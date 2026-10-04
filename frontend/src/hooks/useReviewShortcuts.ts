@@ -11,7 +11,7 @@ export interface ReviewShortcutHandlers {
 }
 
 // the Inspector slide-over is a dialog too, but review shortcuts should keep working inside it
-function isInsideDialog(target: EventTarget | null) {
+export function isInsideDialog(target: EventTarget | null) {
   return target instanceof HTMLElement && !!target.closest('[role="dialog"]:not([data-review-scope]),[role="alertdialog"],[role="menu"]')
 }
 

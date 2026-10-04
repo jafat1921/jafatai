@@ -11,7 +11,8 @@ import { GenerationViewer } from '@/components/review/GenerationViewer'
 import { useGenerationActions, type GenerationTarget } from '@/hooks/useGenerations'
 import { useAiJob } from '@/hooks/useAi'
 import { api } from '@/lib/api'
-import { useSelectedCharacter } from '@/features/workspace/selection'
+import { useProjectId, useSelectedCharacter, useSelectedLocation } from '@/features/workspace/selection'
+import { LocationInspector } from './LocationInspector'
 import { modKey } from '@/lib/keyboard'
 import type { Character } from '@/lib/types'
 import { announce } from '@/stores/ui'
@@ -110,11 +111,14 @@ function PortraitSection({ character }: { character: Character }) {
 }
 
 export function CastInspector() {
+  const projectId = useProjectId()
   const { character } = useSelectedCharacter()
+  const { location } = useSelectedLocation()
+  if (location && !character) return <LocationInspector location={location} projectId={projectId} />
   if (!character) {
     return (
-      <EmptyState icon={<MousePointerClick />} title="No character selected">
-        Pick a character on the canvas to generate and review their portrait.
+      <EmptyState icon={<MousePointerClick />} title="Nothing selected">
+        Pick a character or a location on the canvas to generate and review its reference image.
       </EmptyState>
     )
   }
@@ -143,7 +147,7 @@ export function CastInspector() {
           <h3 className="section-label mb-1">Description</h3>
           <p className="text-body text-studio-muted">{character.description || 'No description yet.'}</p>
           <p className="mt-4 text-small text-studio-muted">
-            Character sheets (front, ¾, side, back) and LoRA binding arrive with the Storyboard milestone.
+            Character sheets (front, ¾, side, back) and LoRA binding arrive in a later milestone.
           </p>
         </TabsContent>
       </Tabs>

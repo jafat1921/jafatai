@@ -21,8 +21,13 @@ TimeOfDay = Literal["dawn", "morning", "day", "golden_hour", "dusk", "night", "i
 TargetType = Literal["character", "scene", "shot", "location", "project"]
 GenKind = Literal[
     "portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyframe_mid",
-    "take", "tile", "render", "scene_text",
+    "take", "tile", "render", "scene_text", "establishing",
 ]
+ShotType = Literal[
+    "wide", "medium", "close_up", "extreme_close_up", "over_shoulder", "pov", "insert", "establishing", "long_take",
+]
+Seam = Literal["cut", "continue"]
+PromptMode = Literal["auto", "manual"]
 
 
 class Out(BaseModel):
@@ -61,6 +66,7 @@ class ProjectOut(Out):
     takes_per_shot: int
     overnight: bool
     status: str
+    style_bible: str = ""
     created_at: Utc
     updated_at: Utc
     thumbnail_url: str | None = None
@@ -77,6 +83,7 @@ class ProjectCreate(BaseModel):
     takes_per_shot: int = Field(3, ge=1, le=16)
     overnight: bool = False
     brief: str | None = None
+    style_bible: str = ""
 
 
 class ProjectPatch(BaseModel):
@@ -90,6 +97,7 @@ class ProjectPatch(BaseModel):
     overnight: bool | None = None
     status: ProjectStatus | None = None
     brief: str | None = None
+    style_bible: str | None = None
 
 
 # scenes
@@ -108,6 +116,7 @@ class SceneOut(Out):
     locked: bool
     version: int
     stale: bool
+    location_id: str | None = None
     created_at: Utc
     updated_at: Utc
 
@@ -138,6 +147,7 @@ class ScenePatch(BaseModel):
     lighting: str | None = None
     locked: bool | None = None
     stale: bool | None = None
+    location_id: str | None = None
 
 
 class ReorderIn(BaseModel):
@@ -169,7 +179,8 @@ class GenerationCreate(BaseModel):
     target_type: TargetType
     target_id: str
     kind: GenKind
-    prompt: str = Field(min_length=1)
+    # shots fill an empty prompt from start/end/motion prompts; other targets still need one
+    prompt: str = ""
     params: dict[str, Any] = {}
 
 
@@ -262,7 +273,117 @@ class SuggestionOut(Out):
     resolved_at: Utc | None = None
 
 
+# locations
+class LocationOut(Out):
+    id: str
+    project_id: str
+    name: str
+    description: str
+    source: str
+    locked: bool
+    time_of_day_variants: list[str] = []
+    approved_establishing: GenerationOut | None = None
+    created_at: Utc
+    updated_at: Utc
+
+
+class LocationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    time_of_day_variants: list[str] = []
+
+
+class LocationPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    time_of_day_variants: list[str] | None = None
+    locked: bool | None = None
+
+
+# shots
+class ShotOut(Out):
+    id: str
+    scene_id: str
+    project_id: str
+    order: int
+    shot_type: str
+    duration_s: float
+    description: str
+    camera: str
+    prompt: str
+    prompt_mode: str
+    start_prompt: str
+    end_prompt: str
+    motion_prompt: str
+    character_ids: list[str] = []
+    location_id: str | None = None
+    seam_in: str
+    handoff_text: str
+    status: str = "draft"
+    stale: bool
+    source: str
+    locked: bool
+    start_frame: GenerationOut | None = None
+    start_linked: bool = False
+    end_frame: GenerationOut | None = None
+    approved_take: GenerationOut | None = None
+    takes_count: int = 0
+    created_at: Utc
+    updated_at: Utc
+
+
+class ShotCreate(BaseModel):
+    shot_type: ShotType = "medium"
+    duration_s: float = Field(4.0, ge=1, le=20)
+    description: str = ""
+    camera: str = ""
+    character_ids: list[str] | None = None
+    location_id: str | None = None
+    seam_in: Seam = "cut"
+    after_shot_id: str | None = None
+
+
+class ShotPatch(BaseModel):
+    shot_type: ShotType | None = None
+    duration_s: float | None = Field(None, ge=1, le=20)
+    description: str | None = None
+    camera: str | None = Field(None, max_length=300)
+    prompt: str | None = None
+    prompt_mode: PromptMode | None = None
+    start_prompt: ScriptText | None = None
+    end_prompt: ScriptText | None = None
+    motion_prompt: ScriptText | None = None
+    character_ids: list[str] | None = None
+    location_id: str | None = None
+    seam_in: Seam | None = None
+    handoff_text: str | None = None
+    locked: bool | None = None
+    stale: bool | None = None
+
+
+class ShotReorderIn(BaseModel):
+    shot_ids: list[str]
+
+
+class TakesIn(BaseModel):
+    count: int | None = Field(None, ge=1, le=16)
+
+
+class SuggestShotsIn(BaseModel):
+    max_shots: int = Field(6, ge=1, le=20)
+
+
+class StoryboardIn(BaseModel):
+    mode: Literal["scene", "shots"] = "scene"
+    scene_ids: list[str] | None = None
+    generate_frames: bool = True
+    overwrite: bool = False
+    continuity: bool | Literal["chain", "none"] = False
+    max_shots: int = Field(6, ge=1, le=20)
+
+
 class SuggestionResult(BaseModel):
     suggestion: SuggestionOut
     scene: SceneOut | None = None
     character: CharacterOut | None = None
+    location: LocationOut | None = None

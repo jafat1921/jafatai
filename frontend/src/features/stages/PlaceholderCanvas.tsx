@@ -2,16 +2,6 @@ import { STAGES, type StageId } from '@/lib/stages'
 import { EmptyState } from '@/components/studio/states'
 
 const COPY: Partial<Record<StageId, { title: string; body: string; next: string }>> = {
-  storyboard: {
-    title: 'Storyboard arrives next',
-    body: 'Each shot gets a START and END frame built from your approved cast, with Continue or Cut seams between shots.',
-    next: 'Milestone 2',
-  },
-  render: {
-    title: 'Render arrives after Storyboard',
-    body: 'Approved frame pairs become video takes with LTX first/last-frame image-to-video, including 60-second long takes.',
-    next: 'Milestone 3',
-  },
   reel: {
     title: 'Reel arrives after Render',
     body: 'Lay out your chosen takes scene by scene, trim them, and set cuts and dissolves in a simple sequence.',

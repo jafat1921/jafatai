@@ -4,6 +4,8 @@ import { GenerationViewer } from '@/components/review/GenerationViewer'
 import { SourceBadge } from '@/components/studio/source-badge'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { PlaceholderCanvas } from '@/features/stages/PlaceholderCanvas'
+import { StoryboardReview } from '@/features/storyboard/StoryboardReview'
+import { RenderReview } from '@/features/render/RenderReview'
 import type { StageId } from '@/lib/stages'
 import { useSelectedCharacter, useSelectedScene } from './selection'
 
@@ -64,7 +66,9 @@ export function ReviewWorkspace({ stage }: { stage: StageId }) {
       <div className="p-4">
         {stage === 'script' && <ScriptReview />}
         {stage === 'cast' && <CastReview />}
-        {stage !== 'script' && stage !== 'cast' && <PlaceholderCanvas stage={stage} />}
+        {stage === 'storyboard' && <StoryboardReview />}
+        {stage === 'render' && <RenderReview />}
+        {(stage === 'reel' || stage === 'output') && <PlaceholderCanvas stage={stage} />}
       </div>
     </main>
   )

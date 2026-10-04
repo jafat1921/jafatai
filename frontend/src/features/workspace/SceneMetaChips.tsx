@@ -1,5 +1,6 @@
 import { ChipGroup } from '@/components/studio/chip'
 import { useUpdateScene } from '@/hooks/useScenes'
+import { LocationPicker } from './LocationPicker'
 import type { Scene, ScenePatch, TimeOfDay } from '@/lib/types'
 import { useProjectId } from './selection'
 
@@ -38,6 +39,11 @@ export function SceneMetaChips({ scene }: { scene: Scene }) {
 
   return (
     <div className="mt-1.5 flex flex-col gap-3 rounded-[6px] border border-studio-border bg-studio-bg/40 p-2.5">
+      <LocationPicker
+        id={`scene-location-${scene.id}`}
+        value={scene.location_id ?? null}
+        onChange={(v) => set({ location_id: v })}
+      />
       <ChipGroup label="Time of day" options={TIME_OF_DAY} value={scene.time_of_day} onChange={(v) => set({ time_of_day: v })} />
       <ChipGroup label="Mood" options={MOOD} value={scene.mood} onChange={(v) => set({ mood: v })} />
       <ChipGroup label="Lighting" options={LIGHTING} value={scene.lighting} onChange={(v) => set({ lighting: v })} />

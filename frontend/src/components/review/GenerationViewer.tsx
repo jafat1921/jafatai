@@ -13,18 +13,38 @@ import { announce } from '@/stores/ui'
 import { ReviewBar } from './ReviewBar'
 import { RegenerateDialog } from './RegenerateDialog'
 import { VersionsPanel } from './VersionsPanel'
+import { GenerationMedia } from './media'
+import { cn } from '@/lib/utils'
 
 interface Props {
   target: GenerationTarget
   subject: string // used for alt text, e.g. "Portrait of Mara"
   emptyHint?: string
   shortcuts?: boolean
+  // frames and takes follow the project aspect; portraits stay square
+  aspectClass?: string
+  // lets a parent (the Render take row) drive which version is shown
+  viewId?: string
+  onViewIdChange?: (id: string | undefined) => void
 }
 
-export function GenerationViewer({ target, subject, emptyHint, shortcuts = true }: Props) {
+export function GenerationViewer({
+  target,
+  subject,
+  emptyHint,
+  shortcuts = true,
+  aspectClass = 'aspect-square',
+  viewId: controlledViewId,
+  onViewIdChange,
+}: Props) {
   const [showRejected, setShowRejected] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
-  const [viewId, setViewId] = useState<string>()
+  const [localViewId, setLocalViewId] = useState<string>()
+  const viewId = controlledViewId ?? localViewId
+  const setViewId = (id: string | undefined) => {
+    setLocalViewId(id)
+    onViewIdChange?.(id)
+  }
   const [dialogMode, setDialogMode] = useState<'note' | 'edit' | null>(null)
   const [confirmMode, setConfirmMode] = useState<RegenerateMode | null>(null)
 
@@ -94,12 +114,17 @@ export function GenerationViewer({ target, subject, emptyHint, shortcuts = true 
     shortcuts && dialogMode === null && confirmMode === null,
   )
 
-  if (query.isPending) return <Skeleton className="aspect-square w-full" />
+  if (query.isPending) return <Skeleton className={cn(aspectClass, 'w-full')} />
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
 
   if (!current) {
     return (
-      <div className="darkroom flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-[6px] border-dashed text-center text-studio-on-dark-muted">
+      <div
+        className={cn(
+          'darkroom flex w-full flex-col items-center justify-center gap-2 rounded-[6px] border-dashed text-center text-studio-on-dark-muted',
+          aspectClass,
+        )}
+      >
         <ImageIcon aria-hidden className="size-6" />
         <p className="max-w-52 text-small">{emptyHint ?? `No ${kindLabel(target.kind).toLowerCase()} yet.`}</p>
       </div>
@@ -108,12 +133,13 @@ export function GenerationViewer({ target, subject, emptyHint, shortcuts = true 
 
   return (
     <div className="flex flex-col gap-3">
-      <figure className="darkroom relative aspect-square w-full overflow-hidden rounded-[6px]">
+      <figure className={cn('darkroom relative w-full overflow-hidden rounded-[6px]', aspectClass)}>
         {current.media_url && !pending ? (
-          <img
-            src={current.media_url}
+          <GenerationMedia
+            key={current.id}
+            gen={current}
             alt={`${subject}, version ${current.version}`}
-            className="size-full object-contain animate-fade-in"
+            className="animate-fade-in"
           />
         ) : pending ? (
           <div className="shimmer-dark flex size-full items-center justify-center">

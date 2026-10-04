@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { API_BASE } from '@/lib/api'
-import type { Generation, Job } from '@/lib/types'
+import type { Generation, Job, Shot } from '@/lib/types'
 import { jobLabel } from '@/lib/status'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
 import { upsertGeneration } from './useGenerations'
 import { syncAiJob } from './useAi'
+import { upsertShot } from './useShots'
 import { announce, useUi } from '@/stores/ui'
 
 function parse<T>(e: MessageEvent): T | null {
@@ -14,6 +15,22 @@ function parse<T>(e: MessageEvent): T | null {
     return JSON.parse(e.data) as T
   } catch {
     return null
+  }
+}
+
+// Storyboard/location jobs create rows the client never saw; refetch them once the job lands.
+const STORYBOARD_JOB = /storyboard|shot|location|compile|take|render/
+
+function syncStoryboardJob(qc: QueryClient, job: Job, before: Job | undefined) {
+  if (!job.project_id || !STORYBOARD_JOB.test(job.type)) return
+  const finished = job.status === 'done' && before?.status !== 'done'
+  // the parent storyboard job creates shots as it goes; refresh when its message moves on
+  const progressed = job.status === 'running' && before?.message !== job.message && job.type.includes('storyboard')
+  if (!finished && !progressed) return
+  qc.invalidateQueries({ queryKey: qk.shots(job.project_id) })
+  if (finished && job.type.includes('location')) {
+    qc.invalidateQueries({ queryKey: qk.locations(job.project_id) })
+    qc.invalidateQueries({ queryKey: qk.scenes(job.project_id) })
   }
 }
 
@@ -40,6 +57,7 @@ export function useEventStream(enabled: boolean) {
       const before = qc.getQueryData<Job[]>(qk.jobs)?.find((j) => j.id === job.id)
       upsertJob(qc, job)
       syncAiJob(qc, job, before)
+      syncStoryboardJob(qc, job, before)
       if (before?.status !== job.status) {
         if (job.status === 'done') announce(`${jobLabel(job.type)} finished.`)
         else if (job.status === 'failed') announce(`${jobLabel(job.type)} failed${job.error ? `: ${job.error}` : '.'}`)
@@ -49,6 +67,11 @@ export function useEventStream(enabled: boolean) {
     es.addEventListener('generation', (e) => {
       const gen = parse<Generation>(e as MessageEvent)
       if (gen) upsertGeneration(qc, gen)
+    })
+
+    es.addEventListener('shot', (e) => {
+      const shot = parse<Shot>(e as MessageEvent)
+      if (shot) upsertShot(qc, shot)
     })
 
     return () => {

@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.ai_jobs import rewrite_prompt_from_note
-from app.models import Generation, Job, utcnow
+from app import storyboard
+from app.models import Generation, Job, Location, Shot, utcnow
 from app.schemas import GenerationCreate, GenerationOut, RegenerateIn, RejectIn
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import approve, enqueue_generation, gen_out, get_owned, new_seed, resolve_target_project
@@ -42,6 +43,14 @@ def create_generation(body: GenerationCreate, db: Session = Depends(get_db), cur
     project_id = resolve_target_project(db, cur.workspace_id, body.target_type, body.target_id)
     params = dict(body.params)
     seed = params.pop("seed", None)
+    prompt = body.prompt
+    if body.target_type == "shot":
+        prompt, params = storyboard.prepare_shot_generation(db, db.get(Shot, body.target_id), body.kind, prompt, params)
+    elif body.target_type == "location":
+        prompt, params = storyboard.prepare_location_generation(
+            db, db.get(Location, body.target_id), body.kind, prompt, params)
+    elif not prompt.strip():
+        raise HTTPException(422, "A prompt is required")
     g = enqueue_generation(
         db,
         workspace_id=cur.workspace_id,
@@ -49,7 +58,7 @@ def create_generation(body: GenerationCreate, db: Session = Depends(get_db), cur
         target_type=body.target_type,
         target_id=body.target_id,
         kind=body.kind,
-        prompt=body.prompt,
+        prompt=prompt,
         params=params,
         seed=int(seed) if seed is not None else None,
     )
@@ -78,6 +87,21 @@ def regenerate(gen_id: str, body: RegenerateIn, db: Session = Depends(get_db), c
             params.update(body.params)
         if "seed" in params:
             seed = int(params.pop("seed"))
+
+    if parent.target_type == "shot":
+        shot = db.get(Shot, parent.target_id)
+        if shot is None:
+            raise HTTPException(404, "Shot not found")
+        if parent.kind == "take":
+            # frames may have been re-approved since; a take always renders from the current pair
+            for k in ("first_frame_id", "last_frame_id", "num_frames"):
+                params.pop(k, None)
+        elif parent.kind == "keyframe_start":
+            prev, _ = storyboard.neighbours(db, shot)
+            if storyboard.is_linked(shot, prev):
+                raise HTTPException(409, storyboard.LINKED_DETAIL)
+        if parent.kind == "take" or not prompt.strip():
+            prompt, params = storyboard.prepare_shot_generation(db, shot, parent.kind, prompt, params)
 
     g = enqueue_generation(
         db,

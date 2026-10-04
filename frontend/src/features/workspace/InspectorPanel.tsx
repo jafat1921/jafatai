@@ -5,6 +5,8 @@ import { SourceBadge } from '@/components/studio/source-badge'
 import { EmptyState } from '@/components/studio/states'
 import { StatusPill } from '@/components/studio/status-pill'
 import { CastInspector } from '@/features/cast/CastInspector'
+import { StoryboardInspector } from '@/features/storyboard/StoryboardInspector'
+import { RenderInspector } from '@/features/render/RenderInspector'
 import { useProject } from '@/hooks/useProjects'
 import { projectStatus, staleStatus } from '@/lib/status'
 import type { StageId } from '@/lib/stages'
@@ -109,7 +111,9 @@ export function InspectorPanel({ stage }: { stage: StageId }) {
       <div className="p-3">
         {stage === 'script' && <ScriptInspector />}
         {stage === 'cast' && <CastInspector />}
-        {stage !== 'script' && stage !== 'cast' && (
+        {stage === 'storyboard' && <StoryboardInspector />}
+        {stage === 'render' && <RenderInspector />}
+        {(stage === 'reel' || stage === 'output') && (
           <>
             <h3 className="section-label mb-2">Project</h3>
             <ProjectDetails />

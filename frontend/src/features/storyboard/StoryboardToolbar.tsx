@@ -1,0 +1,94 @@
+import { CheckCheck, Loader2, Plus, Sparkles, Wand2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Tooltip } from '@/components/ui/tooltip'
+import { ErrorState } from '@/components/studio/states'
+import { useAiJob } from '@/hooks/useAi'
+import { useCreateShot } from '@/hooks/useShots'
+import { api } from '@/lib/api'
+import type { Scene, Shot } from '@/lib/types'
+import { announce } from '@/stores/ui'
+import { useSceneBatch } from './useSceneBatch'
+
+// Per-scene actions for the shot breakdown view.
+export function StoryboardToolbar({
+  scene,
+  shots,
+  prevOf,
+}: {
+  scene: Scene
+  shots: Shot[]
+  prevOf: (s: Shot) => Shot | undefined
+}) {
+  // TODO: show shot suggestions inline once the API lists them (suggest-shots on a scene with hand-made shots)
+  const suggest = useAiJob((id: string) => api.ai.suggestShots(id))
+  const add = useCreateShot(scene.project_id)
+  const batch = useSceneBatch(shots, prevOf)
+  const suggestLabel = suggest.working
+    ? suggest.job?.status === 'running'
+      ? suggest.job.message || 'Breaking the scene down…'
+      : 'Waiting for a worker…'
+    : 'Suggest shots'
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div role="toolbar" aria-label="Scene shot actions" className="flex flex-wrap items-center gap-2">
+        <Tooltip
+          content={
+            scene.script_text?.trim()
+              ? 'AI breaks this scene into shots. It writes directly only when you have no hand-made shots here; otherwise it suggests.'
+              : 'Write the scene first'
+          }
+        >
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-disabled={!scene.script_text?.trim() || undefined}
+            onClick={() => scene.script_text?.trim() && !suggest.working && suggest.run(scene.id)}
+            className="max-w-72"
+          >
+            {suggest.working ? <Loader2 aria-hidden className="animate-spin" /> : <Sparkles aria-hidden />}
+            <span className="truncate">{suggestLabel}</span>
+          </Button>
+        </Tooltip>
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={add.isPending}
+          onClick={() =>
+            add.mutate(
+              { sceneId: scene.id, after_shot_id: shots[shots.length - 1]?.id },
+              { onSuccess: () => announce(`Shot ${shots.length + 1} added.`) },
+            )
+          }
+        >
+          <Plus aria-hidden />
+          Add shot
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={batch.generateCount === 0}
+          loading={batch.running === 'generate'}
+          onClick={batch.generateAll}
+          title={batch.generateCount ? undefined : 'Every frame has been generated'}
+        >
+          <Wand2 aria-hidden />
+          Generate all frames{batch.generateCount ? ` (${batch.generateCount})` : ''}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={batch.approveCount === 0}
+          loading={batch.running === 'approve'}
+          onClick={batch.approveAll}
+        >
+          <CheckCheck aria-hidden />
+          Approve all ready{batch.approveCount ? ` (${batch.approveCount})` : ''}
+        </Button>
+      </div>
+      {suggest.error || add.error || batch.error ? (
+        <ErrorState compact title="That didn't work" error={suggest.error ?? add.error ?? batch.error} />
+      ) : null}
+    </div>
+  )
+}

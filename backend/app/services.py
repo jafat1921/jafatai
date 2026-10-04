@@ -7,7 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import Character, Generation, Job, Project, Scene, utcnow
+from app.models import Character, Generation, Job, Location, Project, Scene, Shot, utcnow
 from app.schemas import CharacterOut, Counts, GenerationOut, JobOut, ProjectOut
 
 READY_STATES = ("ready", "approved", "rejected")
@@ -43,7 +43,7 @@ def project_out(db: Session, p: Project) -> ProjectOut:
     out.counts = Counts(
         scenes=db.scalar(select(func.count()).select_from(Scene).where(Scene.project_id == p.id)) or 0,
         characters=db.scalar(select(func.count()).select_from(Character).where(Character.project_id == p.id)) or 0,
-        shots=0,  # shots arrive in M2
+        shots=db.scalar(select(func.count()).select_from(Shot).where(Shot.project_id == p.id)) or 0,
     )
     thumb = db.scalars(
         select(Generation.file_path)
@@ -80,7 +80,10 @@ def resolve_target_project(db: Session, workspace_id: str, target_type: str, tar
         return get_owned(db, Character, target_id, workspace_id, "Character").project_id
     if target_type == "scene":
         return get_owned(db, Scene, target_id, workspace_id, "Scene").project_id
-    # shot / location tables land with the storyboard work in M2
+    if target_type == "shot":
+        return get_owned(db, Shot, target_id, workspace_id, "Shot").project_id
+    if target_type == "location":
+        return get_owned(db, Location, target_id, workspace_id, "Location").project_id
     raise HTTPException(422, f"target_type '{target_type}' is not available yet")
 
 
@@ -163,6 +166,10 @@ def approve(db: Session, g: Generation) -> Generation:
     )
     g.status = "approved"
     g.approved_at = now
+    db.flush()
+    from app.storyboard import after_approve  # storyboard imports this module
+
+    after_approve(db, g)
     return g
 
 

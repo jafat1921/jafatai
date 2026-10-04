@@ -9,18 +9,21 @@ from app.config import get_settings
 from app.db import get_db
 from app.llm import LLMError, chat
 from app.llm.client import list_models, model_for, server_root
-from app.models import Character, Project, Scene, Suggestion, utcnow
+from app.models import Character, Project, Scene, Shot, Suggestion, utcnow
 from app.schemas import (
     AssistIn,
     ContinueIn,
     JobOut,
     SceneOut,
+    StoryboardIn,
+    SuggestShotsIn,
     SuggestionOut,
     SuggestionResult,
     WriteMissingIn,
 )
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import character_out, get_owned, job_out
+from app.storyboard import location_out
 
 router = APIRouter(tags=["ai"])
 
@@ -85,6 +88,54 @@ def extract_characters(project_id: str, db: Session = Depends(get_db), cur: Curr
     return job_out(running) if running else _queue(db, cur, "ai_extract_characters", {"project_id": p.id}, p.id)
 
 
+@router.post("/projects/{project_id}/ai/extract-locations", response_model=JobOut, status_code=202)
+def extract_locations(project_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    p = get_owned(db, Project, project_id, cur.workspace_id, "Project")
+    if not any((s.heading or s.script_text).strip() for s in ai_jobs.ordered_scenes(db, p.id)):
+        raise HTTPException(409, "There's no script to read locations from yet.")
+    running = ai_jobs.active_job(db, "ai_extract_locations", p.id)
+    return job_out(running) if running else _queue(db, cur, "ai_extract_locations", {"project_id": p.id}, p.id)
+
+
+@router.post("/scenes/{scene_id}/ai/suggest-shots", response_model=JobOut, status_code=202)
+def suggest_shots(scene_id: str, body: SuggestShotsIn | None = None, db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(require_editor)):
+    scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
+    if not scene.script_text.strip():
+        raise HTTPException(409, "This scene has no script yet; shots are planned from the script.")
+    running = ai_jobs.active_job(db, "ai_suggest_shots", scene.project_id, scene_id=scene.id)
+    if running:
+        return job_out(running)
+    payload = {"scene_id": scene.id, "max_shots": (body or SuggestShotsIn()).max_shots}
+    return _queue(db, cur, "ai_suggest_shots", payload, scene.project_id)
+
+
+@router.post("/shots/{shot_id}/ai/compile-prompts", response_model=JobOut, status_code=202)
+def compile_prompts(shot_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    running = ai_jobs.active_job(db, "ai_compile_prompts", shot.project_id, shot_id=shot.id)
+    return job_out(running) if running else _queue(db, cur, "ai_compile_prompts", {"shot_id": shot.id}, shot.project_id)
+
+
+@router.post("/projects/{project_id}/storyboard", response_model=JobOut, status_code=202)
+def build_storyboard(project_id: str, body: StoryboardIn | None = None, db: Session = Depends(get_db),
+                     cur: CurrentUser = Depends(require_editor)):
+    body = body or StoryboardIn()
+    p = get_owned(db, Project, project_id, cur.workspace_id, "Project")
+    running = ai_jobs.active_job(db, "ai_storyboard", p.id)
+    if running:
+        return job_out(running)
+    scenes = ai_jobs.ordered_scenes(db, p.id)
+    if body.scene_ids and not set(body.scene_ids) <= {s.id for s in scenes}:
+        raise HTTPException(422, "scene_ids must be scenes of this project")
+    if not any(s.script_text.strip() for s in scenes if not body.scene_ids or s.id in body.scene_ids):
+        raise HTTPException(409, "There's no script to storyboard yet.")
+    payload = {"project_id": p.id, "mode": body.mode, "scene_ids": body.scene_ids,
+               "generate_frames": body.generate_frames, "overwrite": body.overwrite,
+               "chain": body.continuity in (True, "chain"), "max_shots": body.max_shots}
+    return _queue(db, cur, "ai_storyboard", payload, p.id)
+
+
 @router.post("/scenes/{scene_id}/ai/assist", response_model=JobOut, status_code=202)
 def assist(scene_id: str, body: AssistIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
@@ -136,6 +187,8 @@ def accept_suggestion(suggestion_id: str, db: Session = Depends(get_db), cur: Cu
     out = SuggestionResult(suggestion=SuggestionOut.model_validate(s))
     if s.target_type == "scene":
         out.scene = SceneOut.model_validate(target)
+    elif s.target_type == "location":
+        out.location = location_out(db, target)
     else:
         out.character = character_out(db, target)
     return out

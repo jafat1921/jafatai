@@ -28,7 +28,7 @@ STALE_AFTER = timedelta(seconds=90)
 HEARTBEAT_EVERY = 5.0
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
-IMAGE_KINDS = {"portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyframe_mid"}
+IMAGE_KINDS = {"portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyframe_mid", "establishing"}
 VIDEO_KINDS = {"take", "tile", "render"}
 TEXT_KINDS = {"scene_text"}
 EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt"}
@@ -157,6 +157,13 @@ def handle_generate(ctx: JobContext) -> dict:
         method, media_type = "generate_text", "text/plain"
     else:
         raise RuntimeError(f"No handler for generation kind '{gen.kind}'")
+
+    if (gen.params or {}).get("compile_first"):
+        from app.ai_jobs import fill_shot_prompt
+
+        gen.prompt = fill_shot_prompt(ctx, gen)
+        gen.params = {k: v for k, v in gen.params.items() if k != "compile_first"}
+        db.commit()
 
     driver = ctx.driver_factory()
     job.gpu = job.gpu or getattr(driver, "name", None)

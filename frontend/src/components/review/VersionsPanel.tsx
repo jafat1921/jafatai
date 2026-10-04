@@ -3,17 +3,11 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { StatusPill } from '@/components/studio/status-pill'
-import { generationStatus } from '@/lib/status'
+import { generationStatus, scoreText } from '@/lib/status'
 import type { Generation } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { promptDiff } from '@/lib/diff'
-
-function scoreText(score: Generation['score']) {
-  if (score == null) return null
-  if (typeof score === 'number') return score.toFixed(1)
-  const overall = score.overall ?? Object.values(score)[0]
-  return typeof overall === 'number' ? overall.toFixed(1) : null
-}
+import { GenerationMedia } from './media'
 
 interface VersionsPanelProps {
   versions: Generation[]
@@ -68,12 +62,7 @@ export function VersionsPanel({
                 >
                   <div className="darkroom aspect-square overflow-hidden rounded-[4px]">
                     {v.media_url ? (
-                      <img
-                        src={v.media_url}
-                        alt={`${subject}, version ${v.version}`}
-                        className="size-full object-contain"
-                        loading="lazy"
-                      />
+                      <GenerationMedia gen={v} alt={`${subject}, version ${v.version}`} controls={false} lazy />
                     ) : (
                       <div className="flex size-full items-center justify-center text-studio-on-dark-muted">
                         <ImageOff aria-hidden className="size-5" />

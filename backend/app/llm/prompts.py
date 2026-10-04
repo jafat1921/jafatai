@@ -309,3 +309,193 @@ def rewrite_prompt_messages(prompt: str, note: str) -> list[dict]:
     )
     return [{"role": "system", "content": "You revise prompts for image generation models."},
             {"role": "user", "content": user}]
+
+
+# ---------------------------------------------------------------- storyboard
+
+SHOT_TYPES = ("wide", "medium", "close_up", "extreme_close_up", "over_shoulder", "pov", "insert", "establishing",
+              "long_take")
+
+
+def _shot_type(v) -> str:
+    t = str(v or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if t in SHOT_TYPES:
+        return t
+    for key, val in (("extreme", "extreme_close_up"), ("close", "close_up"), ("over", "over_shoulder"),
+                     ("ots", "over_shoulder"), ("point", "pov"), ("insert", "insert"), ("estab", "establishing"),
+                     ("wide", "wide"), ("long", "wide"), ("full", "wide")):
+        if key in t:
+            return val
+    return "medium"
+
+
+class ShotIdea(BaseModel):
+    shot_type: str = "medium"
+    duration_s: float = 4.0
+    description: str
+    camera: str = ""
+    characters: list[str] = []
+    start_visual: str = ""
+    end_visual: str = ""
+    handoff: str = ""
+    continuous: bool = False
+
+    @field_validator("shot_type", mode="before")
+    @classmethod
+    def _norm_type(cls, v):
+        return _shot_type(v)
+
+    @field_validator("duration_s", mode="before")
+    @classmethod
+    def _clamp(cls, v):
+        try:
+            return max(1.0, min(20.0, float(v)))
+        except (TypeError, ValueError):
+            return 4.0
+
+
+class ShotList(BaseModel):
+    shots: list[ShotIdea] = Field(min_length=1)
+
+
+class FramePrompts(BaseModel):
+    start_prompt: str
+    end_prompt: str
+    motion_prompt: str
+
+
+class SceneFrames(FramePrompts):
+    shot_type: str = "medium"
+    description: str = ""
+    camera: str = ""
+    characters: list[str] = []
+
+    @field_validator("shot_type", mode="before")
+    @classmethod
+    def _norm_type(cls, v):
+        return _shot_type(v)
+
+
+class LocationIdea(BaseModel):
+    name: str
+    description: str = ""
+    time_of_day_variants: list[str] = []
+    scenes: list[int] = []
+
+
+class LocationList(BaseModel):
+    locations: list[LocationIdea] = []
+
+
+FRAME_RULES = """Rules for frame prompts (an image model sees each one alone, with no memory of the others):
+- Reconstruct the whole world every time: who is in frame with their full physical description and wardrobe, where they are, the location's look, time of day and lighting, framing and lens.
+- Describe one frozen moment, present tense, concrete and visual. No sounds, no thoughts, no story recap, no camera moves.
+- Never use a character's name alone; describe the person each time (the name may follow the description).
+- Plain text, flush-left, one paragraph each, under 110 words. No markdown, no lists, no quotes.
+Rules for the motion prompt (a video model animates from the start frame to the end frame):
+- Say what moves and how over the shot's duration: performance, gestures, the camera move, light changes. Keep it physically plausible for the duration.
+- One paragraph, present tense, under 90 words, flush-left plain text."""
+
+
+def _people(characters) -> str:
+    rows = [f"- {c.name}: {c.description or 'no description yet'}" for c in characters]
+    return "\n".join(rows) if rows else "(nobody in particular)"
+
+
+def _place(location, scene) -> str:
+    parts = []
+    if location is not None:
+        parts.append(f"Location: {location.name}. {location.description or ''}".strip())
+    if scene is not None:
+        parts.append(f"Scene heading: {scene.heading or '(none)'}")
+        light = ", ".join(x for x in ((scene.time_of_day or "").replace("_", " "), scene.lighting, scene.mood) if x)
+        if light:
+            parts.append(f"Time, light and mood: {light}")
+    return "\n".join(parts)
+
+
+def _style(project) -> str:
+    style = (getattr(project, "style_bible", "") or "").strip()
+    return (f"Style Bible (copy it word for word at the end of every frame prompt):\n{style}" if style
+            else "Style: photorealistic cinematic film still, natural colour, shallow depth of field.")
+
+
+SHOTLIST_SYSTEM = (
+    "You are a film director planning coverage. You break a scene into a short list of shots a small AI production "
+    "can render: each shot is one continuous camera take between a start frame and an end frame. "
+    "Answer only with JSON matching the schema."
+)
+
+
+def suggest_shots_messages(project, characters, scene, max_shots: int, previous=None) -> list[dict]:
+    before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}" if previous else ""
+    user = (
+        f"{film_block(project, characters)}\n\nScene: {scene.heading or '(no heading)'}\n---\n"
+        f"{scene.script_text.strip()[:6000]}\n---{before}\n\n"
+        f"Break this scene into at most {max_shots} shots, in order. For each shot give: shot_type (one of: "
+        + ", ".join(SHOT_TYPES) + "), duration_s (1-20; time spoken lines at about 2.5 words a second), "
+        "description (what happens, one or two sentences), camera (framing and any move), characters (names exactly "
+        "as in the cast list), start_visual and end_visual (what the first and the last frame show), handoff (what "
+        "carries over from the previous shot: a prop, a look, an emotion; empty for the first shot), and continuous "
+        "(true only when the action flows straight on from the previous shot with no jump in time or place)."
+    )
+    return [{"role": "system", "content": SHOTLIST_SYSTEM}, {"role": "user", "content": user}]
+
+
+def compile_messages(project, scene, shot, characters, location, prev_shot=None, linked: bool = False) -> list[dict]:
+    lines = [
+        f"Shot {shot.order} of the scene: {shot.shot_type.replace('_', ' ')}, {shot.duration_s:g} seconds.",
+        f"What happens: {shot.description or '(see the scene)'}",
+    ]
+    if shot.camera:
+        lines.append(f"Camera: {shot.camera}")
+    if shot.prompt:
+        lines.append(f"Director's notes for this shot: {shot.prompt}")
+    if shot.start_prompt or shot.end_prompt:
+        lines.append(f"Draft of the first frame: {shot.start_prompt or '-'}\nDraft of the last frame: {shot.end_prompt or '-'}")
+    if shot.handoff_text:
+        lines.append(f"Carried over from the previous shot: {shot.handoff_text}")
+    if prev_shot is not None and linked and prev_shot.end_prompt:
+        lines.append("This shot opens exactly on the previous shot's last frame, so the start frame must match it:\n"
+                     + prev_shot.end_prompt)
+    user = (
+        f"Film: {project.title}. {project.logline}\n\nPeople in this shot:\n{_people(characters)}\n\n"
+        f"{_place(location, scene)}\n\nScene script:\n{(scene.script_text or '').strip()[:3000]}\n\n"
+        + "\n".join(lines) + f"\n\n{_style(project)}\n\n{FRAME_RULES}\n\n"
+        "Answer as JSON with start_prompt (the first frame), end_prompt (the last frame) and motion_prompt."
+    )
+    return [{"role": "system", "content": "You write prompts for image and video generation models on a film set."},
+            {"role": "user", "content": user}]
+
+
+def scene_frames_messages(project, characters, scene, location, duration_s: float, previous=None) -> list[dict]:
+    before = ""
+    if previous is not None:
+        before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}"
+    user = (
+        f"Film: {project.title}. {project.logline}\n\nCast:\n{_people(characters)}\n\n{_place(location, scene)}\n\n"
+        f"Scene script:\n---\n{(scene.script_text or '').strip()[:6000]}\n---{before}\n\n"
+        f"Treat the whole scene as one {duration_s:g}-second shot. Give: shot_type (one of: " + ", ".join(SHOT_TYPES)
+        + "), description (one sentence), camera (framing and move), characters (names exactly as in the cast list, "
+        "only those on screen), start_prompt = the frame the scene OPENS on, end_prompt = the frame it ENDS on, and "
+        f"motion_prompt = what happens in between.\n\n{_style(project)}\n\n{FRAME_RULES}"
+    )
+    return [{"role": "system", "content": "You are a director of photography writing prompts for image and video models. "
+                                          "Answer only with JSON."},
+            {"role": "user", "content": user}]
+
+
+def extract_locations_messages(project, scenes, known: list[str]) -> list[dict]:
+    listing = "\n\n".join(f"Scene {i}: {s.heading or '(no heading)'}\n{(s.script_text or '').strip()[:1200]}"
+                          for i, s in enumerate(scenes, 1))
+    have = ", ".join(known) if known else "none yet"
+    user = (
+        f"{film_block(project)}\n\nScenes:\n{listing[:14000]}\n\nLocations already on file: {have}.\n\n"
+        "List every distinct location. Merge headings that are the same place (INT. BOAT - CABIN and INT. BOAT - "
+        "CABIN - LATER are one). For each give: name (short, title case, reuse a name on file when it is the same "
+        "place), description (what an establishing shot would show: architecture or landscape, materials, colours, "
+        "props, scale; one or two sentences, no people), time_of_day_variants (the times of day it appears at, from: "
+        + ", ".join(TIMES) + ") and scenes (the scene numbers set there)."
+    )
+    return [{"role": "system", "content": "You are a production designer and location scout. Answer only with JSON."},
+            {"role": "user", "content": user}]

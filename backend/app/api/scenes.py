@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.ai_jobs import queue_summary
 from app.db import get_db
-from app.models import Generation, Project, Scene, SceneVersion
+from app import storyboard as sb
+from app.models import Generation, Location, Project, Scene, SceneVersion
 from app.schemas import ReorderIn, SceneCreate, SceneOut, ScenePatch
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import get_owned
@@ -85,6 +86,13 @@ def patch_scene(scene_id: str, body: ScenePatch, db: Session = Depends(get_db), 
 
     if "locked" in changes and changes["locked"] is not None:
         scene.locked = changes.pop("locked")
+    if "location_id" in changes:
+        loc_id = changes.pop("location_id")
+        if loc_id:
+            loc = db.get(Location, loc_id)
+            if loc is None or loc.project_id != scene.project_id:
+                raise HTTPException(422, "location_id is not a location of this project")
+        scene.location_id = loc_id
 
     script_changed = False
     for field, value in changes.items():
@@ -103,6 +111,7 @@ def patch_scene(scene_id: str, body: ScenePatch, db: Session = Depends(get_db), 
         if "script_text" in changes:
             # keeps scene.summary fresh as context for later AI writing
             queue_summary(db, scene)
+            sb.mark_scene_shots_stale(db, scene.id)
 
     db.commit()
     return scene
@@ -127,6 +136,7 @@ def delete_scene(scene_id: str, db: Session = Depends(get_db), cur: CurrentUser 
     scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
     project_id = scene.project_id
     db.execute(delete(Generation).where(Generation.target_type == "scene", Generation.target_id == scene.id))
+    sb.delete_shots(db, sb.scene_shots(db, scene.id))
     db.delete(scene)
     db.flush()
     _renumber(_ordered(db, project_id))

@@ -7,6 +7,9 @@ export const qk = {
   project: (id: string) => ['projects', id] as const,
   scenes: (projectId: string) => ['scenes', projectId] as const,
   characters: (projectId: string) => ['characters', projectId] as const,
+  locations: (projectId: string) => ['locations', projectId] as const,
+  // one project-wide list; scenes filter it client-side so SSE patches land in one place
+  shots: (projectId: string) => ['shots', projectId] as const,
   generationsFor: (t: TargetType, id: string, kind: GenerationKind) => ['generations', t, id, kind] as const,
   generations: (t: TargetType, id: string, kind: GenerationKind, includeRejected: boolean) =>
     ['generations', t, id, kind, includeRejected] as const,

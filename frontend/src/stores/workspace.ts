@@ -24,6 +24,13 @@ const defaults: Record<PanelId, PanelState> = {
 
 const clamp = (id: PanelId, w: number) => Math.round(Math.min(PANEL_LIMITS[id].max, Math.max(PANEL_LIMITS[id].min, w)))
 
+export type FrameSide = 'start' | 'end'
+export interface ShotSelection {
+  shotId: string
+  frame: FrameSide
+}
+export type StoryboardView = 'scenes' | 'shots'
+
 interface WorkspaceState {
   panels: Record<PanelId, PanelState>
   setWidth: (id: PanelId, width: number) => void
@@ -33,6 +40,15 @@ interface WorkspaceState {
   selectedCharacter: Record<string, string | undefined>
   selectScene: (projectId: string, id: string | undefined) => void
   selectCharacter: (projectId: string, id: string | undefined) => void
+  // Cast & World shows one item in the Inspector: a character or a location
+  selectedLocation: Record<string, string | undefined>
+  selectLocation: (projectId: string, id: string | undefined) => void
+  selectedShot: Record<string, ShotSelection | undefined>
+  selectShot: (projectId: string, sel: ShotSelection | undefined) => void
+  selectedTake: Record<string, string | undefined>
+  selectTake: (projectId: string, id: string | undefined) => void
+  storyboardView: Record<string, StoryboardView | undefined>
+  setStoryboardView: (projectId: string, view: StoryboardView) => void
 }
 
 export const useWorkspace = create<WorkspaceState>((set) => ({
@@ -45,7 +61,23 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   selectedScene: {},
   selectedCharacter: {},
   selectScene: (projectId, id) => set((s) => ({ selectedScene: { ...s.selectedScene, [projectId]: id } })),
-  selectCharacter: (projectId, id) => set((s) => ({ selectedCharacter: { ...s.selectedCharacter, [projectId]: id } })),
+  selectCharacter: (projectId, id) =>
+    set((s) => ({
+      selectedCharacter: { ...s.selectedCharacter, [projectId]: id },
+      selectedLocation: id ? { ...s.selectedLocation, [projectId]: undefined } : s.selectedLocation,
+    })),
+  selectedLocation: {},
+  selectLocation: (projectId, id) =>
+    set((s) => ({
+      selectedLocation: { ...s.selectedLocation, [projectId]: id },
+      selectedCharacter: id ? { ...s.selectedCharacter, [projectId]: undefined } : s.selectedCharacter,
+    })),
+  selectedShot: {},
+  selectShot: (projectId, sel) => set((s) => ({ selectedShot: { ...s.selectedShot, [projectId]: sel } })),
+  selectedTake: {},
+  selectTake: (projectId, id) => set((s) => ({ selectedTake: { ...s.selectedTake, [projectId]: id } })),
+  storyboardView: {},
+  setStoryboardView: (projectId, view) => set((s) => ({ storyboardView: { ...s.storyboardView, [projectId]: view } })),
 }))
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined

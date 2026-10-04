@@ -1,4 +1,4 @@
-import type { GenerationKind, GenerationStatus, JobStatus, ProjectStatus } from './types'
+import type { Generation, GenerationKind, GenerationStatus, JobStatus, ProjectStatus, ShotStatus } from './types'
 import { humanize } from './utils'
 
 export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
@@ -58,11 +58,27 @@ export function projectStatus(status: ProjectStatus): StatusView {
   }
 }
 
+export function shotStatus(status: ShotStatus): StatusView {
+  switch (status) {
+    case 'draft':
+      return { label: 'Frames needed', tone: 'neutral', icon: 'pencil' }
+    case 'frames_ready':
+      return { label: 'Frames approved', tone: 'success', icon: 'check' }
+    case 'rendering':
+      return { label: 'Rendering', tone: 'accent', icon: 'spinner' }
+    case 'take_ready':
+      return { label: 'Takes to review', tone: 'accent', icon: 'eye' }
+    case 'approved':
+      return { label: 'Take approved', tone: 'success', icon: 'film' }
+  }
+}
+
 export const staleStatus: StatusView = { label: 'Stale', tone: 'warning', icon: 'stale' }
 
 const KIND_LABELS: Record<GenerationKind, string> = {
   portrait: 'Portrait',
   sheet_view: 'Character sheet view',
+  establishing: 'Establishing frame',
   keyframe_start: 'Start frame',
   keyframe_end: 'End frame',
   keyframe_mid: 'Mid frame',
@@ -89,9 +105,22 @@ const JOB_LABELS: Record<string, string> = {
   ai_extract_characters: 'Extract characters',
   ai_portrait_prompt: 'Portrait prompt',
   ai_summarize: 'Scene summary',
+  ai_extract_locations: 'Extract locations',
+  ai_suggest_shots: 'Suggest shots',
+  ai_compile_prompts: 'Shot prompts',
+  storyboard: 'Storyboard from script',
+  ai_storyboard: 'Storyboard from script',
+  take: 'Video take',
 }
 
 export const jobLabel = (type: string) => JOB_LABELS[type] ?? humanize(type)
 
 export const isActiveJob = (s: JobStatus) => s === 'queued' || s === 'running'
 export const isPendingGeneration = (s: GenerationStatus) => s === 'queued' || s === 'generating'
+
+export function scoreText(score: Generation['score']) {
+  if (score == null) return null
+  if (typeof score === 'number') return score.toFixed(1)
+  const overall = score.overall ?? Object.values(score)[0]
+  return typeof overall === 'number' ? overall.toFixed(1) : null
+}

@@ -78,6 +78,8 @@ class Project(Base):
     takes_per_shot: Mapped[int] = mapped_column(Integer, default=3)
     overnight: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="draft")
+    # look suffix every frame/motion prompt carries verbatim (world reconstruction)
+    style_bible: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 
@@ -100,6 +102,9 @@ class Scene(Base):
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
     stale: Mapped[bool] = mapped_column(Boolean, default=False)
+    # no FK on purpose: adding one to an existing SQLite table means a table rebuild,
+    # which with foreign_keys=ON cascades into scene_version. Cleared in code on delete.
+    location_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -130,6 +135,47 @@ class Character(Base):
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Location(Base):
+    __tablename__ = "location"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(20), default="user")
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    time_of_day_variants: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Shot(Base):
+    __tablename__ = "shot"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True)
+    scene_id: Mapped[str] = mapped_column(String(36), ForeignKey("scene.id", ondelete="CASCADE"), index=True)
+    order: Mapped[int] = mapped_column("sort_order", Integer, default=0)
+    shot_type: Mapped[str] = mapped_column(String(30), default="medium")
+    duration_s: Mapped[float] = mapped_column(Float, default=4.0)
+    description: Mapped[str] = mapped_column(Text, default="")
+    camera: Mapped[str] = mapped_column(String(300), default="")
+    prompt: Mapped[str] = mapped_column(Text, default="")
+    prompt_mode: Mapped[str] = mapped_column(String(10), default="auto")
+    start_prompt: Mapped[str] = mapped_column(Text, default="")
+    end_prompt: Mapped[str] = mapped_column(Text, default="")
+    motion_prompt: Mapped[str] = mapped_column(Text, default="")
+    character_ids: Mapped[list] = mapped_column(JSON, default=list)
+    location_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    seam_in: Mapped[str] = mapped_column(String(10), default="cut")
+    handoff_text: Mapped[str] = mapped_column(Text, default="")
+    stale: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(20), default="user")
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 
 
 class Generation(Base):

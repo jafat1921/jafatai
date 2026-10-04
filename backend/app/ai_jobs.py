@@ -4,6 +4,7 @@ Lock rule (PLAN 2b): AI writes straight into a field only when it is empty or th
 is still an untouched AI draft (source 'ai', not locked). Anything else becomes a
 Suggestion the user accepts or rejects.
 """
+import json
 import logging
 import re
 import time
@@ -15,7 +16,10 @@ from sqlalchemy.orm import Session
 from app.llm import LLMError, chat_sync
 from app.llm import prompts as P
 from app.llm.client import is_warm, model_for
-from app.models import Character, Job, Project, Scene, SceneVersion, Suggestion, utcnow
+from app import storyboard as sb
+from app.models import Character, Job, Location, Project, Scene, SceneVersion, Shot, Suggestion, utcnow
+from app.schemas import flush_left
+from app.services import enqueue_generation
 
 log = logging.getLogger("mixai.ai")
 
@@ -29,6 +33,10 @@ PRIORITY = {
     "ai_write_missing": 2,
     "ai_continue": 2,
     "ai_outline": 1,
+    "ai_compile_prompts": 5,
+    "ai_suggest_shots": 4,
+    "ai_extract_locations": 3,
+    "ai_storyboard": 1,
     "ai_summarize": -10,
 }
 SUMMARY_QUIET = timedelta(seconds=8)
@@ -163,8 +171,10 @@ def write_scene(db: Session, scene: Scene, values: dict, *, action: str, job_id:
             scene.source = "ai_edited"
         scene.version += 1
         db.add(snapshot(scene))
-        if "script_text" in written and summarize:
-            queue_summary(db, scene)
+        if "script_text" in written:
+            sb.mark_scene_shots_stale(db, scene.id)
+            if summarize:
+                queue_summary(db, scene)
     return {"written": written, "suggestion_ids": suggested}
 
 
@@ -202,14 +212,16 @@ def upsert_character(db: Session, project: Project, name: str, description: str,
 
 
 def accept(db: Session, s: Suggestion, user_id: str):
-    if s.target_type == "scene":
-        target = db.get(Scene, s.target_id)
-    elif s.target_type == "character":
-        target = db.get(Character, s.target_id)
-    else:
-        target = None
+    model = {"scene": Scene, "character": Character, "location": Location}.get(s.target_type)
+    target = db.get(model, s.target_id) if model else None
     if target is None:
-        raise LookupError("The scene or character for this suggestion no longer exists")
+        raise LookupError(f"The {s.target_type} for this suggestion no longer exists")
+    if s.field == "shots":
+        # the user picked the AI's shot list over what was there, so it replaces the lot
+        replace_shots(db, target, json.loads(s.proposed_text or "[]"), source="ai_edited", locked=True)
+        s.status = "accepted"
+        s.resolved_at = utcnow()
+        return target
     setattr(target, s.field, s.proposed_text)
     # the user chose this text, so it is theirs now: mixed provenance, locked
     target.source = "ai_edited"
@@ -218,6 +230,7 @@ def accept(db: Session, s: Suggestion, user_id: str):
         target.version += 1
         db.add(snapshot(target, user_id))
         if s.field == "script_text":
+            sb.mark_scene_shots_stale(db, target.id)
             queue_summary(db, target)
     s.status = "accepted"
     s.resolved_at = utcnow()
@@ -548,7 +561,301 @@ def handle_summarize(ctx) -> dict:
     return run.result(scene_ids=[scene.id], summary=scene.summary)
 
 
+# ---------------------------------------------------------------- storyboard
+
+PLAN_FIELDS = ("shot_type", "duration_s", "description", "camera", "character_ids", "location_id", "seam_in",
+               "handoff_text", "start_prompt", "end_prompt", "motion_prompt")
+
+
+def _text(v: str) -> str:
+    return flush_left(P.clean_script(v or "")).strip()
+
+
+def _char_ids(names: list[str], chars: list[Character]) -> list[str]:
+    out = []
+    for raw in names or []:
+        n = _clean_name(raw).casefold()
+        if not n:
+            continue
+        hit = next((c for c in chars if c.name.casefold() == n), None) or next(
+            (c for c in chars if n in c.name.casefold().split() or c.name.casefold() in n), None)
+        if hit and hit.id not in out:
+            out.append(hit.id)
+    return out
+
+
+def replace_shots(db: Session, scene: Scene, plans: list[dict], *, source: str = "ai", locked: bool = False) -> list[Shot]:
+    sb.delete_shots(db, sb.scene_shots(db, scene.id))
+    db.flush()
+    shots = []
+    for i, plan in enumerate(plans, start=1):
+        shot = Shot(workspace_id=scene.workspace_id, project_id=scene.project_id, scene_id=scene.id, order=i,
+                    source=source, locked=locked, prompt_mode="auto",
+                    **{k: plan[k] for k in PLAN_FIELDS if plan.get(k) is not None})
+        shot.character_ids = list(plan.get("character_ids") or [])
+        shots.append(shot)
+    db.add_all(shots)
+    db.flush()
+    return shots
+
+
+def apply_shot_plan(db: Session, scene: Scene, plans: list[dict], *, action: str, job_id: str | None):
+    """Lock rule for shots: AI replaces a scene's shots only while they are all untouched AI drafts."""
+    existing = sb.scene_shots(db, scene.id)
+    touched = [s for s in existing if s.locked or s.source != "ai" or sb.has_approved_work(db, s)]
+    if not touched:
+        return replace_shots(db, scene, plans), None
+    db.execute(
+        update(Suggestion)
+        .where(Suggestion.target_type == "scene", Suggestion.target_id == scene.id, Suggestion.field == "shots",
+               Suggestion.status == "pending")
+        .values(status="rejected", resolved_at=utcnow())
+    )
+    sug = Suggestion(
+        workspace_id=scene.workspace_id, project_id=scene.project_id, target_type="scene", target_id=scene.id,
+        field="shots", action=action, job_id=job_id,
+        current_text=json.dumps([{"shot_type": s.shot_type, "duration_s": s.duration_s, "description": s.description}
+                                 for s in existing]),
+        proposed_text=json.dumps(plans),
+    )
+    db.add(sug)
+    db.flush()
+    return [], sug.id
+
+
+def _previous_scene(db: Session, scene: Scene) -> Scene | None:
+    scenes = ordered_scenes(db, scene.project_id)
+    i = scenes.index(scene)
+    return scenes[i - 1] if i > 0 else None
+
+
+def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_shots: int, frac: float,
+                first_seam: str = "cut") -> list[dict]:
+    chars = _characters(db, project.id)
+    ideas = run.call(f"Planning shots for {scene.heading or 'the scene'}", frac, "reasoning",
+                     P.suggest_shots_messages(project, chars, scene, max_shots, _previous_scene(db, scene)),
+                     schema=P.ShotList, temperature=0.5, max_tokens=5000).data.shots[:max_shots]
+    plans = []
+    for i, idea in enumerate(ideas):
+        seam = first_seam if i == 0 else ("continue" if idea.continuous else "cut")
+        plans.append({
+            "shot_type": idea.shot_type, "duration_s": idea.duration_s, "description": idea.description.strip(),
+            "camera": idea.camera.strip()[:300], "character_ids": _char_ids(idea.characters, chars),
+            "location_id": scene.location_id, "seam_in": seam, "handoff_text": idea.handoff.strip() if i else "",
+            "start_prompt": _text(idea.start_visual), "end_prompt": _text(idea.end_visual), "motion_prompt": "",
+        })
+    return plans
+
+
+def compile_shot(run: AiRun, db: Session, shot: Shot, frac: float, label: str | None = None) -> None:
+    project = db.get(Project, shot.project_id)
+    scene = db.get(Scene, shot.scene_id)
+    chars = [c for c in (db.get(Character, cid) for cid in shot.character_ids or []) if c is not None]
+    loc_id = shot.location_id or scene.location_id
+    location = db.get(Location, loc_id) if loc_id else None
+    prev, _ = sb.neighbours(db, shot)
+    d: P.FramePrompts = run.call(
+        label or f"Writing prompts for shot {shot.order} of {scene.heading or 'the scene'}", frac, "creative",
+        P.compile_messages(project, scene, shot, chars, location, prev, sb.is_linked(shot, prev)),
+        schema=P.FramePrompts, temperature=0.5, max_tokens=1600,
+    ).data
+    shot.start_prompt, shot.end_prompt, shot.motion_prompt = _text(d.start_prompt), _text(d.end_prompt), _text(d.motion_prompt)
+
+
+def fill_shot_prompt(ctx, gen) -> str:
+    """Called by the generate handler when a shot generation was queued without a prompt."""
+    db = ctx.db
+    shot = db.get(Shot, gen.target_id) if gen.target_type == "shot" else None
+    if shot is None:
+        raise RuntimeError("The shot for this generation no longer exists")
+    kind = "keyframe_start" if gen.kind == "keyframe_mid" else gen.kind
+    field = {"keyframe_start": "start_prompt", "keyframe_end": "end_prompt", "take": "motion_prompt"}[kind]
+    if not getattr(shot, field).strip() and shot.prompt_mode == "auto":
+        try:
+            compile_shot(AiRun(ctx), db, shot, 0.02, label="Writing this shot's prompts first")
+        except LLMError as e:
+            raise RuntimeError(f"Couldn't write this shot's prompts ({e}). Write them in the shot inspector, "
+                               "or try again when the AI is reachable.") from e
+        db.commit()
+    prompt = sb.frame_prompt(db, shot, kind)
+    if not prompt:
+        prompt = sb.with_style(db.get(Project, shot.project_id), shot.prompt or shot.description)
+    if not prompt.strip():
+        raise RuntimeError("This shot has no prompt and no description to work from. Describe the shot first.")
+    ctx.progress(0.05, "Prompt ready")
+    return prompt
+
+
+def handle_suggest_shots(ctx) -> dict:
+    db, job = ctx.db, ctx.job
+    scene = _owned(db, Scene, job.payload.get("scene_id"), job, "Scene")
+    if not scene.script_text.strip():
+        raise RuntimeError("This scene has no script yet; shots are planned from the script.")
+    project = db.get(Project, scene.project_id)
+    run = AiRun(ctx)
+    plans = _plan_shots(run, db, project, scene, int(job.payload.get("max_shots") or 6), 0.1)
+    shots, sug = apply_shot_plan(db, scene, plans, action="suggest_shots", job_id=job.id)
+    return run.result(outcome="suggested" if sug else "written", scene_ids=[scene.id],
+                      shot_ids=[s.id for s in shots], suggestion_ids=[sug] if sug else [])
+
+
+def handle_compile_prompts(ctx) -> dict:
+    db, job = ctx.db, ctx.job
+    shot = _owned(db, Shot, job.payload.get("shot_id"), job, "Shot")
+    if shot.prompt_mode == "manual":
+        return {"outcome": "unchanged", "shot_ids": [shot.id], "calls": []}
+    run = AiRun(ctx)
+    compile_shot(run, db, shot, 0.1)
+    return run.result(outcome="written", shot_ids=[shot.id], prompt=shot.start_prompt)
+
+
+def upsert_location(db: Session, project: Project, idea: P.LocationIdea, *, action: str, job_id: str | None):
+    name = _clean_name(idea.name)
+    if not name:
+        return None, "skipped"
+    if name.islower():
+        name = name.title()
+    desc = idea.description.strip()
+    times = [t for t in (P._time(v) for v in idea.time_of_day_variants) if t]
+    existing = next((loc for loc in db.scalars(select(Location).where(Location.project_id == project.id)).all()
+                     if loc.name.casefold() == name.casefold()), None)
+    if existing is None:
+        loc = Location(workspace_id=project.workspace_id, project_id=project.id, name=name, description=desc,
+                       source="ai", locked=False, time_of_day_variants=list(dict.fromkeys(times)))
+        db.add(loc)
+        db.flush()
+        return loc, "created"
+    # variants are chips, cheap to undo, so they merge without a suggestion
+    merged = list(dict.fromkeys([*(existing.time_of_day_variants or []), *times]))
+    if merged != list(existing.time_of_day_variants or []):
+        existing.time_of_day_variants = merged
+    if not desc or desc == existing.description.strip():
+        return existing, "unchanged"
+    if ai_may_write(existing.description, existing.source, existing.locked):
+        existing.description = desc
+        if existing.source != "ai":
+            existing.source = "ai_edited" if existing.locked else "ai"
+        return existing, "updated"
+    s = suggest(db, target=existing, target_type="location", field="description", proposed=desc,
+                action=action, job_id=job_id)
+    return existing, s.id
+
+
+def handle_extract_locations(ctx) -> dict:
+    db, job = ctx.db, ctx.job
+    project = _owned(db, Project, job.payload.get("project_id"), job, "Project")
+    scenes = [s for s in ordered_scenes(db, project.id) if (s.heading or s.script_text).strip()]
+    if not scenes:
+        raise RuntimeError("There's no script to read locations from yet.")
+    known = [loc.name for loc in db.scalars(select(Location).where(Location.project_id == project.id)).all()]
+    run = AiRun(ctx)
+    found = run.call("Reading the script for locations", 0.1, "creative",
+                     P.extract_locations_messages(project, scenes, known),
+                     schema=P.LocationList, temperature=0.4, max_tokens=2500).data
+    created, updated, suggestions, linked = [], [], [], []
+    for idea in found.locations:
+        loc, outcome = upsert_location(db, project, idea, action="extract", job_id=job.id)
+        if loc is None:
+            continue
+        if outcome == "created":
+            created.append(loc.id)
+        elif outcome == "updated":
+            updated.append(loc.id)
+        elif outcome not in ("unchanged", "skipped"):
+            suggestions.append(outcome)
+        for n in idea.scenes:
+            # only fill gaps: a scene the user already pointed at a location keeps it
+            if 1 <= n <= len(scenes) and scenes[n - 1].location_id is None:
+                scenes[n - 1].location_id = loc.id
+                linked.append(scenes[n - 1].id)
+                for shot in sb.scene_shots(db, scenes[n - 1].id):
+                    shot.location_id = shot.location_id or loc.id
+    return run.result(location_ids=created + updated, created_ids=created, updated_ids=updated,
+                      suggestion_ids=suggestions, scene_ids=linked)
+
+
+def queue_frames(db: Session, shot: Shot) -> list:
+    prev, _ = sb.neighbours(db, shot)
+    kinds = ["keyframe_end"] if sb.is_linked(shot, prev) else ["keyframe_start", "keyframe_end"]
+    gens = []
+    for kind in kinds:
+        prompt, params = sb.prepare_shot_generation(db, shot, kind, "", {})
+        gens.append(enqueue_generation(db, workspace_id=shot.workspace_id, project_id=shot.project_id,
+                                       target_type="shot", target_id=shot.id, kind=kind, prompt=prompt, params=params))
+    return gens
+
+
+def _scene_plan(run: AiRun, db: Session, project: Project, scene: Scene, frac: float, seam: str) -> dict:
+    chars = _characters(db, project.id)
+    location = db.get(Location, scene.location_id) if scene.location_id else None
+    duration = sb.script_duration(scene.script_text)
+    d: P.SceneFrames = run.call(
+        f"Writing first and last frames for {scene.heading or 'the scene'}", frac, "creative",
+        P.scene_frames_messages(project, chars, scene, location, duration, _previous_scene(db, scene)),
+        schema=P.SceneFrames, temperature=0.5, max_tokens=1800,
+    ).data
+    return {
+        "shot_type": d.shot_type, "duration_s": duration,
+        "description": (d.description or scene.logline or scene.summary).strip(),
+        "camera": d.camera.strip()[:300], "character_ids": _char_ids(d.characters, chars),
+        "location_id": scene.location_id, "seam_in": seam, "handoff_text": "",
+        "start_prompt": _text(d.start_prompt), "end_prompt": _text(d.end_prompt), "motion_prompt": _text(d.motion_prompt),
+    }
+
+
+def handle_storyboard(ctx) -> dict:
+    db, job = ctx.db, ctx.job
+    p = job.payload
+    project = _owned(db, Project, p.get("project_id"), job, "Project")
+    wanted = set(p.get("scene_ids") or [])
+    targets = [s for s in ordered_scenes(db, project.id)
+               if s.script_text.strip() and (not wanted or s.id in wanted)]
+    if not targets:
+        raise RuntimeError("There's no script to storyboard yet.")
+    mode, chain = p.get("mode") or "scene", bool(p.get("chain"))
+    run = AiRun(ctx)
+    done: dict[str, list] = {"scene_ids": [], "skipped_scene_ids": [], "shot_ids": [], "suggestion_ids": [],
+                             "generation_ids": [], "frame_job_ids": []}
+
+    for k, scene in enumerate(targets):
+        frac = 0.05 + 0.9 * k / len(targets)
+        if sb.scene_shots(db, scene.id) and not p.get("overwrite"):
+            done["skipped_scene_ids"].append(scene.id)
+            continue
+        seam = "continue" if chain else "cut"
+        if mode == "shots":
+            plans = _plan_shots(run, db, project, scene, int(p.get("max_shots") or 6), frac, first_seam=seam)
+        else:
+            plans = [_scene_plan(run, db, project, scene, frac, seam)]
+        shots, sug = apply_shot_plan(db, scene, plans, action="storyboard", job_id=job.id)
+        if sug:
+            done["suggestion_ids"].append(sug)
+            continue
+        prev, _ = sb.neighbours(db, shots[0])
+        if prev is None:
+            shots[0].seam_in = "cut"  # nothing before the film's first shot to continue from
+        if mode == "shots":
+            for i, shot in enumerate(shots):
+                compile_shot(run, db, shot, frac + 0.9 / len(targets) * (i + 1) / (len(shots) + 1))
+        db.flush()
+        if p.get("generate_frames", True):
+            for shot in shots:
+                for g in queue_frames(db, shot):
+                    done["generation_ids"].append(g.id)
+                    done["frame_job_ids"].append(g.job_id)
+        done["scene_ids"].append(scene.id)
+        done["shot_ids"] += [s.id for s in shots]
+        run.publish(**done)
+        ctx.progress(frac, f"Storyboarded {len(done['scene_ids'])} of {len(targets)} scenes")
+    project.updated_at = utcnow()
+    return run.result(outcome="suggested" if done["suggestion_ids"] and not done["shot_ids"] else "written", **done)
+
+
 AI_HANDLERS = {
+    "ai_suggest_shots": handle_suggest_shots,
+    "ai_compile_prompts": handle_compile_prompts,
+    "ai_extract_locations": handle_extract_locations,
+    "ai_storyboard": handle_storyboard,
     "ai_outline": handle_outline,
     "ai_write_missing": handle_write_missing,
     "ai_continue": handle_continue,

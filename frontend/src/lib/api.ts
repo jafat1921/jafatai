@@ -5,12 +5,17 @@ import type {
   GenerationKind,
   Job,
   JobStatus,
+  Location,
   Project,
   ProjectCreate,
   RegenerateMode,
   Scene,
   ScenePatch,
   Suggestion,
+  Shot,
+  ShotPatch,
+  ShotType,
+  StoryboardRequest,
   SuggestionResult,
   SystemStatus,
   TargetType,
@@ -156,6 +161,31 @@ export const api = {
       patch<Character>(`/characters/${id}`, body),
     remove: (id: string) => del(`/characters/${id}`),
   },
+  locations: {
+    list: (projectId: string) => get<Location[]>(`/projects/${projectId}/locations`),
+    create: (projectId: string, body: { name: string; description?: string }) =>
+      post<Location>(`/projects/${projectId}/locations`, body),
+    update: (id: string, body: Partial<Pick<Location, 'name' | 'description' | 'locked' | 'time_of_day_variants'>>) =>
+      patch<Location>(`/locations/${id}`, body),
+    remove: (id: string) => del(`/locations/${id}`),
+  },
+  shots: {
+    list: (projectId: string) => get<Shot[]>(`/projects/${projectId}/shots`),
+    listForScene: (sceneId: string) => get<Shot[]>(`/scenes/${sceneId}/shots`),
+    create: (
+      sceneId: string,
+      body: { shot_type?: ShotType; duration_s?: number; description?: string; after_shot_id?: string } = {},
+    ) => post<Shot>(`/scenes/${sceneId}/shots`, body),
+    update: (id: string, body: ShotPatch) => patch<Shot>(`/shots/${id}`, body),
+    reorder: (sceneId: string, shotIds: string[]) => post<Shot[]>(`/scenes/${sceneId}/shots/reorder`, { shot_ids: shotIds }),
+    remove: (id: string) => del(`/shots/${id}`),
+    clearStale: (id: string) => post<Shot>(`/shots/${id}/clear-stale`),
+    renderTakes: (id: string, count?: number) => post<Job[]>(`/shots/${id}/takes`, count ? { count } : {}),
+    renderScene: (sceneId: string, count?: number) => post<Job[]>(`/scenes/${sceneId}/render`, count ? { count } : {}),
+  },
+  storyboard: {
+    fromScript: (projectId: string, body: StoryboardRequest) => post<Job>(`/projects/${projectId}/storyboard`, body),
+  },
   generations: {
     list: (q: GenerationQuery) => get<Generation[]>('/generations', { ...q }),
     create: (body: {
@@ -182,6 +212,10 @@ export const api = {
     extractCharacters: (projectId: string) => post<Job>(`/projects/${projectId}/ai/extract-characters`),
     assist: (sceneId: string, body: { action: AssistAction; idea?: string; tone?: string }) =>
       post<Job>(`/scenes/${sceneId}/ai/assist`, body),
+    extractLocations: (projectId: string) => post<Job>(`/projects/${projectId}/ai/extract-locations`),
+    suggestShots: (sceneId: string, maxShots?: number) =>
+      post<Job>(`/scenes/${sceneId}/ai/suggest-shots`, maxShots ? { max_shots: maxShots } : {}),
+    compilePrompts: (shotId: string) => post<Job>(`/shots/${shotId}/ai/compile-prompts`),
     portraitPrompt: (characterId: string) => post<Job>(`/characters/${characterId}/ai/portrait-prompt`),
     suggestions: (projectId: string) => get<Suggestion[]>(`/projects/${projectId}/suggestions`, { status: 'pending' }),
     accept: (id: string) => post<SuggestionResult>(`/suggestions/${id}/accept`),

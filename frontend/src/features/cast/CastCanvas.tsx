@@ -12,6 +12,7 @@ import { announce, useUi } from '@/stores/ui'
 import { AddCharacterDialog } from './AddCharacterDialog'
 import { CharacterSuggestions } from './CharacterSuggestions'
 import { ExtractCharactersButton } from './ExtractCharactersButton'
+import { LocationsSection } from './LocationsSection'
 
 function CharacterCard({ c, selected, onSelect }: { c: Character; selected: boolean; onSelect: () => void }) {
   const portrait = c.approved_portrait?.media_url
@@ -63,7 +64,7 @@ export function CastCanvas() {
         <div>
           <h1 className="text-title font-display font-semibold">Cast &amp; World</h1>
           <p className="text-small text-studio-muted">
-            {characters.data ? plural(list.length, 'character') : 'Characters'} · approve a portrait for each before storyboarding
+            {characters.data ? plural(list.length, 'character') : 'Characters'} · approve a portrait for each, and an establishing frame per location, before storyboarding
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
@@ -119,6 +120,7 @@ export function CastCanvas() {
               ))}
             </ul>
           )}
+          <LocationsSection projectId={projectId} />
         </div>
       </ScrollArea>
 

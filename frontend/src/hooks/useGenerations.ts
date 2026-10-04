@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { Character, Generation, GenerationKind, RegenerateMode, TargetType } from '@/lib/types'
+import type { Character, Generation, Location, GenerationKind, RegenerateMode, TargetType } from '@/lib/types'
 import { qk } from './keys'
+import { patchShotsFromGeneration } from './useShots'
 
 export interface GenerationTarget {
   targetType: TargetType
@@ -50,6 +51,19 @@ export function upsertGeneration(qc: QueryClient, gen: Generation) {
       }),
     )
   }
+
+  if (gen.target_type === 'location' && gen.kind === 'establishing') {
+    qc.setQueriesData<Location[]>({ queryKey: ['locations'] }, (old) =>
+      old?.map((l) => {
+        if (l.id !== gen.target_id) return l
+        if (gen.status === 'approved') return { ...l, approved_establishing: gen }
+        if (l.approved_establishing?.id === gen.id) return { ...l, approved_establishing: null }
+        return l
+      }),
+    )
+  }
+
+  patchShotsFromGeneration(qc, gen)
 }
 
 export function useGenerationActions() {
@@ -57,12 +71,13 @@ export function useGenerationActions() {
   const onSuccess = (g: Generation) => upsertGeneration(qc, g)
 
   const create = useMutation({
-    mutationFn: (body: { target: GenerationTarget; prompt: string; params?: Record<string, unknown> }) =>
+    mutationFn: (body: { target: GenerationTarget; prompt?: string; params?: Record<string, unknown> }) =>
       api.generations.create({
         target_type: body.target.targetType,
         target_id: body.target.targetId,
         kind: body.target.kind,
-        prompt: body.prompt,
+        // shot keyframes may go out empty: the server then uses the shot's own prompts
+        prompt: body.prompt ?? '',
         params: body.params,
       }),
     onSuccess: (g) => {

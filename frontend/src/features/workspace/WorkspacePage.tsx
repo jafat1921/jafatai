@@ -17,6 +17,8 @@ import { AddSceneButton, ScenesPanel } from './ScenesPanel'
 import { ScriptCanvas } from '@/features/script/ScriptCanvas'
 import { CastCanvas } from '@/features/cast/CastCanvas'
 import { PlaceholderCanvas } from '@/features/stages/PlaceholderCanvas'
+import { StoryboardCanvas } from '@/features/storyboard/StoryboardCanvas'
+import { RenderCanvas } from '@/features/render/RenderCanvas'
 
 function StageCanvas({ stage }: { stage: StageId }) {
   switch (stage) {
@@ -24,6 +26,10 @@ function StageCanvas({ stage }: { stage: StageId }) {
       return <ScriptCanvas />
     case 'cast':
       return <CastCanvas />
+    case 'storyboard':
+      return <StoryboardCanvas />
+    case 'render':
+      return <RenderCanvas />
     default:
       return <PlaceholderCanvas stage={stage} />
   }

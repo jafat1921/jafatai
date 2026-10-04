@@ -118,6 +118,17 @@ def _loras(params: dict) -> list[tuple[str, float]]:
     return out
 
 
+def _ref_preamble(labels, n: int) -> str:
+    # the Qwen edit encoder names its inputs "Picture 1..3"; say which is which so it composes
+    # rather than copying picture 1 back out
+    labels = list(labels or [])[:n]
+    if not labels:
+        return ""
+    parts = [f"Picture {i} shows {name}" for i, name in enumerate(labels, 1)]
+    return ("; ".join(parts) + ". Compose a new film frame with them: keep each character's face, hair and "
+            "clothing exactly, and match the location. ")
+
+
 def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
     params = params or {}
     negative = params.get("negative") or params.get("negative_prompt") or ""
@@ -166,10 +177,12 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         plan.inputs["view"] = view  # recorded only; build() ignores unknown keys
         return plan
 
-    if kind in ("keyframe_start", "keyframe_end", "keyframe_mid"):
+    if kind in ("keyframe_start", "keyframe_end", "keyframe_mid", "establishing"):
         aspect = params.get("aspect_ratio") or lookup.project_aspect(params.get("project_id")) or "16:9"
         size = IMAGE_SIZES.get(aspect, IMAGE_SIZES["16:9"])
-        return edit_plan(ref_ids, prompt, size) if ref_ids else t2i_plan(size)
+        if not ref_ids:
+            return t2i_plan(size)
+        return edit_plan(ref_ids, _ref_preamble(params.get("reference_labels"), len(ref_ids)) + prompt, size)
 
     if kind == "take":
         first = params.get("first_frame_id")

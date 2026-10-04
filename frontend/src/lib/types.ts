@@ -75,18 +75,23 @@ export interface Scene {
   locked: boolean
   version: number
   stale: boolean
+  location_id?: string | null
   created_at: string
   updated_at: string
 }
 
 export type ScenePatch = Partial<
-  Pick<Scene, 'heading' | 'logline' | 'script_text' | 'summary' | 'time_of_day' | 'mood' | 'lighting' | 'locked'>
+  Pick<
+    Scene,
+    'heading' | 'logline' | 'script_text' | 'summary' | 'time_of_day' | 'mood' | 'lighting' | 'locked' | 'location_id'
+  >
 >
 
 export type TargetType = 'character' | 'scene' | 'shot' | 'location' | 'project'
 export type GenerationKind =
   | 'portrait'
   | 'sheet_view'
+  | 'establishing'
   | 'keyframe_start'
   | 'keyframe_end'
   | 'keyframe_mid'
@@ -124,6 +129,92 @@ export interface Character {
   source: Source
   locked: boolean
   approved_portrait?: Generation | null
+}
+
+// contract-v1-storyboard.md
+export interface Location {
+  id: string
+  project_id: string
+  name: string
+  description: string
+  source: Source
+  locked: boolean
+  time_of_day_variants: string[]
+  approved_establishing?: Generation | null
+  created_at: string
+  updated_at: string
+}
+
+export type ShotType =
+  | 'wide'
+  | 'medium'
+  | 'close_up'
+  | 'extreme_close_up'
+  | 'over_shoulder'
+  | 'pov'
+  | 'insert'
+  | 'establishing'
+  | 'long_take'
+export type SeamMode = 'cut' | 'continue'
+export type PromptMode = 'auto' | 'manual'
+export type ShotStatus = 'draft' | 'frames_ready' | 'rendering' | 'take_ready' | 'approved'
+
+export interface Shot {
+  id: string
+  scene_id: string
+  project_id: string
+  order: number
+  shot_type: ShotType
+  duration_s: number
+  description: string
+  camera: string
+  prompt: string
+  prompt_mode: PromptMode
+  start_prompt?: string | null
+  end_prompt?: string | null
+  motion_prompt?: string | null
+  character_ids: string[]
+  location_id?: string | null
+  seam_in: SeamMode
+  handoff_text: string
+  status: ShotStatus
+  stale: boolean
+  source: Source
+  locked: boolean
+  start_frame?: Generation | null
+  end_frame?: Generation | null
+  start_linked?: boolean
+  approved_take?: Generation | null
+  takes_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type ShotPatch = Partial<
+  Pick<
+    Shot,
+    | 'shot_type'
+    | 'duration_s'
+    | 'description'
+    | 'camera'
+    | 'prompt'
+    | 'prompt_mode'
+    | 'start_prompt'
+    | 'end_prompt'
+    | 'motion_prompt'
+    | 'character_ids'
+    | 'location_id'
+    | 'seam_in'
+    | 'handoff_text'
+  >
+>
+
+export interface StoryboardRequest {
+  mode: 'scene' | 'shots'
+  scene_ids?: string[]
+  generate_frames: boolean
+  overwrite: boolean
+  continuity?: 'chain'
 }
 
 export type RegenerateMode = 'same' | 'note' | 'edit'

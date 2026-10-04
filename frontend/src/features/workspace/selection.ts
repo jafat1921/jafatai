@@ -1,6 +1,7 @@
 import { useParams } from 'react-router'
 import { useScenes } from '@/hooks/useScenes'
 import { useCharacters } from '@/hooks/useCharacters'
+import { useLocations } from '@/hooks/useLocations'
 import { useWorkspace } from '@/stores/workspace'
 
 export function useProjectId() {
@@ -31,4 +32,13 @@ export function useSelectedCharacter() {
   const select = useWorkspace((s) => s.selectCharacter)
   const character = characters.data?.find((c) => c.id === selectedId)
   return { characters, character, select: (id: string | undefined) => select(projectId, id) }
+}
+
+export function useSelectedLocation() {
+  const projectId = useProjectId()
+  const locations = useLocations(projectId)
+  const selectedId = useWorkspace((s) => s.selectedLocation[projectId])
+  const select = useWorkspace((s) => s.selectLocation)
+  const location = locations.data?.find((l) => l.id === selectedId)
+  return { locations, location, select: (id: string | undefined) => select(projectId, id) }
 }

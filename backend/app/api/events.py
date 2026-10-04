@@ -10,7 +10,8 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import Generation, Job, utcnow
+from app import storyboard as sb
+from app.models import Generation, Job, Shot, utcnow
 from app.security import COOKIE_NAME, load_current, read_session_token
 from app.services import gen_out, job_out
 
@@ -43,10 +44,36 @@ def collect_changes(workspace_id: str, since: datetime) -> list[tuple[str, str, 
         ).all()
         out = [("job", j.id, j.updated_at, job_out(j).model_dump(mode="json")) for j in jobs]
         out += [("generation", g.id, g.updated_at, gen_out(g).model_dump(mode="json")) for g in gens]
+        out += _shot_changes(db, workspace_id, since, gens)
     finally:
         db.close()
     out.sort(key=lambda r: r[2])
     return out
+
+
+def _shot_changes(db, workspace_id: str, since: datetime, gens) -> list[tuple[str, str, datetime, dict]]:
+    # a shot's status/frames are derived from its generations, so those count as shot changes too
+    stamps: dict[str, datetime] = {}
+    shots: dict[str, Shot] = {}
+    for s in db.scalars(select(Shot).where(Shot.workspace_id == workspace_id, Shot.updated_at > since)).all():
+        shots[s.id], stamps[s.id] = s, s.updated_at
+    for g in gens:
+        if g.target_type != "shot":
+            continue
+        s = shots.get(g.target_id) or db.get(Shot, g.target_id)
+        if s is None:
+            continue
+        related = [s]
+        if g.kind == "keyframe_end":
+            _, nxt = sb.neighbours(db, s)
+            if nxt is not None and nxt.seam_in == "continue":
+                related.append(nxt)  # its linked START frame is this generation
+        for r in related:
+            shots[r.id] = r
+            stamps[r.id] = max(stamps.get(r.id, r.updated_at), g.updated_at, r.updated_at)
+    if not shots:
+        return []
+    return [("shot", o.id, stamps[o.id], o.model_dump(mode="json")) for o in sb.shots_out(db, list(shots.values()))]
 
 
 def _parse_last_id(value: str | None) -> datetime | None:

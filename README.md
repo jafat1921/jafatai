@@ -29,7 +29,12 @@ Other tasks: `api`, `worker`, `web`, `build`, `test`, `serve`.
 
 ## Server install
 
-See [docs/ops/deploy-server.md](docs/ops/deploy-server.md) for the full guide (clone, `.env`, systemd, Caddy).
+**[INSTALL.md](INSTALL.md)** is the full guide. The short version:
+
+```bash
+git clone https://github.com/mharisali-hash/mixaicinemastudio.git && cd mixaicinemastudio
+./scripts/install-server.sh --admin-email you@example.com --public-url https://YOUR_HOST:8443 --systemd
+```
 
 ## Configuration
 
@@ -40,6 +45,6 @@ Never commit `.env`.
 
 **Custom nodes:** ComfyUI-LTXVideo, ComfyUI-KJNodes, ComfyUI-VideoHelperSuite.
 
-**Models:** `z_image_turbo_bf16`, `qwen_3_4b`, `ae`, `qwen_image_edit_2511` + Lightning 4-step LoRA, `qwen_2.5_vl_7b_fp8_scaled`, `qwen_image_vae`, `ltx-2.3-22b-distilled-fp8`, `gemma_3_12B_it_fp4_mixed`, `LTX23_video_vae_bf16`, `LTX23_audio_vae_bf16`.
+**Models:** `z_image_turbo_bf16`, `qwen_3_4b`, `ae`, `qwen_image_edit_2511_fp8mixed` + Lightning 4-step LoRA, `qwen_2.5_vl_7b_fp8_scaled`, `qwen_image_vae`, `ltx-2.3-22b-distilled-fp8`, `gemma_3_12B_it_fp4_mixed`. Full list with folders: [INSTALL.md](INSTALL.md#2-server-requirements).
 
 `GET /api/system/comfy-check` reports anything missing.

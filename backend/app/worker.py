@@ -13,8 +13,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Callable
 
-from sqlalchemy import or_, select, update
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import exists, or_, select, update
+from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from app.config import get_settings
 from app.db import SessionLocal
@@ -32,6 +32,8 @@ IMAGE_KINDS = {"portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyf
 VIDEO_KINDS = {"take", "tile", "render"}
 TEXT_KINDS = {"scene_text"}
 EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt"}
+# same string as app.reel.ASSEMBLE_JOB (that module is imported at the bottom)
+SERIAL_PER_PROJECT = ("reel_assemble",)
 
 _stop = threading.Event()
 
@@ -45,10 +47,15 @@ class WorkerStopping(Exception):
 
 
 def claim_next(db: Session, gpu: str | None = None) -> Job | None:
+    # stitches of one project share scene mezzanines, so they run one after another
+    other = aliased(Job)
+    busy_project = exists().where(
+        other.project_id == Job.project_id, other.type.in_(SERIAL_PER_PROJECT), other.status == "running",
+    )
     for _ in range(5):
         job_id = db.scalars(
             select(Job.id)
-            .where(Job.status == "queued")
+            .where(Job.status == "queued", or_(Job.type.not_in(SERIAL_PER_PROJECT), ~busy_project))
             .order_by(Job.priority.desc(), Job.created_at)
             .limit(1)
         ).first()

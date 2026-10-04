@@ -1,11 +1,11 @@
-import { useState } from 'react'
 import { Link } from 'react-router'
 import { Film } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState, ErrorState } from '@/components/studio/states'
-import { useMoveClip, useReel, useUpdateClip } from '@/hooks/useReel'
+import { useAssemble, useMoveClip, useReel, useUpdateClip } from '@/hooks/useReel'
+import { restitchPayload } from '@/lib/stitch'
 import { ApiError } from '@/lib/api'
 import { useProjectAspectClass } from '@/lib/aspect'
 import { moveClip } from '@/lib/reel'
@@ -16,6 +16,8 @@ import { MissingList } from './MissingList'
 import { ReelHeader } from './ReelHeader'
 import { ReelPlayer } from './ReelPlayer'
 import { ReelRenders } from './ReelRenders'
+import { StitchPanel } from './StitchPanel'
+import { useStitch } from './useStitch'
 import { SceneStrip } from './SceneStrip'
 import { useShotIndex } from './useShotIndex'
 
@@ -28,7 +30,8 @@ export function ReelCanvas() {
   const selectClip = useWorkspace((s) => s.selectClip)
   const update = useUpdateClip(projectId)
   const move = useMoveClip(projectId)
-  const [assembling, setAssembling] = useState(false)
+  const stitch = useStitch(reel.data)
+  const assemble = useAssemble(projectId)
 
   if (reel.isPending) {
     return (
@@ -72,7 +75,7 @@ export function ReelCanvas() {
 
   return (
     <div className="flex h-full flex-col">
-      <ReelHeader reel={data} projectId={projectId} confirming={assembling} setConfirming={setAssembling} />
+      <ReelHeader reel={data} projectId={projectId} />
       {(update.isError || move.isError) && (
         <ErrorState compact className="mx-5 mb-3" title="That change didn't save" error={update.error ?? move.error} />
       )}
@@ -91,6 +94,7 @@ export function ReelCanvas() {
               The Reel lines up every shot's approved take in scene order. Approve takes in Render, then press Sync.
             </EmptyState>
           )}
+          {hasClips && <StitchPanel projectId={projectId} stitch={stitch} />}
           <MissingList missing={data.missing} projectId={projectId} shotFor={shots.shotFor} onOpen={shots.openInRender} />
 
           {scenes.map((s, i) => (
@@ -99,6 +103,7 @@ export function ReelCanvas() {
               scene={s}
               index={i}
               isFirstScene={i === 0}
+              inStitch={stitch.inSelection.has(s.scene_id)}
               meta={(c) => ({ label: shots.labelFor(c.shot_id), description: shots.shotFor(c.shot_id)?.shot.description })}
               selectedClipId={selectedClip}
               moving={move.isPending}
@@ -114,9 +119,16 @@ export function ReelCanvas() {
                   <h2 className="section-label">Preview</h2>
                   <ReelPlayer reel={data} labelFor={shots.labelFor} aspectClass={aspect} />
                 </section>
-                <section aria-label="Renders" className="flex flex-col gap-2">
-                  <h2 className="section-label">Assembled film</h2>
-                  <ReelRenders projectId={projectId} aspectClass={aspect} onReassemble={() => setAssembling(true)} />
+                <section aria-label="Full film" className="flex flex-col gap-2">
+                  <h2 className="section-label">Full film</h2>
+                  <ReelRenders
+                    projectId={projectId}
+                    aspectClass={aspect}
+                    onReassemble={(r) => assemble.mutate(restitchPayload(r), { onSuccess: () => announce('Stitching the full film again.') })}
+                  />
+                  <Link to={`/projects/${projectId}/output`} className="text-small text-studio-accent-hover underline underline-offset-2">
+                    All stitched videos are in Output
+                  </Link>
                 </section>
               </div>
             </div>

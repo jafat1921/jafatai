@@ -32,8 +32,10 @@ Changing one clip rebuilds only its scene's mezzanine plus the film join.
 | POST | `/projects/{id}/reel/sync` | — | `Reel`. Adds clips for newly approved takes; updates `generation_id` when a shot's approved take changed (marks it changed); keeps the user's order, trims and transitions. Shots without an approved take are listed as `missing` |
 | PATCH | `/reel-clips/{id}` | `{trim_in_s?, trim_out_s?, transition_in?, transition_s?, enabled?}` | `ReelClip` |
 | POST | `/projects/{id}/reel/reorder` | `{clip_ids:[...]}` | `Reel` (clips may only move within their scene for now; scenes keep scene order) |
-| POST | `/projects/{id}/reel/assemble` | `{quality:"draft", scene_ids?}` | `Job`. Builds stale mezzanines, then the film → `Generation(kind="render", target_type="project")` with review actions (approve = the "current cut") |
-| GET | `/projects/{id}/renders` | — | `Generation[]` of kind render, newest first |
+| POST | `/projects/{id}/reel/assemble` | `{quality:"draft", scene_ids?, title?}` | `Job`. Stitches the selected scenes (all when omitted): builds stale mezzanines, then joins them → `Generation(kind="render", target_type="project")` with review actions (approve = the "final film"). See "Range stitching & Output" |
+| GET | `/projects/{id}/renders` | — | `Render[]` (a Generation plus `title, scene_range, scene_ids, full, duration_s, clips, approved`), newest first |
+| PATCH | `/generations/{id}` | `{title}` | `Render`. Renames a stitched video (renders only; 422 otherwise) |
+| GET | `/generations/{id}/download` | — | The file as an attachment named `<project>-<title>-v<version>.mp4` |
 | GET | `/projects/{id}/reel/estimate` | — | `{clips, duration_s, stale_scenes, est_seconds}` |
 
 **`Reel` shape:**
@@ -78,10 +80,23 @@ These clarify or slightly extend the contract above; the frontend can rely on th
 - **Fade through black** does not overlap: the outgoing clip fades out over `d/2`, the incoming clip fades in over `d/2`, and `d` is clamped like a dissolve. Only dissolves shorten the timeline.
 - **The scene seam** (the first clip's `transition_in`) is not part of that scene's mezzanine hash, so changing it only re-joins the film.
 - **Chapters** start where the seam into the scene begins.
-- **`POST .../reel/assemble`**: if an assembly is already queued or running for the project, the in-flight Job is returned instead of starting a second one. Returns 409 when there is nothing to assemble. `scene_ids` forces those scenes to be rebuilt even when they are fresh; stale scenes are always rebuilt.
+- **`POST .../reel/assemble`**: returns 409 when there is nothing to assemble. Stale scenes are always rebuilt, fresh ones reused. (Superseded on 2026-10-04: `scene_ids` now selects the scenes to stitch rather than forcing rebuilds, and the in-flight rule is per selection; see below.)
 - The render `Generation` is created when the job is queued (`status: queued → generating → ready`, or `failed` on error or cancel). Its `params` record `input_hash`, `mezzanines[]` (scene, generation, hash), `chapters[]`, `join` (`copy`|`reencode`), `fallbacks[]` and `loudness`. Mezzanine generations record `input_hash` and `clips[]`.
 - **`mezzanine` is not accepted by `POST /generations`.** Only the assembly job produces it. `render` is still accepted there (for the mock driver).
 - **Usage:** the job records `gpu_seconds = 0` and a `usage_ledger` row with kind `assembly`; the wall time is in `job.result.wall_seconds`.
 - **Silent films:** if the joined audio is silence, the loudnorm pass is skipped and the audio is copied as it is.
 - **`reel.settings.size`** (`[w, h]`) overrides the draft size. The tests use it for 160x90 renders.
 - **SSE `reel`** fires when the reel row or one of its clips changes, and when an assembly job is queued, starts or finishes (progress ticks don't trigger it).
+
+## Range stitching & Output (2026-10-04)
+After Render, the user **stitches** approved takes into one video from the Reel, choosing which scenes go in. They can make as many stitched videos as they like ("Full film", "Scenes 1–4", "Act 2"…). The **Output** stage is the gallery of every stitched video.
+
+- **Selection.** `scene_ids` means "stitch only these scenes"; they are always joined in film order, whatever order they were sent in. Empty or omitted means every scene that has a playable clip. Scenes are numbered by their position in the film (1-based, the "Sc N" on the Reel).
+- **Validation.** Ids that aren't scenes of the project → 422. Selected scenes with no enabled clip on an approved take → 422 with a message naming them (for example `No approved takes to stitch in: Scene 3 (INT. LAB)`). Nothing stitchable at all → 409. The Reel UI's Range mode leaves such scenes out itself and says so.
+- **Titles.** `title` is optional. The automatic title is `Full film` when the selection covers every scene with takes, otherwise the range label: `Scene 3`, `Scenes 2–5` for a contiguous run, or `Scenes 1, 3, 6` for a set. An automatic title follows what the job really stitched (takes can change while it waits); a typed title is kept.
+- **Render params** (set when queued, finalised when done): `title`, `title_auto`, `scene_ids` (included scenes, film order), `scene_range`, `full`, `clips`, `duration_s`, `created_by: {user_id, flow: "reel_stitch"}`, plus the existing `input_hash`, `mezzanines`, `chapters`, `join`, `fallbacks`, `loudness`. The prompt reads `<project> · <title>` and the mp4 metadata title `<project> - <title>`. Renders made before this change have none of the new keys and read as `Full film`.
+- **Concurrency.** An identical selection that is already queued or running returns that Job (the whole film counts as one selection, however it was asked for). A different selection is queued as its own Job. The worker never runs two stitches of the same project at once (they share scene mezzanines), so the second one waits for the first and then reuses whatever scenes it built.
+- **`reel.last_render`** is the newest ready or approved **full-film** stitch; partial stitches appear only in `/renders` and Output.
+- **Rename:** `PATCH /generations/{id} {title}` (1–200 characters, trimmed; renders only). It sets `title_auto: false`, bumps `updated_at` (so an SSE `generation` event follows), and returns the `Render`.
+- **Download:** `GET /generations/{id}/download` needs a session and serves only files inside the caller's workspace folder (same containment as `/media`), with status ready, approved or rejected. The name is `<project-title>-<title>-v<version>.mp4`, cut down to ASCII letters, digits and hyphens (`Reef-Scenes-2-5-v3.mp4`).
+- **Output stage.** Cards newest first, each in a darkroom frame: title, scene range, mm:ss, date, version, and a "Final film" badge on the approved one. Actions: Play (large player dialog), Download (the endpoint above), Rename (inline; Enter saves, Escape cancels), Approve as final or Unapprove (the usual one-approved-per-target rule, so approving one demotes the previous final film), and Reject or Restore with a "Show rejected" toggle. Filter chips: All · Full film · Partial. On phones the page is review-only: play, download and approve.

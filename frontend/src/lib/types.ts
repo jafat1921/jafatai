@@ -361,3 +361,21 @@ export interface ReelEstimate {
   stale_scenes: number
   est_seconds: number
 }
+
+// Range stitching (contract-v3 "Range stitching & Output"). SSE generation events omit the
+// top-level extras, so read them through renderInfo() which falls back to params.
+export interface Render extends Generation {
+  title?: string
+  scene_range?: string
+  scene_ids?: string[]
+  full?: boolean
+  duration_s?: number | null
+  clips?: number | null
+  approved?: boolean
+}
+
+export interface StitchRequest {
+  quality: 'draft'
+  scene_ids?: string[]
+  title?: string
+}

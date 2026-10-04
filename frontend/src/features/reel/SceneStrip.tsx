@@ -1,6 +1,8 @@
+import { Badge } from '@/components/ui/badge'
 import { StatusPill } from '@/components/studio/status-pill'
 import { formatTimecode } from '@/lib/duration'
 import { mezzanineStatus } from '@/lib/status'
+import { cn } from '@/lib/utils'
 import type { ReelClip, ReelClipPatch, ReelScene } from '@/lib/types'
 import { ClipCard } from './ClipCard'
 import { TransitionChip } from './TransitionChip'
@@ -14,6 +16,8 @@ interface Props {
   scene: ReelScene
   index: number
   isFirstScene: boolean
+  // inside the Stitch panel's current selection
+  inStitch?: boolean
   meta: (clip: ReelClip) => ClipMeta
   selectedClipId: string | undefined
   moving: boolean
@@ -22,10 +26,16 @@ interface Props {
   onPatch: (clip: ReelClip, patch: ReelClipPatch) => void
 }
 
-export function SceneStrip({ scene, index, isFirstScene, meta, selectedClipId, moving, onSelect, onMove, onPatch }: Props) {
+export function SceneStrip({ scene, index, isFirstScene, inStitch, meta, selectedClipId, moving, onSelect, onMove, onPatch }: Props) {
   const changed = scene.clips.filter((c) => c.changed).map((c) => meta(c).label)
   return (
-    <section aria-labelledby={`reel-scene-${scene.scene_id}`} className="rounded-[6px] border border-studio-border-strong bg-studio-panel p-3 shadow-card">
+    <section
+      aria-labelledby={`reel-scene-${scene.scene_id}`}
+      className={cn(
+        'rounded-[6px] border bg-studio-panel p-3 shadow-card transition-colors',
+        inStitch ? 'border-studio-accent ring-1 ring-studio-gold/50' : 'border-studio-border-strong',
+      )}
+    >
       <header className="mb-2 flex flex-wrap items-center gap-2">
         <span className="rounded-[4px] bg-studio-accent-soft px-1.5 font-mono text-small font-medium text-studio-accent-hover">
           Sc {index + 1}
@@ -33,6 +43,7 @@ export function SceneStrip({ scene, index, isFirstScene, meta, selectedClipId, m
         <h2 id={`reel-scene-${scene.scene_id}`} className="min-w-0 flex-1 truncate font-display text-panel font-semibold">
           {scene.heading || 'Untitled scene'}
         </h2>
+        {inStitch && <Badge tone="accent">In stitch</Badge>}
         <span className="font-mono text-small text-studio-muted">{formatTimecode(scene.duration_s)}</span>
         <StatusPill status={mezzanineStatus(scene.mezzanine.status)} />
       </header>

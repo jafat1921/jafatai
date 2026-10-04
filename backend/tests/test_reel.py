@@ -220,3 +220,103 @@ def test_concat_lists_are_per_job(clips, tmp_path):
     assert Path(results["job2"]["list"]).parent == tmp_path / "job2"
     for n in ("job1", "job2"):
         assert rl.probe(tmp_path / f"{n}.mp4").duration == pytest.approx(results[n]["length"], abs=0.1)
+
+
+def test_range_labels():
+    assert rl.range_label([3]) == "Scene 3"
+    assert rl.range_label([5, 2, 4, 3]) == "Scenes 2–5"
+    assert rl.range_label([1, 3, 6]) == "Scenes 1, 3, 6"
+    assert rl.safe_name("Act 2 / Ending!") == "Act-2-Ending"
+    assert rl.safe_name("Ça va — été") == "Ca-va-ete"
+    assert rl.safe_name("Scenes 2–5") == "Scenes-2-5"
+    assert rl.safe_name("***") == "film"
+
+
+def test_stitch_range_contains_only_the_selected_scenes(client, db, project, clips):
+    (s1, _), (s2, _), (s3, _) = _film(client, db, project, [[clips["tone2"]], [clips["silent15"]], [clips["tone1"]]])
+    # asked out of order, stitched in film order
+    job = _assemble(client, project, scene_ids=[s3, s2])
+    assert sorted(job.result["scenes_built"]) == sorted([s2, s3])
+    render = db.get(Generation, job.generation_id)
+    assert render.params["scene_ids"] == [s2, s3]
+    assert render.params["title"] == "Scenes 2–3" and render.params["full"] is False
+    assert render.params["clips"] == 2
+    film = rl.probe(get_settings().data_dir / render.file_path)
+    assert film.duration == pytest.approx(2.5, abs=0.1)  # 1.5 + 1, scene 1's 2 s left out
+    assert len(film.chapters) == 2
+
+    rows = client.get(f"/api/projects/{project['id']}/renders").json()
+    assert rows[0]["title"] == "Scenes 2–3" and rows[0]["scene_range"] == "Scenes 2–3"
+    assert rows[0]["full"] is False and rows[0]["duration_s"] == pytest.approx(2.5, abs=0.01)
+    assert rows[0]["approved"] is False
+
+    # a set reuses the mezzanines already built for the range
+    job2 = _assemble(client, project, scene_ids=[s1, s3])
+    assert job2.result["scenes_built"] == [s1] and job2.result["scenes_cached"] == [s3]
+    assert db.get(Generation, job2.generation_id).params["title"] == "Scenes 1, 3"
+
+
+def test_full_film_label_and_custom_title(client, db, project, clips):
+    (s1, _), (s2, _), _ = _film(client, db, project, [[clips["tone1"]], [clips["tone1"]], [None]])
+    full = client.post(f"/api/projects/{project['id']}/reel/assemble", json={}).json()
+    explicit = client.post(f"/api/projects/{project['id']}/reel/assemble", json={"scene_ids": [s2, s1]}).json()
+    assert explicit["id"] == full["id"]  # every scene with takes is the same "full film" selection
+    assert db.get(Generation, full["generation_id"]).params["title"] == "Full film"
+
+    named = client.post(f"/api/projects/{project['id']}/reel/assemble", json={"scene_ids": [s2], "title": " Act 2 "})
+    g = db.get(Generation, named.json()["generation_id"])
+    assert g.params["title"] == "Act 2" and g.params["title_auto"] is False and g.params["scene_range"] == "Scene 2"
+
+
+def test_stitch_rejects_scenes_without_takes(client, db, project, clips):
+    (s1, _), (s2, _) = _film(client, db, project, [[clips["tone1"]], [None]])
+    r = client.post(f"/api/projects/{project['id']}/reel/assemble", json={"scene_ids": [s1, s2]})
+    assert r.status_code == 422 and "Scene 2 (SCENE 2)" in r.json()["detail"]
+    other = client.post("/api/projects", json={"title": "x", "authoring_mode": "scene_by_scene"}).json()
+    sc = client.post(f"/api/projects/{other['id']}/scenes", json={}).json()
+    r = client.post(f"/api/projects/{project['id']}/reel/assemble", json={"scene_ids": [sc["id"]]})
+    assert r.status_code == 422
+
+
+def test_different_ranges_queue_identical_returns_in_flight(client, db, project, clips):
+    (s1, _), (s2, _) = _film(client, db, project, [[clips["tone1"]], [clips["tone1"]]])
+    url = f"/api/projects/{project['id']}/reel/assemble"
+    a = client.post(url, json={"scene_ids": [s1]}).json()
+    b = client.post(url, json={"scene_ids": [s2]}).json()
+    again = client.post(url, json={"scene_ids": [s1]}).json()
+    assert a["id"] != b["id"] and again["id"] == a["id"]
+    assert len(client.get(f"/api/projects/{project['id']}/renders").json()) == 2
+
+    first = claim_next(db)
+    assert first.id == a["id"]
+    # the second stitch waits for the first instead of building the same mezzanines alongside it
+    assert claim_next(db) is None
+    run_job(db, first)
+    assert db.get(Job, a["id"]).status == "done"
+    second = claim_next(db)
+    assert second.id == b["id"]
+    run_job(db, second)
+    assert db.get(Job, b["id"]).status == "done"
+
+
+def test_rename_and_download(client, db, project, clips):
+    _film(client, db, project, [[clips["tone1"]]])
+    job = _assemble(client, project)
+    gid = job.generation_id
+    r = client.patch(f"/api/generations/{gid}", json={"title": "Act 2 / Ending!"})
+    assert r.status_code == 200 and r.json()["title"] == "Act 2 / Ending!"
+    assert client.get(f"/api/projects/{project['id']}/renders").json()[0]["title"] == "Act 2 / Ending!"
+    assert client.patch(f"/api/generations/{gid}", json={"title": "   "}).status_code == 422
+
+    d = client.get(f"/api/generations/{gid}/download")
+    assert d.status_code == 200 and d.content[4:8] == b"ftyp"
+    assert d.headers["content-disposition"] == 'attachment; filename="Reef-Act-2-Ending-v1.mp4"'
+
+    take = db.scalars(select(Generation).where(Generation.kind == "take")).first()
+    assert client.patch(f"/api/generations/{take.id}", json={"title": "x"}).status_code == 422
+    assert client.get("/api/generations/nope/download").status_code == 404
+    # a file path pointing outside the workspace is never served
+    g = db.get(Generation, gid)
+    g.file_path = "../../outside.mp4"
+    db.commit()
+    assert client.get(f"/api/generations/{gid}/download").status_code == 404

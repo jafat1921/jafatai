@@ -494,8 +494,23 @@ class ReelReorderIn(BaseModel):
 
 class AssembleIn(BaseModel):
     quality: Literal["draft"] = "draft"
-    # scenes to rebuild even if their mezzanine is fresh; stale ones are always rebuilt
+    # stitch only these scenes (always in film order); empty/None = the whole film
     scene_ids: list[str] | None = None
+    title: str | None = Field(None, max_length=200)
+
+
+class RenderOut(GenerationOut):
+    title: str = "Full film"
+    scene_range: str = ""
+    scene_ids: list[str] = []
+    full: bool = True
+    duration_s: float | None = None
+    clips: int | None = None
+    approved: bool = False
+
+
+class GenerationPatch(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
 
 
 class ReelEstimateOut(BaseModel):

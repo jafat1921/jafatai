@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { applyClipPatch, moveClip, patchReelClip } from '@/lib/reel'
-import type { Generation, Job, Reel, ReelClipPatch } from '@/lib/types'
+import type { Generation, Job, Reel, ReelClipPatch, Render, StitchRequest } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
 
@@ -26,13 +26,18 @@ export function useReelEstimate(projectId: string, enabled: boolean) {
 export const setReel = (qc: QueryClient, reel: Reel) => qc.setQueryData(qk.reel(reel.project_id), reel)
 
 /** Renders list mirrors the server's "one approved render = the current cut" rule, newest first. */
-export function upsertRender(qc: QueryClient, gen: Generation) {
+export function upsertRender(qc: QueryClient, gen: Generation | Render) {
   if (gen.kind !== 'render') return
-  qc.setQueryData<Generation[]>(qk.renders(gen.target_id), (old) => {
+  qc.setQueryData<Render[]>(qk.renders(gen.target_id), (old) => {
     if (!old) return old
+    const prev = old.find((g) => g.id === gen.id)
     let list = old.filter((g) => g.id !== gen.id)
-    if (gen.status === 'approved') list = list.map((g) => (g.status === 'approved' ? { ...g, status: 'ready' as const } : g))
-    return [gen, ...list].sort((a, b) => b.version - a.version || b.created_at.localeCompare(a.created_at))
+    if (gen.status === 'approved') {
+      list = list.map((g) => (g.status === 'approved' ? { ...g, status: 'ready' as const, approved: false } : g))
+    }
+    // SSE sends a plain Generation; keep the list's extra fields (title, range…) underneath it
+    const merged: Render = { ...prev, ...gen, approved: gen.status === 'approved' }
+    return [merged, ...list].sort((a, b) => b.version - a.version || b.created_at.localeCompare(a.created_at))
   })
 }
 
@@ -97,10 +102,32 @@ export function useMoveClip(projectId: string) {
 export function useAssemble(projectId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (sceneIds?: string[]) => api.reel.assemble(projectId, sceneIds),
+    mutationFn: (body?: StitchRequest) => api.reel.assemble(projectId, body),
     onSuccess: (job) => {
       upsertJob(qc, job)
       qc.invalidateQueries({ queryKey: qk.reel(projectId) })
+      // the queued render row exists already, so Output can show it straight away
+      qc.invalidateQueries({ queryKey: qk.renders(projectId) })
     },
+  })
+}
+
+export function useRenameRender(projectId: string) {
+  const qc = useQueryClient()
+  const key = qk.renders(projectId)
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => api.reel.rename(id, title),
+    onMutate: async ({ id, title }) => {
+      await qc.cancelQueries({ queryKey: key })
+      const prev = qc.getQueryData<Render[]>(key)
+      qc.setQueryData<Render[]>(key, (old) =>
+        old?.map((r) => (r.id === id ? { ...r, title, params: { ...r.params, title, title_auto: false } } : r)),
+      )
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(key, ctx.prev)
+    },
+    onSuccess: (r) => upsertRender(qc, r),
   })
 }

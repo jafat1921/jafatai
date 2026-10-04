@@ -8,16 +8,19 @@ import { ReviewBar } from '@/components/review/ReviewBar'
 import { useGenerationActions } from '@/hooks/useGenerations'
 import { useJob, useJobAction } from '@/hooks/useJobs'
 import { useRenders } from '@/hooks/useReel'
+import { api } from '@/lib/api'
+import { renderInfo } from '@/lib/stitch'
 import { generationStatus, isPendingGeneration } from '@/lib/status'
 import type { Generation } from '@/lib/types'
 import { cn, timeAgo } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 
-export function DownloadButton({ render, size = 'sm' }: { render: Generation; size?: 'sm' | 'md' }) {
+export function DownloadButton({ render, size = 'sm', label }: { render: Generation; size?: 'sm' | 'md'; label?: string }) {
   if (!render.media_url || isPendingGeneration(render.status)) return null
   return (
     <Button asChild size={size} variant="secondary">
-      <a href={render.media_url} download={`film-v${render.version}.mp4`}>
+      {/* the server names the file (<project>-<title>-v<n>.mp4) */}
+      <a href={api.reel.downloadUrl(render.id)} download aria-label={label}>
         <Download aria-hidden />
         Download
       </a>
@@ -25,14 +28,22 @@ export function DownloadButton({ render, size = 'sm' }: { render: Generation; si
   )
 }
 
-/** Assembled films, newest first. Approving one makes it the current cut (shown in Output). */
-export function ReelRenders({ projectId, aspectClass, onReassemble }: { projectId: string; aspectClass: string; onReassemble?: () => void }) {
+/** Whole-film stitches, newest first. Partial stitches are listed in Output. */
+export function ReelRenders({
+  projectId,
+  aspectClass,
+  onReassemble,
+}: {
+  projectId: string
+  aspectClass: string
+  onReassemble?: (render: Generation) => void
+}) {
   const renders = useRenders(projectId)
   const actions = useGenerationActions()
   const cancel = useJobAction('cancel')
   const [viewId, setViewId] = useState<string>()
   const [versionsOpen, setVersionsOpen] = useState(false)
-  const list = (renders.data ?? []).filter((r) => r.status !== 'rejected')
+  const list = (renders.data ?? []).filter((r) => r.status !== 'rejected' && renderInfo(r).full)
   const current = list.find((r) => r.id === viewId) ?? list.find((r) => r.status === 'approved') ?? list[0]
   const job = useJob(current?.job_id)
 
@@ -40,8 +51,8 @@ export function ReelRenders({ projectId, aspectClass, onReassemble }: { projectI
   if (renders.isError) return <ErrorState compact title="Couldn't load renders" error={renders.error} onRetry={() => renders.refetch()} />
   if (!current) {
     return (
-      <EmptyState icon={<Film />} title="No film assembled yet">
-        Assemble a draft to get one MP4 of the whole film.
+      <EmptyState icon={<Film />} title="No full film stitched yet">
+        Stitch every scene in the Reel to get one MP4 of the whole film.
       </EmptyState>
     )
   }
@@ -68,9 +79,9 @@ export function ReelRenders({ projectId, aspectClass, onReassemble }: { projectI
         error={job?.error}
         busy={busy}
         versionsOpen={versionsOpen}
-        onApprove={() => actions.approve.mutate(current.id, { onSuccess: () => announce(`Render v${current.version} is now the current cut.`) })}
+        onApprove={() => actions.approve.mutate(current.id, { onSuccess: () => announce(`Render v${current.version} is now the final film.`) })}
         onUnapprove={() => actions.unapprove.mutate(current.id)}
-        onRegenerate={() => onReassemble?.()}
+        onRegenerate={() => onReassemble?.(current)}
         onReject={() => actions.reject.mutate(current.id, { onSuccess: () => setViewId(undefined) })}
         onRestore={() => actions.restore.mutate(current.id)}
         onToggleVersions={() => setVersionsOpen((v) => !v)}
@@ -78,7 +89,7 @@ export function ReelRenders({ projectId, aspectClass, onReassemble }: { projectI
       />
       <div className="flex flex-wrap items-center gap-2">
         <DownloadButton render={current} />
-        {current.status === 'approved' && <span className="text-small text-studio-muted">Current cut</span>}
+        {current.status === 'approved' && <span className="text-small text-studio-muted">Final film</span>}
       </div>
       {err && <ErrorState compact title="That didn't work" error={err} />}
       {versionsOpen && (

@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.ai_jobs import rewrite_prompt_from_note
-from app import storyboard
-from app.models import Generation, Job, Location, Shot, utcnow
-from app.schemas import GenerationCreate, GenerationOut, RegenerateIn, RejectIn
+from app import reel, storyboard
+from app.api.media import resolve_media_path
+from app.config import get_settings
+from app.models import Generation, Job, Location, Project, Shot, utcnow
+from app.schemas import GenerationCreate, GenerationOut, GenerationPatch, RegenerateIn, RejectIn, RenderOut
 from app.security import CurrentUser, get_current_user, require_editor
-from app.services import approve, enqueue_generation, gen_out, get_owned, new_seed, resolve_target_project
+from app.services import (
+    READY_STATES, approve, enqueue_generation, gen_out, get_owned, new_seed, resolve_target_project,
+)
 
 router = APIRouter(prefix="/generations", tags=["generations"])
 
@@ -155,6 +160,33 @@ def reject_generation(
         g.reject_reason = body.reason
     db.commit()
     return gen_out(g)
+
+
+@router.patch("/{gen_id}", response_model=RenderOut)
+def rename_generation(gen_id: str, body: GenerationPatch, db: Session = Depends(get_db),
+                      cur: CurrentUser = Depends(require_editor)):
+    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    if g.kind != "render":
+        raise HTTPException(422, "Only stitched videos can be renamed")
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(422, "The name can't be blank")
+    # a new dict, so the JSON column registers the change
+    g.params = {**(g.params or {}), "title": title, "title_auto": False}
+    g.updated_at = utcnow()
+    db.commit()
+    return reel.render_out(g)
+
+
+@router.get("/{gen_id}/download")
+def download_generation(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    path = resolve_media_path(g.file_path or "", cur.workspace_id, get_settings().data_dir)
+    if path is None or g.status not in READY_STATES:
+        raise HTTPException(404, "This file isn't available")
+    name = reel.download_name(db.get(Project, g.project_id) if g.project_id else None, g)
+    return FileResponse(path, media_type=g.media_type or None, filename=name,
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/{gen_id}/restore", response_model=GenerationOut)

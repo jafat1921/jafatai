@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -25,7 +26,7 @@ from app import storyboard as sb
 from app.config import get_settings
 from app.models import Generation, Job, Project, Reel, ReelClip, Scene, new_id, utcnow
 from app.schemas import (
-    MezzanineOut, ReelClipOut, ReelMissingOut, ReelOut, ReelSceneOut,
+    MezzanineOut, ReelClipOut, ReelMissingOut, ReelOut, ReelSceneOut, RenderOut,
 )
 from app.services import gen_out, generation_file, media_url, next_version
 
@@ -491,16 +492,103 @@ def film_length(plans: list[ScenePlan]) -> float:
     return round(total, 3)
 
 
-def active_job(db: Session, project_id: str) -> Job | None:
-    return db.scalars(select(Job).where(
+FULL_FILM = "Full film"
+
+
+def range_label(numbers: list[int]) -> str:
+    """'Scene 3', 'Scenes 2–5' for a contiguous run, 'Scenes 1, 3, 6' otherwise."""
+    nums = sorted(set(numbers))
+    if not nums:
+        return ""
+    if len(nums) == 1:
+        return f"Scene {nums[0]}"
+    if nums[-1] - nums[0] == len(nums) - 1:
+        return f"Scenes {nums[0]}–{nums[-1]}"
+    return "Scenes " + ", ".join(str(n) for n in nums)
+
+
+@dataclass
+class Selection:
+    plans: list[ScenePlan]  # included scenes, film order, each with at least one playable clip
+    numbers: list[int]      # 1-based positions in the film
+    full: bool
+    empty: list[tuple[int, Scene]]  # asked-for scenes with nothing to play
+
+    @property
+    def scene_ids(self) -> list[str]:
+        return [p.scene.id for p in self.plans]
+
+    @property
+    def label(self) -> str:
+        return range_label(self.numbers)
+
+    @property
+    def key(self) -> str:
+        # what makes two stitch requests "the same job"
+        return "all" if self.full else ",".join(self.scene_ids)
+
+    @property
+    def auto_title(self) -> str:
+        return FULL_FILM if self.full else self.label
+
+
+def select_scenes(plans: list[ScenePlan], scene_ids: list[str] | None) -> Selection:
+    pos = {p.scene.id: i for i, p in enumerate(plans, start=1)}
+    live = {p.scene.id for p in plans if p.clips}
+    wanted = set(scene_ids) if scene_ids else live
+    chosen = [p for p in plans if p.scene.id in wanted]
+    included = [p for p in chosen if p.clips]
+    empty = [(pos[p.scene.id], p.scene) for p in chosen if not p.clips]
+    full = bool(included) and {p.scene.id for p in included} == live
+    return Selection(included, [pos[p.scene.id] for p in included], full, empty)
+
+
+def active_job(db: Session, project_id: str, key: str | None = None) -> Job | None:
+    """The oldest queued/running assembly; with `key`, only one stitching that exact selection."""
+    jobs = db.scalars(select(Job).where(
         Job.project_id == project_id, Job.type == ASSEMBLE_JOB, Job.status.in_(("queued", "running")),
-    ).order_by(Job.created_at)).first()
+    ).order_by(Job.created_at)).all()
+    if key is None:
+        return jobs[0] if jobs else None
+    # jobs queued before range stitching existed always meant the whole film
+    return next((j for j in jobs if (j.payload or {}).get("selection", "all") == key), None)
 
 
 def renders(db: Session, project_id: str) -> list[Generation]:
     return list(db.scalars(select(Generation).where(
         Generation.project_id == project_id, Generation.target_type == "project", Generation.kind == "render",
     ).order_by(Generation.created_at.desc())).all())
+
+
+def render_out(g: Generation) -> RenderOut:
+    p = g.params or {}
+    out = RenderOut(**gen_out(g).model_dump())
+    # renders made before range stitching were always the whole film
+    out.title = p.get("title") or FULL_FILM
+    out.scene_ids = list(p.get("scene_ids") or [m.get("scene_id") for m in p.get("mezzanines", [])])
+    out.scene_range = p.get("scene_range") or ""
+    out.full = bool(p.get("full", True))
+    out.duration_s = p.get("duration_s")
+    out.clips = p.get("clips")
+    out.approved = g.status == "approved"
+    return out
+
+
+_UNSAFE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def safe_name(text: str, fallback: str = "film") -> str:
+    # drop accents but keep separators like the en dash in "Scenes 2–5" as word breaks
+    ascii_ = "".join(ch if ch.isascii() else ("" if unicodedata.combining(ch) else "-")
+                     for ch in unicodedata.normalize("NFKD", text))
+    return _UNSAFE.sub("-", ascii_).strip("-")[:80].strip("-") or fallback
+
+
+def download_name(project: Project | None, g: Generation) -> str:
+    ext = Path(g.file_path or "").suffix or ".mp4"
+    what = (g.params or {}).get("title") or (FULL_FILM if g.kind == "render" else g.kind)
+    proj = safe_name(project.title, "project") if project else "project"
+    return f"{proj}-{safe_name(what)}-v{g.version}{ext}"
 
 
 def _thumbs(db: Session, gens: list[Generation]) -> dict[str, str | None]:
@@ -543,7 +631,9 @@ def reel_out(db: Session, reel: Reel) -> ReelOut:
             mezzanine=MezzanineOut(status=status, generation_id=p.mezzanine.id if p.mezzanine else None),
             clips=clips,
         ))
-    last = next((g for g in renders(db, reel.project_id) if g.status in ("ready", "approved")), None)
+    # the Reel's "last render" is the newest whole-film stitch; partial ones live in Output
+    last = next((g for g in renders(db, reel.project_id)
+                 if g.status in ("ready", "approved") and (g.params or {}).get("full", True)), None)
     return ReelOut(id=reel.id, project_id=reel.project_id, duration_s=film_length(plans), scenes=scenes,
                    missing=missing, last_render=gen_out(last) if last else None)
 
@@ -720,11 +810,14 @@ def handle_assemble(ctx) -> dict:
     sync(db, reel)
     db.commit()
     plans, _ = plan(db, reel)
-    live = [p for p in plans if p.clips]
+    sel = select_scenes(plans, (job.payload or {}).get("scene_ids") or None)
+    live = sel.plans
     if not live:
-        raise RuntimeError("Nothing to assemble yet: approve at least one take")
+        raise RuntimeError("Nothing to stitch: the selected scenes have no approved takes")
     size = reel_size(db, reel)
-    force = set((job.payload or {}).get("scene_ids") or [])
+    asked = render.params or {}
+    # takes may have come or gone since the request; an automatic name follows what's really in it
+    title = sel.auto_title if asked.get("title_auto", True) or not asked.get("title") else asked["title"]
 
     render.status = "generating"
     reel.updated_at = utcnow()
@@ -738,7 +831,7 @@ def handle_assemble(ctx) -> dict:
     try:
         n = len(live)
         for i, p in enumerate(live, start=1):
-            if p.fresh and p.scene.id not in force:
+            if p.fresh:
                 cached.append(p.scene.id)
                 continue
             ctx.progress(0.05 + 0.65 * (i - 1) / n, f"Scene {i} of {n} · building")
@@ -784,7 +877,7 @@ def handle_assemble(ctx) -> dict:
 
         ctx.progress(0.88, "Loudness pass")
         final_tmp = work / "final.mp4"
-        loud = finish_film(joined, work, final_tmp, project.title, j["chapters"])
+        loud = finish_film(joined, work, final_tmp, f"{project.title} - {title}", j["chapters"])
 
         abs_path, rel = _gen_path(render)
         abs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -796,9 +889,14 @@ def handle_assemble(ctx) -> dict:
     film_hash = hashlib.sha256(json.dumps(
         [[p.mezzanine.params.get("input_hash"), p.head.transition_in, round(p.head.transition_s, 3)] for p in live]
     ).encode()).hexdigest()[:32]
+    db.refresh(render)
+    if render.params.get("title_auto") is False:
+        title = render.params.get("title") or title  # renamed while it was stitching
     render.file_path, render.media_type, render.status = rel, "video/mp4", "ready"
     render.params = {
         **(render.params or {}), "input_hash": film_hash, "quality": "draft", "size": list(size),
+        "title": title, "scene_ids": sel.scene_ids, "scene_range": sel.label, "full": sel.full,
+        "clips": sum(len(p.clips) for p in live),
         "duration_s": j["length"], "join": j["mode"], "fallbacks": fallbacks, "loudness": loud,
         "mezzanines": [{"scene_id": p.scene.id, "generation_id": p.mezzanine.id,
                         "input_hash": p.mezzanine.params.get("input_hash")} for p in live],

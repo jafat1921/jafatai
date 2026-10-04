@@ -6,10 +6,10 @@ from app import reel as rl
 from app.db import get_db
 from app.models import Generation, Job, Project, Reel, ReelClip, Scene, utcnow
 from app.schemas import (
-    AssembleIn, GenerationOut, JobOut, ReelClipOut, ReelClipPatch, ReelEstimateOut, ReelOut, ReelReorderIn,
+    AssembleIn, JobOut, ReelClipOut, ReelClipPatch, ReelEstimateOut, ReelOut, ReelReorderIn, RenderOut,
 )
 from app.security import CurrentUser, get_current_user, require_editor
-from app.services import gen_out, get_owned, job_out, new_seed, next_version
+from app.services import get_owned, job_out, new_seed, next_version
 
 router = APIRouter(tags=["reel"])
 
@@ -86,23 +86,35 @@ def assemble(project_id: str, body: AssembleIn, db: Session = Depends(get_db),
         ok = set(db.scalars(select(Scene.id).where(Scene.project_id == project.id, Scene.id.in_(body.scene_ids))).all())
         if ok != set(body.scene_ids):
             raise HTTPException(422, "scene_ids must be scenes of this project")
-    running = rl.active_job(db, project.id)
-    if running is not None:
-        return job_out(running)  # one assembly per project at a time; hand back the one in flight
     reel = _synced(db, project)
-    if not rl.estimate(db, reel)["clips"]:
+    plans, _ = rl.plan(db, reel)
+    sel = rl.select_scenes(plans, body.scene_ids)
+    if sel.empty:
+        names = ", ".join(f"Scene {n}" + (f" ({s.heading})" if s.heading else "") for n, s in sel.empty)
+        raise HTTPException(422, f"No approved takes to stitch in: {names}. Approve a take in Render or leave "
+                                 "those scenes out.")
+    if not sel.plans:
         raise HTTPException(409, "Nothing to assemble yet: approve at least one take")
+    running = rl.active_job(db, project.id, sel.key)
+    if running is not None:
+        return job_out(running)  # the same selection is already stitching; a different one just queues
 
+    title = (body.title or "").strip()
     render = Generation(
         workspace_id=project.workspace_id, project_id=project.id, target_type="project", target_id=project.id,
         kind="render", version=next_version(db, "project", project.id, "render"), status="queued",
-        prompt=f"{project.title} · draft cut", params={"quality": body.quality}, seed=new_seed(),
+        prompt=f"{project.title} · {title or sel.auto_title}", seed=new_seed(),
+        params={"quality": body.quality, "title": title or sel.auto_title, "title_auto": not title,
+                "scene_ids": sel.scene_ids, "scene_range": sel.label, "full": sel.full,
+                "clips": sum(len(p.clips) for p in sel.plans), "duration_s": rl.film_length(sel.plans),
+                "created_by": {"user_id": cur.id, "flow": "reel_stitch"}},
     )
     db.add(render)
     db.flush()
     job = Job(workspace_id=project.workspace_id, type=rl.ASSEMBLE_JOB, project_id=project.id,
               generation_id=render.id, message="Waiting for a worker",
-              payload={"project_id": project.id, "quality": body.quality, "scene_ids": body.scene_ids or []})
+              payload={"project_id": project.id, "quality": body.quality,
+                       "scene_ids": [] if sel.full else sel.scene_ids, "selection": sel.key})
     db.add(job)
     db.flush()
     render.job_id = job.id
@@ -111,10 +123,10 @@ def assemble(project_id: str, body: AssembleIn, db: Session = Depends(get_db),
     return job_out(job)
 
 
-@router.get("/projects/{project_id}/renders", response_model=list[GenerationOut])
+@router.get("/projects/{project_id}/renders", response_model=list[RenderOut])
 def list_renders(project_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     get_owned(db, Project, project_id, cur.workspace_id, "Project")
-    return [gen_out(g) for g in rl.renders(db, project_id)]
+    return [rl.render_out(g) for g in rl.renders(db, project_id)]
 
 
 @router.get("/projects/{project_id}/reel/estimate", response_model=ReelEstimateOut)

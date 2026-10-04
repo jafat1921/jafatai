@@ -13,6 +13,7 @@ import type {
   ReelClip,
   ReelClipPatch,
   ReelEstimate,
+  Render,
   Scene,
   ScenePatch,
   Suggestion,
@@ -20,6 +21,7 @@ import type {
   ShotEstimate,
   ShotPatch,
   ShotType,
+  StitchRequest,
   StoryboardRequest,
   SuggestionResult,
   SystemStatus,
@@ -221,9 +223,12 @@ export const api = {
     sync: (projectId: string) => post<Reel>(`/projects/${projectId}/reel/sync`),
     updateClip: (id: string, body: ReelClipPatch) => patch<ReelClip>(`/reel-clips/${id}`, body),
     reorder: (projectId: string, clipIds: string[]) => post<Reel>(`/projects/${projectId}/reel/reorder`, { clip_ids: clipIds }),
-    assemble: (projectId: string, sceneIds?: string[]) =>
-      post<Job>(`/projects/${projectId}/reel/assemble`, sceneIds ? { quality: 'draft', scene_ids: sceneIds } : { quality: 'draft' }),
-    renders: (projectId: string) => get<Generation[]>(`/projects/${projectId}/renders`),
+    assemble: (projectId: string, body: StitchRequest = { quality: 'draft' }) =>
+      post<Job>(`/projects/${projectId}/reel/assemble`, body),
+    renders: (projectId: string) => get<Render[]>(`/projects/${projectId}/renders`),
+    rename: (renderId: string, title: string) => patch<Render>(`/generations/${renderId}`, { title }),
+    // a plain link: the browser streams the file and names it from Content-Disposition
+    downloadUrl: (generationId: string) => `${API_BASE}/generations/${generationId}/download`,
     estimate: (projectId: string) => get<ReelEstimate>(`/projects/${projectId}/reel/estimate`),
   },
   ai: {

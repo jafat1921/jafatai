@@ -3,11 +3,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { GenerationViewer } from '@/components/review/GenerationViewer'
 import { SourceBadge } from '@/components/studio/source-badge'
 import { EmptyState, ErrorState } from '@/components/studio/states'
-import { PlaceholderCanvas } from '@/features/stages/PlaceholderCanvas'
+import { OutputCanvas } from '@/features/stages/OutputCanvas'
+import { ReelRenders } from '@/features/reel/ReelRenders'
 import { StoryboardReview } from '@/features/storyboard/StoryboardReview'
 import { RenderReview } from '@/features/render/RenderReview'
 import type { StageId } from '@/lib/stages'
-import { useSelectedCharacter, useSelectedScene } from './selection'
+import { useProjectAspectClass } from '@/lib/aspect'
+import { useProjectId, useSelectedCharacter, useSelectedScene } from './selection'
 
 function ScriptReview() {
   const { scenes } = useSelectedScene()
@@ -55,6 +57,11 @@ function CastReview() {
   )
 }
 
+// phones get the assembled film and its review bar; editing the sequence needs a wider screen
+function ReelReview() {
+  return <ReelRenders projectId={useProjectId()} aspectClass={useProjectAspectClass()} />
+}
+
 // <768 px: review only — read the script, approve or reject generations. Editing needs a wider screen.
 export function ReviewWorkspace({ stage }: { stage: StageId }) {
   return (
@@ -68,7 +75,8 @@ export function ReviewWorkspace({ stage }: { stage: StageId }) {
         {stage === 'cast' && <CastReview />}
         {stage === 'storyboard' && <StoryboardReview />}
         {stage === 'render' && <RenderReview />}
-        {(stage === 'reel' || stage === 'output') && <PlaceholderCanvas stage={stage} />}
+        {stage === 'reel' && <ReelReview />}
+        {stage === 'output' && <OutputCanvas />}
       </div>
     </main>
   )

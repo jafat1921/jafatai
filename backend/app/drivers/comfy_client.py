@@ -167,10 +167,12 @@ class ComfyClient:
         return (data or {}).get(prompt_id)
 
     async def upload_image(self, path: Path, name: str | None = None, subfolder: str = "mixai") -> str:
-        """Upload and return the value a LoadImage node needs ('sub/name.png')."""
+        """Upload and return the value a LoadImage node needs ('sub/name.png').
+        Videos go through the same endpoint; VHS_LoadVideo reads them from the input folder."""
         name = name or path.name
+        mime = "video/mp4" if path.suffix.lower() in VIDEO_EXT else "image/png"
         with open(path, "rb") as fh:
-            files = {"image": (name, fh, "image/png")}
+            files = {"image": (name, fh, mime)}
             data = {"type": "input", "subfolder": subfolder, "overwrite": "true"}
             r = await self._http.post("/upload/image", files=files, data=data)
         r.raise_for_status()

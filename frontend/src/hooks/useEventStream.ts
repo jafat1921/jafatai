@@ -1,13 +1,14 @@
 import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { API_BASE } from '@/lib/api'
-import type { Generation, Job, Shot } from '@/lib/types'
+import type { Generation, Job, Reel, Shot } from '@/lib/types'
 import { jobLabel } from '@/lib/status'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
 import { upsertGeneration } from './useGenerations'
 import { syncAiJob } from './useAi'
 import { upsertShot } from './useShots'
+import { setReel, syncReelJob } from './useReel'
 import { announce, useUi } from '@/stores/ui'
 
 function parse<T>(e: MessageEvent): T | null {
@@ -19,7 +20,7 @@ function parse<T>(e: MessageEvent): T | null {
 }
 
 // Storyboard/location jobs create rows the client never saw; refetch them once the job lands.
-const STORYBOARD_JOB = /storyboard|shot|location|compile|take|render/
+const STORYBOARD_JOB = /storyboard|shot|location|compile|take|render|beats/
 
 function syncStoryboardJob(qc: QueryClient, job: Job, before: Job | undefined) {
   if (!job.project_id || !STORYBOARD_JOB.test(job.type)) return
@@ -58,6 +59,7 @@ export function useEventStream(enabled: boolean) {
       upsertJob(qc, job)
       syncAiJob(qc, job, before)
       syncStoryboardJob(qc, job, before)
+      syncReelJob(qc, job, before)
       if (before?.status !== job.status) {
         if (job.status === 'done') announce(`${jobLabel(job.type)} finished.`)
         else if (job.status === 'failed') announce(`${jobLabel(job.type)} failed${job.error ? `: ${job.error}` : '.'}`)
@@ -72,6 +74,12 @@ export function useEventStream(enabled: boolean) {
     es.addEventListener('shot', (e) => {
       const shot = parse<Shot>(e as MessageEvent)
       if (shot) upsertShot(qc, shot)
+    })
+
+    // contract-v3: the whole Reel after a sync, a clip change or an assembly status change
+    es.addEventListener('reel', (e) => {
+      const reel = parse<Reel>(e as MessageEvent)
+      if (reel?.project_id) setReel(qc, reel)
     })
 
     return () => {

@@ -19,6 +19,8 @@ import { CastCanvas } from '@/features/cast/CastCanvas'
 import { PlaceholderCanvas } from '@/features/stages/PlaceholderCanvas'
 import { StoryboardCanvas } from '@/features/storyboard/StoryboardCanvas'
 import { RenderCanvas } from '@/features/render/RenderCanvas'
+import { ReelCanvas } from '@/features/reel/ReelCanvas'
+import { OutputCanvas } from '@/features/stages/OutputCanvas'
 
 function StageCanvas({ stage }: { stage: StageId }) {
   switch (stage) {
@@ -30,6 +32,10 @@ function StageCanvas({ stage }: { stage: StageId }) {
       return <StoryboardCanvas />
     case 'render':
       return <RenderCanvas />
+    case 'reel':
+      return <ReelCanvas />
+    case 'output':
+      return <OutputCanvas />
     default:
       return <PlaceholderCanvas stage={stage} />
   }

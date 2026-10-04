@@ -171,9 +171,46 @@ class Shot(Base):
     location_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     seam_in: Mapped[str] = mapped_column(String(10), default="cut")
     handoff_text: Mapped[str] = mapped_column(Text, default="")
+    # long-take beat list (migration 0004); owned by the long-take engine
+    beats: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     stale: Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[str] = mapped_column(String(20), default="user")
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
+
+
+class Reel(Base):
+    __tablename__ = "reel"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("project.id", ondelete="CASCADE"), unique=True
+    )
+    title: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
+
+
+class ReelClip(Base):
+    __tablename__ = "reel_clip"
+    __table_args__ = (UniqueConstraint("reel_id", "shot_id", name="uq_reel_clip_shot"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    reel_id: Mapped[str] = mapped_column(String(36), ForeignKey("reel.id", ondelete="CASCADE"), index=True)
+    shot_id: Mapped[str] = mapped_column(String(36), ForeignKey("shot.id", ondelete="CASCADE"))
+    scene_id: Mapped[str] = mapped_column(String(36), ForeignKey("scene.id", ondelete="CASCADE"), index=True)
+    # not an FK: takes are bulk-deleted with their shot; sync handles a dangling id
+    generation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    order: Mapped[int] = mapped_column("sort_order", Integer, default=0)
+    trim_in_s: Mapped[float] = mapped_column(Float, default=0.0)
+    trim_out_s: Mapped[float] = mapped_column(Float, default=0.0)
+    transition_in: Mapped[str] = mapped_column(String(12), default="cut")
+    transition_s: Mapped[float] = mapped_column(Float, default=0.5)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    changed: Mapped[bool] = mapped_column(Boolean, default=False)
+    source_duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 

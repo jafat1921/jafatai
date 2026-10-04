@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import longtake
 from app import storyboard as sb
+from app.ai_jobs import active_job, enqueue_ai
+from app.config import get_settings
 from app.db import get_db
-from app.models import Character, Job, Location, Project, Scene, Shot
-from app.schemas import JobOut, ShotCreate, ShotOut, ShotPatch, ShotReorderIn, TakesIn
+from app.models import Character, Generation, Job, Location, Project, Scene, Shot
+from app.schemas import (ChunkRegenerateIn, JobOut, ShotCreate, ShotOut, ShotPatch, ShotReorderIn, TakeEstimate,
+                         TakesIn)
 from app.security import CurrentUser, get_current_user, require_editor
-from app.services import enqueue_generation, get_owned, job_out
+from app.services import enqueue_generation, get_owned, job_out, new_seed
 
 router = APIRouter(tags=["shots"])
 
@@ -60,7 +64,7 @@ def create_shot(scene_id: str, body: ShotCreate, db: Session = Depends(get_db), 
         workspace_id=cur.workspace_id,
         project_id=scene.project_id,
         scene_id=scene.id,
-        shot_type=body.shot_type,
+        shot_type=body.shot_type or ("long_take" if longtake.is_long(body.duration_s) else "medium"),
         duration_s=body.duration_s,
         description=body.description,
         camera=body.camera,
@@ -87,6 +91,16 @@ def patch_shot(shot_id: str, body: ShotPatch, db: Session = Depends(get_db), cur
         if changes.get(flag) is not None:
             setattr(shot, flag, changes.pop(flag))
         changes.pop(flag, None)
+
+    if "beats" in changes:
+        beats = changes.pop("beats")
+        if beats is not None:
+            shot.beats = _merge_beats(shot.beats or [], beats)
+    if changes.get("duration_s") is not None and changes["duration_s"] != shot.duration_s:
+        # beats are timed to the old chunk plan; unlocked ones get rewritten on the next render
+        longtake.mark_beats_stale(shot)
+        if "shot_type" not in changes and longtake.is_long(changes["duration_s"]):
+            changes["shot_type"] = "long_take"
 
     edited: set[str] = set()
     for field, value in changes.items():
@@ -144,8 +158,33 @@ def clear_stale(shot_id: str, db: Session = Depends(get_db), cur: CurrentUser = 
     return sb.shot_out(db, shot)
 
 
-def _queue_takes(db: Session, shot: Shot, count: int) -> list[Job]:
-    prompt, params = sb.prepare_shot_generation(db, shot, "take", "", {})
+def _merge_beats(old: list[dict], new: list[dict]) -> list[dict]:
+    """Every beat the user changed gets locked (source user/ai_edited); untouched ones keep their state."""
+    out = []
+    for i, b in enumerate(new):
+        prev = old[i] if i < len(old) else None
+        b = dict(b)
+        if b["t_end"] < b["t_start"]:
+            raise HTTPException(422, f"beat {i + 1}: t_end is before t_start")
+        if prev is None or (prev.get("prompt") or "").strip() != b["prompt"].strip():
+            b["source"] = "ai_edited" if prev is not None and prev.get("source") in ("ai", "ai_edited") else "user"
+            b["locked"] = True
+        elif prev.get("stale") and (prev.get("t_start"), prev.get("t_end")) == (b["t_start"], b["t_end"]):
+            b["stale"] = True
+        out.append(b)
+    return out
+
+
+def _take_count(body: TakesIn | None, project: Project, long: bool) -> int:
+    if body and body.count:
+        return body.count
+    # long takes are expensive: one unless asked
+    return 1 if long else project.takes_per_shot
+
+
+def _queue_takes(db: Session, shot: Shot, count: int, duration_s: float | None = None) -> list[Job]:
+    params = {"duration_s": duration_s} if duration_s else {}
+    prompt, params = sb.prepare_shot_generation(db, shot, "take", "", params)
     jobs = []
     for _ in range(count):
         # one seed each, queued back to back so LTX stays loaded between them
@@ -159,8 +198,9 @@ def _queue_takes(db: Session, shot: Shot, count: int) -> list[Job]:
 def queue_takes(shot_id: str, body: TakesIn | None = None, db: Session = Depends(get_db),
                 cur: CurrentUser = Depends(require_editor)):
     shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
-    count = (body.count if body else None) or db.get(Project, shot.project_id).takes_per_shot
-    jobs = _queue_takes(db, shot, count)
+    duration = (body.duration_s if body else None) or shot.duration_s
+    count = _take_count(body, db.get(Project, shot.project_id), longtake.is_long(duration))
+    jobs = _queue_takes(db, shot, count, duration)
     db.commit()
     return [job_out(j) for j in jobs]
 
@@ -169,13 +209,68 @@ def queue_takes(shot_id: str, body: TakesIn | None = None, db: Session = Depends
 def render_scene(scene_id: str, body: TakesIn | None = None, db: Session = Depends(get_db),
                  cur: CurrentUser = Depends(require_editor)):
     scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
-    count = (body.count if body else None) or db.get(Project, scene.project_id).takes_per_shot
+    project = db.get(Project, scene.project_id)
     jobs = []
     for shot in sb.scene_shots(db, scene.id):
         start, _ = sb.take_frames(db, shot)
         if start is not None:
+            long = longtake.is_long(shot.duration_s)
+            # the scene-wide count is meant for normal shots; a long take stays at one
+            # (re-roll it from the shot if needed) so one click can't queue hours of GPU
+            count = 1 if long else _take_count(body, project, long)
             jobs += _queue_takes(db, shot, count)
     if not jobs:
         raise HTTPException(409, "No shot in this scene has an approved START frame yet")
     db.commit()
     return [job_out(j) for j in jobs]
+
+
+# ---------------------------------------------------------------- long takes (contract v2)
+
+@router.get("/shots/{shot_id}/estimate", response_model=TakeEstimate)
+def estimate_take(shot_id: str, duration_s: float | None = Query(None), db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(get_current_user)):
+    shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    duration = duration_s if duration_s is not None else shot.duration_s
+    if not 1 <= duration <= get_settings().longtake_max_s:
+        raise HTTPException(422, f"duration_s must be between 1 and {get_settings().longtake_max_s:g} seconds")
+    return longtake.estimate(duration, longtake.measured_rate(db, cur.workspace_id))
+
+
+@router.post("/shots/{shot_id}/ai/beats", response_model=JobOut, status_code=202)
+def write_beats(shot_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    running = active_job(db, "ai_beats", shot.project_id, shot_id=shot.id)
+    if running:
+        return job_out(running)
+    job = enqueue_ai(db, workspace_id=cur.workspace_id, type="ai_beats", project_id=shot.project_id,
+                     payload={"shot_id": shot.id, "duration_s": shot.duration_s,
+                              "old_duration_s": longtake.beats_span(shot.beats)})
+    job.priority = 5
+    db.commit()
+    return job_out(job)
+
+
+@router.post("/generations/{gen_id}/chunks/{idx}/regenerate", response_model=JobOut, status_code=202)
+def regenerate_chunk(gen_id: str, idx: int, body: ChunkRegenerateIn | None = None, db: Session = Depends(get_db),
+                     cur: CurrentUser = Depends(require_editor)):
+    """New take version: chunks before idx are reused, idx..end are rendered again, then rejoined."""
+    parent = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    if parent.kind != "take" or not (parent.params or {}).get("longtake"):
+        raise HTTPException(409, "Only long takes are made of chunks")
+    if parent.status in ("queued", "generating"):
+        raise HTTPException(409, "This take is still rendering")
+    body = body or ChunkRegenerateIn()
+    try:
+        params = longtake.reroll_params(parent, idx, body.prompt, body.seed)
+    except longtake.LongTakeError as e:
+        raise HTTPException(422, str(e)) from None
+    g = enqueue_generation(db, workspace_id=parent.workspace_id, project_id=parent.project_id,
+                           target_type=parent.target_type, target_id=parent.target_id, kind="take",
+                           prompt=parent.prompt, params=params, seed=new_seed(), parent_id=parent.id)
+    longtake.copy_kept_chunks(parent, g)
+    job = db.get(Job, g.job_id)
+    redo = len(params["chunks"]) - idx
+    job.message = f"Waiting for a worker · redoing {redo} of {len(params['chunks'])} chunks"
+    db.commit()
+    return job_out(job)

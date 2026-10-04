@@ -3,6 +3,7 @@ import { api } from '@/lib/api'
 import type { Character, Generation, Location, GenerationKind, RegenerateMode, TargetType } from '@/lib/types'
 import { qk } from './keys'
 import { patchShotsFromGeneration } from './useShots'
+import { upsertRender } from './useReel'
 
 export interface GenerationTarget {
   targetType: TargetType
@@ -64,6 +65,7 @@ export function upsertGeneration(qc: QueryClient, gen: Generation) {
   }
 
   patchShotsFromGeneration(qc, gen)
+  if (gen.target_type === 'project') upsertRender(qc, gen)
 }
 
 export function useGenerationActions() {

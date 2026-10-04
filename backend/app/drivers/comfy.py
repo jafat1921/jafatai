@@ -30,7 +30,7 @@ VIEW_PROMPTS = {
 VIEW_ALIASES = {"3/4": "three_quarter", "3-4": "three_quarter", "34": "three_quarter", "profile": "side"}
 ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
 
-TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0}
+TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23_extend": 3600.0}
 
 
 @dataclass
@@ -203,7 +203,42 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         return Plan("ltx23_i2v", inputs, images, loras, "video",
                     {"first_frame_id": first, "last_frame_id": last})
 
+    if kind == "take_chunk":
+        return chunk_plan(prompt, params, seed, lookup, negative, loras)
+
     raise ComfyError(f"The ComfyUI driver doesn't handle '{kind}' generations")
+
+
+def chunk_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:
+    """One chunk of a long take (app.longtake). Chunk 0 is plain I2V from START; later chunks
+    continue from the previous chunk's tail clip (extend) or restart from its last frame (i2v)."""
+    w, h = _size(params, VIDEO_SIZES["16:9"], 32)
+    fps = float(params.get("fps") or 24)
+    frames = min(int(params["num_frames"]), MAX_FRAMES)
+    inputs: dict[str, Any] = {"prompt": prompt, "width": w, "height": h, "num_frames": frames, "fps": fps, "seed": seed}
+    if negative:
+        inputs["negative"] = negative
+    images: dict[str, Path | list[Path]] = {}
+    last = params.get("last_frame_id")
+    if last:
+        images["last_image"] = lookup.generation_file(last)
+    sources = {"chunk": params.get("chunk_idx"), "last_frame_id": last}
+
+    if params.get("context_video"):
+        ctx_frames = int(params.get("context_frames") or 9)
+        images["context_video"] = Path(params["context_video"])
+        # the audio mask works in seconds over this chunk only, not the whole take
+        inputs.update(duration_s=frames / fps, context_s=ctx_frames / fps)
+        return Plan("ltx23_extend", inputs, images, loras, "video", sources)
+
+    if params.get("first_image_path"):
+        images["first_image"] = Path(params["first_image_path"])
+    elif params.get("first_frame_id"):
+        images["first_image"] = lookup.generation_file(params["first_frame_id"])
+        sources["first_frame_id"] = params["first_frame_id"]
+    else:
+        raise ComfyError("A take chunk needs the START frame, a context clip or a first image")
+    return Plan("ltx23_i2v", inputs, images, loras, "video", sources)
 
 
 def exec_seconds(entry: dict) -> float | None:

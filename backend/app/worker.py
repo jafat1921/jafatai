@@ -170,6 +170,11 @@ def handle_generate(ctx: JobContext) -> dict:
     gen.status = "generating"
     db.commit()
 
+    if gen.kind == "take" and (gen.params or {}).get("longtake"):
+        from app.longtake import run_take
+
+        return run_take(ctx, gen, driver)
+
     abs_path, rel_path = _out_path(gen, EXT[media_type])
     params = {
         **(gen.params or {}),
@@ -198,6 +203,15 @@ HANDLERS: dict[str, Callable[[JobContext], dict]] = {
 from app.ai_jobs import AI_HANDLERS  # noqa: E402  (LLM writing jobs live in their own module)
 
 HANDLERS.update(AI_HANDLERS)
+from app.longtake import handle_beats  # noqa: E402
+
+HANDLERS["ai_beats"] = handle_beats
+
+from app.reel import ASSEMBLE_JOB, handle_assemble  # noqa: E402
+
+HANDLERS[ASSEMBLE_JOB] = handle_assemble
+# CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result)
+CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly"}
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:
@@ -247,13 +261,16 @@ def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver
         # drivers that know the real GPU time (comfy history timestamps) report it
         if isinstance(result, dict) and result.get("gpu_seconds"):
             elapsed = float(result["gpu_seconds"])
+        if job.type in CPU_JOB_LEDGER:
+            elapsed = 0.0
         job.status = "done"
         job.progress = 1.0
         job.message = "Done"
         job.result = result
         job.finished_at = utcnow()
         job.gpu_seconds = elapsed
-        db.add(UsageLedger(workspace_id=job.workspace_id, job_id=job.id, gpu_seconds=elapsed, kind=job.type))
+        db.add(UsageLedger(workspace_id=job.workspace_id, job_id=job.id, gpu_seconds=elapsed,
+                           kind=CPU_JOB_LEDGER.get(job.type, job.type)))
     db.commit()
 
 

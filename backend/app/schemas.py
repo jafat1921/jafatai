@@ -30,6 +30,19 @@ Seam = Literal["cut", "continue"]
 PromptMode = Literal["auto", "manual"]
 
 
+def _take_length(v: float | None) -> float | None:
+    from app.config import get_settings
+
+    top = get_settings().longtake_max_s
+    if v is not None and not 1 <= v <= top:
+        raise ValueError(f"must be between 1 and {top:g} seconds")
+    return v
+
+
+# 1..LONGTAKE_MAX_S (a setting, so it can't be a static Field bound)
+TakeSeconds = Annotated[float, AfterValidator(_take_length)]
+
+
 class Out(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -328,13 +341,22 @@ class ShotOut(Out):
     end_frame: GenerationOut | None = None
     approved_take: GenerationOut | None = None
     takes_count: int = 0
+    beats: list[dict[str, Any]] = []
     created_at: Utc
     updated_at: Utc
 
 
+class Beat(BaseModel):
+    t_start: float = Field(ge=0)
+    t_end: float = Field(ge=0)
+    prompt: str = Field(max_length=4000)
+    source: Literal["ai", "user", "ai_edited"] = "user"
+    locked: bool = False
+
+
 class ShotCreate(BaseModel):
-    shot_type: ShotType = "medium"
-    duration_s: float = Field(4.0, ge=1, le=20)
+    shot_type: ShotType | None = None
+    duration_s: TakeSeconds = 4.0
     description: str = ""
     camera: str = ""
     character_ids: list[str] | None = None
@@ -345,7 +367,8 @@ class ShotCreate(BaseModel):
 
 class ShotPatch(BaseModel):
     shot_type: ShotType | None = None
-    duration_s: float | None = Field(None, ge=1, le=20)
+    duration_s: TakeSeconds | None = None
+    beats: list[Beat] | None = None
     description: str | None = None
     camera: str | None = Field(None, max_length=300)
     prompt: str | None = None
@@ -367,6 +390,23 @@ class ShotReorderIn(BaseModel):
 
 class TakesIn(BaseModel):
     count: int | None = Field(None, ge=1, le=16)
+    duration_s: TakeSeconds | None = None
+
+
+class ChunkRegenerateIn(BaseModel):
+    prompt: str | None = Field(None, max_length=4000)
+    seed: int | None = Field(None, ge=0)
+
+
+class TakeEstimate(BaseModel):
+    chunks: int
+    frames_total: int
+    duration_s: float
+    long_take: bool
+    method: str
+    est_gpu_s: int
+    est_wall_s: int
+    rate_gpu_s_per_output_s: float
 
 
 class SuggestShotsIn(BaseModel):
@@ -387,3 +427,79 @@ class SuggestionResult(BaseModel):
     scene: SceneOut | None = None
     character: CharacterOut | None = None
     location: LocationOut | None = None
+
+
+# reel (contract v3)
+Transition = Literal["cut", "dissolve", "fade_black"]
+
+
+class ReelClipOut(BaseModel):
+    id: str
+    shot_id: str
+    scene_id: str
+    order: int
+    generation_id: str | None
+    media_url: str | None = None
+    thumb_url: str | None = None
+    source_duration_s: float
+    trim_in_s: float
+    trim_out_s: float
+    duration_s: float
+    transition_in: str
+    transition_s: float
+    enabled: bool
+    changed: bool
+
+
+class MezzanineOut(BaseModel):
+    status: Literal["fresh", "stale", "missing", "building"]
+    generation_id: str | None = None
+
+
+class ReelSceneOut(BaseModel):
+    scene_id: str
+    heading: str
+    order: int
+    duration_s: float
+    mezzanine: MezzanineOut
+    clips: list[ReelClipOut] = []
+
+
+class ReelMissingOut(BaseModel):
+    shot_id: str
+    scene_id: str
+    reason: str
+
+
+class ReelOut(BaseModel):
+    id: str
+    project_id: str
+    duration_s: float
+    scenes: list[ReelSceneOut] = []
+    missing: list[ReelMissingOut] = []
+    last_render: GenerationOut | None = None
+
+
+class ReelClipPatch(BaseModel):
+    trim_in_s: float | None = Field(None, ge=0)
+    trim_out_s: float | None = Field(None, ge=0)
+    transition_in: Transition | None = None
+    transition_s: float | None = Field(None, ge=0, le=10)
+    enabled: bool | None = None
+
+
+class ReelReorderIn(BaseModel):
+    clip_ids: list[str]
+
+
+class AssembleIn(BaseModel):
+    quality: Literal["draft"] = "draft"
+    # scenes to rebuild even if their mezzanine is fresh; stale ones are always rebuilt
+    scene_ids: list[str] | None = None
+
+
+class ReelEstimateOut(BaseModel):
+    clips: int
+    duration_s: float
+    stale_scenes: int
+    est_seconds: float

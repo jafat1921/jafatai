@@ -9,10 +9,15 @@ import type {
   Project,
   ProjectCreate,
   RegenerateMode,
+  Reel,
+  ReelClip,
+  ReelClipPatch,
+  ReelEstimate,
   Scene,
   ScenePatch,
   Suggestion,
   Shot,
+  ShotEstimate,
   ShotPatch,
   ShotType,
   StoryboardRequest,
@@ -180,7 +185,12 @@ export const api = {
     reorder: (sceneId: string, shotIds: string[]) => post<Shot[]>(`/scenes/${sceneId}/shots/reorder`, { shot_ids: shotIds }),
     remove: (id: string) => del(`/shots/${id}`),
     clearStale: (id: string) => post<Shot>(`/shots/${id}/clear-stale`),
-    renderTakes: (id: string, count?: number) => post<Job[]>(`/shots/${id}/takes`, count ? { count } : {}),
+    renderTakes: (id: string, count?: number, durationS?: number) =>
+      post<Job[]>(`/shots/${id}/takes`, {
+        ...(count ? { count } : {}),
+        ...(durationS ? { duration_s: durationS } : {}),
+      }),
+    estimate: (id: string, durationS?: number) => get<ShotEstimate>(`/shots/${id}/estimate`, { duration_s: durationS }),
     renderScene: (sceneId: string, count?: number) => post<Job[]>(`/scenes/${sceneId}/render`, count ? { count } : {}),
   },
   storyboard: {
@@ -203,6 +213,18 @@ export const api = {
     unapprove: (id: string) => post<Generation>(`/generations/${id}/unapprove`),
     reject: (id: string, reason?: string) => post<Generation>(`/generations/${id}/reject`, reason ? { reason } : {}),
     restore: (id: string) => post<Generation>(`/generations/${id}/restore`),
+    regenerateChunk: (id: string, idx: number, body: { prompt?: string; seed?: number } = {}) =>
+      post<Job>(`/generations/${id}/chunks/${idx}/regenerate`, body),
+  },
+  reel: {
+    get: (projectId: string) => get<Reel>(`/projects/${projectId}/reel`),
+    sync: (projectId: string) => post<Reel>(`/projects/${projectId}/reel/sync`),
+    updateClip: (id: string, body: ReelClipPatch) => patch<ReelClip>(`/reel-clips/${id}`, body),
+    reorder: (projectId: string, clipIds: string[]) => post<Reel>(`/projects/${projectId}/reel/reorder`, { clip_ids: clipIds }),
+    assemble: (projectId: string, sceneIds?: string[]) =>
+      post<Job>(`/projects/${projectId}/reel/assemble`, sceneIds ? { quality: 'draft', scene_ids: sceneIds } : { quality: 'draft' }),
+    renders: (projectId: string) => get<Generation[]>(`/projects/${projectId}/renders`),
+    estimate: (projectId: string) => get<ReelEstimate>(`/projects/${projectId}/reel/estimate`),
   },
   ai: {
     outline: (projectId: string) => post<Job>(`/projects/${projectId}/ai/outline`),
@@ -216,6 +238,7 @@ export const api = {
     suggestShots: (sceneId: string, maxShots?: number) =>
       post<Job>(`/scenes/${sceneId}/ai/suggest-shots`, maxShots ? { max_shots: maxShots } : {}),
     compilePrompts: (shotId: string) => post<Job>(`/shots/${shotId}/ai/compile-prompts`),
+    beats: (shotId: string) => post<Job>(`/shots/${shotId}/ai/beats`),
     portraitPrompt: (characterId: string) => post<Job>(`/characters/${characterId}/ai/portrait-prompt`),
     suggestions: (projectId: string) => get<Suggestion[]>(`/projects/${projectId}/suggestions`, { status: 'pending' }),
     accept: (id: string) => post<SuggestionResult>(`/suggestions/${id}/accept`),

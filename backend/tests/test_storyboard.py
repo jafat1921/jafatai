@@ -236,6 +236,17 @@ def test_scene_render_batch_is_ordered_by_shot(client, project, fast_driver):
     assert client.post(f"/api/scenes/{empty['id']}/render").status_code == 409
 
 
+def test_scene_render_keeps_long_takes_at_one(client, project, fast_driver):
+    scene = _scene(client, project, heading="EXT. PIER - DAWN")
+    short, long_ = _shot(client, scene, duration_s=4), _shot(client, scene, duration_s=60)
+    for s in (short, long_):
+        _approved(client, fast_driver, "shot", s["id"], "keyframe_start")
+    r = client.post(f"/api/scenes/{scene['id']}/render", json={"count": 3})
+    with SessionLocal() as db:
+        targets = [db.get(Generation, db.get(Job, j["id"]).generation_id).target_id for j in r.json()]
+    assert targets.count(short["id"]) == 3 and targets.count(long_["id"]) == 1
+
+
 # ------------------------------------------------------------------ AI
 
 def shotlist(body):

@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import Character, Generation, Location, Project, Scene, Shot, utcnow
 from app.schemas import LocationOut, ShotOut
 from app.services import gen_out
@@ -328,6 +329,15 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
         )
         params.setdefault("width", w)
         params.setdefault("height", h)
+        from app import longtake  # imports this module
+
+        if not 1 <= duration <= get_settings().longtake_max_s:
+            raise HTTPException(422, f"duration_s must be between 1 and {get_settings().longtake_max_s:g} seconds")
+        if longtake.is_long(duration):
+            longtake.init_params(params)
+        else:
+            for k in ("longtake", "chunks", "assembly", "continuity", "context_frames", "longtake_stats"):
+                params.pop(k, None)
         prompt = prompt.strip() or frame_prompt(db, shot, "take")
 
     if not prompt:

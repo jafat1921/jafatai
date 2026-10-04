@@ -47,6 +47,8 @@ interface WorkspaceState {
   selectShot: (projectId: string, sel: ShotSelection | undefined) => void
   selectedTake: Record<string, string | undefined>
   selectTake: (projectId: string, id: string | undefined) => void
+  selectedClip: Record<string, string | undefined>
+  selectClip: (projectId: string, id: string | undefined) => void
   storyboardView: Record<string, StoryboardView | undefined>
   setStoryboardView: (projectId: string, view: StoryboardView) => void
 }
@@ -76,6 +78,8 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   selectShot: (projectId, sel) => set((s) => ({ selectedShot: { ...s.selectedShot, [projectId]: sel } })),
   selectedTake: {},
   selectTake: (projectId, id) => set((s) => ({ selectedTake: { ...s.selectedTake, [projectId]: id } })),
+  selectedClip: {},
+  selectClip: (projectId, id) => set((s) => ({ selectedClip: { ...s.selectedClip, [projectId]: id } })),
   storyboardView: {},
   setStoryboardView: (projectId, view) => set((s) => ({ storyboardView: { ...s.storyboardView, [projectId]: view } })),
 }))

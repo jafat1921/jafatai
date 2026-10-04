@@ -89,12 +89,17 @@ class MockDriver:
         frame = out_path.with_suffix(".frame.png")
         render_placeholder(prompt, params, seed, frame)
         seconds = float(params.get("duration_s", 2))
-        cmd = [
-            get_settings().ffmpeg_path(), "-y", "-loglevel", "error",
-            "-loop", "1", "-i", str(frame), "-t", f"{seconds:.2f}", "-r", "24",
-            "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            str(out_path),
-        ]
+        cmd = [get_settings().ffmpeg_path(), "-y", "-loglevel", "error", "-loop", "1", "-i", str(frame)]
+        if params.get("kind") == "take_chunk":
+            # long-take chunks: exact 8n+1 frame count plus a tone, so the joiner has audio to crossfade
+            frames = int(params["num_frames"])
+            seconds = frames / 24
+            cmd += ["-f", "lavfi", "-t", f"{seconds:.4f}", "-i", f"sine=frequency={220 + seed % 400}:sample_rate=48000",
+                    "-frames:v", str(frames), "-c:a", "aac"]
+        else:
+            cmd += ["-t", f"{seconds:.2f}"]
+        cmd += ["-r", "24", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p", str(out_path)]
         try:
             subprocess.run(cmd, check=True, capture_output=True, timeout=120)
         except subprocess.CalledProcessError as e:

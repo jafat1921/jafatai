@@ -1,0 +1,35 @@
+{
+  "name": "ltx23_extend",
+  "family": "ltx-2.3",
+  "description": "LTX-2.3 distilled continuation chunk for long takes: the first latent frames are the previous chunk's tail (multi-frame in-place conditioning), optional END frame guide on the last frame, native LTX-AV audio continued from the tail's audio (the context seconds are kept, the rest is generated).",
+  "inputs": {
+    "prompt":        {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":      {"type": "str", "default": "blurry, low quality, still frame, frozen, watermark, overlay, titles, subtitles, scene cut, jump cut",
+                      "targets": [["Negative", "text"]]},
+    "context_video": {"type": "image", "required": true, "targets": [["ContextVideo", "video"]]},
+    "last_image":    {"type": "image", "required": false, "targets": [["LastImage", "image"]],
+                      "if_missing": {"drop": ["LastImage", "LastScale", "LastPre"],
+                                     "bypass": {"LastGuide": {"0": "positive", "1": "negative", "2": "latent"}}}},
+    "context_strength": {"type": "float", "default": 1.0, "targets": [["ContextFrames", "strength"]]},
+    "width":         {"type": "int", "default": 768, "multiple_of": 32,
+                      "targets": [["VideoLatent", "width"], ["ContextScale", "width"], ["LastScale", "width"]]},
+    "height":        {"type": "int", "default": 448, "multiple_of": 32,
+                      "targets": [["VideoLatent", "height"], ["ContextScale", "height"], ["LastScale", "height"]]},
+    "num_frames":    {"type": "int", "default": 193, "frames_8n1": true,
+                      "targets": [["VideoLatent", "length"]]},
+    "fps":           {"type": "float", "default": 24.0,
+                      "targets": [["Conditioning", "frame_rate"], ["AudioMask", "video_fps"], ["Save", "frame_rate"]]},
+    "duration_s":    {"type": "float", "default": 8.0,
+                      "targets": [["AudioMask", "video_end_time"], ["AudioMask", "audio_end_time"]]},
+    "context_s":     {"type": "float", "default": 0.375, "targets": [["AudioMask", "audio_start_time"]]},
+    "seed":          {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/ltx_ext", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {
+    "checkpoints": ["ltx-2.3-22b-distilled-fp8.safetensors"],
+    "text_encoders": ["gemma_3_12B_it_fp4_mixed.safetensors"]
+  },
+  "lora": {"after": "Checkpoint", "output": 0},
+  "progress_weights": {"Sampler": 10, "Checkpoint": 4, "TextEncoder": 3, "Decode": 3, "Save": 1}
+}

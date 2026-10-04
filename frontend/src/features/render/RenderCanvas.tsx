@@ -12,7 +12,7 @@ import { useProject } from '@/hooks/useProjects'
 import { useRenderScene } from '@/hooks/useShots'
 import { useStageShortcuts } from '@/hooks/useStageShortcuts'
 import { useProjectAspectClass } from '@/lib/aspect'
-import { canRender, estimateRenderSeconds, formatEstimate, shotLabel } from '@/lib/shots'
+import { canRender, estimateRenderSeconds, formatEstimate, sceneTakeCount, shotLabel } from '@/lib/shots'
 import type { Shot } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce, useUi } from '@/stores/ui'
@@ -95,7 +95,7 @@ export function RenderCanvas() {
     )
   }
 
-  const totalTakes = eligible.length * perShot
+  const totalTakes = eligible.reduce((n, s) => n + sceneTakeCount(s, perShot), 0)
   const estimate = formatEstimate(estimateRenderSeconds(eligible, perShot))
   const storyboardHref = `/projects/${projectId}/storyboard`
 

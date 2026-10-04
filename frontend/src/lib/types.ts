@@ -98,6 +98,7 @@ export type GenerationKind =
   | 'take'
   | 'tile'
   | 'render'
+  | 'mezzanine'
   | 'scene_text'
 export type GenerationStatus = 'queued' | 'generating' | 'ready' | 'approved' | 'rejected' | 'failed'
 
@@ -186,6 +187,8 @@ export interface Shot {
   start_linked?: boolean
   approved_take?: Generation | null
   takes_count: number
+  // contract-v2: per-chunk action prompts for long takes; older servers omit it
+  beats?: Beat[]
   created_at: string
   updated_at: string
 }
@@ -206,6 +209,7 @@ export type ShotPatch = Partial<
     | 'location_id'
     | 'seam_in'
     | 'handoff_text'
+    | 'beats'
   >
 >
 
@@ -273,4 +277,87 @@ export interface AiJobResult {
   character_ids?: string[]
   suggestion_ids?: string[]
   calls?: { role: string; model: string; seconds: number; step?: string }[]
+}
+
+// contract-v2-longtake.md
+export interface Beat {
+  t_start: number
+  t_end: number
+  prompt: string
+  source: Source
+  locked: boolean
+  // the server sets this when the duration changed under an unlocked beat
+  stale?: boolean
+}
+
+export interface ShotEstimate {
+  chunks: number
+  frames_total: number
+  est_gpu_s: number
+  est_wall_s: number
+  // not in the contract yet; read it when the server sends it
+  max_s?: number
+}
+
+export type ChunkStatus = 'queued' | 'generating' | 'done' | 'failed'
+
+export interface TakeChunk {
+  idx: number
+  t_start: number
+  t_end: number
+  frames: number
+  status: ChunkStatus
+  file?: string | null
+  seed?: number | null
+  gpu_seconds?: number | null
+  progress?: number | null
+}
+
+// contract-v3-reel.md
+export type TransitionKind = 'cut' | 'dissolve' | 'fade_black'
+export type MezzanineStatus = 'fresh' | 'stale' | 'missing' | 'building'
+
+export interface ReelClip {
+  id: string
+  shot_id: string
+  scene_id: string
+  order: number
+  generation_id: string
+  media_url: string
+  thumb_url?: string | null
+  source_duration_s: number
+  trim_in_s: number
+  trim_out_s: number
+  duration_s: number
+  transition_in: TransitionKind
+  transition_s: number
+  enabled: boolean
+  changed: boolean
+}
+
+export type ReelClipPatch = Partial<Pick<ReelClip, 'trim_in_s' | 'trim_out_s' | 'transition_in' | 'transition_s' | 'enabled'>>
+
+export interface ReelScene {
+  scene_id: string
+  heading: string
+  order: number
+  duration_s: number
+  mezzanine: { status: MezzanineStatus; generation_id?: string | null }
+  clips: ReelClip[]
+}
+
+export interface Reel {
+  id: string
+  project_id: string
+  duration_s: number
+  scenes: ReelScene[]
+  missing: { shot_id: string; scene_id: string; reason: string }[]
+  last_render?: Generation | null
+}
+
+export interface ReelEstimate {
+  clips: number
+  duration_s: number
+  stale_scenes: number
+  est_seconds: number
 }

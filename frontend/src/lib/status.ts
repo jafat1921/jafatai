@@ -1,4 +1,13 @@
-import type { Generation, GenerationKind, GenerationStatus, JobStatus, ProjectStatus, ShotStatus } from './types'
+import type {
+  ChunkStatus,
+  Generation,
+  GenerationKind,
+  GenerationStatus,
+  JobStatus,
+  MezzanineStatus,
+  ProjectStatus,
+  ShotStatus,
+} from './types'
 import { humanize } from './utils'
 
 export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
@@ -85,6 +94,7 @@ const KIND_LABELS: Record<GenerationKind, string> = {
   take: 'Video take',
   tile: 'Long-take tile',
   render: 'Film render',
+  mezzanine: 'Scene mezzanine',
   scene_text: 'Scene draft',
 }
 
@@ -111,6 +121,12 @@ const JOB_LABELS: Record<string, string> = {
   storyboard: 'Storyboard from script',
   ai_storyboard: 'Storyboard from script',
   take: 'Video take',
+  ai_beats: 'Long-take beats',
+  ai_write_beats: 'Long-take beats',
+  regenerate_chunk: 'Re-roll chunks',
+  reel_assemble: 'Assemble film',
+  assemble: 'Assemble film',
+  mezzanine: 'Scene mezzanine',
 }
 
 export const jobLabel = (type: string) => JOB_LABELS[type] ?? humanize(type)
@@ -123,4 +139,30 @@ export function scoreText(score: Generation['score']) {
   if (typeof score === 'number') return score.toFixed(1)
   const overall = score.overall ?? Object.values(score)[0]
   return typeof overall === 'number' ? overall.toFixed(1) : null
+}
+
+export function chunkStatus(status: ChunkStatus, progress?: number | null): StatusView {
+  switch (status) {
+    case 'queued':
+      return { label: 'Waiting', tone: 'neutral', icon: 'clock' }
+    case 'generating':
+      return { label: `Generating${pct(progress ?? undefined)}`, tone: 'accent', icon: 'spinner' }
+    case 'done':
+      return { label: 'Done', tone: 'success', icon: 'check' }
+    case 'failed':
+      return { label: 'Failed', tone: 'danger', icon: 'alert' }
+  }
+}
+
+export function mezzanineStatus(status: MezzanineStatus): StatusView {
+  switch (status) {
+    case 'fresh':
+      return { label: 'Up to date', tone: 'success', icon: 'check' }
+    case 'stale':
+      return { label: 'Rebuild needed', tone: 'warning', icon: 'stale' }
+    case 'building':
+      return { label: 'Building', tone: 'accent', icon: 'spinner' }
+    case 'missing':
+      return { label: 'Not built yet', tone: 'neutral', icon: 'clock' }
+  }
 }

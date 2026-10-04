@@ -3,10 +3,14 @@ import { EmptyState } from '@/components/studio/states'
 import { StatusPill } from '@/components/studio/status-pill'
 import { GenerationViewer } from '@/components/review/GenerationViewer'
 import { useProjectAspectClass } from '@/lib/aspect'
-import { shotLabel } from '@/lib/shots'
+import { useGenerations } from '@/hooks/useGenerations'
+import { isLongTake } from '@/lib/duration'
+import { chunksOf } from '@/lib/longtake'
+import { isApproved, shotLabel, startFrameOf } from '@/lib/shots'
 import { shotStatus } from '@/lib/status'
 import { useWorkspace } from '@/stores/workspace'
 import { useStoryboard } from '@/features/storyboard/useStoryboard'
+import { LongTakePanel } from './longtake/LongTakePanel'
 
 export function RenderInspector() {
   const board = useStoryboard()
@@ -14,6 +18,9 @@ export function RenderInspector() {
   const takeId = useWorkspace((s) => s.selectedTake[board.projectId])
   const selectTake = useWorkspace((s) => s.selectTake)
   const shot = board.selectedShot
+  // same query the viewer uses, so this is the take on screen
+  const takes = useGenerations({ targetType: 'shot', targetId: shot?.id ?? '', kind: 'take' }, false).data ?? []
+  const take = takes.find((t) => t.id === takeId) ?? takes.find((t) => t.status === 'approved') ?? takes[0]
 
   if (!shot) {
     return (
@@ -43,6 +50,16 @@ export function RenderInspector() {
           onViewIdChange={(id) => selectTake(board.projectId, id)}
           emptyHint="No takes yet. Press Render takes on the shot."
         />
+      {(isLongTake(shot) || chunksOf(take).length > 1) && (
+        <LongTakePanel
+          key={shot.id}
+          shot={shot}
+          label={label}
+          take={take}
+          startApproved={isApproved(startFrameOf(shot, board.prevOf(shot)).frame)}
+          endApproved={isApproved(shot.end_frame)}
+        />
+      )}
     </div>
   )
 }

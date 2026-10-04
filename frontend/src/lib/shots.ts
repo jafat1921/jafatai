@@ -1,3 +1,4 @@
+import { isLongTakeDuration } from './duration'
 import type { Generation, Scene, Shot, ShotType, StoryboardRequest } from './types'
 
 export const SHOT_TYPES: { value: ShotType; label: string; disabled?: boolean }[] = [
@@ -9,8 +10,7 @@ export const SHOT_TYPES: { value: ShotType; label: string; disabled?: boolean }[
   { value: 'over_shoulder', label: 'Over the shoulder' },
   { value: 'pov', label: 'POV' },
   { value: 'insert', label: 'Insert' },
-  // PLAN §7.1 long-take editor isn't built yet
-  { value: 'long_take', label: 'Long take (coming)', disabled: true },
+  { value: 'long_take', label: 'Long take' },
 ]
 
 export const shotLabel = (sceneIndex: number, shotIndex: number) => `${sceneIndex + 1}.${shotIndex + 1}`
@@ -69,8 +69,12 @@ export function canRender(shot: Shot, prev: Shot | undefined) {
 export const SECONDS_PER_TAKE_SECOND = 6
 export const MODEL_LOAD_S: [number, number] = [60, 120]
 
+// mirrors the backend's scene batch: long takes always go out as a single take
+export const sceneTakeCount = (shot: Pick<Shot, 'duration_s'>, count: number) =>
+  isLongTakeDuration(shot.duration_s) ? 1 : count
+
 export function estimateRenderSeconds(shots: Shot[], count: number) {
-  return shots.reduce((sum, s) => sum + Math.max(1, s.duration_s) * SECONDS_PER_TAKE_SECOND * count, 0)
+  return shots.reduce((sum, s) => sum + Math.max(1, s.duration_s) * SECONDS_PER_TAKE_SECOND * sceneTakeCount(s, count), 0)
 }
 
 export function formatEstimate(seconds: number) {

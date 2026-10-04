@@ -7,6 +7,7 @@ import { StatusPill } from '@/components/studio/status-pill'
 import { CastInspector } from '@/features/cast/CastInspector'
 import { StoryboardInspector } from '@/features/storyboard/StoryboardInspector'
 import { RenderInspector } from '@/features/render/RenderInspector'
+import { ReelInspector } from '@/features/reel/ReelInspector'
 import { useProject } from '@/hooks/useProjects'
 import { projectStatus, staleStatus } from '@/lib/status'
 import type { StageId } from '@/lib/stages'
@@ -113,7 +114,8 @@ export function InspectorPanel({ stage }: { stage: StageId }) {
         {stage === 'cast' && <CastInspector />}
         {stage === 'storyboard' && <StoryboardInspector />}
         {stage === 'render' && <RenderInspector />}
-        {(stage === 'reel' || stage === 'output') && (
+        {stage === 'reel' && <ReelInspector />}
+        {stage === 'output' && (
           <>
             <h3 className="section-label mb-2">Project</h3>
             <ProjectDetails />

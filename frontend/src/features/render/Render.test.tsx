@@ -40,7 +40,44 @@ describe('Render stage', () => {
     const count = screen.getByRole('spinbutton', { name: /takes/i })
     expect(count).toHaveValue(3)
     await user.click(screen.getByRole('button', { name: /render takes/i }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(/5 s each/)
+    expect(dialog).toHaveTextContent(/1 chunk · about/)
+    await user.click(within(dialog).getByRole('button', { name: 'Render 3 takes' }))
     expect(calls).toContainEqual({ method: 'POST', path: '/shots/s1/takes', body: { count: 3 } })
+  })
+
+  it('defaults long takes to one take and warns with the multiplied estimate', async () => {
+    const long = { ...ready, duration_s: 60, shot_type: 'long_take' as const }
+    const calls = mockApi([long])
+    renderStage(<RenderCanvas />, { scenes, shots: [long], stage: 'render' })
+    const user = userEvent.setup()
+    const count = screen.getByRole('spinbutton', { name: /takes/i })
+    expect(count).toHaveValue(1)
+    await user.tripleClick(count)
+    await user.keyboard('2')
+    expect(screen.getByRole('note')).toHaveTextContent('2 long takes = 2× the GPU time')
+
+    await user.click(screen.getByRole('button', { name: /render takes/i }))
+    const dialog = await screen.findByRole('alertdialog')
+    // 60 s × 6 GPU-s per second × 2 takes, from the local fallback
+    expect(dialog).toHaveTextContent('2 takes × 9 chunks · about 12 min on the GPU')
+    expect(dialog).toHaveTextContent(/Long takes are expensive/)
+    await user.click(within(dialog).getByRole('button', { name: 'Render 2 takes' }))
+    expect(calls).toContainEqual({ method: 'POST', path: '/shots/s1/takes', body: { count: 2 } })
+  })
+
+  it('sends a per-request duration override', async () => {
+    const calls = mockApi([ready])
+    renderStage(<RenderCanvas />, { scenes, shots: [ready], stage: 'render' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /take length for shot 1\.1/i }))
+    await user.click(screen.getByRole('button', { name: '30 s' }))
+    await user.click(screen.getByRole('button', { name: /render takes/i }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('(the shot is set to 5 s)')
+    await user.click(within(dialog).getByRole('button', { name: /^Render 1 take$/ }))
+    expect(calls).toContainEqual({ method: 'POST', path: '/shots/s1/takes', body: { count: 1, duration_s: 30 } })
   })
 
   it('picks takes with number keys, oldest first, and ignores keys typed into a field', async () => {

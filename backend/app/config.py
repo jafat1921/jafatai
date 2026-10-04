@@ -53,6 +53,13 @@ class Settings(BaseSettings):
 
     ffmpeg_bin: str = ""
 
+    # long takes (contract v2)
+    longtake_max_s: float = 300.0
+    chunk_s: float = 8.0
+    chunk_overlap_s: float = 1.0
+    chunk_context_frames: int = 9
+    longtake_method: str = "extend"  # extend | i2v
+
     @field_validator("cors_origins", "comfy_urls", mode="before")
     @classmethod
     def _split_csv(cls, v):

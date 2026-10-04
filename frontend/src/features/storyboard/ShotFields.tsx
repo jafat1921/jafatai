@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Chip } from '@/components/studio/chip'
+import { DurationPicker } from '@/components/studio/duration-picker'
 import { fieldClass } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useCharacters } from '@/hooks/useCharacters'
@@ -50,23 +51,14 @@ export function ShotFields({ shot, label }: { shot: Shot; label: string }) {
         </div>
         <div className="flex flex-col gap-0.5">
           <label htmlFor={id('dur')} className="section-label">
-            Seconds
+            Length
           </label>
-          <input
+          <DurationPicker
             id={id('dur')}
-            type="number"
-            min={1}
-            max={20}
-            step={1}
-            // uncontrolled + key: typing "1" on the way to "12" shouldn't PATCH twice
-            key={shot.duration_s}
-            defaultValue={shot.duration_s}
-            className={cn(fieldClass, 'h-7 w-16 font-mono text-small')}
-            onBlur={(e) => {
-              const v = Math.round(Number(e.target.value))
-              if (v >= 1 && v <= 20 && v !== shot.duration_s) save({ duration_s: v })
-              else e.target.value = String(shot.duration_s)
-            }}
+            value={shot.duration_s}
+            shotId={shot.id}
+            label={`Length of shot ${label}`}
+            onChange={(v) => save({ duration_s: v })}
           />
         </div>
         <div className="min-w-40 flex-1">

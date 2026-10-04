@@ -5,6 +5,7 @@ import { StatusPill } from '@/components/studio/status-pill'
 import { ErrorState } from '@/components/studio/states'
 import { useGenerationActions } from '@/hooks/useGenerations'
 import { useClearStale, useCreateShot, useDeleteShot, useReorderShots } from '@/hooks/useShots'
+import { formatDuration } from '@/lib/duration'
 import { shotLabel, startFrameOf, type FrameUnit } from '@/lib/shots'
 import { shotStatus } from '@/lib/status'
 import type { GenerationKind, Shot } from '@/lib/types'
@@ -76,8 +77,8 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
         )}
         <span className="font-mono text-small text-studio-muted">
           {sceneShots.length && view === 'scenes'
-            ? `${sceneShots.reduce((t, s) => t + s.duration_s, 0)} s`
-            : `${startShot.duration_s} s`}
+            ? formatDuration(sceneShots.reduce((t, s) => t + s.duration_s, 0))
+            : formatDuration(startShot.duration_s)}
         </span>
         {view === 'shots' && <StatusPill status={shotStatus(startShot.status)} />}
         {stale && (

@@ -113,7 +113,8 @@ export function useClearStale() {
 export function useRenderTakes() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ shotId, count }: { shotId: string; count?: number }) => api.shots.renderTakes(shotId, count),
+    mutationFn: ({ shotId, count, durationS }: { shotId: string; count?: number; durationS?: number }) =>
+      api.shots.renderTakes(shotId, count, durationS),
     onSuccess: (_jobs, { shotId }) => {
       qc.invalidateQueries({ queryKey: qk.jobs })
       qc.invalidateQueries({ queryKey: qk.generationsFor('shot', shotId, 'take') })

@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.db import SessionLocal
 from app import storyboard as sb
 from app.models import Generation, Job, Shot, utcnow
+from app.reel import reel_events
 from app.security import COOKIE_NAME, load_current, read_session_token
 from app.services import gen_out, job_out
 
@@ -45,6 +46,7 @@ def collect_changes(workspace_id: str, since: datetime) -> list[tuple[str, str, 
         out = [("job", j.id, j.updated_at, job_out(j).model_dump(mode="json")) for j in jobs]
         out += [("generation", g.id, g.updated_at, gen_out(g).model_dump(mode="json")) for g in gens]
         out += _shot_changes(db, workspace_id, since, gens)
+        out += reel_events(db, workspace_id, since, jobs)
     finally:
         db.close()
     out.sort(key=lambda r: r[2])

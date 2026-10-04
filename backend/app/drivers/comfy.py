@@ -1,0 +1,306 @@
+"""Real generation driver: maps a Generation onto one of our ComfyUI templates."""
+import asyncio
+import logging
+import random
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Awaitable, Callable
+
+from app.config import Settings, get_settings
+from app.drivers.base import DriverResult, ProgressCallback
+from app.drivers.comfy_client import ComfyClient, ComfyError, ComfyOutput, parse_outputs, pick_client
+from app.workflows import build, frames_for, load, snap_multiple
+
+log = logging.getLogger("mixai.comfy")
+
+# keyframes: ~0.6-0.9 MP, multiples of 16 for Z-Image / Qwen latents
+IMAGE_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024), "4:3": (1152, 864), "2.39:1": (1536, 640)}
+# LTX draft sizes, multiples of 32. Final-res passes go through the x2 upscaler later.
+VIDEO_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (640, 640), "4:3": (736, 544), "2.39:1": (960, 416)}
+PORTRAIT_SIZE = (768, 1024)
+MAX_FRAMES = 257  # ~10.7 s at 24 fps; longer shots belong to the long-take templates
+
+VIEW_PROMPTS = {
+    "front": "front view, facing the camera directly, full body, arms relaxed",
+    "three_quarter": "three-quarter view, body turned 45 degrees from the camera, full body",
+    "side": "side profile view, body turned 90 degrees, full body",
+    "back": "back view, seen from directly behind, full body",
+}
+VIEW_ALIASES = {"3/4": "three_quarter", "3-4": "three_quarter", "34": "three_quarter", "profile": "side"}
+ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
+
+TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0}
+
+
+@dataclass
+class Plan:
+    template: str
+    inputs: dict[str, Any]
+    images: dict[str, Path | list[Path]] = field(default_factory=dict)
+    loras: list[tuple[str, float]] = field(default_factory=list)
+    media: str = "image"
+    sources: dict[str, Any] = field(default_factory=dict)  # generation ids behind the images, for the record
+
+
+class DbLookup:
+    """Reads the few things the driver needs from the app DB (own short-lived session)."""
+
+    def _session(self):
+        from app.db import SessionLocal
+
+        return SessionLocal()
+
+    def generation_file(self, gen_id: str) -> Path:
+        from app.models import Generation
+        from app.services import generation_file
+
+        with self._session() as db:
+            g = db.get(Generation, gen_id)
+            if g is None:
+                raise ComfyError(f"referenced generation {gen_id} doesn't exist")
+            if g.status not in ("ready", "approved") or not g.file_path:
+                raise ComfyError(f"referenced generation {gen_id} has no finished image (status {g.status})")
+            path = generation_file(g)
+        if not path or not path.is_file():
+            raise ComfyError(f"file for generation {gen_id} is missing on disk")
+        return path
+
+    def character_portrait(self, character_id: str) -> str | None:
+        from sqlalchemy import select
+
+        from app.models import Generation
+
+        with self._session() as db:
+            base = select(Generation.id).where(
+                Generation.target_type == "character", Generation.target_id == character_id,
+                Generation.kind == "portrait", Generation.file_path.is_not(None),
+            )
+            approved = db.scalars(base.where(Generation.status == "approved")).first()
+            if approved:
+                return approved
+            # no approved portrait yet: newest finished one is better than refusing outright
+            return db.scalars(base.where(Generation.status == "ready").order_by(Generation.created_at.desc())).first()
+
+    def project_aspect(self, project_id: str | None) -> str | None:
+        if not project_id:
+            return None
+        from app.models import Project
+
+        with self._session() as db:
+            p = db.get(Project, project_id)
+            return p.aspect_ratio if p else None
+
+
+def _ids(value) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(v) for v in value if v]
+
+
+def _size(params: dict, default: tuple[int, int], multiple: int) -> tuple[int, int]:
+    w = params.get("width") or default[0]
+    h = params.get("height") or default[1]
+    return snap_multiple(w, multiple), snap_multiple(h, multiple)
+
+
+def _loras(params: dict) -> list[tuple[str, float]]:
+    # TODO: check names (and model family) against the lora table / object_info before queueing,
+    # so a typo fails here instead of as a ComfyUI validation error
+    out = []
+    for item in params.get("loras") or []:
+        if isinstance(item, str):
+            out.append((item, 1.0))
+        elif isinstance(item, dict) and item.get("name"):
+            out.append((item["name"], float(item.get("strength", 1.0))))
+    return out
+
+
+def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
+    params = params or {}
+    negative = params.get("negative") or params.get("negative_prompt") or ""
+    ref_ids = _ids(params.get("reference_ids"))[:3]
+    loras = _loras(params)
+
+    def edit_plan(ids: list[str], text: str, size: tuple[int, int]) -> Plan:
+        files = [lookup.generation_file(i) for i in ids]
+        w, h = _size(params, size, 16)
+        inputs = {"prompt": text, "negative": negative, "width": w, "height": h, "seed": seed}
+        if params.get("steps"):
+            inputs["steps"] = params["steps"]
+        return Plan("qwen_edit", inputs, {"images": files}, loras, "image", {"reference_ids": ids})
+
+    def t2i_plan(size: tuple[int, int]) -> Plan:
+        w, h = _size(params, size, 16)
+        inputs = {"prompt": prompt, "negative": negative, "width": w, "height": h, "seed": seed}
+        if params.get("steps"):
+            inputs["steps"] = params["steps"]
+        return Plan("zimage_t2i", inputs, {}, loras, "image")
+
+    if kind == "portrait":
+        return edit_plan(ref_ids, prompt, PORTRAIT_SIZE) if ref_ids else t2i_plan(PORTRAIT_SIZE)
+
+    if kind == "sheet_view":
+        ids = ref_ids
+        if not ids:
+            portrait = lookup.character_portrait(params["target_id"]) if params.get("target_id") else None
+            if not portrait:
+                raise ComfyError("This character has no portrait yet. Generate (and ideally approve) one first.")
+            ids = [portrait]
+        view = str(params.get("view") or "front").lower().replace(" ", "_")
+        view = VIEW_ALIASES.get(view, view)
+        angle = VIEW_PROMPTS.get(view, view.replace("_", " "))
+        text = (
+            f"Show the same character from a new camera angle: {angle}. "
+            "Keep the face, hairstyle, body shape, clothing and colours exactly the same. "
+            "Plain light grey studio background, soft even lighting, character sheet style."
+        )
+        if prompt.strip():
+            text += f" {prompt.strip()}"
+        plan = edit_plan(ids, text, PORTRAIT_SIZE)
+        if params.get("angles_lora"):
+            strength = params["angles_lora"] if isinstance(params["angles_lora"], (int, float)) else 1.0
+            plan.loras = [(ANGLES_LORA, float(strength))] + plan.loras
+        plan.inputs["view"] = view  # recorded only; build() ignores unknown keys
+        return plan
+
+    if kind in ("keyframe_start", "keyframe_end", "keyframe_mid"):
+        aspect = params.get("aspect_ratio") or lookup.project_aspect(params.get("project_id")) or "16:9"
+        size = IMAGE_SIZES.get(aspect, IMAGE_SIZES["16:9"])
+        return edit_plan(ref_ids, prompt, size) if ref_ids else t2i_plan(size)
+
+    if kind == "take":
+        first = params.get("first_frame_id")
+        if not first:
+            raise ComfyError("A take needs params.first_frame_id (the START keyframe generation)")
+        last = params.get("last_frame_id")
+        aspect = params.get("aspect_ratio") or lookup.project_aspect(params.get("project_id")) or "16:9"
+        w, h = _size(params, VIDEO_SIZES.get(aspect, VIDEO_SIZES["16:9"]), 32)
+        fps = float(params.get("fps") or 24)
+        frames = int(params["num_frames"]) if params.get("num_frames") else frames_for(float(params.get("duration_s") or 5), fps)
+        frames = min(frames, MAX_FRAMES)
+        images: dict[str, Path | list[Path]] = {"first_image": lookup.generation_file(first)}
+        if last:
+            images["last_image"] = lookup.generation_file(last)
+        inputs = {"prompt": prompt, "width": w, "height": h, "num_frames": frames, "fps": fps, "seed": seed}
+        if negative:
+            inputs["negative"] = negative
+        return Plan("ltx23_i2v", inputs, images, loras, "video",
+                    {"first_frame_id": first, "last_frame_id": last})
+
+    raise ComfyError(f"The ComfyUI driver doesn't handle '{kind}' generations")
+
+
+def exec_seconds(entry: dict) -> float | None:
+    """GPU time from the history timestamps, so time spent queued behind other jobs isn't billed."""
+    start = end = None
+    for msg in (entry.get("status") or {}).get("messages") or []:
+        if not (isinstance(msg, list) and len(msg) == 2 and isinstance(msg[1], dict)):
+            continue
+        ts = msg[1].get("timestamp")
+        if msg[0] == "execution_start":
+            start = ts
+        elif msg[0] in ("execution_success", "execution_error", "execution_interrupted"):
+            end = ts
+    if start and end and end >= start:
+        return round((end - start) / 1000.0, 3)
+    return None
+
+
+class ComfyDriver:
+    name = "comfy"
+
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        client_factory: Callable[[], Awaitable[ComfyClient]] | None = None,
+        lookup=None,
+    ):
+        self.settings = settings or get_settings()
+        s = self.settings
+        self._client_factory = client_factory or (
+            lambda: pick_client(s.comfy_urls, s.comfy_auth_token, s.comfy_verify_tls)
+        )
+        self.lookup = lookup or DbLookup()
+
+    def generate_image(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
+        return self._generate(prompt, params, seed, out_path, progress_cb)
+
+    def generate_video(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
+        return self._generate(prompt, params, seed, out_path, progress_cb)
+
+    def generate_text(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
+        raise ComfyError("Text generations go to the LLM lane, not ComfyUI")
+
+    def _generate(self, prompt, params, seed, out_path, progress_cb) -> DriverResult:
+        seed = int(seed) if seed is not None else random.randint(0, 2**31 - 1)
+        plan = plan_generation(params.get("kind", ""), prompt, params, seed, self.lookup)
+        # the worker is sync; each job gets its own short event loop
+        return asyncio.run(self._execute(plan, out_path, progress_cb, params))
+
+    async def _execute(self, plan: Plan, out_path: Path, progress_cb: ProgressCallback, params: dict) -> DriverResult:
+        progress_cb(0.0, "Connecting to ComfyUI")
+        client = await self._client_factory()
+        try:
+            inputs = dict(plan.inputs)
+            for key, value in plan.images.items():
+                if isinstance(value, list):
+                    inputs[key] = [await client.upload_image(p) for p in value]
+                else:
+                    inputs[key] = await client.upload_image(value)
+            gen_id = params.get("generation_id") or out_path.stem
+            inputs["filename_prefix"] = f"mixai/{gen_id}"
+
+            graph, resolved = build(plan.template, inputs, plan.loras)
+            tpl = load(plan.template)
+            weights = {tpl.node_id(t): w for t, w in tpl.manifest.get("progress_weights", {}).items()
+                       if any(n.get("_meta", {}).get("title") == t for n in graph.values())}
+
+            t0 = time.monotonic()
+            prompt_id, entry = await client.run(
+                graph, progress_cb, timeout=TIMEOUTS.get(plan.template, 1800.0), weights=weights
+            )
+            wall = round(time.monotonic() - t0, 3)
+
+            outs = [o for o in parse_outputs(entry) if o.kind == plan.media]
+            if not outs:
+                raise ComfyError(f"{plan.template} finished but produced no {plan.media} output")
+            progress_cb(0.99, "Downloading result")
+            await client.download(self._pick(outs, graph, tpl.manifest), out_path)
+            server = client.base_url
+        finally:
+            await client.close()
+
+        gpu_seconds = exec_seconds(entry) or wall
+        record = {
+            "template": plan.template,
+            "seed": resolved.get("seed"),
+            "inputs": {k: v for k, v in resolved.items() if k != "filename_prefix"},
+            "sources": plan.sources,
+            "prompt_id": prompt_id,
+            "server": server,
+            "gpu_seconds": gpu_seconds,
+            "wall_seconds": wall,
+        }
+        if "view" in plan.inputs:
+            record["view"] = plan.inputs["view"]
+        meta: dict[str, Any] = {"template": plan.template, "gpu_seconds": gpu_seconds}
+        if plan.media == "video":
+            fps = float(resolved.get("fps") or 24)
+            meta.update(duration_s=round(resolved["num_frames"] / fps, 3), width=resolved["width"], height=resolved["height"])
+        else:
+            meta.update(width=resolved.get("width"), height=resolved.get("height"))
+        progress_cb(1.0, "Done")
+        return DriverResult(out_path, "video/mp4" if plan.media == "video" else "image/png", meta,
+                            params_update={"comfy": record})
+
+    @staticmethod
+    def _pick(outs: list[ComfyOutput], graph: dict, manifest: dict) -> ComfyOutput:
+        wanted = {spec["node"] for spec in manifest.get("outputs", {}).values()}
+        ids = {nid for nid, n in graph.items() if n.get("_meta", {}).get("title") in wanted}
+        for o in outs:
+            if o.node_id in ids:
+                return o
+        return outs[0]

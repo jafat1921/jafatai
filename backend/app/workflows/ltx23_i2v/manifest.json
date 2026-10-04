@@ -1,0 +1,31 @@
+{
+  "name": "ltx23_i2v",
+  "family": "ltx-2.3",
+  "description": "LTX-2.3 distilled first-frame (+ optional last-frame) image-to-video with native LTX-AV audio. Single segment, no looping/extend.",
+  "inputs": {
+    "prompt":      {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":    {"type": "str", "default": "blurry, low quality, still frame, frozen, watermark, overlay, titles, subtitles",
+                    "targets": [["Negative", "text"]]},
+    "first_image": {"type": "image", "required": true, "targets": [["FirstImage", "image"]]},
+    "last_image":  {"type": "image", "required": false, "targets": [["LastImage", "image"]],
+                    "if_missing": {"drop": ["LastImage", "LastScale", "LastPre"],
+                                   "bypass": {"LastGuide": {"0": "positive", "1": "negative", "2": "latent"}}}},
+    "width":       {"type": "int", "default": 768, "multiple_of": 32,
+                    "targets": [["VideoLatent", "width"], ["FirstScale", "width"], ["LastScale", "width"]]},
+    "height":      {"type": "int", "default": 512, "multiple_of": 32,
+                    "targets": [["VideoLatent", "height"], ["FirstScale", "height"], ["LastScale", "height"]]},
+    "num_frames":  {"type": "int", "default": 49, "frames_8n1": true,
+                    "targets": [["VideoLatent", "length"], ["AudioLatent", "frames_number"]]},
+    "fps":         {"type": "float", "default": 24.0,
+                    "targets": [["Conditioning", "frame_rate"], ["AudioLatent", "frame_rate"], ["Save", "frame_rate"]]},
+    "seed":        {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/ltx", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {
+    "checkpoints": ["ltx-2.3-22b-distilled-fp8.safetensors"],
+    "text_encoders": ["gemma_3_12B_it_fp4_mixed.safetensors"]
+  },
+  "lora": {"after": "Checkpoint", "output": 0},
+  "progress_weights": {"Sampler": 10, "Checkpoint": 4, "TextEncoder": 3, "Decode": 3, "Save": 1}
+}

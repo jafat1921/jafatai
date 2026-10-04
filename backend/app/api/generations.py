@@ -1,0 +1,146 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.ai_jobs import rewrite_prompt_from_note
+from app.models import Generation, Job, utcnow
+from app.schemas import GenerationCreate, GenerationOut, RegenerateIn, RejectIn
+from app.security import CurrentUser, get_current_user, require_editor
+from app.services import approve, enqueue_generation, gen_out, get_owned, new_seed, resolve_target_project
+
+router = APIRouter(prefix="/generations", tags=["generations"])
+
+
+@router.get("", response_model=list[GenerationOut])
+def list_generations(
+    target_type: str | None = None,
+    target_id: str | None = None,
+    kind: str | None = None,
+    project_id: str | None = None,
+    include_rejected: bool = False,
+    db: Session = Depends(get_db),
+    cur: CurrentUser = Depends(get_current_user),
+):
+    q = select(Generation).where(Generation.workspace_id == cur.workspace_id)
+    if target_type:
+        q = q.where(Generation.target_type == target_type)
+    if target_id:
+        q = q.where(Generation.target_id == target_id)
+    if kind:
+        q = q.where(Generation.kind == kind)
+    if project_id:
+        q = q.where(Generation.project_id == project_id)
+    if not include_rejected:
+        q = q.where(Generation.status != "rejected")
+    q = q.order_by(Generation.version.desc(), Generation.created_at.desc()).limit(500)
+    return [gen_out(g) for g in db.scalars(q).all()]
+
+
+@router.post("", response_model=GenerationOut, status_code=201)
+def create_generation(body: GenerationCreate, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    project_id = resolve_target_project(db, cur.workspace_id, body.target_type, body.target_id)
+    params = dict(body.params)
+    seed = params.pop("seed", None)
+    g = enqueue_generation(
+        db,
+        workspace_id=cur.workspace_id,
+        project_id=project_id,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        kind=body.kind,
+        prompt=body.prompt,
+        params=params,
+        seed=int(seed) if seed is not None else None,
+    )
+    db.commit()
+    return gen_out(g)
+
+
+@router.post("/{gen_id}/regenerate", response_model=GenerationOut, status_code=201)
+def regenerate(gen_id: str, body: RegenerateIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    parent = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    prompt, params, seed, note = parent.prompt, dict(parent.params or {}), new_seed(), None
+    rewrite_failed = None
+
+    if body.mode == "note":
+        if not (body.note and body.note.strip()):
+            raise HTTPException(422, "A note is required for mode=note")
+        note = body.note.strip()
+        # creative LLM folds the note into the prompt; if it can't, the note is appended and flagged
+        prompt, rewrite_failed = rewrite_prompt_from_note(parent.prompt, note)
+    elif body.mode == "edit":
+        if body.prompt is not None:
+            if not body.prompt.strip():
+                raise HTTPException(422, "Prompt can't be empty")
+            prompt = body.prompt
+        if body.params:
+            params.update(body.params)
+        if "seed" in params:
+            seed = int(params.pop("seed"))
+
+    g = enqueue_generation(
+        db,
+        workspace_id=cur.workspace_id,
+        project_id=parent.project_id,
+        target_type=parent.target_type,
+        target_id=parent.target_id,
+        kind=parent.kind,
+        prompt=prompt,
+        params=params,
+        seed=seed,
+        parent_id=parent.id,
+        note=note,
+    )
+    if rewrite_failed:
+        job = db.get(Job, g.job_id)
+        job.message = f"Waiting for a worker · note appended, AI rewrite unavailable ({rewrite_failed})"[:500]
+    db.commit()
+    return gen_out(g)
+
+
+@router.post("/{gen_id}/approve", response_model=GenerationOut)
+def approve_generation(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    approve(db, g)
+    db.commit()
+    return gen_out(g)
+
+
+@router.post("/{gen_id}/unapprove", response_model=GenerationOut)
+def unapprove_generation(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    if g.status != "approved":
+        raise HTTPException(409, "This generation isn't approved")
+    g.status = "ready"
+    g.approved_at = None
+    db.commit()
+    return gen_out(g)
+
+
+@router.post("/{gen_id}/reject", response_model=GenerationOut)
+def reject_generation(
+    gen_id: str, body: RejectIn | None = None, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)
+):
+    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    if g.status not in ("ready", "approved", "failed", "rejected"):
+        raise HTTPException(409, f"Can't reject a generation that is {g.status}")
+    g.status = "rejected"
+    g.approved_at = None
+    if body and body.reason:
+        g.reject_reason = body.reason
+    db.commit()
+    return gen_out(g)
+
+
+@router.post("/{gen_id}/restore", response_model=GenerationOut)
+def restore_generation(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    if g.status != "rejected":
+        raise HTTPException(409, "Only rejected generations can be restored")
+    # a rejected failure has no media, so it goes back to failed rather than ready
+    g.status = "ready" if g.file_path else "failed"
+    g.reject_reason = None
+    g.updated_at = utcnow()
+    db.commit()
+    return gen_out(g)

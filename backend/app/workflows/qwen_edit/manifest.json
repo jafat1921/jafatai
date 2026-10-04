@@ -1,0 +1,29 @@
+{
+  "name": "qwen_edit",
+  "family": "qwen-image-edit-2511",
+  "description": "Qwen-Image-Edit-2511 + Lightning 4-step, 1-3 reference images. Character sheet views and reference-composed keyframes.",
+  "inputs": {
+    "prompt":  {"type": "str", "required": true, "targets": [["Positive", "prompt"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Negative", "prompt"]]},
+    "images":  {"type": "image_list", "required": true, "min": 1,
+                "slots": [["Ref1", "image"], ["Ref2", "image"], ["Ref3", "image"]],
+                "drop_unused": [["Ref2", "Ref2Scale"], ["Ref3", "Ref3Scale"]]},
+    "width":   {"type": "int", "default": 768, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":  {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":    {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":   {"type": "int", "default": 4, "targets": [["Sampler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/qwenedit", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["qwen_image_edit_2511_fp8mixed.safetensors"],
+    "text_encoders": ["qwen_2.5_vl_7b_fp8_scaled.safetensors"],
+    "vae": ["qwen_image_vae.safetensors"],
+    "loras": ["Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors"]
+  },
+  "optional_models": {
+    "loras": ["qwen-image-edit-2511-multiple-angles-lora.safetensors"]
+  },
+  "lora": {"after": "Lightning"},
+  "progress_weights": {"Sampler": 6, "UNet": 3, "TextEncoder": 2, "Positive": 1, "Negative": 1}
+}

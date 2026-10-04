@@ -1,0 +1,38 @@
+.env
+data/
+*.db
+*.db-*
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# local reference material, never shipped
+ref/
+
+.compliance/
+.DS_Store
+Thumbs.db
+
+dist-deploy/
+
+# internal - kept locally, never published
+tasks/
+docs/*
+!docs/ops/
+docs/ops/*
+!docs/ops/deploy-server.md
+!docs/api/
+.claude/
+CLAUDE.md
+frontend/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/

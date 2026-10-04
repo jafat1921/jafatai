@@ -1,0 +1,15 @@
+[Unit]
+Description=Mix AI Cinema Studio API
+After=network.target
+
+[Service]
+Type=simple
+User=gpu
+WorkingDirectory=/data/apps/mixaicinemastudio/backend
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/data/apps/mixaicinemastudio/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8090 --timeout-graceful-shutdown 3 --proxy-headers
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

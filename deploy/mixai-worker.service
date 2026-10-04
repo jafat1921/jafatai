@@ -1,0 +1,18 @@
+[Unit]
+Description=Mix AI Cinema Studio GPU worker
+After=network.target mixai-api.service
+
+[Service]
+Type=simple
+User=gpu
+WorkingDirectory=/data/apps/mixaicinemastudio/backend
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/data/apps/mixaicinemastudio/backend/.venv/bin/python -m app.worker
+# long renders: give an in-flight job time to checkpoint before systemd kills it
+KillSignal=SIGINT
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

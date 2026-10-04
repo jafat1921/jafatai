@@ -1,0 +1,22 @@
+{
+  "name": "zimage_t2i",
+  "family": "z-image-turbo",
+  "description": "Z-Image Turbo text-to-image. Portraits and keyframes without references.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 768, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 8, "targets": [["Sampler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/zimage", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["z_image_turbo_bf16.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["ae.safetensors"]
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 8, "UNet": 2, "TextEncoder": 2}
+}

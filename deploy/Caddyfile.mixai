@@ -1,0 +1,10 @@
+# Replace SERVER_IP with your server address before pasting.
+# Mix AI Cinema Studio on its own HTTPS port.
+# The app has its own login, so no basic_auth here. Paste into /etc/caddy/Caddyfile.
+SERVER_IP:8443 {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8090 {
+		# SSE: stream events immediately instead of buffering
+		flush_interval -1
+	}
+}

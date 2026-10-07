@@ -3,10 +3,10 @@ import { Link, useLocation } from 'react-router'
 import { Clapperboard } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useConnections } from '@/hooks/useConnections'
-import { useRunningCount } from '@/hooks/useStudio'
 import { activeRail, RAIL_ITEMS, SETTINGS_ITEM, type MenuId, type RailId, type RailItem } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 import { StatusDot } from './ConnectionStatus'
+import { JobsTray } from './JobsTray'
 import { MegaMenu } from './MegaMenu'
 import { UserMenu } from './UserMenu'
 import { useMegaMenu } from './useMegaMenu'
@@ -21,20 +21,10 @@ function Indicator({ on }: { on: boolean }) {
   return on ? <span aria-hidden className="absolute -left-2 top-2 bottom-2 w-[3px] rounded-r bg-studio-gold" /> : null
 }
 
-function Face({ item, badge }: { item: RailItem; badge?: number }) {
+function Face({ item }: { item: RailItem }) {
   return (
     <>
-      <span className="relative">
-        <item.icon aria-hidden className="size-5" />
-        {!!badge && (
-          <span
-            aria-hidden
-            className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-studio-accent px-1 text-center font-mono text-[11px] leading-4 text-studio-accent-fg"
-          >
-            {badge}
-          </span>
-        )}
-      </span>
+      <item.icon aria-hidden className="size-5" />
       {/* two-word labels ("Brand Kits") wrap onto a second line inside the 56 px item */}
       <span aria-hidden className="text-center text-small leading-[1.1]">
         {item.label}
@@ -49,7 +39,6 @@ export function Rail() {
   const root = useRef<HTMLElement>(null)
   const triggers = useRef(new Map<RailId, HTMLButtonElement>())
   const menu = useMegaMenu<RailId>(root)
-  const { running } = useRunningCount()
   const conn = useConnections()
   const menus = useMenus()
   // set on pointerdown so the click handler knows mouse vs touch vs keyboard
@@ -83,19 +72,26 @@ export function Rail() {
       <ul className="flex flex-col items-center gap-1">
         {RAIL_ITEMS.map((item) => {
           const on = active === item.id
+          if (item.id === 'queue') {
+            return (
+              <li key={item.id} className="relative" onPointerEnter={() => menu.open && menu.hoverLeave()}>
+                <Indicator on={on} />
+                <JobsTray item={item} current={on} className={cn(ITEM, on && ACTIVE)} />
+              </li>
+            )
+          }
           if (!item.menu) {
-            const badge = item.id === 'queue' ? running : undefined
             return (
               <li key={item.id}>
                 <Link
                   to={item.to}
                   aria-current={on ? 'page' : undefined}
-                  aria-label={item.id === 'queue' ? `Queue, ${running} running` : item.label}
+                  aria-label={item.label}
                   className={cn(ITEM, on && ACTIVE)}
                   onPointerEnter={() => menu.open && menu.hoverLeave()}
                 >
                   <Indicator on={on} />
-                  <Face item={item} badge={badge} />
+                  <Face item={item} />
                 </Link>
               </li>
             )

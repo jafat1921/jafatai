@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { job, media, mockApi, renderAt } from '@/test/media-fixtures'
 import { seedCatalog } from '@/test/model-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 import { VideoCreatePage } from './VideoCreatePage'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -25,14 +26,18 @@ describe('Create Video', () => {
     renderAt('/video/create', route, seedCatalog)
     const user = userEvent.setup()
 
-    expect(screen.getByRole('radio', { name: 'LTX-2.3' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Model: Auto' })).toBeInTheDocument()
     await user.click(screen.getByRole('textbox', { name: 'Describe the clip' }))
     await user.paste('Gulls over a grey harbour')
-    await user.click(screen.getByRole('button', { name: '10 s' }))
-    await user.click(screen.getByRole('radio', { name: 'Wan 2.2 14B' }))
+    await user.click(within(await openChip(user, 'Length')).getByRole('button', { name: '10 s' }))
+    await closeChip(user)
+    await user.click(within(await openChip(user, 'Model')).getByRole('radio', { name: 'Wan 2.2 14B' }))
+    await closeChip(user)
     // 10 s is past Wan's 5 s, so the preset is gone and the length is clamped
-    expect(screen.queryByRole('button', { name: '10 s' })).not.toBeInTheDocument()
-    expect(screen.getByText('Custom (up to 5 s)')).toBeInTheDocument()
+    const length = await openChip(user, 'Length')
+    expect(within(length).queryByRole('button', { name: '10 s' })).not.toBeInTheDocument()
+    expect(within(length).getByText('Custom (up to 5 s)')).toBeInTheDocument()
+    await closeChip(user)
     await user.keyboard('{Control>}{Enter}{/Control}')
 
     expect(calls.find((c) => c.method === 'POST')).toEqual(
@@ -42,7 +47,7 @@ describe('Create Video', () => {
       }),
     )
     const results = screen.getByRole('region', { name: 'Results' })
-    expect(await within(results).findByRole('group', { name: 'Actions for New clip' })).toBeInTheDocument()
+    expect(await within(results).findByRole('listitem', { name: 'Request: Gulls over a grey harbour' })).toBeInTheDocument()
   })
 
   it('a start image disables Wan with the reason, and sends image_id and smooth motion with LTX', async () => {
@@ -50,15 +55,17 @@ describe('Create Video', () => {
     renderAt('/video/create?image=m1&model=ltx23_distilled', route, seedCatalog)
     const user = userEvent.setup()
 
-    const wan = screen.getByRole('radio', { name: 'Wan 2.2 14B' })
+    const wan = within(await openChip(user, 'Model')).getByRole('radio', { name: 'Wan 2.2 14B' })
     expect(wan).toBeDisabled()
     expect(wan).toHaveAccessibleDescription(/works from text only\. Remove the start image to use it\./)
+    await closeChip(user)
     expect(await screen.findByRole('img', { name: 'Harbour still' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('textbox', { name: 'Describe the clip' }))
     await user.paste('The boat drifts out')
+    await user.click(screen.getByRole('radio', { name: 'Advanced' }))
     await user.click(screen.getByRole('switch', { name: /Smooth motion/ }))
-    await user.click(screen.getByRole('button', { name: /Create clip/ }))
+    await user.click(screen.getByRole('button', { name: /^Render/ }))
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
       prompt: 'The boat drifts out',
       model: 'ltx23_distilled',
@@ -70,7 +77,7 @@ describe('Create Video', () => {
 
     // removing the image frees Wan again
     await user.click(screen.getByRole('button', { name: 'Remove the start image' }))
-    expect(screen.getByRole('radio', { name: 'Wan 2.2 14B' })).toBeEnabled()
+    expect(within(await openChip(user, 'Model')).getByRole('radio', { name: 'Wan 2.2 14B' })).toBeEnabled()
   })
 
   it('sets the prompt to read in either direction', () => {

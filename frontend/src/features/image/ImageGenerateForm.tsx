@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react'
-import { ChevronDown, LayoutTemplate, Wand2 } from 'lucide-react'
+import { ChevronDown, ImagePlus, LayoutTemplate, Wand2 } from 'lucide-react'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -9,194 +10,187 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { ChipGroup } from '@/components/studio/chip'
 import { PlaceholderHint } from '@/components/studio/placeholder-hint'
 import { ErrorState } from '@/components/studio/states'
-import { ModelPicker } from '@/components/models/ModelPicker'
-import { SpeedPicker } from '@/components/models/SpeedPicker'
-import { BrandChip } from '@/components/brand/BrandChip'
+import { DockChip } from '@/components/generate/DockChip'
+import { AspectChip, BrandDockChip, CountChip, ModelChip, StyleChip } from '@/components/generate/DockChips'
+import { GenerateButton } from '@/components/generate/GenerateButton'
+import { PromptDock } from '@/components/generate/PromptDock'
+import { useDockModels } from '@/components/generate/useDockModels'
+import { useMagicPrompt } from '@/components/generate/useMagicPrompt'
 import { useBrandChoice } from '@/hooks/useBrandKits'
-import { useImageGenerate } from '@/hooks/useMedia'
-import { useModels } from '@/hooks/useModels'
+import { useGenEstimate } from '@/hooks/useGenEstimate'
 import { useTemplates } from '@/hooks/useStudio'
-import { IMAGE_STYLES, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
-import { modKey } from '@/lib/keyboard'
-import { defaultSpeed, estimateSeconds, has, pickModel, secondsText } from '@/lib/models'
 import { withBrand } from '@/lib/brand'
+import { localEstimate } from '@/lib/estimate'
+import { IMAGE_ASPECTS, IMAGE_STYLES, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
+import { defaultSpeed, has } from '@/lib/models'
 import { imageFormFrom } from '@/lib/templates'
-import { cn, plural } from '@/lib/utils'
+import type { ImageGenerateRequest } from '@/lib/types'
+import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { CountPicker, ImageAspectTiles } from './controls'
+
+export interface ImageRun {
+  form: ImageForm
+  body: ImageGenerateRequest
+  summary: string
+}
 
 interface Props {
   initial: ImageForm
   templateTitle?: string
   modelPicked?: boolean
+  onRun: (run: ImageRun) => void
+  pending?: boolean
+  error?: unknown
 }
 
-export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props) {
+const sizeOf = (aspect: string) => {
+  const s = IMAGE_ASPECTS.find((a) => a.value === aspect)?.size.split('×').map(Number)
+  return s ? { width: s[0], height: s[1] } : {}
+}
+
+export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, pending, error }: Props) {
   const uid = useId()
   const field = useRef<HTMLTextAreaElement>(null)
   const [form, setForm] = useState<ImageForm>(initial)
-  const [advanced, setAdvanced] = useState(!!(initial.negative || initial.seed || initial.steps))
   const [fromTemplate, setFromTemplate] = useState(templateTitle)
-  const generate = useImageGenerate()
   const templates = useTemplates('image')
-  const { models } = useModels('image')
   const brand = useBrandChoice()
   const set = <K extends keyof ImageForm>(k: K, v: ImageForm[K]) => setForm((f) => ({ ...f, [k]: v }))
-  const model = pickModel(models, form.model)
+  const { models, model, send, effective } = useDockModels('image', form.model, { prompt: form.prompt, count: form.count })
   const speed = model?.speeds?.find((s) => s.id === form.speed && s.available !== false) ?? defaultSpeed(model)
-  const perImage = estimateSeconds(model, speed?.id)
+  const magic = useMagicPrompt(form.prompt, { kind: 'image', model: send?.id, style: form.style, brandKitId: brand.sendId })
+  const estimate = useGenEstimate(
+    effective ? { kind: 'image', model: effective.id, ...(speed ? { speed: speed.id } : {}), count: form.count, ...sizeOf(form.aspect) } : null,
+    localEstimate(effective, { count: form.count, speed: speed?.id }),
+  )
 
   const slots = placeholdersIn(form.prompt)
-  const canSubmit = form.prompt.trim().length >= 3 && !slots.length && !generate.isPending
+  const blocked = slots.length ? `Replace ${slots.join(', ')} first.` : form.prompt.trim().length < 3 ? 'Describe the image first.' : null
+  const styleLabel = IMAGE_STYLES.find((s) => s.value === form.style)?.label
 
   const submit = () => {
-    if (!canSubmit) return
-    generate.mutate(withBrand(imagePayload({ ...form, model: model?.id, speed: speed?.id }), brand.sendId), {
-      onSuccess: ({ items }) => announce(`Creating ${plural(items?.length ?? form.count, 'image')}. They appear below as they finish.`),
-    })
+    if (blocked || pending) return
+    const body = withBrand({ ...imagePayload({ ...form, model: send?.id, speed: speed?.id }), ...magic.fields() }, brand.sendId)
+    const summary = [model?.label, form.aspect, plural(form.count, 'image'), styleLabel, brand.sendId ? `Brand: ${brand.kit?.name}` : null].filter(Boolean).join(' · ')
+    onRun({ form: { ...form, model: model?.id, speed: speed?.id }, body, summary })
   }
 
-  return (
-    <form
-      aria-labelledby={`${uid}-title`}
-      onSubmit={(e) => {
-        e.preventDefault()
-        submit()
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-          e.preventDefault()
-          submit()
-        }
-      }}
-      className="flex flex-col gap-4 rounded-[8px] border border-studio-border-strong bg-studio-panel p-4 shadow-card"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <Wand2 aria-hidden className="size-4 text-studio-accent-hover" />
-        <h1 id={`${uid}-title`} className="font-display text-title font-semibold">
-          Create Image
-        </h1>
-        {fromTemplate && (
-          <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Template: {fromTemplate}</span>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" size="sm" variant="ghost" className="ml-auto">
-              <LayoutTemplate aria-hidden />
-              Start from a template
-              <ChevronDown aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>Image templates</DropdownMenuLabel>
-            {templates.isPending && <p className="px-2 py-1.5 text-small text-studio-muted">Loading…</p>}
-            {templates.isError && <p className="px-2 py-1.5 text-small text-studio-muted">Templates aren't available right now.</p>}
-            {templates.data?.map((t) => (
-              <DropdownMenuItem
-                key={t.id}
-                onSelect={() => {
-                  setForm({ ...imageFormFrom(t.defaults ?? {}, t.id), model: form.model, speed: form.speed })
-                  setFromTemplate(t.title)
-                  announce(`Filled in from the ${t.title} template. Replace the highlighted words, then create.`)
-                }}
-              >
-                <span className="flex flex-col">
-                  <span>{t.title}</span>
-                  <span className="text-small text-studio-muted">{t.description}</span>
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <ModelPicker label="Model" models={models} value={model?.id} onChange={(id) => setForm((f) => ({ ...f, model: id, speed: undefined }))} highlighted={modelPicked} />
-      <BrandChip choice={brand} />
-      {model?.speeds?.length ? <SpeedPicker model={model} value={speed?.id} onChange={(id) => set('speed', id)} /> : null}
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={`${uid}-prompt`}>Describe the image</Label>
-        <Textarea
-          ref={field}
-          id={`${uid}-prompt`}
-          rows={3}
-          maxLength={4000}
-          value={form.prompt}
-          onChange={(e) => set('prompt', e.target.value)}
-          placeholder="e.g. A weathered lighthouse keeper in a wool coat, golden hour, 85mm portrait"
-          // Urdu or Arabic prompts read right to left
-          dir="auto"
-          aria-describedby={has(model, 'text_render') ? `${uid}-texthint` : undefined}
-          className="min-h-24 text-[15px] leading-6"
-        />
-        {has(model, 'text_render') && (
-          <p id={`${uid}-texthint`} className="text-small text-studio-muted">
-            Put text in quotes, e.g. a poster that says <bdi>{'"عید مبارک"'}</bdi>
-          </p>
-        )}
-        <PlaceholderHint text={form.prompt} field={field} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-        <ImageAspectTiles value={form.aspect} onChange={(v) => v && set('aspect', v)} />
-        <CountPicker value={form.count} onChange={(n) => set('count', n)} />
-      </div>
-
-      <ChipGroup label="Style" options={IMAGE_STYLES} value={form.style as (typeof IMAGE_STYLES)[number]['value'] | null} onChange={(v) => set('style', v)} />
-
-      <div>
-        <button
-          type="button"
-          aria-expanded={advanced}
-          aria-controls={`${uid}-adv`}
-          onClick={() => setAdvanced((a) => !a)}
-          className="flex items-center gap-1.5 rounded-[6px] px-1 text-small text-studio-muted hover:text-studio-text"
-        >
-          <ChevronDown aria-hidden className={cn('size-3.5 transition-transform duration-150', advanced && 'rotate-180')} />
-          Advanced
-        </button>
-        {advanced && (
-          <div id={`${uid}-adv`} className="mt-2 grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
-            <div>
-              <Label htmlFor={`${uid}-neg`} className="mb-1.5">
-                Avoid (negative prompt)
-              </Label>
-              <Input id={`${uid}-neg`} value={form.negative} onChange={(e) => set('negative', e.target.value)} placeholder="e.g. text, watermark, extra fingers" />
-            </div>
-            <div>
-              <Label htmlFor={`${uid}-seed`} className="mb-1.5">
-                Seed
-              </Label>
-              <Input id={`${uid}-seed`} inputMode="numeric" value={form.seed} onChange={(e) => set('seed', e.target.value.replace(/\D/g, ''))} placeholder="Random" className="font-mono" />
-            </div>
-            <div>
-              <Label htmlFor={`${uid}-steps`} className="mb-1.5">
-                Steps
-              </Label>
-              <Input id={`${uid}-steps`} inputMode="numeric" value={form.steps} onChange={(e) => set('steps', e.target.value.replace(/\D/g, ''))} placeholder="Default" className="font-mono" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {generate.isError && <ErrorState compact title="Couldn't start the images" error={generate.error} />}
-
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <p className="mr-auto text-small text-studio-muted" aria-live="polite">
-          {slots.length ? `Replace ${slots.join(', ')} first.` : `${plural(form.count, 'image')}${perImage ? ` · about ${secondsText(form.count * perImage)} on the GPU` : ''}`}
-        </p>
-        <Button type="submit" size="lg" variant="primary" disabled={!canSubmit} loading={generate.isPending} aria-keyshortcuts="Control+Enter">
-          <Wand2 aria-hidden />
-          Create
-          <Kbd>{modKey}+Enter</Kbd>
+  const templateMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" size="sm" variant="ghost">
+          <LayoutTemplate aria-hidden />
+          <span className="max-sm:sr-only">Start from a template</span>
+          <ChevronDown aria-hidden />
         </Button>
-      </div>
-    </form>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72">
+        <DropdownMenuLabel>Image templates</DropdownMenuLabel>
+        {templates.isPending && <p className="px-2 py-1.5 text-small text-studio-muted">Loading…</p>}
+        {templates.isError && <p className="px-2 py-1.5 text-small text-studio-muted">Templates aren't available right now.</p>}
+        {templates.data?.map((t) => (
+          <DropdownMenuItem
+            key={t.id}
+            onSelect={() => {
+              setForm({ ...imageFormFrom(t.defaults ?? {}, t.id), model: form.model, speed: form.speed })
+              setFromTemplate(t.title)
+              announce(`Filled in from the ${t.title} template. Replace the highlighted words, then create.`)
+            }}
+          >
+            <span className="flex flex-col">
+              <span>{t.title}</span>
+              <span className="text-small text-studio-muted">{t.description}</span>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
+  return (
+    <PromptDock
+      title="Create Image"
+      icon={<Wand2 aria-hidden className="size-4 text-studio-accent-hover" />}
+      headerExtra={
+        <>
+          {fromTemplate && <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Template: {fromTemplate}</span>}
+          {templateMenu}
+        </>
+      }
+      promptLabel="Describe the image"
+      prompt={form.prompt}
+      onPrompt={(v) => set('prompt', v)}
+      placeholder="e.g. A weathered lighthouse keeper in a wool coat, golden hour, 85mm portrait"
+      promptRef={field}
+      promptHint={
+        has(effective, 'text_render') ? (
+          <>
+            Put text in quotes, e.g. a poster that says <bdi>{'"عید مبارک"'}</bdi>
+          </>
+        ) : undefined
+      }
+      belowPrompt={<PlaceholderHint text={form.prompt} field={field} />}
+      chips={
+        <>
+          <ModelChip
+            models={models}
+            model={model}
+            onChange={(id) => setForm((f) => ({ ...f, model: id, speed: undefined }))}
+            speed={speed?.id}
+            onSpeed={(id) => set('speed', id)}
+            highlighted={modelPicked}
+          />
+          <AspectChip value={form.aspect}>
+            <ImageAspectTiles value={form.aspect} onChange={(v) => v && set('aspect', v)} />
+          </AspectChip>
+          <CountChip value={`×${form.count}`}>
+            <CountPicker value={form.count} onChange={(n) => set('count', n)} />
+          </CountChip>
+          <StyleChip options={IMAGE_STYLES} value={form.style as (typeof IMAGE_STYLES)[number]['value'] | null} onChange={(v) => set('style', v)} />
+          <DockChip name="References" value="Refs" icon={<ImagePlus aria-hidden />}>
+            <p className="text-small text-studio-muted">Start from a picture you have. You can also drop or paste one anywhere on this page.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="secondary">
+                <Link to="/image/edit">Edit with references</Link>
+              </Button>
+              <Button asChild size="sm" variant="secondary">
+                <Link to="/image/img2img">Image to Image</Link>
+              </Button>
+            </div>
+          </DockChip>
+          <BrandDockChip choice={brand} />
+        </>
+      }
+      advanced={
+        <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
+          <div>
+            <Label htmlFor={`${uid}-neg`} className="mb-1.5">
+              Avoid (negative prompt)
+            </Label>
+            <Input id={`${uid}-neg`} value={form.negative} onChange={(e) => set('negative', e.target.value)} placeholder="e.g. text, watermark, extra fingers" />
+          </div>
+          <div>
+            <Label htmlFor={`${uid}-seed`} className="mb-1.5">
+              Seed
+            </Label>
+            <Input id={`${uid}-seed`} inputMode="numeric" value={form.seed} onChange={(e) => set('seed', e.target.value.replace(/\D/g, ''))} placeholder="Random" className="font-mono" />
+          </div>
+          <div>
+            <Label htmlFor={`${uid}-steps`} className="mb-1.5">
+              Steps
+            </Label>
+            <Input id={`${uid}-steps`} inputMode="numeric" value={form.steps} onChange={(e) => set('steps', e.target.value.replace(/\D/g, ''))} placeholder="Default" className="font-mono" />
+          </div>
+        </div>
+      }
+      magic={magic}
+      error={error ? <ErrorState compact title="Couldn't start the images" error={error} /> : null}
+      footer={<GenerateButton verb="Generate" what={plural(form.count, 'image')} estimate={estimate} icon={<Wand2 aria-hidden />} blocked={blocked} pending={pending} />}
+      onSubmit={submit}
+    />
   )
 }

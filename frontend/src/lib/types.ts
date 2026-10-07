@@ -479,7 +479,7 @@ export interface UpscaleSegment {
 export type QuickStyle = 'cinematic' | 'documentary' | 'animated' | 'commercial'
 export type QuickAspect = '16:9' | '9:16' | '1:1'
 
-export interface QuickRequest {
+export interface QuickRequest extends MagicFields {
   prompt: string
   duration_s: number
   aspect_ratio: QuickAspect
@@ -542,6 +542,9 @@ export interface MediaItem {
   status?: GenerationStatus
   prompt?: string
   seed?: number | null
+  // newer servers echo the generation params (model, model_resolved, brand_kit_id…) on the item
+  params?: Record<string, unknown> | null
+  model?: string | null
 }
 
 export interface MediaDetail extends MediaItem {
@@ -566,7 +569,50 @@ export interface MediaQuery {
 
 export type ImageAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '2:3' | '3:2'
 
-export interface ImageGenerateRequest {
+// magic prompt (contract-v8 draft): omitted means "auto"
+export type MagicMode = 'auto' | 'on' | 'off'
+
+export interface MagicFields {
+  magic_prompt?: MagicMode
+  // the prompt is an enhancement the user already reviewed; don't enhance it again
+  prompt_enhanced?: boolean
+}
+
+export interface PromptEnhanceRequest {
+  prompt: string
+  kind: 'image' | 'video' | 'quick'
+  model?: string
+  style?: string
+  brand_kit_id?: string
+  mode: MagicMode
+}
+
+export interface PromptEnhanceResult {
+  enhanced: string
+  changed: boolean
+  notes?: string | null
+}
+
+export interface EstimateQuery {
+  kind: 'image' | 'video' | 'take' | 'upscale'
+  model?: string
+  speed?: string
+  count?: number
+  duration_s?: number
+  width?: number
+  height?: number
+}
+
+export interface EstimateResult {
+  low_s: number
+  high_s: number
+  basis: 'measured' | 'rough'
+  samples?: number
+  // a model load, already included in both ends
+  load_s?: number
+}
+
+export interface ImageGenerateRequest extends MagicFields {
   prompt: string
   negative?: string
   aspect: ImageAspect
@@ -580,7 +626,7 @@ export interface ImageGenerateRequest {
   brand_kit_id?: string
 }
 
-export interface ImageEditRequest {
+export interface ImageEditRequest extends MagicFields {
   source_ids: string[]
   instruction: string
   aspect?: ImageAspect
@@ -592,7 +638,7 @@ export interface ImageEditRequest {
 
 export type Img2ImgAspect = 'source' | ImageAspect
 
-export interface Img2ImgRequest {
+export interface Img2ImgRequest extends MagicFields {
   source_id: string
   prompt: string
   strength: number
@@ -687,6 +733,7 @@ export interface ModelInfo {
   max_refs?: number
   max_duration_s?: number
   est_seconds?: number
+  estimate_source?: 'measured' | 'rough'
   available: boolean
   reason?: string | null
   default: boolean
@@ -696,7 +743,7 @@ export interface ModelInfo {
 
 export type VideoAspect = '16:9' | '9:16' | '1:1'
 
-export interface VideoGenerateRequest {
+export interface VideoGenerateRequest extends MagicFields {
   prompt: string
   model: string
   duration_s: number

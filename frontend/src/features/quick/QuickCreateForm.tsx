@@ -1,44 +1,33 @@
 import { useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ChevronDown, Clapperboard, MessageSquareText, Wand2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Kbd } from '@/components/ui/kbd'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { Clapperboard, MessageSquareText, RectangleHorizontal, SlidersHorizontal, Timer, Wand2 } from 'lucide-react'
 import { AspectTiles } from '@/components/studio/aspect-tile'
-import { ChipGroup } from '@/components/studio/chip'
 import { DurationFields } from '@/components/studio/duration-picker'
 import { PlaceholderHint } from '@/components/studio/placeholder-hint'
-import { SwitchRow } from '@/components/studio/switch-row'
-import { BrandChip } from '@/components/brand/BrandChip'
-import { useBrandChoice } from '@/hooks/useBrandKits'
-import { withBrand } from '@/lib/brand'
-import { QuickAdvanced } from './QuickAdvanced'
 import { ErrorState } from '@/components/studio/states'
+import { SwitchRow } from '@/components/studio/switch-row'
+import { DockChip } from '@/components/generate/DockChip'
+import { BrandDockChip, StyleChip } from '@/components/generate/DockChips'
+import { GenerateButton } from '@/components/generate/GenerateButton'
+import { PromptDock } from '@/components/generate/PromptDock'
+import { useMagicPrompt } from '@/components/generate/useMagicPrompt'
+import { useBrandChoice } from '@/hooks/useBrandKits'
 import { useCreateQuick } from '@/hooks/useQuick'
 import { useUpscaleOptions } from '@/hooks/useUpscale'
+import { withBrand } from '@/lib/brand'
 import { formatDuration } from '@/lib/duration'
-import { modKey } from '@/lib/keyboard'
-import {
-  DEFAULT_QUICK_FORM,
-  QUICK_ASPECTS,
-  QUICK_MAX_S,
-  QUICK_MIN_S,
-  QUICK_PRESETS,
-  QUICK_STYLES,
-  quickEstimateText,
-  quickPayload,
-  type QuickForm,
-} from '@/lib/quick'
-import type { QuickAspect, QuickStyle } from '@/lib/types'
+import { spread } from '@/lib/estimate'
 import { placeholdersIn } from '@/lib/images'
+import { DEFAULT_QUICK_FORM, QUICK_ASPECTS, QUICK_MAX_S, QUICK_MIN_S, QUICK_PRESETS, QUICK_STYLES, quickEstimateS, quickPayload, type QuickForm } from '@/lib/quick'
+import type { QuickAspect, QuickStyle } from '@/lib/types'
 import { pickEngine } from '@/lib/upscale'
-import { cn } from '@/lib/utils'
+import { trackJobs } from '@/stores/toasts'
 import { announce } from '@/stores/ui'
+import { QuickAdvanced } from './QuickAdvanced'
 
 /**
- * One prompt → finished video. On the Projects page the options start folded into a summary
- * line so the prompt box stays the obvious first step; /create shows everything.
+ * One prompt → finished video. On the Quick Video page the dock is sticky over the recent films
+ * (a bottom sheet on phones); on Home it sits inline.
  */
 export function QuickCreateForm({
   expanded = false,
@@ -59,8 +48,8 @@ export function QuickCreateForm({
   const options = useUpscaleOptions()
   const brand = useBrandChoice()
   const [form, setForm] = useState<QuickForm>({ ...DEFAULT_QUICK_FORM, ...initial })
-  const [open, setOpen] = useState(expanded)
   const set = <K extends keyof QuickForm>(k: K, v: QuickForm[K]) => setForm((f) => ({ ...f, [k]: v }))
+  const magic = useMagicPrompt(form.prompt, { kind: 'quick', style: form.style, brandKitId: brand.sendId })
 
   const engines = options.data?.engines ?? []
   const engineId = pickEngine(engines, options.data?.default_engine)
@@ -71,13 +60,17 @@ export function QuickCreateForm({
       ? 'No upscale engine is installed on the server.'
       : `Adds a ${engine?.label ?? 'default engine'} pass at the end.`
   const slots = placeholdersIn(form.prompt)
-  const canSubmit = form.prompt.trim().length >= 3 && !slots.length && !create.isPending
-  const styleLabel = QUICK_STYLES.find((s) => s.value === form.style)?.label
+  const blocked = slots.length ? `Replace ${slots.join(', ')} first.` : form.prompt.trim().length < 3 ? 'Describe your video first.' : null
+  // the whole pipeline has no measured history to lean on, so it's always a rough range
+  const estimate = spread(quickEstimateS(form.durationS, form.upscale ? engine : undefined), 'rough')
+  const extras = [form.dialogue ? 'Narration' : 'No narration', form.upscale && engine ? '1080p' : null].filter(Boolean).join(' · ')
 
   const submit = () => {
-    if (!canSubmit) return
-    create.mutate(withBrand(quickPayload(form, engineId), brand.sendId), {
-      onSuccess: ({ project }) => {
+    if (blocked || create.isPending) return
+    const { prompt, ...magicFields } = magic.fields()
+    create.mutate(withBrand({ ...quickPayload({ ...form, prompt }, engineId), ...magicFields }, brand.sendId), {
+      onSuccess: ({ project, job }) => {
+        trackJobs([job], `“${project.title}”`, `/quick/${project.id}`)
         announce(`Started “${project.title}”. Writing the script.`)
         navigate(`/quick/${project.id}`)
       },
@@ -85,90 +78,45 @@ export function QuickCreateForm({
   }
 
   return (
-    <form
-      aria-labelledby={`${uid}-title`}
-      onSubmit={(e) => {
-        e.preventDefault()
-        submit()
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-          e.preventDefault()
-          submit()
-        }
-      }}
-      className={cn('flex flex-col gap-3 rounded-[8px] border border-studio-border-strong bg-studio-panel p-4 shadow-card', className)}
-    >
-      <div className="flex items-baseline gap-2">
-        <Wand2 aria-hidden className="size-4 shrink-0 self-center text-studio-accent-hover" />
-        <h2 id={`${uid}-title`} className="font-display text-title font-semibold">
-          Quick Create
-        </h2>
-        <p className="text-small text-studio-muted max-sm:hidden">One prompt, a finished video. Open it in the studio later to refine.</p>
-      </div>
-      {note}
-
-      <Label htmlFor={`${uid}-prompt`} className="sr-only">
-        Describe your video
-      </Label>
-      <Textarea
-        ref={field}
-        id={`${uid}-prompt`}
-        rows={3}
-        value={form.prompt}
-        maxLength={4000}
-        onChange={(e) => set('prompt', e.target.value)}
-        placeholder="Describe your video… e.g. A lighthouse keeper rescues a stray fox during a winter storm"
-        className="min-h-24 text-[15px] leading-6"
-      />
-      <PlaceholderHint text={form.prompt} field={field} />
-      <BrandChip choice={brand} />
-
-      {!expanded && (
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={`${uid}-options`}
-          onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-1.5 self-start rounded-[6px] px-1 text-small text-studio-muted hover:text-studio-text"
-        >
-          <ChevronDown aria-hidden className={cn('size-3.5 transition-transform duration-150', open && 'rotate-180')} />
-          {open ? 'Hide options' : 'Options'}
-          <span className="font-mono text-studio-text">
-            {formatDuration(form.durationS)} · {form.aspect} · {styleLabel}
-            {form.dialogue ? ' · narration' : ''}
-            {form.upscale ? ' · 1080p' : ''}
-            {form.videoQuality === 'hq' ? ' · high quality' : ''}
-          </span>
-        </button>
-      )}
-
-      {open && (
-        <div id={`${uid}-options`} className="grid gap-4 md:grid-cols-2">
-          <DurationFields
-            label="Length"
-            value={form.durationS}
-            onChange={(v) => set('durationS', v)}
-            presets={QUICK_PRESETS}
-            min={QUICK_MIN_S}
-            max={QUICK_MAX_S}
-            limitNoun=""
-            estimateLine={null}
-          />
-          <div>
-            <div id={`${uid}-aspect`} className="section-label mb-2">
+    <PromptDock
+      docked={expanded}
+      className={className}
+      title="Quick Create"
+      icon={<Wand2 aria-hidden className="size-4 shrink-0 text-studio-accent-hover" />}
+      headerExtra={
+        <>
+          <p className="text-small text-studio-muted max-lg:hidden">One prompt, a finished video.</p>
+          {note}
+        </>
+      }
+      promptLabel="Describe your video"
+      prompt={form.prompt}
+      onPrompt={(v) => set('prompt', v)}
+      placeholder="Describe your video… e.g. A lighthouse keeper rescues a stray fox during a winter storm"
+      promptRef={field}
+      belowPrompt={<PlaceholderHint text={form.prompt} field={field} />}
+      chips={
+        <>
+          <DockChip name="Length" value={formatDuration(form.durationS)} icon={<Timer aria-hidden />}>
+            <DurationFields
+              label="Length"
+              value={form.durationS}
+              onChange={(v) => set('durationS', v)}
+              presets={QUICK_PRESETS}
+              min={QUICK_MIN_S}
+              max={QUICK_MAX_S}
+              limitNoun=""
+              estimateLine={null}
+            />
+          </DockChip>
+          <DockChip name="Aspect" value={form.aspect} icon={<RectangleHorizontal aria-hidden />} wide>
+            <div id={`${uid}-aspect`} className="section-label">
               Aspect
             </div>
             <AspectTiles value={form.aspect} onChange={(v) => set('aspect', v as QuickAspect)} labelledBy={`${uid}-aspect`} only={QUICK_ASPECTS} />
-          </div>
-          <ChipGroup
-            label="Style"
-            options={QUICK_STYLES}
-            value={form.style}
-            allowEmpty={false}
-            onChange={(v) => v && set('style', v as QuickStyle)}
-          />
-          <div className="flex flex-col gap-2">
+          </DockChip>
+          <StyleChip options={QUICK_STYLES} value={form.style} allowEmpty={false} onChange={(v) => v && set('style', v as QuickStyle)} />
+          <DockChip name="Sound and finish" value={extras} icon={<SlidersHorizontal aria-hidden />}>
             <SwitchRow
               id={`${uid}-dialogue`}
               checked={form.dialogue}
@@ -186,25 +134,25 @@ export function QuickCreateForm({
               title="Upscale to 1080p when done"
               hint={upscaleHint}
             />
-          </div>
-          <QuickAdvanced form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
-        </div>
-      )}
-
-      {create.isError && <ErrorState compact title="Couldn't start the video" error={create.error} />}
-
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <p className="mr-auto text-small text-studio-muted" aria-live="polite">
-          {slots.length
-            ? `Replace ${slots.join(', ')} first.`
-            : `${quickEstimateText(form.durationS, form.upscale ? engine : undefined)}. You can close the page while it works.`}
-        </p>
-        <Button type="submit" size="lg" variant="primary" disabled={!canSubmit} loading={create.isPending} aria-keyshortcuts="Control+Enter" className="max-sm:w-full">
-          <Wand2 aria-hidden />
-          Create video
-          <Kbd>{modKey}+Enter</Kbd>
-        </Button>
-      </div>
-    </form>
+          </DockChip>
+          <BrandDockChip choice={brand} />
+        </>
+      }
+      advanced={<QuickAdvanced form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />}
+      magic={magic}
+      error={create.isError ? <ErrorState compact title="Couldn't start the video" error={create.error} /> : null}
+      footer={
+        <GenerateButton
+          verb="Create video"
+          what={`${formatDuration(form.durationS)} film`}
+          estimate={estimate}
+          icon={<Wand2 aria-hidden />}
+          blocked={blocked}
+          note="You can close the page while it works."
+          pending={create.isPending}
+        />
+      }
+      onSubmit={submit}
+    />
   )
 }

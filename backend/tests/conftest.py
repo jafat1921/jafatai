@@ -26,6 +26,8 @@ os.environ.update(
         "LLM_MODEL_CREATIVE": "fake-writer",
         "LLM_MODEL_VISION": "fake-eye",
         "LLM_REASONING_FORMAT": "deepseek",
+        # older tests script the fake LLM call by call; an extra enhancer call would shift them
+        "MAGIC_PROMPT_DEFAULT": "off",
     }
 )
 

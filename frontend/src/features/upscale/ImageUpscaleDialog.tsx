@@ -12,6 +12,7 @@ import { IMAGE_TARGETS, gpuText, planFor, previewText } from '@/lib/imageUpscale
 import { modKey } from '@/lib/keyboard'
 import type { Generation, ImageUpscaleEngine, ImageUpscaleEngineId, ImageUpscaleTarget, Job } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { trackJobs } from '@/stores/toasts'
 import { announce } from '@/stores/ui'
 import { DetailSlider } from './DetailSlider'
 
@@ -92,6 +93,7 @@ function UpscaleForm({
       { id: source.id, body },
       {
         onSuccess: (job) => {
+          trackJobs([job], `Upscale to ${chosen.label}`)
           announce(`Upscaling version ${source.version} to ${chosen.label}. It will appear in Versions.`)
           onDone(job)
         },

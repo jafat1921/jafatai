@@ -1,9 +1,10 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_I2V_FORM, i2vBlockedReason, i2vPayload } from '@/lib/video'
 import { media, mockApi, renderAt } from '@/test/media-fixtures'
 import { CATALOG, seedCatalog } from '@/test/model-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 import { Img2VidPage } from './Img2VidPage'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -44,18 +45,23 @@ describe('Image to Video page', () => {
     const user = userEvent.setup()
 
     expect(await screen.findByRole('img', { name: 'Cup, full' })).toBeInTheDocument()
-    const wanRadio = screen.getByRole('radio', { name: 'Wan 2.2 14B' })
+    const wanRadio = within(await openChip(user, 'Model')).getByRole('radio', { name: 'Wan 2.2 14B' })
     expect(wanRadio).toBeDisabled()
     expect(wanRadio).toHaveAccessibleDescription(/works from text only/)
+    await closeChip(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'Pick from Library' })[0])
+    await user.click(screen.getByRole('button', { name: 'Add end image' }))
+    await user.click(await screen.findByRole('button', { name: 'Pick from Library' }))
     await user.click(await screen.findByRole('button', { name: /Cup, empty/ }))
     await user.click(screen.getByRole('button', { name: /Use selected/ }))
 
     await user.click(screen.getByRole('textbox', { name: 'Describe the motion' }))
     await user.paste('Coffee drains from the cup, slow push in')
-    await user.click(screen.getByRole('radio', { name: 'LTX-2.3 High quality, HQ' }))
-    await user.click(screen.getByRole('button', { name: /Animate/ }))
+    const models = await openChip(user, 'Model')
+    await user.click(within(models).getByRole('radio', { name: 'LTX-2.3 High quality, HQ' }))
+    expect(within(models).getByText(/adds sound that fits the motion/)).toBeInTheDocument()
+    await closeChip(user)
+    await user.click(screen.getByRole('button', { name: /^Animate ·/ }))
 
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
       prompt: 'Coffee drains from the cup, slow push in',
@@ -64,7 +70,6 @@ describe('Image to Video page', () => {
       image_id: 's1',
       end_image_id: 'end1',
     })
-    expect(screen.getByText(/adds sound that fits the motion/)).toBeInTheDocument()
   })
 
   it('cannot run without a start picture', async () => {
@@ -73,7 +78,7 @@ describe('Image to Video page', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('textbox', { name: 'Describe the motion' }))
     await user.paste('Leaves drift past')
-    expect(screen.getByRole('button', { name: /Animate/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Animate ·/ })).toBeDisabled()
     expect(screen.getByText('Add a start picture first.')).toBeInTheDocument()
   })
 })

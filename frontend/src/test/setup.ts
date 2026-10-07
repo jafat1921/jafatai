@@ -12,3 +12,21 @@ if (!('ResizeObserver' in globalThis)) {
     disconnect() {}
   } as unknown as typeof ResizeObserver
 }
+
+// per-browser and per-tab state must not leak between tests
+afterEach(async () => {
+  try {
+    window.localStorage.clear()
+  } catch {
+    /* jsdom without storage */
+  }
+  const [{ useSessions }, { useToasts, useMyJobs }, { useFavourites }] = await Promise.all([
+    import('@/stores/sessions'),
+    import('@/stores/toasts'),
+    import('@/stores/favourites'),
+  ])
+  useSessions.setState({ requests: [] })
+  useToasts.setState({ toasts: [] })
+  useMyJobs.setState({ jobs: {}, done: [] })
+  useFavourites.setState({ ids: [] })
+})

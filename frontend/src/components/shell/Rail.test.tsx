@@ -49,16 +49,16 @@ describe('rail', () => {
     renderRail('/image/library', [job('a', { status: 'running' }), job('b', { status: 'running' }), job('c', { status: 'queued' })])
     expect(trigger('Image')).toHaveAttribute('aria-current', 'true')
     expect(trigger('Video')).not.toHaveAttribute('aria-current')
-    const queue = within(rail()).getByRole('link', { name: 'Queue, 2 running' })
-    expect(queue).toHaveAttribute('href', '/queue')
-    expect(queue).toHaveTextContent('2')
+    // the badge counts everything still to do; the label splits running and waiting
+    const queue = within(rail()).getByRole('button', { name: 'Queue, 2 running, 1 waiting' })
+    expect(queue).toHaveTextContent('3')
     expect(within(rail()).getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current')
   })
 
   it('home is a plain link with aria-current on /', () => {
     renderRail('/', [])
     expect(within(rail()).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
-    expect(within(rail()).getByRole('link', { name: 'Queue, 0 running' })).toBeInTheDocument()
+    expect(within(rail()).getByRole('button', { name: 'Queue, 0 running' })).not.toHaveTextContent(/\d/)
   })
 
   it('opens on hover after the intent delay and closes after the grace period', () => {

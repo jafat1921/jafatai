@@ -125,3 +125,11 @@ export function tileState(item: MediaItem, gen?: { status: GenerationStatus } | 
 }
 
 export const sizeLabel = (m: Pick<MediaItem, 'width' | 'height'>) => (m.width && m.height ? `${m.width}×${m.height}` : null)
+
+/** Width over height, from the item, else the size the request asked for, else square. */
+export function tileRatio(item: Pick<MediaItem, 'width' | 'height' | 'kind'>, hint?: string | null) {
+  if (item.width && item.height) return `${item.width} / ${item.height}`
+  const m = hint?.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/)
+  if (m) return `${m[1]} / ${m[2]}`
+  return item.kind === 'video' ? '16 / 9' : '1 / 1'
+}

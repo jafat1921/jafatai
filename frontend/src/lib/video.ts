@@ -1,6 +1,6 @@
 import { CHUNK_MAX_S, isLongTakeDuration, LONGTAKE_MAX_S } from './duration'
 import { has } from './models'
-import type { ModelInfo, VideoAspect, VideoGenerateRequest } from './types'
+import type { Job, MediaBatch, MediaItem, ModelInfo, VideoAspect, VideoGenerateRequest } from './types'
 
 export const VIDEO_ASPECTS: VideoAspect[] = ['16:9', '9:16', '1:1']
 
@@ -94,4 +94,12 @@ export function videoPayload(f: VideoForm, m: ModelInfo): VideoGenerateRequest {
   if (Number.isFinite(seed) && seed >= 0) body.seed = seed
   if (f.smooth && !smoothBlockedReason(m, body.duration_s)) body.smooth_motion = true
   return body
+}
+
+/** The generate endpoint answers one MediaItem (+ job), or a batch on some servers. */
+export function videoResult(res: (MediaItem & { job?: Job | null }) | MediaBatch) {
+  const batch = res as Partial<MediaBatch>
+  const single = res as MediaItem & { job?: Job | null }
+  const items = Array.isArray(batch.items) ? batch.items : single?.id ? [single] : []
+  return { items, jobs: [...(batch.jobs ?? []), ...(single?.job ? [single.job] : [])] }
 }

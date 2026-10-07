@@ -23,6 +23,7 @@ import {
   type Size,
 } from '@/lib/upscale'
 import { cn } from '@/lib/utils'
+import { trackJobs } from '@/stores/toasts'
 import { announce } from '@/stores/ui'
 
 const ENGINE_COPY: Record<UpscaleEngineId, { name: string; blurb: string; icon: typeof Sparkles }> = {
@@ -90,7 +91,8 @@ function UpscaleForm({
     upscale.mutate(
       { id: render.id, body: { engine: engine.id, target: chosen.id } },
       {
-        onSuccess: () => {
+        onSuccess: (job) => {
+          trackJobs([job], `${info.title} at ${chosen.label}`)
           announce(`Upscaling ${info.title} to ${chosen.label}.`)
           onDone()
         },

@@ -19,10 +19,29 @@ import { aspectClassFor } from '@/lib/aspect'
 import { formatTimecode } from '@/lib/duration'
 import { filterRenders, renderInfo, shortDate, type OutputFilter } from '@/lib/stitch'
 import type { Render } from '@/lib/types'
-import { compareSources, upscaleInfo } from '@/lib/upscale'
+import { compareSources, resolutionLabel, upscaleInfo } from '@/lib/upscale'
+import { modelUsedId } from '@/lib/models'
+import { Lightbox, type LightboxEntry } from '@/components/generate/Lightbox'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { OutputCard } from './OutputCard'
+
+function renderEntry(r: Render): LightboxEntry {
+  const info = renderInfo(r)
+  return {
+    key: r.id,
+    kind: 'video',
+    src: r.media_url ?? null,
+    title: `${info.title} · v${r.version}`,
+    prompt: [info.range, info.durationS != null ? formatTimecode(info.durationS) : null].filter(Boolean).join(' · '),
+    modelId: modelUsedId(r.params),
+    seed: r.seed,
+    size: resolutionLabel(r),
+    brandKitId: typeof r.params?.brand_kit_id === 'string' ? r.params.brand_kit_id : null,
+    createdAt: r.created_at,
+    generationId: r.id,
+  }
+}
 
 const FILTERS: { value: OutputFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -42,12 +61,15 @@ export function OutputCanvas() {
   const [filter, setFilter] = useState<OutputFilter>('all')
   const [showRejected, setShowRejected] = useState(false)
   const [playingId, setPlayingId] = useState<string>()
+  const [comparingId, setComparingId] = useState<string>()
   const [upscaleId, setUpscaleId] = useState<string>()
 
   const all = renders.data ?? []
   const final = all.find((r) => r.status === 'approved')
   const visible = filterRenders(all, filter, showRejected && !reviewOnly)
-  const playing = all.find((r) => r.id === playingId)
+  const playable = visible.filter((r) => !!r.media_url && (r.status === 'ready' || r.status === 'approved'))
+  const playIndex = playable.findIndex((r) => r.id === playingId)
+  const playing = all.find((r) => r.id === comparingId)
   const playingInfo = playing && renderInfo(playing)
   const byId = new Map(all.map((r) => [r.id, r]))
   const sourceOf = (r: Render) => {
@@ -141,7 +163,24 @@ export function OutputCanvas() {
         )}
       </div>
 
-      <Dialog open={!!playing} onOpenChange={(open) => !open && setPlayingId(undefined)}>
+      <Lightbox
+        entries={playable.map(renderEntry)}
+        index={playIndex >= 0 ? playIndex : null}
+        onIndex={(i) => setPlayingId(playable[i]?.id)}
+        onClose={() => setPlayingId(undefined)}
+        detailsLabel="Compare and approve"
+        actions={{
+          upscale: reviewOnly ? undefined : (e) => {
+            setPlayingId(undefined)
+            setUpscaleId(e.key)
+          },
+          details: (e) => {
+            setPlayingId(undefined)
+            setComparingId(e.key)
+          },
+        }}
+      />
+      <Dialog open={!!playing} onOpenChange={(open) => !open && setComparingId(undefined)}>
         {playing && playingInfo && (
           <DialogContent className="max-w-5xl">
             <DialogTitle className="pr-8">{playingInfo.title}</DialogTitle>

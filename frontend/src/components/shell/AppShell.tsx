@@ -9,6 +9,7 @@ import { TopBar } from './TopBar'
 import { QueueDrawer } from './QueueDrawer'
 import { Rail } from './Rail'
 import { BottomBar } from './BottomBar'
+import { Toaster } from './Toaster'
 
 function LiveAnnouncer() {
   const { text, n } = useUi((s) => s.announcement)
@@ -46,6 +47,7 @@ export function AppShell() {
         {mobile && <BottomBar />}
       </Tabs>
       <QueueDrawer />
+      <Toaster />
       <LiveAnnouncer />
     </div>
   )

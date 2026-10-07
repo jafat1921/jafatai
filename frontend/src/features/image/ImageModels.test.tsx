@@ -1,8 +1,9 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { job, media, mockApi, renderAt } from '@/test/media-fixtures'
 import { seedCatalog } from '@/test/model-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 import { ImageEditPage } from './ImageEditPage'
 import { ImageGeneratePage } from './ImageGeneratePage'
 
@@ -18,16 +19,19 @@ describe('Create Image: model choice', () => {
     renderAt('/image/generate?model=qwen_image_2512', [{ path: '/image/generate', element: <ImageGeneratePage /> }], seedCatalog)
     const user = userEvent.setup()
 
-    expect(screen.getByRole('radio', { name: 'Qwen-Image 2512, TEXT' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: /^Full: 24 steps/ })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Model: Qwen-Image 2512 · Full' })).toBeInTheDocument()
+    const chip = await openChip(user, 'Model')
+    expect(within(chip).getByRole('radio', { name: 'Qwen-Image 2512, TEXT' })).toBeChecked()
+    expect(within(chip).getByRole('radio', { name: /^Full: 24 steps/ })).toBeChecked()
+    await user.click(within(chip).getByRole('radio', { name: /^Lightning 4-step/ }))
+    await closeChip(user)
     const prompt = screen.getByRole('textbox', { name: 'Describe the image' })
     expect(prompt).toHaveAttribute('dir', 'auto')
     expect(prompt).toHaveAccessibleDescription(/Put text in quotes, e\.g\. a poster that says "عید مبارک"/)
 
     await user.click(prompt)
     await user.paste('A poster that says "عید مبارک"')
-    await user.click(screen.getByRole('radio', { name: /^Lightning 4-step/ }))
-    await user.click(screen.getByRole('button', { name: /Create/ }))
+    await user.click(screen.getByRole('button', { name: /^Generate/ }))
 
     expect(calls.find((c) => c.method === 'POST')).toMatchObject({
       path: '/images/generate',
@@ -43,8 +47,10 @@ describe('Create Image: model choice', () => {
     })
     renderAt('/image/generate?model=qwen_image_2512', [{ path: '/image/generate', element: <ImageGeneratePage /> }], seedCatalog)
     const user = userEvent.setup()
-    await user.click(screen.getByRole('radio', { name: 'Z-Image Turbo, FAST' }))
-    expect(screen.queryByRole('radiogroup', { name: 'Speed' })).not.toBeInTheDocument()
+    const chip = await openChip(user, 'Model')
+    await user.click(within(chip).getByRole('radio', { name: 'Z-Image Turbo, FAST' }))
+    expect(within(chip).queryByRole('radiogroup', { name: 'Speed' })).not.toBeInTheDocument()
+    await closeChip(user)
     expect(screen.queryByText(/Put text in quotes/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('textbox', { name: 'Describe the image' }))
     await user.paste('a fox')
@@ -71,7 +77,8 @@ describe('Edit Image: model choice', () => {
     await user.click(screen.getByRole('textbox', { name: 'What should change?' }))
     await user.paste('make it night')
 
-    await user.click(screen.getByRole('radio', { name: 'FLUX.2 klein 4B (base)' }))
+    await user.click(within(await openChip(user, 'Model')).getByRole('radio', { name: 'FLUX.2 klein 4B (base)' }))
+    await closeChip(user)
     expect(screen.getByText('Source images (2/1)')).toBeInTheDocument()
     expect(screen.getByText('FLUX.2 klein 4B (base) takes 1 image. Remove 1 image or pick another model.')).toHaveAttribute('role', 'status')
     expect(screen.getByRole('button', { name: /^Edit/ })).toBeDisabled()
@@ -84,10 +91,13 @@ describe('Edit Image: model choice', () => {
     })
   })
 
-  it('defaults to Qwen-Image-Edit with up to 3 references', () => {
+  it('defaults to Auto, which stands for Qwen-Image-Edit and its 3 references', async () => {
     api()
     renderAt('/image/edit', [{ path: '/image/edit', element: <ImageEditPage /> }], seedCatalog)
-    expect(screen.getByRole('radio', { name: 'Qwen-Image-Edit 2511, BEST' })).toBeChecked()
+    const user = userEvent.setup()
     expect(screen.getByText('Source images (0/3)')).toBeInTheDocument()
+    const chip = await openChip(user, 'Model')
+    expect(within(chip).getByRole('radio', { name: 'Auto' })).toBeChecked()
+    expect(within(chip).getAllByRole('radio')[0]).toHaveAccessibleName('Auto')
   })
 })

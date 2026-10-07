@@ -18,7 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from app import brand
 from app import library as lib
 from app import models_catalog as mc
-from app import uploads
+from app import prompt_enhance, uploads
 from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db
 from app.models import Generation, Job, MediaItem, Project, new_id
@@ -206,15 +206,19 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
         raise HTTPException(422, f"Unknown style '{body.style}' (expected {', '.join(lib.STYLES)})")
     if not body.prompt.strip():
         raise HTTPException(422, "A prompt is required")
-    model = mc.get(body.model, "image")
-    speed = mc.speed_of(model, body.speed)
+    model, chosen = mc.choose(body.model, "image", body.prompt, count=body.count)
+    speed = _speed(model, body)
+    magic = prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "image",
+                                  style=lib.STYLES[body.style][0] if body.style else None,
+                                  brand_kit_id=body.brand_kit_id)
     w, h = lib.size_for_aspect(body.aspect)
     prompt = lib.styled_prompt(body.prompt, body.style)
     title = (body.title or "").strip() or lib.short_title(body.prompt)
     items, jobs = [], []
     for i in range(body.count):
         params = {"aspect": body.aspect, "width": w, "height": h, "style": body.style,
-                  "user_prompt": body.prompt.strip(), "created_by": {"user_id": cur.id, "flow": "image_generate"}}
+                  "user_prompt": body.prompt.strip(), "created_by": {"user_id": cur.id, "flow": "image_generate"},
+                  "magic_prompt": magic, **chosen}
         if body.negative:
             params["negative"] = body.negative.strip()
         if body.steps:
@@ -230,7 +234,15 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
         items.append(item)
         jobs.append(job)
     db.commit()
-    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs])
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs],
+                         model_resolved=model.id, magic_prompt=magic)
+
+
+def _speed(model: mc.Model, body) -> mc.Speed | None:
+    # a speed picked for some other model shouldn't sink an auto pick that has no speeds
+    if body.model == mc.AUTO and not model.speeds:
+        return None
+    return mc.speed_of(model, body.speed)
 
 
 def _edit_source(db: Session, workspace_id: str, sid: str) -> tuple[str | None, Generation]:
@@ -254,7 +266,7 @@ def _edit_source(db: Session, workspace_id: str, sid: str) -> tuple[str | None, 
 def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     if not body.instruction.strip():
         raise HTTPException(422, "Say what to change")
-    model = mc.get(body.model, "edit")
+    model, chosen = mc.choose(body.model, "edit", body.instruction, refs=len(body.source_ids))
     mc.check_refs(model, len(body.source_ids))
     sources = [_edit_source(db, cur.workspace_id, sid) for sid in body.source_ids]
     if body.aspect:
@@ -270,25 +282,26 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
     for i in range(body.count):
         params = {"width": w, "height": h, "aspect": body.aspect, "instruction": instruction, "edit_of": edit_of,
                   "reference_ids": [g.id for _, g in sources], "model": model.id,
-                  "created_by": {"user_id": cur.id, "flow": "image_edit"}}
+                  "created_by": {"user_id": cur.id, "flow": "image_edit"}, **chosen}
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
             db, cur.workspace_id, body.brand_kit_id, instruction, params, edit=True, max_refs=model.max_refs or 3), seed)
         items.append(item)
         jobs.append(job)
     db.commit()
-    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs])
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs], model_resolved=model.id)
 
 
 @router.post("/images/img2img", response_model=ImageBatchOut, status_code=202)
 def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     if not body.prompt.strip():
         raise HTTPException(422, "Describe the picture you want")
-    model = mc.get(body.model, "image")
+    model, chosen = mc.choose(body.model, "image", body.prompt, count=body.count)
     reason = mc.capability_unavailable(model, "i2i")
     if reason:
         raise HTTPException(422, f"Image to image with {model.label} isn't available: {reason}")
-    speed = mc.speed_of(model, body.speed)
+    speed = _speed(model, body)
+    magic = prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "image", brand_kit_id=body.brand_kit_id)
     media_id, src = _edit_source(db, cur.workspace_id, body.source_id)
     if body.aspect == "source":
         sw, sh = lib._image_dims(src)
@@ -301,7 +314,7 @@ def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = D
     for i in range(body.count):
         params = {"width": w, "height": h, "aspect": body.aspect, "model": model.id, "user_prompt": prompt,
                   "img2img_of": {"media_id": media_id, "generation_id": src.id, "strength": body.strength},
-                  "created_by": {"user_id": cur.id, "flow": "image_img2img"}}
+                  "created_by": {"user_id": cur.id, "flow": "image_img2img"}, "magic_prompt": magic, **chosen}
         if speed:
             params["speed"] = speed.id
         if body.negative:
@@ -312,7 +325,8 @@ def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = D
         items.append(item)
         jobs.append(job)
     db.commit()
-    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs])
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs],
+                         model_resolved=model.id, magic_prompt=magic)
 
 
 # ---------------------------------------------------------------- templates

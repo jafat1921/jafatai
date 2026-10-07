@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { qk } from '@/hooks/keys'
 import { autopilotJob, mockFetch, quickProject, renderRoutes, stage, upscaleOptions, video } from '@/test/quick-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 import { QuickCreateForm } from './QuickCreateForm'
 import { QuickProgressPage } from './QuickProgressPage'
 
@@ -27,12 +28,19 @@ describe('Quick Create form', () => {
     const user = userEvent.setup()
 
     await user.type(screen.getByRole('textbox', { name: 'Describe your video' }), 'A fox rescued from a storm')
-    await user.click(screen.getByRole('button', { name: '2 min' }))
-    await user.click(screen.getByRole('radio', { name: /9:16 Portrait/ }))
-    await user.click(screen.getByRole('button', { name: 'Documentary' }))
-    await user.click(screen.getByRole('switch', { name: /Dialogue/ }))
-    await user.click(await screen.findByRole('switch', { name: /Upscale to 1080p/ }))
-    expect(screen.getByText(/Roughly .* of GPU time/)).toBeInTheDocument()
+    await user.click(within(await openChip(user, 'Length')).getByRole('button', { name: '2 min' }))
+    await closeChip(user)
+    await user.click(within(await openChip(user, 'Aspect')).getByRole('radio', { name: /9:16 Portrait/ }))
+    await closeChip(user)
+    await user.click(within(await openChip(user, 'Style')).getByRole('button', { name: 'Documentary' }))
+    await closeChip(user)
+    const sound = await openChip(user, 'Sound and finish')
+    await user.click(within(sound).getByRole('switch', { name: /Dialogue/ }))
+    await user.click(await within(sound).findByRole('switch', { name: /Upscale to 1080p/ }))
+    await closeChip(user)
+    expect(screen.getByRole('button', { name: 'Sound and finish: No narration · 1080p' })).toBeInTheDocument()
+    // the whole pipeline is always a rough range
+    expect(screen.getByRole('button', { name: /^Create video · 2 min film · ~\d+–\d+ min/ })).toBeEnabled()
     await user.keyboard('{Control>}{Enter}{/Control}')
 
     expect(calls).toContainEqual({
@@ -58,12 +66,14 @@ describe('Quick Create form', () => {
     renderRoutes('/projects', [{ path: '/projects', element: <QuickCreateForm /> }])
     const user = userEvent.setup()
 
-    // options are folded on the Projects page
+    // the options sit folded in chips
     expect(screen.queryByRole('button', { name: '2 min' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Options/ }))
-    await user.type(screen.getByRole('textbox', { name: /custom/i }), '1:30{Enter}')
-    expect(await screen.findByRole('switch', { name: /Upscale to 1080p/ })).toBeDisabled()
-    expect(screen.getByText(/isn't available on this server/)).toBeInTheDocument()
+    await user.type(within(await openChip(user, 'Length')).getByRole('textbox', { name: /custom/i }), '1:30{Enter}')
+    await closeChip(user)
+    const sound = await openChip(user, 'Sound and finish')
+    expect(await within(sound).findByRole('switch', { name: /Upscale to 1080p/ })).toBeDisabled()
+    expect(within(sound).getByText(/isn't available on this server/)).toBeInTheDocument()
+    await closeChip(user)
 
     expect(screen.getByRole('button', { name: /Create video/ })).toBeDisabled()
     await user.type(screen.getByRole('textbox', { name: 'Describe your video' }), 'Neon city at dawn')

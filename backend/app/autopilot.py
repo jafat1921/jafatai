@@ -132,13 +132,15 @@ NO_DIALOGUE = ("Nobody speaks on screen and there is no voice-over: tell it thro
 
 
 def outline_messages(project: Project, style: str, dialogue: bool, duration_s: float, brand: str = "",
-                     planner: str = "") -> list[dict]:
+                     planner: str = "", expanded: str = "") -> list[dict]:
     lo, hi = scene_range(duration_s)
     n = target_scenes(duration_s)
     count = "exactly 1 scene" if hi == 1 else f"{n} scenes (anywhere from {lo} to {hi} is fine)"
     talk = "Characters may speak; keep the lines few and short." if dialogue else NO_DIALOGUE
     user = (
         f"The idea, in the client's own words:\n{project.brief.strip()[:3000]}\n\n"
+        + (f"The same idea, expanded (the client's words come first):\n{expanded.strip()[:3000]}\n\n"
+           if expanded else "") +
         f"Make it {STYLE_PRESETS[style][1]}. Total running time: {duration_s:g} seconds, so plan {count} whose "
         f"duration_s add up to {duration_s:g}.\n{talk}\n"
         "Each scene is filmed as ONE continuous shot, so keep every scene to one place and one clear action.\n"
@@ -289,6 +291,26 @@ class Autopilot:
         child = self.db.get(Job, g.job_id)
         child.payload = {**(child.payload or {}), "parent_job_id": self.job.id}
         return g
+
+    def magic_prompt(self, style: str, brand_context: str) -> str:
+        """The enhanced idea for the outline ("" when off or unchanged); worked out once per job."""
+        done = self.r.get("magic_prompt")
+        if done is None:
+            mp = self.p.get("magic_prompt") or {}
+            if mp.get("status") != "pending":
+                return ""
+            from app.prompt_enhance import enhance_sync
+
+            self.tick(message="Improving the prompt")
+            out = enhance_sync(self.project.brief, "quick", mode=mp.get("mode") or "auto", style=style,
+                               brand_context=brand_context, tick=lambda: self.tick())
+            done = {"mode": mp.get("mode"), "status": "done", "changed": out["changed"],
+                    "original_prompt": self.project.brief, "enhanced_prompt": out["enhanced"]}
+            if out.get("notes"):
+                done["notes"] = out["notes"]
+            self.r["magic_prompt"] = done
+            self.save()
+        return done["enhanced_prompt"] if done.get("changed") else ""
 
     # ---- the loop
     def run(self) -> dict:
@@ -579,10 +601,12 @@ class Autopilot:
                 db.delete(s)
             db.flush()
             kit = bm.project_kit(db, project)
+            expanded = self.magic_prompt(style, brand.prompt_context(kit) if kit else "")
             try:
                 res = self.llm("Outlining the film", "reasoning",
                                outline_messages(project, style, dialogue, total,
-                                                brand.prompt_context(kit) if kit else "", self.planner_notes()),
+                                                brand.prompt_context(kit) if kit else "", self.planner_notes(),
+                                                expanded),
                                schema=QuickOutline, temperature=0.6, max_tokens=8000)
             except LLMError as e:
                 raise StageFailed(f"The AI writer isn't available: {e}") from e

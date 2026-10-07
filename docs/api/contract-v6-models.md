@@ -119,3 +119,48 @@ All three pass `check_template` against the live `/object_info` (2026-10-07). Th
 - `brand_kit_id` works as before.
 
 **Uploads everywhere:** every source-image input takes a Library item id or a generation id: `images/edit`, `images/img2img`, `videos/generate` (`image_id`, `end_image_id`). `POST /generations/{id}/upscale` and `POST /generations/{id}/brand` now also take a Library item id, standing for its current version.
+
+## P1 endpoints (UI polish, 2026-10-07)
+
+**Magic prompt: `POST /api/prompts/enhance`** (editor)
+```
+in:  {prompt, kind: "image"|"video"|"quick" = "image", model?, style?, brand_kit_id?, mode: "auto"|"on" = "auto"}
+out: {enhanced, changed: bool, notes?: str}
+```
+- The creative LLM (thinking off, strict JSON) adds visual detail: at most ~120 words for images, ~160 for video and quick. Video adds the camera, the motion and sound cues.
+- Quoted text (`"…"`, `“…”`, `«…»`, `「…」`) is copied verbatim and never translated, including Urdu. If the model changes it, the original comes back with `changed: false` and a note.
+- `auto` only enhances prompts under 12 words (quotes not counted) or prompts with no look, light or camera words. Otherwise the prompt comes back unchanged.
+- If the LLM is down, slow (`ENHANCE_TIMEOUT_S`, 30 s) or broken, you get the original, `changed: false`, `notes: "enhancer unavailable"`. This is never an error.
+- Identical requests are cached in memory for 10 minutes.
+
+**Generators:** `images/generate`, `images/img2img`, `videos/generate` and `POST /quick` accept `magic_prompt: "auto"|"on"|"off"` (the default comes from `MAGIC_PROMPT_DEFAULT`, `auto`) and `prompt_enhanced: bool`.
+- Send `prompt_enhanced: true` when the dock already showed the enhanced text. The job then won't enhance it again.
+- Otherwise the job enhances the prompt before the GPU step. Style and brand suffixes are kept.
+- Each generation records `params.magic_prompt {mode, status: off|client|pending|done, changed?, notes?}`, plus `params.original_prompt` and `params.enhanced_prompt` once the job has run.
+- Quick Create keeps the client's brief. The expanded idea goes to the outline beside it, recorded in `job.result.magic_prompt`.
+- Batch responses also return `magic_prompt` (the marker) and `model_resolved`.
+
+**Auto model:** `model: "auto"` on `images/generate`, `images/img2img`, `images/edit`, `videos/generate`.
+- **image:**
+  - `qwen_image_2512` when the prompt has quoted text, non-Latin script, or words like poster, sign, logo, text, banner or billboard;
+  - `flux2_klein` when `count ≥ 4` and there's no text;
+  - otherwise `zimage_turbo`.
+- **edit:** `qwen_image_edit_2511` (or an edit model that takes that many refs).
+- **video:** `ltx23_distilled`; `ltx23_hq` only with `quality: "hq"`.
+- A pick known to be unavailable is skipped.
+- `params.model_resolved` is always set. With auto, `params.model_requested: "auto"` and `params.model_auto_reason` are set too.
+- A `speed` sent with auto is ignored if the picked model has no speeds.
+- `GET /api/models` lists `{id: "auto", label: "Auto", auto: true, description: "Picks the best model for your prompt", default: false}` first for image, edit and video. Project settings treat `"auto"` as "use the default" for now.
+
+**Estimate: `GET /api/estimate?kind=image|video|take|upscale&model=&speed=&count=&duration_s=&width=&height=`**
+```
+out: {low_s, high_s, basis: "measured"|"rough", samples, model, load_s, units}
+```
+- A unit is one image, or one output second for video and video upscale (`kind=upscale` with `duration_s` means video; without it, image).
+- **measured** (3 or more samples):
+  - the median (low) and p80 (high) GPU seconds per unit from this workspace's last 300 finished generations (`params.comfy.gpu_seconds`, long-take and video-upscale stats, else `job.gpu_seconds`);
+  - grouped by model, speed and a 0.25 MP size bucket;
+  - other sizes of the same model are scaled by pixel count;
+  - `high` is never under 1.15 × `low`.
+- **rough:** the catalog's warm guess × 0.75 … 1.6.
+- `load_s` (a model load) is added to both ends when the model isn't the last one the GPU ran.

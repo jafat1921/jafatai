@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import autopilot, brand, models_catalog
+from app import autopilot, brand, models_catalog, prompt_enhance
 from app.config import get_settings
 from app.db import get_db
 from app.models import Generation, Job, Project
@@ -42,6 +42,8 @@ class QuickIn(BaseModel):
     brand_kit_id: str | None = None  # contract v7: saved as project.settings.brand_kit_id
     template_id: str | None = Field(None, max_length=80)  # its planner notes steer the outline
     brand_closing: Literal["auto", "ai_packshot", "logo_reveal", "none"] | None = None
+    magic_prompt: Literal["auto", "on", "off"] | None = None
+    prompt_enhanced: bool = False
 
 
 class QuickOut(BaseModel):
@@ -91,7 +93,9 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
                        "aspect_ratio": body.aspect_ratio, "style": body.style, "dialogue": body.dialogue,
                        "upscale": body.upscale.model_dump() if body.upscale else None, "title_auto": True,
                        "models": settings, "template_id": body.template_id,
-                       "planner": (tpl or {}).get("planner") or ""},
+                       "planner": (tpl or {}).get("planner") or "",
+                       "magic_prompt": prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "quick",
+                                                             style=body.style, brand_kit_id=body.brand_kit_id)},
               result=autopilot.initial_result(body.upscale is not None))
     db.add(job)
     db.commit()

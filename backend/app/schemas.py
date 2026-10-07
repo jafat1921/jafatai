@@ -607,6 +607,9 @@ class MediaPatch(BaseModel):
     tags: list[str] | None = Field(None, max_length=30)
 
 
+MagicMode = Literal["auto", "on", "off"]
+
+
 class ImageGenerateIn(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     negative: str | None = Field(None, max_length=2000)
@@ -620,6 +623,8 @@ class ImageGenerateIn(BaseModel):
     model: str | None = Field(None, max_length=60)  # catalog id (contract v6); default Z-Image Turbo
     speed: str | None = Field(None, max_length=30)
     brand_kit_id: str | None = None  # contract v7: palette/look in the prompt, brand pass on the result
+    magic_prompt: MagicMode | None = None  # None: settings.magic_prompt_default
+    prompt_enhanced: bool = False  # the dock already ran /prompts/enhance; don't do it again
 
 
 class ImageEditIn(BaseModel):
@@ -649,6 +654,9 @@ class VideoGenerateIn(BaseModel):
     negative: str | None = Field(None, max_length=2000)
     title: str | None = Field(None, max_length=300)
     brand_kit_id: str | None = None  # contract v7
+    magic_prompt: MagicMode | None = None
+    prompt_enhanced: bool = False
+    quality: Literal["standard", "hq"] | None = None  # only read with model "auto"
 
 
 class Img2ImgIn(BaseModel):
@@ -663,15 +671,21 @@ class Img2ImgIn(BaseModel):
     negative: str | None = Field(None, max_length=2000)
     title: str | None = Field(None, max_length=300)
     brand_kit_id: str | None = None
+    magic_prompt: MagicMode | None = None
+    prompt_enhanced: bool = False
 
 
 class VideoGenerateOut(MediaItemOut):
     job: JobOut | None = None
+    model_resolved: str | None = None
+    magic_prompt: dict | None = None
 
 
 class ImageBatchOut(BaseModel):
     items: list[MediaItemOut]
     jobs: list[JobOut]
+    model_resolved: str | None = None  # what "auto" (or the default) turned into
+    magic_prompt: dict | None = None
 
 
 class TemplateOut(BaseModel):

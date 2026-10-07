@@ -8,6 +8,7 @@ from app import brand
 from app import library as lib
 from app import longtake
 from app import models_catalog as mc
+from app import prompt_enhance
 from app.config import get_settings
 from app.db import get_db
 from app.drivers.comfy import HQ_SIZES, VIDEO_SIZES, WAN_SIZES
@@ -54,7 +55,7 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     prompt = body.prompt.strip()
     if not prompt:
         raise HTTPException(422, "A prompt is required")
-    m = mc.get(body.model, "video")
+    m, chosen = mc.choose(body.model, "video", prompt, quality=body.quality)
     mc.check_video(m, has_image=bool(body.image_id or body.end_image_id), duration_s=body.duration_s,
                    smooth_motion=body.smooth_motion)
     if body.end_image_id:
@@ -81,7 +82,9 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     params = {"model": m.id, "aspect_ratio": aspect, "duration_s": duration, "fps": fps,
               "num_frames": frames, "width": w, "height": h,
               "smooth_motion": body.smooth_motion, "user_prompt": prompt,
-              "created_by": {"user_id": cur.id, "flow": "video_generate"}}
+              "created_by": {"user_id": cur.id, "flow": "video_generate"}, **chosen,
+              "magic_prompt": prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "video",
+                                                    brand_kit_id=body.brand_kit_id)}
     if m.id == "ltx23_hq":
         params["quality"] = "hq"
     if start is not None:
@@ -105,4 +108,5 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     item.generation_id = g.id
     job = db.get(Job, g.job_id)
     db.commit()
-    return VideoGenerateOut(**lib.item_out(db, item).model_dump(), job=job_out(job))
+    return VideoGenerateOut(**lib.item_out(db, item).model_dump(), job=job_out(job), model_resolved=m.id,
+                            magic_prompt=params["magic_prompt"])

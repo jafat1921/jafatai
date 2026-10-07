@@ -11,6 +11,7 @@ import { upsertShot } from './useShots'
 import { setReel, syncReelJob } from './useReel'
 import { syncQuickJob } from './useQuick'
 import { upsertMedia } from './useMedia'
+import { useMyJobs, useToasts } from '@/stores/toasts'
 import { announce, useUi } from '@/stores/ui'
 
 function parse<T>(e: MessageEvent): T | null {
@@ -35,6 +36,24 @@ function syncStoryboardJob(qc: QueryClient, job: Job, before: Job | undefined) {
     qc.invalidateQueries({ queryKey: qk.locations(job.project_id) })
     qc.invalidateQueries({ queryKey: qk.scenes(job.project_id) })
   }
+}
+
+const ENDED = new Set(['done', 'failed', 'cancelled'])
+
+/** A job this tab started has ended: once its whole request is through, one toast. True when it was ours. */
+export function notifyMine(qc: QueryClient, job: Job) {
+  const mine = useMyJobs.getState()
+  if (!mine.jobs[job.id]) return false
+  if (!ENDED.has(job.status)) return true
+  const settled = mine.settle(job.id, qc.getQueryData<Job[]>(qk.jobs) ?? [job])
+  if (!settled) return true
+  const { group, failed, total } = settled
+  useToasts.getState().push(
+    failed
+      ? { tone: 'failed', title: `${failed === total ? 'Failed' : `${failed} of ${total} failed`} — ${group.label}`, detail: job.error ?? undefined, to: group.to }
+      : { tone: 'done', title: `Finished — ${group.label}`, to: group.to },
+  )
+  return true
 }
 
 // One stream per tab. EventSource reconnects on its own and resends Last-Event-ID.
@@ -63,7 +82,9 @@ export function useEventStream(enabled: boolean) {
       syncStoryboardJob(qc, job, before)
       syncReelJob(qc, job, before)
       syncQuickJob(qc, job, before)
-      if (before?.status !== job.status) {
+      // our own jobs get a toast (itself a live region) instead of the plain announcement
+      const ours = before?.status !== job.status && notifyMine(qc, job)
+      if (before?.status !== job.status && !ours) {
         if (job.status === 'done') announce(`${jobLabel(job.type)} finished.`)
         else if (job.status === 'failed') announce(`${jobLabel(job.type)} failed${job.error ? `: ${job.error}` : '.'}`)
       }

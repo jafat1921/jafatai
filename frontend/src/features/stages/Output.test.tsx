@@ -101,7 +101,7 @@ describe('Output gallery', () => {
     expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(1)
   })
 
-  it('approves as final and plays in a large player', async () => {
+  it('approves as final, plays in the lightbox and compares in the large player', async () => {
     const calls = mockOutputApi(list)
     renderStage(<OutputCanvas />, { scenes: [], shots: [], stage: 'output' })
     const user = userEvent.setup()
@@ -110,7 +110,11 @@ describe('Output gallery', () => {
     expect(calls).toContainEqual({ method: 'POST', path: '/generations/r3/approve', body: {} })
 
     await user.click(within(screen.getByRole('article', { name: 'Full film' })).getAllByRole('button', { name: 'Play Full film' })[0])
-    const dialog = screen.getByRole('dialog', { name: 'Full film' })
+    // the shared lightbox first; the compare player is one step further
+    const box = await screen.findByRole('dialog', { name: 'Full film · v2' })
+    expect(box.querySelector('video')).toHaveAttribute('src', '/api/media/r2.mp4')
+    await user.click(within(box).getByRole('button', { name: 'Compare and approve' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Full film' })
     expect(within(dialog).getByLabelText('Full film, Original · v2')).toHaveAttribute('src', '/api/media/r2.mp4')
   })
 

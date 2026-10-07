@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     llm_api: str = "auto"
     llm_num_ctx: int = 8192
     llm_timeout_s: float = 600.0
+    # magic prompt (UI polish P1): what generators do when the client doesn't say; auto | on | off
+    magic_prompt_default: str = "auto"
+    enhance_timeout_s: float = 30.0
 
     ffmpeg_bin: str = ""
 

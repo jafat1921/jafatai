@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addSources, editPayload, imagePayload, DEFAULT_IMAGE_FORM, placeholdersIn, splitPlaceholders } from '@/lib/images'
 import { job, media, mockApi, renderAt } from '@/test/media-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 import { ImageEditPage } from './ImageEditPage'
 import { ImageGeneratePage } from './ImageGeneratePage'
 import { ImageReferencesPage } from './ImageReferencesPage'
@@ -53,10 +54,14 @@ describe('Create Image page', () => {
     // paste rather than type: the form re-renders its pickers per keystroke, which is slow under jsdom
     await user.click(screen.getByRole('textbox', { name: 'Describe the image' }))
     await user.paste('A lighthouse keeper at dusk')
-    await user.click(screen.getByRole('radio', { name: /16:9 Wide/ }))
-    await user.click(screen.getByRole('radio', { name: '4 images' }))
-    await user.click(screen.getByRole('button', { name: 'Cinematic' }))
-    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    await user.click(within(await openChip(user, 'Aspect')).getByRole('radio', { name: /16:9 Wide/ }))
+    await closeChip(user)
+    await user.click(within(await openChip(user, 'Count')).getByRole('radio', { name: '4 images' }))
+    await closeChip(user)
+    await user.click(within(await openChip(user, 'Style')).getByRole('button', { name: 'Cinematic' }))
+    await closeChip(user)
+    expect(screen.getByRole('button', { name: 'Style: Cinematic' })).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Advanced' }))
     await user.type(screen.getByRole('textbox', { name: 'Seed' }), '42')
     await user.type(screen.getByRole('textbox', { name: /Avoid/ }), 'text')
     await user.keyboard('{Control>}{Enter}{/Control}')
@@ -66,11 +71,14 @@ describe('Create Image page', () => {
       path: '/images/generate',
       body: { prompt: 'A lighthouse keeper at dusk', aspect: '16:9', count: 4, style: 'cinematic', seed: 42, negative: 'text' },
     })
-    // new items go to the top and show as waiting until SSE delivers them
+    // the request becomes the top row; its tiles wait in the queue (with their place) until SSE delivers them
     const results = screen.getByRole('region', { name: 'Results' })
-    const tiles = await within(results).findAllByRole('group', { name: /^Actions for/ })
-    expect(tiles.map((t) => t.getAttribute('aria-label'))).toEqual(['Actions for Lighthouse 1', 'Actions for Lighthouse 2', 'Actions for Older image'])
-    expect(within(results).getAllByText('Waiting in queue')).toHaveLength(2)
+    const rows = await within(results).findAllByRole('listitem', { name: /^Request:/ })
+    expect(rows.map((r) => r.getAttribute('aria-label'))).toEqual(['Request: A lighthouse keeper at dusk', 'Request: Older image'])
+    expect(within(rows[0]).getByText(/Z-Image Turbo · 16:9 · 4 images · Cinematic/)).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Queued, next')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Queued, 2nd in line')).toBeInTheDocument()
+    expect(within(rows[1]).getByRole('group', { name: 'Actions for Older image' })).toBeInTheDocument()
   })
 
   it('offers review actions on a finished image', async () => {
@@ -83,7 +91,8 @@ describe('Create Image page', () => {
     const user = userEvent.setup()
     const bar = await screen.findByRole('group', { name: 'Actions for Fox' })
     expect(within(bar).getByRole('link', { name: 'Download Fox' })).toHaveAttribute('href', '/api/generations/g-m1/download')
-    await user.click(within(bar).getByRole('button', { name: /Regenerate/ }))
+    await user.click(within(bar).getByRole('button', { name: 'More for Fox' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Regenerate: same prompt/ }))
     expect(calls).toContainEqual(expect.objectContaining({ method: 'POST', path: '/media/m1/regenerate', body: { mode: 'same' } }))
 
     await user.click(within(bar).getByRole('button', { name: 'Edit Fox' }))
@@ -105,11 +114,11 @@ describe('Edit Image page', () => {
     const chosen = screen.getByRole('list', { name: 'Chosen sources' })
     expect(within(chosen).getAllByRole('listitem')).toHaveLength(3)
     expect(screen.getByText('Source images (3/3)')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add from library' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Upload' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Add/ })).not.toBeInTheDocument()
 
     await user.type(screen.getByRole('textbox', { name: 'What should change?' }), 'Put them on a boat')
-    await user.click(screen.getByRole('radio', { name: '2 images' }))
+    await user.click(within(await openChip(user, 'Count')).getByRole('radio', { name: '2 images' }))
+    await closeChip(user)
     await user.click(screen.getByRole('button', { name: /^Edit/ }))
     expect(calls.find((c) => c.method === 'POST')).toMatchObject({
       path: '/images/edit',
@@ -118,7 +127,7 @@ describe('Edit Image page', () => {
 
     await user.click(await within(chosen).findByRole('button', { name: 'Remove Image b' }))
     expect(within(chosen).getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.getByRole('button', { name: 'Add from library' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Add another source' })).toBeEnabled()
   })
 
   it('needs a source before it can edit', async () => {

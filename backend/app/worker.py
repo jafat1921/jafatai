@@ -194,6 +194,11 @@ def handle_generate(ctx: JobContext) -> dict:
         gen.params = {k: v for k, v in gen.params.items() if k != "compile_first"}
         db.commit()
 
+    if ((gen.params or {}).get("magic_prompt") or {}).get("status") == "pending":
+        from app.prompt_enhance import run_in_job
+
+        run_in_job(ctx, gen)
+
     driver = ctx.driver_factory()
     job.gpu = job.gpu or getattr(driver, "name", None)
     gen.status = "generating"

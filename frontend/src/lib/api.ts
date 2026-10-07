@@ -50,6 +50,10 @@ import type {
   TakesRequest,
   VideoGenerateRequest,
   Img2ImgRequest,
+  EstimateQuery,
+  EstimateResult,
+  PromptEnhanceRequest,
+  PromptEnhanceResult,
 } from './types'
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 
@@ -351,6 +355,11 @@ export const api = {
     start: (id: string) => post<TemplateStart>(`/templates/${id}/start`),
   },
   dashboard: () => get<Dashboard>('/dashboard'),
+  // P1 polish; both answer 404 on servers that predate them
+  prompts: {
+    enhance: (body: PromptEnhanceRequest) => post<PromptEnhanceResult>('/prompts/enhance', body),
+  },
+  estimate: (q: EstimateQuery) => get<EstimateResult>('/estimate', { ...q }),
   jobs: {
     list: (q?: { status?: JobStatus; project_id?: string }) => get<Job[]>('/jobs', q),
     cancel: (id: string) => post<Job>(`/jobs/${id}/cancel`),

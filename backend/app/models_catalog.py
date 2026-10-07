@@ -3,6 +3,7 @@
 Single source of truth for the pickers (GET /api/models), for request validation and for the
 comfy driver's routing. Availability comes from check_template against a cached /object_info.
 """
+import re
 import statistics
 import time
 from dataclasses import dataclass, field
@@ -104,8 +105,8 @@ def default_for(type_: str) -> Model:
 
 def get(model_id: str | None, type_: str) -> Model:
     """The model, or the type's default when none was asked for. 422 on unknown / wrong type /
-    known-unavailable."""
-    if not model_id:
+    known-unavailable. "auto" with nothing to go on is the default too (see resolve_auto)."""
+    if not model_id or model_id == AUTO:
         return default_for(type_)
     m = MODELS.get(model_id)
     if m is None or m.type != type_:
@@ -116,6 +117,71 @@ def get(model_id: str | None, type_: str) -> Model:
     if reason:
         raise HTTPException(422, f"{m.label} isn't available right now: {reason}")
     return m
+
+
+# ---------------------------------------------------------------- auto
+
+AUTO = "auto"
+AUTO_TYPES = ("image", "edit", "video")
+AUTO_DESCRIPTION = "Picks the best model for your prompt"
+_NON_LATIN = re.compile(r"[֐-ࣿऀ-෿฀-࿿ᄀ-ᇿ぀-ヿ㐀-鿿가-힯"
+                        r"Ѐ-ӿͰ-Ͽﭐ-﷿ﹰ-﻿]")
+_TEXT_WORDS = re.compile(r"\b(posters?|signs?|signage|signboard|logos?|text|caption|headline|lettering|typography|"
+                         r"banner|billboard)\b", re.I)
+
+
+def wants_text(prompt: str) -> bool:
+    from app.prompt_enhance import quoted
+
+    return bool(quoted(prompt) or _NON_LATIN.search(prompt or "") or _TEXT_WORDS.search(prompt or ""))
+
+
+def _usable(model_id: str) -> bool:
+    return known_unavailable(MODELS[model_id]) is None
+
+
+def resolve_auto(type_: str, prompt: str = "", *, count: int = 1, refs: int = 0,
+                 quality: str | None = None) -> tuple[Model, str]:
+    """(model, why) for the catalog's "auto" entry. Skips a pick the last /object_info says is broken."""
+    if type_ == "image":
+        if wants_text(prompt):
+            picks = [("qwen_image_2512", "text in the prompt")]
+        elif count >= 4:
+            picks = [("flux2_klein", f"{count} images, fastest model")]
+        else:
+            picks = []
+        picks.append(("zimage_turbo", "general picture"))
+    elif type_ == "edit":
+        picks = [(m.id, "keeps faces and clothes" if m.id == "qwen_image_edit_2511" else f"{refs} references")
+                 for m in MODELS.values() if m.type == "edit" and (m.max_refs is None or refs <= m.max_refs)]
+        picks.sort(key=lambda p: p[0] != "qwen_image_edit_2511")
+        picks.append(("qwen_image_edit_2511", "default"))
+    elif type_ == "video":
+        picks = [("ltx23_hq", "high quality asked for")] if quality == "hq" else []
+        picks.append(("ltx23_distilled", "video with sound"))
+    else:
+        raise HTTPException(422, f"There's no auto choice for {type_} models")
+    for mid, why in picks:
+        if _usable(mid):
+            return MODELS[mid], why
+    # nothing known-good: hand back the last resort and let get()/the job say why
+    mid, why = picks[-1]
+    return get(mid, type_), why
+
+
+def choose(model_id: str | None, type_: str, prompt: str = "", **kw) -> tuple[Model, dict]:
+    """Route helper: the model plus what goes into params (model_resolved, and the reason when auto)."""
+    if model_id == AUTO:
+        m, why = resolve_auto(type_, prompt, **kw)
+        return m, {"model_requested": AUTO, "model_resolved": m.id, "model_auto_reason": why}
+    m = get(model_id, type_)
+    return m, {"model_resolved": m.id}
+
+
+def auto_out(type_: str) -> dict:
+    return {"id": AUTO, "type": type_, "label": "Auto", "badge": None, "description": AUTO_DESCRIPTION,
+            "capabilities": [], "available": True, "reason": None, "default": False, "auto": True,
+            "est_seconds": None, "estimate_source": "rough"}
 
 
 def speed_of(m: Model, speed_id: str | None) -> Speed | None:
@@ -288,8 +354,19 @@ def model_out(m: Model, av: dict, measured: dict[str, float] | None = None) -> d
 
 def catalog(type_: str | None, info: dict | None, *, driver: str, error: str | None = None,
             measured: dict | None = None) -> list[dict]:
-    return [model_out(m, availability(m, info, driver=driver, error=error), measured)
-            for m in MODELS.values() if type_ in (None, m.type)]
+    out = []
+    for t in TYPES:
+        if type_ not in (None, t):
+            continue
+        rows = [model_out(m, availability(m, info, driver=driver, error=error), measured)
+                for m in MODELS.values() if m.type == t]
+        if t in AUTO_TYPES:
+            auto = auto_out(t)
+            if not any(r["available"] for r in rows):
+                auto.update(available=False, reason=rows[0]["reason"])
+            out.append(auto)
+        out += rows
+    return out
 
 
 # ---------------------------------------------------------------- studio params
@@ -304,6 +381,10 @@ def clean_project_settings(current: dict, patch: dict) -> dict:
         if key == "brand_closing_shot":
             continue  # owned by brand_moments, not settable from outside
         if val is None:
+            out.pop(key, None)
+            continue
+        if key in ("image_model", "edit_model") and val == AUTO:
+            # TODO: resolve per prompt in the studio too; for now auto there means the type's default
             out.pop(key, None)
             continue
         if key == "image_model":

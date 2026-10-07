@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ImageEditPage } from '@/features/image/ImageEditPage'
@@ -9,6 +9,7 @@ import { withBrand } from '@/lib/brand'
 import { kit } from '@/test/brand-fixtures'
 import { media, mockApi, renderAt } from '@/test/media-fixtures'
 import { seedCatalog } from '@/test/model-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -37,11 +38,14 @@ describe('brand chip', () => {
     const calls = api()
     renderAt('/image/generate', [{ path: '/image/generate', element: <ImageGeneratePage /> }], seedCatalog)
     const user = userEvent.setup()
-    expect(await screen.findByRole('combobox', { name: 'Brand:' })).toHaveValue('k1')
-    expect(screen.getByRole('switch', { name: 'Use the brand kit' })).toBeChecked()
+    await screen.findByRole('button', { name: /^Brand: Leaf/ })
+    const chip = await openChip(user, 'Brand')
+    expect(within(chip).getByRole('combobox', { name: 'Brand:' })).toHaveValue('k1')
+    expect(within(chip).getByRole('switch', { name: 'Use the brand kit' })).toBeChecked()
+    await closeChip(user)
     await user.click(screen.getByRole('textbox', { name: 'Describe the image' }))
     await user.paste('A cup of cold brew on a counter')
-    await user.click(screen.getByRole('button', { name: /^Create/ }))
+    await user.click(screen.getByRole('button', { name: /^Generate/ }))
     expect(posted(calls)).toMatchObject({ prompt: 'A cup of cold brew on a counter', brand_kit_id: 'k1' })
   })
 
@@ -49,16 +53,22 @@ describe('brand chip', () => {
     const calls = api()
     renderAt('/video/create', [{ path: '/video/create', element: <VideoCreatePage /> }], seedCatalog)
     const user = userEvent.setup()
-    await user.selectOptions(await screen.findByRole('combobox', { name: 'Brand:' }), 'k2')
+    await screen.findByRole('button', { name: /^Brand: Leaf/ })
+    await user.selectOptions(within(await openChip(user, 'Brand')).getByRole('combobox', { name: 'Brand:' }), 'k2')
+    await closeChip(user)
+    expect(screen.getByRole('button', { name: /^Brand: Stone/ })).toBeInTheDocument()
     await user.click(screen.getByRole('textbox', { name: 'Describe the clip' }))
     await user.paste('Steam rising from a cup')
-    await user.click(screen.getByRole('button', { name: /Create clip/ }))
+    await user.click(screen.getByRole('button', { name: /^Render/ }))
     expect(posted(calls).brand_kit_id).toBe('k2')
 
     calls.length = 0
-    await user.click(screen.getByRole('switch', { name: 'Use the brand kit' }))
-    expect(screen.getByText('Off')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Create clip/ }))
+    const chip = await openChip(user, 'Brand')
+    await user.click(within(chip).getByRole('switch', { name: 'Use the brand kit' }))
+    expect(within(chip).getByText('Off')).toBeInTheDocument()
+    await closeChip(user)
+    expect(screen.getByRole('button', { name: 'Brand: Stone (off)' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Render/ }))
     expect(posted(calls)).not.toHaveProperty('brand_kit_id')
   })
 
@@ -66,7 +76,7 @@ describe('brand chip', () => {
     const calls = api()
     renderAt('/image/edit?sources=a', [{ path: '/image/edit', element: <ImageEditPage /> }], seedCatalog)
     const user = userEvent.setup()
-    await screen.findByRole('combobox', { name: 'Brand:' })
+    await screen.findByRole('button', { name: /^Brand: Leaf/ })
     await user.type(screen.getByRole('textbox', { name: 'What should change?' }), 'Put the logo on the mug')
     await user.click(screen.getByRole('button', { name: /^Edit/ }))
     expect(posted(calls)).toMatchObject({ source_ids: ['a'], brand_kit_id: 'k1' })
@@ -76,7 +86,7 @@ describe('brand chip', () => {
     const calls = api()
     renderAt('/q', [{ path: '/q', element: <QuickCreateForm expanded /> }])
     const user = userEvent.setup()
-    await screen.findByRole('combobox', { name: 'Brand:' })
+    await screen.findByRole('button', { name: /^Brand: Leaf/ })
     await user.click(screen.getByRole('textbox', { name: 'Describe your video' }))
     await user.paste('A 30 second advert for cold brew')
     await user.click(screen.getByRole('button', { name: /Create video/ }))
@@ -87,10 +97,11 @@ describe('brand chip', () => {
     const calls = api([])
     renderAt('/image/generate', [{ path: '/image/generate', element: <ImageGeneratePage /> }], seedCatalog)
     const user = userEvent.setup()
-    expect(await screen.findByRole('link', { name: 'Create a brand kit' })).toHaveAttribute('href', '/brand-kits')
+    expect(await within(await openChip(user, 'Brand')).findByRole('link', { name: 'Create a brand kit' })).toHaveAttribute('href', '/brand-kits')
+    await closeChip(user)
     await user.click(screen.getByRole('textbox', { name: 'Describe the image' }))
     await user.paste('A plain mug')
-    await user.click(screen.getByRole('button', { name: /^Create/ }))
+    await user.click(screen.getByRole('button', { name: /^Generate/ }))
     expect(posted(calls)).not.toHaveProperty('brand_kit_id')
   })
 })

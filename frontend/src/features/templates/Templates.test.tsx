@@ -68,7 +68,7 @@ describe('templates', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/video/quick')
     expect(prompt).toHaveValue('A 30 second ad for [product] by [brand]')
     expect(screen.getByText('Template: 30 s product ad')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Commercial' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Style: Commercial' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Create video/ })).toBeDisabled()
     expect(screen.getByText('Replace [product], [brand] first.')).toBeInTheDocument()
 
@@ -103,9 +103,9 @@ describe('templates', () => {
 
     expect(await screen.findByRole('textbox', { name: 'Describe the image' })).toHaveValue('Portrait of [subject], 85mm')
     expect(screen.getByTestId('location')).toHaveTextContent('/image/generate')
-    expect(screen.getByRole('radio', { name: /3:4 Portrait/ })).toBeChecked()
-    expect(screen.getByRole('radio', { name: '4 images' })).toBeChecked()
-    expect(screen.getByRole('button', { name: /^Create/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Aspect: 3:4' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Count: ×4' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Generate/ })).toBeDisabled()
     expect(calls.some((c) => c.path === '/images/generate')).toBe(false)
   })
 })

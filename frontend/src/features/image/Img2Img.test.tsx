@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clampStrength, DEFAULT_I2I_FORM, i2iModels, img2imgPayload, strengthLabel } from '@/lib/img2img'
 import { job, media, mockApi, renderAt } from '@/test/media-fixtures'
 import { CATALOG, seedCatalog } from '@/test/model-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 import type { ModelInfo, ModelType } from '@/lib/types'
 import { Img2ImgPage } from './Img2ImgPage'
 
@@ -51,25 +52,33 @@ describe('Image to Image page', () => {
     const user = userEvent.setup()
 
     expect(await screen.findByRole('img', { name: 'Street at noon' })).toBeInTheDocument()
-    expect(screen.queryByRole('radio', { name: /Qwen-Image 2512/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Same as the source' })).toBeChecked()
+    const models = await openChip(user, 'Model')
+    expect(within(models).getByRole('radio', { name: 'Auto' })).toBeChecked()
+    expect(within(models).queryByRole('radio', { name: /Qwen-Image 2512/ })).not.toBeInTheDocument()
+    await closeChip(user)
+    expect(within(await openChip(user, 'Aspect')).getByRole('radio', { name: 'Same as the source' })).toBeChecked()
+    await closeChip(user)
 
+    await openChip(user, 'How much to change')
     const slider = screen.getByRole('slider', { name: 'How much to change' })
     expect(slider).toHaveAttribute('aria-valuetext', '0.45, Balanced')
     fireEvent.change(slider, { target: { value: '0.8' } })
     expect(slider).toHaveAttribute('aria-valuetext', '0.80, Reimagine')
     expect(screen.getByText('Keeps a loose layout, redraws almost everything.')).toBeInTheDocument()
+    await closeChip(user)
 
     await user.click(screen.getByRole('textbox', { name: 'Describe the result' }))
     await user.paste('Watercolour, soft evening light')
-    await user.click(screen.getByRole('radio', { name: '1 image' }))
+    await user.click(within(await openChip(user, 'Count')).getByRole('radio', { name: '1 image' }))
+    await closeChip(user)
+    await user.click(screen.getByRole('textbox', { name: 'Describe the result' }))
     await user.keyboard('{Control>}{Enter}{/Control}')
 
     expect(calls.find((c) => c.method === 'POST')).toMatchObject({
       path: '/images/img2img',
       body: { source_id: 's1', prompt: 'Watercolour, soft evening light', strength: 0.8, model: 'zimage_turbo', aspect: 'source', count: 1 },
     })
-    expect(await within(screen.getByRole('region', { name: 'Results' })).findByRole('group', { name: 'Actions for Street, painted' })).toBeInTheDocument()
+    expect(await within(screen.getByRole('region', { name: 'Results' })).findByRole('listitem', { name: 'Request: Watercolour, soft evening light' })).toBeInTheDocument()
   })
 
   it('needs a picture before it can run', async () => {
@@ -78,8 +87,8 @@ describe('Image to Image page', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('textbox', { name: 'Describe the result' }))
     await user.paste('Make it a poster')
-    expect(screen.getByRole('button', { name: /^Create/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Generate/ })).toBeDisabled()
     expect(screen.getByText('Add your picture first: drop, paste or pick one.')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Add your picture' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add your picture (required)' })).toBeInTheDocument()
   })
 })

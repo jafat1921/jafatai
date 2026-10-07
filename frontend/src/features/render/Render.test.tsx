@@ -149,3 +149,43 @@ describe('Render stage', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Quality' })).not.toBeInTheDocument()
   })
 })
+
+describe('Render shot cards (P3)', () => {
+  it('flips through takes and re-renders only this shot', async () => {
+    const calls = mockApi([ready, notReady], (_method, path) =>
+      path === '/shots/s1/rerender' ? { jobs: [], linked_next_shot_id: null } : undefined,
+    )
+    renderStage(<RenderCanvas />, {
+      scenes,
+      shots: [ready, notReady],
+      stage: 'render',
+      takes: { s1: [take('t2', 2), take('t1', 1)] },
+    })
+    const user = userEvent.setup()
+    const card = screen.getByRole('article', { name: 'Shot 1.1' })
+    expect(within(card).getByText('take –/2')).toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Next take of shot 1.1' }))
+    expect(useWorkspace.getState().selectedTake[PID]).toBe('t1')
+    expect(within(card).getByText('take 1/2')).toBeInTheDocument()
+
+    await user.click(within(card).getByRole('button', { name: /re-render this shot/i }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Re-render this shot' }))
+    expect(calls).toContainEqual({ method: 'POST', path: '/shots/s1/rerender', body: { what: 'takes', count: 3 } })
+    expect(calls.some((c) => c.method === 'POST' && c.path.startsWith('/shots/s2'))).toBe(false)
+  })
+
+  it('shows take progress from the job on the card', () => {
+    mockApi([])
+    const busy = { ...ready, activity: [{ id: 't3', kind: 'take' as const, status: 'generating' as const, job_id: 'j3', version: 3 }] }
+    renderStage(<RenderCanvas />, {
+      scenes,
+      shots: [busy],
+      stage: 'render',
+      seed: (qc) =>
+        qc.setQueryData(qk.jobs, [
+          { id: 'j3', type: 'generate', status: 'running', progress: 0.25, message: '', attempts: 0, created_at: '2026-10-04T00:00:00Z' },
+        ]),
+    })
+    expect(within(screen.getByRole('article', { name: 'Shot 1.1' })).getByText(/Rendering 25%/)).toBeInTheDocument()
+  })
+})

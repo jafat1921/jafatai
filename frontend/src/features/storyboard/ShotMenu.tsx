@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, MoreHorizontal, Plus, RefreshCcw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, FastForward, MoreHorizontal, Plus, RefreshCcw, RotateCw, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import {
@@ -18,6 +18,9 @@ export interface ShotMenuProps {
   onMove: (dir: -1 | 1) => void
   onInsertAfter: () => void
   onRewritePrompts: () => void
+  // P3; optional so older callers keep working
+  onRerender?: () => void
+  onExtend?: () => void
   onClearStale: () => void
   onDelete: () => void
 }
@@ -50,6 +53,18 @@ export function ShotMenu(p: ShotMenuProps) {
             <Sparkles aria-hidden />
             Rewrite prompts with AI
           </DropdownMenuItem>
+          {p.onRerender && (
+            <DropdownMenuItem onSelect={p.onRerender}>
+              <RotateCw aria-hidden />
+              Re-render this shot
+            </DropdownMenuItem>
+          )}
+          {p.onExtend && (
+            <DropdownMenuItem onSelect={p.onExtend}>
+              <FastForward aria-hidden />
+              Extend shot…
+            </DropdownMenuItem>
+          )}
           {p.stale && (
             <DropdownMenuItem onSelect={p.onClearStale}>
               <RefreshCcw aria-hidden />

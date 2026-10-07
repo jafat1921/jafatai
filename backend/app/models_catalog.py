@@ -378,8 +378,8 @@ def clean_project_settings(current: dict, patch: dict) -> dict:
     """Merge a settings patch, validating the keys this module owns; other keys (brand kits…) pass through."""
     out = dict(current)
     for key, val in patch.items():
-        if key == "brand_closing_shot":
-            continue  # owned by brand_moments, not settable from outside
+        if key in ("brand_closing_shot", "shots_review"):
+            continue  # owned by brand_moments / the storyboard review gate, not settable from outside
         if val is None:
             out.pop(key, None)
             continue

@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { Plus, Sparkles, Wand2 } from 'lucide-react'
+import { ListChecks, Plus, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/studio/states'
 import { useCreateShot, useUpdateShot } from '@/hooks/useShots'
@@ -10,6 +10,7 @@ import { announce } from '@/stores/ui'
 import { FrameRow } from './FrameRow'
 import { shotLabel } from '@/lib/shots'
 import { SeamControl } from './SeamControl'
+import { ShotListReview } from './ShotListReview'
 import { StoryboardToolbar } from './StoryboardToolbar'
 import { unitHas, type useStoryboard } from './useStoryboard'
 
@@ -47,6 +48,7 @@ export function StoryboardList({ board, onStoryboardScene }: { board: Board; onS
           unit={unit}
           view={board.view}
           sceneShots={sceneShots}
+          nextShot={board.all[board.all.indexOf(unit.endShot) + 1]}
           labelFor={labelFor}
           selection={board.selection}
           aspectClass={aspect}
@@ -67,7 +69,24 @@ export function StoryboardList({ board, onStoryboardScene }: { board: Board; onS
           const unit = board.units.find((u) => u.scene.id === g.scene.id)
           return (
             <li key={g.scene.id}>
-              {unit ? (
+              {unit && g.scene.shots_review === 'pending' ? (
+                <div className="my-1 flex flex-wrap items-center gap-2 rounded-[6px] border border-studio-accent bg-studio-accent-soft px-3 py-2">
+                  <span className="font-mono text-small text-studio-muted">Scene {g.index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-body">{g.scene.heading || 'Untitled scene'}</span>
+                  <span className="text-small text-studio-muted">Shot list waiting for review · {g.shots.length} shots</span>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      board.selectScene(g.scene.id)
+                      board.setView('shots')
+                    }}
+                  >
+                    <ListChecks aria-hidden />
+                    Review shot list
+                  </Button>
+                </div>
+              ) : unit ? (
                 row(unit)
               ) : (
                 <div className="my-1 flex flex-wrap items-center gap-2 rounded-[6px] border border-dashed border-studio-border-strong px-3 py-2">
@@ -94,7 +113,14 @@ export function StoryboardList({ board, onStoryboardScene }: { board: Board; onS
   return (
     <div className="flex flex-col gap-3">
       <StoryboardToolbar scene={scene} shots={sceneShots} prevOf={board.prevOf} />
-      {sceneShots.length === 0 ? (
+      {scene.shots_review === 'pending' && sceneShots.length > 0 ? (
+        <ShotListReview
+          scene={scene}
+          sceneIndex={board.groups.find((g) => g.scene.id === scene.id)?.index ?? 0}
+          shots={sceneShots}
+          firstShotId={board.all[0]?.id}
+        />
+      ) : sceneShots.length === 0 ? (
         <EmptyState
           icon={<Sparkles />}
           title="Break this scene into shots"

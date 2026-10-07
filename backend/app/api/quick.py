@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import autopilot, brand, models_catalog, prompt_enhance
+from app import mentions as mn
 from app.config import get_settings
 from app.db import get_db
 from app.models import Generation, Job, Project
@@ -68,11 +69,13 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
     longest = get_settings().longtake_max_s * 4
     if not MIN_S <= body.duration_s <= longest:
         raise HTTPException(422, f"duration_s must be between {MIN_S} and {longest:g} seconds")
-    prompt = body.prompt.strip()
+    # TODO: cast mentioned characters into the autopilot's project instead of describing them in words
+    mentioned = mn.resolve(db, cur.workspace_id, body.prompt.strip(), budget=0)
+    prompt = mentioned.prompt
     choice = {k: getattr(body, k) for k in ("image_model", "image_speed", "video_quality", "smooth_motion")
               if getattr(body, k) is not None}
     settings = models_catalog.clean_project_settings({}, choice)
-    p = Project(workspace_id=cur.workspace_id, title=placeholder_title(prompt), authoring_mode="quick", brief=prompt,
+    p = Project(workspace_id=cur.workspace_id, title=placeholder_title(mn.plain(body.prompt)), authoring_mode="quick", brief=prompt,
                 aspect_ratio=body.aspect_ratio, target_runtime_s=max(1, round(body.duration_s)), takes_per_shot=1,
                 status="in_progress", style_bible=autopilot.STYLE_PRESETS[body.style][0], settings=settings)
     tpl = None
@@ -93,7 +96,7 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
                        "aspect_ratio": body.aspect_ratio, "style": body.style, "dialogue": body.dialogue,
                        "upscale": body.upscale.model_dump() if body.upscale else None, "title_auto": True,
                        "models": settings, "template_id": body.template_id,
-                       "planner": (tpl or {}).get("planner") or "",
+                       "planner": (tpl or {}).get("planner") or "", "mentions": mentioned.mentions,
                        "magic_prompt": prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "quick",
                                                              style=body.style, brand_kit_id=body.brand_kit_id)},
               result=autopilot.initial_result(body.upscale is not None))

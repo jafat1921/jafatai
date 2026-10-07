@@ -5,6 +5,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer
 
+from app.camera import Camera
+
 
 def _iso(dt: datetime) -> str:
     if dt.tzinfo is None:
@@ -134,6 +136,8 @@ class SceneOut(Out):
     version: int
     stale: bool
     location_id: str | None = None
+    # P3 review gate: "pending" while the planned shot list waits for approval, else null
+    shots_review: str | None = None
     created_at: Utc
     updated_at: Utc
 
@@ -352,6 +356,9 @@ class ShotOut(Out):
     brand_closing: str | None = None
     closing: str | None = None
     brand_placements_locked: bool = False
+    camera_rack: dict[str, Any] = {}
+    # P3 shot cards: generations in flight and kinds whose newest try failed ({id, kind, status, job_id, version})
+    activity: list[dict[str, Any]] = []
     created_at: Utc
     updated_at: Utc
 
@@ -381,6 +388,8 @@ class ShotPatch(BaseModel):
     beats: list[Beat] | None = None
     description: str | None = None
     camera: str | None = Field(None, max_length=300)
+    # P2 camera rack; setting it also rewrites `camera` as plain words unless that is sent too
+    camera_rack: Camera | None = None
     prompt: str | None = None
     prompt_mode: PromptMode | None = None
     start_prompt: ScriptText | None = None
@@ -415,6 +424,54 @@ class ShotReorderIn(BaseModel):
     shot_ids: list[str]
 
 
+class ShotMergeIn(BaseModel):
+    shot_ids: list[str] = Field(min_length=2, max_length=20)
+
+
+class ShotSplitIn(BaseModel):
+    # where the cut falls, as a fraction of the shot's duration (and of its description when not given)
+    at_ratio: float = Field(0.5, gt=0.05, lt=0.95)
+    descriptions: list[str] | None = Field(None, min_length=2, max_length=2)
+
+
+class ShotExtendIn(BaseModel):
+    duration_s: TakeSeconds | None = None
+    prompt: str | None = Field(None, max_length=2000)
+
+
+class ShotExtendOut(BaseModel):
+    shot: "ShotOut"
+    job: "JobOut"
+
+
+class ShotRerenderIn(BaseModel):
+    what: Literal["frames", "takes"] = "frames"
+    count: int | None = Field(None, ge=1, le=8)
+    # frames only: extra generation params (the studio's image model choice)
+    params: dict[str, Any] | None = None
+
+
+class ShotRerenderOut(BaseModel):
+    jobs: list["JobOut"]
+    # a Continue-seam shot after this one opens on this shot's END: it goes stale once a new END is approved
+    linked_next_shot_id: str | None = None
+
+
+class ShotsReviewIn(BaseModel):
+    status: Literal["pending", "approved"] | None = None
+
+
+class ShotsApproveIn(BaseModel):
+    generate_frames: bool = True
+    # extra generation params for the frames (the image model picked in the review header)
+    params: dict[str, Any] | None = None
+
+
+class ShotsApproveOut(BaseModel):
+    scene: SceneOut
+    jobs: list["JobOut"]
+
+
 class TakesIn(BaseModel):
     count: int | None = Field(None, ge=1, le=16)
     duration_s: TakeSeconds | None = None
@@ -441,6 +498,7 @@ class TakeEstimate(BaseModel):
 
 class SuggestShotsIn(BaseModel):
     max_shots: int = Field(6, ge=1, le=20)
+    review_first: bool = False
 
 
 class StoryboardIn(BaseModel):
@@ -450,6 +508,8 @@ class StoryboardIn(BaseModel):
     overwrite: bool = False
     continuity: bool | Literal["chain", "none"] = False
     max_shots: int = Field(6, ge=1, le=20)
+    # P3: plan the shot list and stop; frames are queued when the user approves it
+    review_first: bool = False
 
 
 class SuggestionResult(BaseModel):
@@ -657,6 +717,7 @@ class VideoGenerateIn(BaseModel):
     magic_prompt: MagicMode | None = None
     prompt_enhanced: bool = False
     quality: Literal["standard", "hq"] | None = None  # only read with model "auto"
+    camera: Camera | None = None  # polish P2: written into the motion prompt
 
 
 class Img2ImgIn(BaseModel):

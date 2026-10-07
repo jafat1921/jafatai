@@ -19,10 +19,11 @@ function open(onSubmit = vi.fn()) {
 }
 
 describe('Storyboard from script dialog', () => {
-  it('defaults to first & last frame per scene for every scene, generating frames', async () => {
+  it('defaults to first & last frame per scene for every scene, reviewing the shot list first', async () => {
     const onSubmit = open()
+    expect(screen.getByRole('checkbox', { name: /generate frames now/i })).toBeDisabled()
     await userEvent.setup().click(screen.getByRole('button', { name: /storyboard all scenes/i }))
-    expect(onSubmit).toHaveBeenCalledWith({ mode: 'scene', generate_frames: true, overwrite: false })
+    expect(onSubmit).toHaveBeenCalledWith({ mode: 'scene', generate_frames: true, overwrite: false, review_first: true })
   })
 
   it('sends shots mode, chain continuity, the selected scene and the checkbox choices', async () => {
@@ -31,6 +32,7 @@ describe('Storyboard from script dialog', () => {
     await user.click(screen.getByRole('radio', { name: /break scenes into shots/i }))
     await user.click(screen.getByRole('switch', { name: /chain scenes/i }))
     await user.click(screen.getByRole('radio', { name: /selected scene only/i }))
+    await user.click(screen.getByRole('switch', { name: /review shot list first/i }))
     await user.click(screen.getByRole('checkbox', { name: /generate frames now/i }))
     await user.click(screen.getByRole('checkbox', { name: /include scenes that already have shots/i }))
     await user.click(screen.getByRole('button', { name: /storyboard this scene/i }))

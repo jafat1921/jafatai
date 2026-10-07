@@ -96,8 +96,9 @@ export function addSources(current: string[], incoming: string[], max = MAX_EDIT
   return { ids, dropped }
 }
 
-// "[product]" style slots in template prompts; the user swaps them for their own words
-const SLOT = /\[[^\]\n]{1,40}\]/g
+// "[product]" style slots in template prompts; the user swaps them for their own words.
+// An @-mention token, @[Mara](character:id), is not a slot.
+const SLOT = /(?<!@)\[[^\]\n]{1,40}\](?!\()/g
 
 export const placeholdersIn = (text: string) => [...new Set(text.match(SLOT) ?? [])]
 

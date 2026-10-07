@@ -1,0 +1,64 @@
+/* Camera rack diagrams. The loops only run on the chip being looked at (hover, focus, picked),
+   so a row of sixteen moves doesn't crawl all at once. */
+.cam-anim {
+  transform-box: view-box;
+  transform-origin: 16px 11px;
+  animation-duration: 2.4s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-play-state: paused;
+}
+
+.cam-chip:hover .cam-anim,
+.cam-chip:focus-visible .cam-anim,
+.cam-chip[aria-checked='true'] .cam-anim {
+  animation-play-state: running;
+}
+
+.cam-push_in { animation-name: cam-scale-up; }
+.cam-zoom_in { animation-name: cam-scale-up; animation-timing-function: linear; animation-duration: 1.6s; }
+.cam-pull_out { animation-name: cam-scale-down; }
+.cam-zoom_out { animation-name: cam-scale-down; animation-timing-function: linear; animation-duration: 1.6s; }
+/* the camera turns left, so the world slides right in the frame */
+.cam-pan_left,
+.cam-dolly_left { animation-name: cam-slide-right; }
+.cam-pan_right,
+.cam-dolly_right { animation-name: cam-slide-left; }
+.cam-tilt_up { animation-name: cam-slide-down; }
+.cam-tilt_down { animation-name: cam-slide-up; }
+.cam-orbit_left { animation-name: cam-orbit; }
+.cam-orbit_right { animation-name: cam-orbit; animation-direction: alternate-reverse; }
+.cam-crane_up { animation-name: cam-crane; }
+.cam-crane_down { animation-name: cam-crane; animation-direction: alternate-reverse; }
+.cam-handheld { animation-name: cam-shake; animation-duration: 0.9s; animation-direction: normal; animation-timing-function: linear; }
+
+@keyframes cam-scale-up { from { transform: scale(1); } to { transform: scale(1.4); } }
+@keyframes cam-scale-down { from { transform: scale(1.4); } to { transform: scale(1); } }
+@keyframes cam-slide-right { from { transform: translateX(-3px); } to { transform: translateX(4px); } }
+@keyframes cam-slide-left { from { transform: translateX(3px); } to { transform: translateX(-4px); } }
+@keyframes cam-slide-down { from { transform: translateY(-2px); } to { transform: translateY(4px); } }
+@keyframes cam-slide-up { from { transform: translateY(2px); } to { transform: translateY(-4px); } }
+@keyframes cam-orbit {
+  0% { transform: translateX(-4px) scaleX(0.55); }
+  50% { transform: translateX(0) scaleX(1); }
+  100% { transform: translateX(4px) scaleX(0.55); }
+}
+@keyframes cam-crane {
+  from { transform: translateY(0) scale(1); }
+  to { transform: translateY(4px) scale(0.75); }
+}
+@keyframes cam-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  20% { transform: translate(-0.8px, 0.5px) rotate(-1.5deg); }
+  40% { transform: translate(0.7px, -0.6px) rotate(1deg); }
+  60% { transform: translate(-0.5px, -0.4px) rotate(-0.6deg); }
+  80% { transform: translate(0.6px, 0.6px) rotate(1.2deg); }
+}
+
+/* reduced motion: the resting drawing, not the global "jump to the last frame" */
+@media (prefers-reduced-motion: reduce) {
+  .cam-anim {
+    animation: none !important;
+  }
+}

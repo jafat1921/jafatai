@@ -91,7 +91,7 @@ export interface Call {
 }
 
 /** Stubs fetch: records every call and answers PATCH /shots/:id by echoing the merged shot. */
-export function mockApi(shots: Shot[]) {
+export function mockApi(shots: Shot[], respond?: (method: string, path: string, body: unknown) => unknown) {
   const calls: Call[] = []
   const json = (data: unknown, status = 200) =>
     new Response(status === 204 ? null : JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
@@ -102,6 +102,8 @@ export function mockApi(shots: Shot[]) {
       const method = init?.method ?? 'GET'
       const body = init?.body ? JSON.parse(String(init.body)) : undefined
       calls.push({ method, path, body })
+      const custom = respond?.(method, path, body)
+      if (custom !== undefined) return json(custom)
       const m = path.match(/^\/shots\/([^/]+)$/)
       if (m && method === 'PATCH') {
         const s = shots.find((x) => x.id === m[1])!

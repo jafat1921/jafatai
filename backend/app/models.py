@@ -15,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, object_session
 
 from app.db import Base
 
@@ -110,6 +110,13 @@ class Scene(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
+    @property
+    def shots_review(self) -> str | None:
+        # the shot-list review gate lives in project.settings["shots_review"][scene_id], so no migration
+        s = object_session(self)
+        p = s.get(Project, self.project_id) if s is not None and self.project_id else None
+        return ((p.settings or {}).get("shots_review") or {}).get(self.id) if p is not None else None
+
 
 class SceneVersion(Base):
     __tablename__ = "scene_version"
@@ -177,6 +184,8 @@ class Shot(Base):
     beats: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     # [{asset_id, asset_type: logo|product, surface, prominence: hero|background}] (migration 0006)
     brand_placements: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # {size, angle, motion, speed} from the camera rack (migration 0007); `camera` keeps the readable text
+    camera_rack: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     stale:Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[str] = mapped_column(String(20), default="user")
     locked: Mapped[bool] = mapped_column(Boolean, default=False)

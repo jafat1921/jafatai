@@ -164,6 +164,7 @@ export function RenderCanvas() {
                 onSelectShot={() => pickShot(s)}
                 onSelectTake={(t) => pickTake(s, t.id)}
                 onOpenStoryboard={() => board.selectFrame(s, 'start', false)}
+                onExtended={pickShot}
               />
             ))
           )}

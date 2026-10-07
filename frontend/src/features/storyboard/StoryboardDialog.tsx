@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Link2, Wand2 } from 'lucide-react'
+import { Link2, ListChecks, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
@@ -130,10 +130,29 @@ function Form({ selectedSceneId, selectedSceneLabel, initialScope, scenesWithSho
         </label>
       </fieldset>
 
+      <label className="flex items-start justify-between gap-3">
+        <span className="flex flex-col">
+          <span className="inline-flex items-center gap-1.5 text-body font-medium">
+            <ListChecks aria-hidden className="size-3.5 text-studio-accent-hover" />
+            Review shot list first
+          </span>
+          <span className="text-small text-studio-muted">
+            The AI plans the shots and stops. Merge, split, reorder and rewrite them, then approve to draw the frames.
+          </span>
+        </span>
+        <Switch checked={form.reviewFirst} onCheckedChange={(v) => set({ reviewFirst: v })} aria-label="Review shot list first" />
+      </label>
+
       <div className="flex flex-col gap-1.5">
-        <label className="flex items-center gap-2 text-body">
-          <input type="checkbox" checked={form.generateFrames} onChange={(e) => set({ generateFrames: e.target.checked })} />
+        <label className={cn('flex items-center gap-2 text-body', form.reviewFirst && 'opacity-60')}>
+          <input
+            type="checkbox"
+            checked={form.generateFrames && !form.reviewFirst}
+            disabled={form.reviewFirst}
+            onChange={(e) => set({ generateFrames: e.target.checked })}
+          />
           Generate frames now
+          {form.reviewFirst && <span className="text-small text-studio-muted">(after you approve the shot list)</span>}
         </label>
         <label className="flex items-center gap-2 text-body">
           <input type="checkbox" checked={form.includeExisting} onChange={(e) => set({ includeExisting: e.target.checked })} />

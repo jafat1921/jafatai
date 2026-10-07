@@ -26,6 +26,7 @@ import { withBrand } from '@/lib/brand'
 import { localEstimate } from '@/lib/estimate'
 import { IMAGE_ASPECTS, IMAGE_STYLES, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
 import { defaultSpeed, has } from '@/lib/models'
+import { MENTION_REFS } from '@/lib/mentions'
 import { imageFormFrom } from '@/lib/templates'
 import type { ImageGenerateRequest } from '@/lib/types'
 import { plural } from '@/lib/utils'
@@ -124,6 +125,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
       promptLabel="Describe the image"
       prompt={form.prompt}
       onPrompt={(v) => set('prompt', v)}
+      mentions={{ refBudget: MENTION_REFS }}
       placeholder="e.g. A weathered lighthouse keeper in a wool coat, golden hour, 85mm portrait"
       promptRef={field}
       promptHint={

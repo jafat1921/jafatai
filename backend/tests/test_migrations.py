@@ -200,7 +200,7 @@ def test_0006_adds_brand_kit_and_keeps_data(tmp_path):
     con.commit()
     con.close()
 
-    _alembic(db, "upgrade", "head")
+    _alembic(db, "upgrade", "0006")
 
     con = sqlite3.connect(db)
     con.execute("PRAGMA foreign_keys=ON")
@@ -222,4 +222,35 @@ def test_0006_adds_brand_kit_and_keeps_data(tmp_path):
     cols = [r[1] for r in con.execute("PRAGMA table_info(shot)")]
     assert "brand_placements" not in cols and "beats" in cols
     con.close()
+    _alembic(db, "upgrade", "head")
+
+
+def test_0007_adds_shot_camera_rack(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0006")
+    con = sqlite3.connect(db)
+    now = "2026-10-07 18:30:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    con.execute(
+        "INSERT INTO project (id, workspace_id, title, logline, brief, authoring_mode, aspect_ratio, target_runtime_s,"
+        " quality, takes_per_shot, overnight, status, created_at, updated_at)"
+        " VALUES ('p1', 'w1', 'Ad', '', '', 'quick', '16:9', 30, 'draft', 1, 0, 'done', ?, ?)", (now, now))
+    con.execute(
+        "INSERT INTO scene (id, workspace_id, project_id, sort_order, heading, logline, script_text, summary, mood,"
+        " lighting, source, locked, version, stale, created_at, updated_at)"
+        " VALUES ('s1', 'w1', 'p1', 1, 'INT. CAFE', '', '', '', '', '', 'user', 0, 1, 0, ?, ?)", (now, now))
+    con.execute(
+        "INSERT INTO shot (id, workspace_id, project_id, scene_id, sort_order, shot_type, duration_s, description,"
+        " camera, prompt, prompt_mode, start_prompt, end_prompt, motion_prompt, character_ids, seam_in, handoff_text,"
+        " stale, source, locked, created_at, updated_at) VALUES ('sh1', 'w1', 'p1', 's1', 1, 'wide', 4.0,"
+        " 'Cup', 'slow dolly', '', 'auto', '', '', '', '[]', 'cut', '', 0, 'user', 0, ?, ?)", (now, now))
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "head")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0007"
+    assert con.execute("SELECT camera, camera_rack, brand_placements FROM shot").fetchall() == [("slow dolly", "{}", "[]")]
+    con.close()
+    _alembic(db, "downgrade", "0006")
     _alembic(db, "upgrade", "head")

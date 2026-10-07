@@ -40,6 +40,7 @@ PRIORITY = {
     "ai_extract_locations": 3,
     "ai_storyboard": 1,
     "ai_brand_moments": 3,
+    "ai_extend_shot": 5,
     "ai_summarize": -10,
 }
 SUMMARY_QUIET = timedelta(seconds=8)
@@ -723,6 +724,8 @@ def handle_suggest_shots(ctx) -> dict:
     plans = _plan_shots(run, db, project, scene, int(job.payload.get("max_shots") or 6), 0.1)
     shots, sug = apply_shot_plan(db, scene, plans, action="suggest_shots", job_id=job.id)
     closing = bm.ensure_closing(db, project) if shots else None
+    if shots:
+        sb.set_review(project, scene.id, "pending" if job.payload.get("review_first") else None)
     return run.result(outcome="suggested" if sug else "written", scene_ids=[scene.id],
                       shot_ids=[s.id for s in shots], suggestion_ids=[sug] if sug else [],
                       closing_shot_id=closing.id if closing else None)
@@ -847,6 +850,9 @@ def handle_storyboard(ctx) -> dict:
     if not targets:
         raise RuntimeError("There's no script to storyboard yet.")
     mode, chain = p.get("mode") or "scene", bool(p.get("chain"))
+    review = bool(p.get("review_first"))
+    # the review gate holds frames back until the user approves the shot list
+    make_frames = p.get("generate_frames", True) and not review
     run = AiRun(ctx)
     done: dict[str, list] = {"scene_ids": [], "skipped_scene_ids": [], "shot_ids": [], "suggestion_ids": [],
                              "generation_ids": [], "frame_job_ids": []}
@@ -873,7 +879,8 @@ def handle_storyboard(ctx) -> dict:
             for i, shot in enumerate(shots):
                 compile_shot(run, db, shot, frac + 0.9 / len(targets) * (i + 1) / (len(shots) + 1))
         db.flush()
-        if p.get("generate_frames", True):
+        sb.set_review(project, scene.id, "pending" if review else None)
+        if make_frames:
             for shot in shots:
                 for g in queue_frames(db, shot):
                     done["generation_ids"].append(g.id)
@@ -887,12 +894,38 @@ def handle_storyboard(ctx) -> dict:
         closing = bm.ensure_closing(db, project)
         if closing is not None:
             done["closing_shot_id"] = closing.id
-            if closing.id != had and p.get("generate_frames", True):
+            if closing.id != had and make_frames:
                 for g in queue_frames(db, closing):
                     done["generation_ids"].append(g.id)
                     done["frame_job_ids"].append(g.job_id)
     project.updated_at = utcnow()
-    return run.result(outcome="suggested" if done["suggestion_ids"] and not done["shot_ids"] else "written", **done)
+    return run.result(outcome="suggested" if done["suggestion_ids"] and not done["shot_ids"] else "written",
+                      review_scene_ids=done["scene_ids"] if review else [], **done)
+
+
+def handle_extend_shot(ctx) -> dict:
+    """Writes the beat for a shot made by POST /shots/{id}/extend; the user's words are kept (lock rule)."""
+    db, job = ctx.db, ctx.job
+    shot = _owned(db, Shot, job.payload.get("shot_id"), job, "The new shot")
+    before = db.get(Shot, job.payload.get("from_shot_id") or "")
+    if before is None:
+        raise RuntimeError("The shot being extended no longer exists")
+    project = db.get(Project, shot.project_id)
+    scene = db.get(Scene, shot.scene_id)
+    chars = [c for c in (db.get(Character, cid) for cid in shot.character_ids or []) if c is not None]
+    loc_id = shot.location_id or scene.location_id
+    run = AiRun(ctx)
+    d: P.NextBeat = run.call("Writing the next beat", 0.1, "creative",
+                             P.extend_messages(project, scene, before, chars, db.get(Location, loc_id) if loc_id else None,
+                                               shot.duration_s, job.payload.get("hint") or ""),
+                             schema=P.NextBeat, temperature=0.7, max_tokens=1200).data
+    if ai_may_write(shot.description, shot.source, shot.locked):
+        shot.description = d.description.strip()
+    if not shot.camera.strip() or not shot.locked:
+        shot.camera = d.camera.strip()[:300] or shot.camera
+    if shot.prompt_mode == "auto":
+        shot.end_prompt, shot.motion_prompt = _text(d.end_prompt), _text(d.motion_prompt)
+    return run.result(outcome="written", shot_ids=[shot.id], scene_ids=[scene.id])
 
 
 def handle_brand_moments(ctx) -> dict:
@@ -910,6 +943,7 @@ AI_HANDLERS = {
     "ai_extract_locations": handle_extract_locations,
     "ai_storyboard": handle_storyboard,
     "ai_brand_moments": handle_brand_moments,
+    "ai_extend_shot": handle_extend_shot,
     "ai_outline": handle_outline,
     "ai_write_missing": handle_write_missing,
     "ai_continue": handle_continue,

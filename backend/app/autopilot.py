@@ -27,12 +27,13 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app import ai_jobs, brand, longtake, models_catalog, storyboard as sb, vision
 from app import brand_moments as bm
+from app import estimate as est
 from app import reel as rl
 from app.config import get_settings
 from app.llm import LLMError, chat_sync
 from app.llm import prompts as P
 from app.models import Character, Generation, Job, Location, Project, Scene, Shot, utcnow
-from app.services import approve, enqueue_generation, generation_file, new_seed, next_version
+from app.services import approve, enqueue_generation, generation_file, media_url, new_seed, next_version
 
 log = logging.getLogger("mixai.autopilot")
 
@@ -44,6 +45,10 @@ WAIT_PRIORITY = -20
 POLL_S = 10.0
 TAKE_ATTEMPTS = 2  # first take plus one re-roll
 STITCH_ATTEMPTS = 2
+# what each stage's mini-thumbnail strip shows on the progress page
+STAGE_KINDS = {"cast": ("portrait", "establishing"), "storyboard": ("keyframe_start", "keyframe_end"),
+               "render": ("take",), "stitch": ("render",)}
+STAGE_THUMBS = 12
 
 # rough wall-clock figures for the ETA
 IMAGE_S = 25.0
@@ -322,6 +327,7 @@ class Autopilot:
             if st["status"] != "running":
                 st.update(status="running", started_at=st.get("started_at") or _iso(), detail=None)
             self.r["eta_s"] = self.eta()
+            self.r["eta_range_s"] = self.eta_range(self.r["eta_s"])
             self.tick(0.0, "")
             fn: Callable[[], object] = getattr(self, f"stage_{key}")
             while True:
@@ -334,7 +340,7 @@ class Autopilot:
                       detail=out.detail if isinstance(out, Skip) else st.get("detail"))
             self.previews()
             self.tick(1.0, "")
-        self.r.update(eta_s=0, waiting_on=[])
+        self.r.update(eta_s=0, eta_range_s=[0, 0], waiting_on=[])
         self.project.status = "done"
         self.previews()
         return copy.deepcopy(self.r)
@@ -352,6 +358,7 @@ class Autopilot:
         ids = list(dict.fromkeys(w.job_ids))
         self.r["waiting_on"] = ids
         self.r["eta_s"] = self.eta()
+        self.r["eta_range_s"] = self.eta_range(self.r["eta_s"])
         self.previews()
         self.tick(message=w.message)
         if not self.pending(ids):
@@ -414,6 +421,44 @@ class Autopilot:
             Generation.kind.in_(("portrait", "establishing", "keyframe_start", "keyframe_end", "take", "render")),
         ).order_by(Generation.updated_at.desc()).limit(8)).all()
         self.r["preview_ids"] = list(rows)
+        self.r["stage_media"] = self.stage_media()
+
+    def stage_media(self) -> dict:
+        """Mini thumbnails per stage for the progress page (UI polish P3), oldest first so strips fill left to right."""
+        rows = self.db.scalars(select(Generation).where(
+            Generation.project_id == self.project.id, Generation.status.in_(("ready", "approved")),
+            Generation.kind.in_(tuple(k for kinds in STAGE_KINDS.values() for k in kinds)),
+        ).order_by(Generation.created_at)).all()
+        out: dict = {key: [] for key in STAGE_KINDS}
+        for g in rows:
+            key = next(k for k, kinds in STAGE_KINDS.items() if g.kind in kinds)
+            out[key].append({"id": g.id, "kind": g.kind, "url": media_url(g.file_path),
+                             "video": g.kind in ("take", "render")})
+        for key in out:
+            del out[key][:-STAGE_THUMBS]
+        n = len(self.scenes())
+        out["outline"] = {"text": f"{n} scene{'s' if n != 1 else ''}" if n else ""}
+        return out
+
+    def eta_range(self, eta: int) -> list[int]:
+        # the render share comes from measured take timings when there are any, the rest stays rough
+        if eta <= 0:
+            return [0, 0]
+        lo, hi = eta * 0.75, eta * 1.6
+        render = next((st for st in self.r["stages"] if st["key"] == "render"), None)
+        if render and render["status"] not in ("done", "skipped"):
+            shots = sb.project_shots(self.db, self.project.id)
+            try:
+                m = est.estimate(self.db, self.project.workspace_id, kind="take",
+                                 duration_s=min(sum(s.duration_s for s in shots), 1200)) if shots else None
+            except Exception as e:  # an estimate must never stop the film
+                log.debug("take estimate unavailable: %s", e)
+                m = None
+            if m and m.get("basis") == "measured":
+                rough = sum(longtake.estimate(s.duration_s)["est_wall_s"] for s in shots)
+                lo += m["low_s"] - rough * 0.75
+                hi += m["high_s"] - rough * 1.6
+        return [max(0, int(lo)), max(int(lo) + 1, int(hi))]
 
     def eta(self) -> int:
         # TODO: calibrate from this server's finished autopilot jobs instead of fixed figures

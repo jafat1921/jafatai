@@ -3,14 +3,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import brand_moments as bm
+from app import camera as cam
 from app import longtake
 from app import storyboard as sb
 from app.ai_jobs import active_job, enqueue_ai
 from app.config import get_settings
 from app.db import get_db
 from app.models import Character, Generation, Job, Location, Project, Scene, Shot
-from app.schemas import (ChunkRegenerateIn, JobOut, ShotCreate, ShotOut, ShotPatch, ShotReorderIn, TakeEstimate,
-                         TakesIn)
+from app.schemas import (ChunkRegenerateIn, JobOut, SceneOut, ShotCreate, ShotExtendIn, ShotExtendOut, ShotMergeIn,
+                         ShotOut, ShotPatch, ShotReorderIn, ShotRerenderIn, ShotRerenderOut, ShotsApproveIn,
+                         ShotsApproveOut, ShotsReviewIn, ShotSplitIn, TakeEstimate, TakesIn)
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import enqueue_generation, get_owned, job_out, new_seed
 
@@ -96,6 +98,11 @@ def patch_shot(shot_id: str, body: ShotPatch, db: Session = Depends(get_db), cur
         # model_dump drops nothing extra; a placement without a source is the user's (locked)
         changes["brand_placements"] = [{**p, "source": p.get("source") or "user"} for p in changes["brand_placements"]]
 
+    if changes.get("camera_rack") is not None:
+        rack = {k: v for k, v in changes["camera_rack"].items() if v}
+        changes["camera_rack"] = rack
+        if "camera" not in changes:
+            changes["camera"] = cam.to_prompt(rack).rstrip(".")[:300]
     if "beats" in changes:
         beats = changes.pop("beats")
         if beats is not None:
@@ -134,8 +141,11 @@ def reorder_shots(scene_id: str, body: ShotReorderIn, db: Session = Depends(get_
     if len(body.shot_ids) != len(set(body.shot_ids)) or set(body.shot_ids) != set(shots):
         raise HTTPException(422, "shot_ids must list every shot of the scene exactly once")
     ordered = [shots[i] for i in body.shot_ids]
+    before = sb.link_map(db, ordered[0].project_id) if ordered else {}
     sb.renumber(ordered)
-    # TODO: a reorder changes which END frame a Continue seam links to; flag those shots stale too
+    if ordered:
+        # a Continue seam that now follows another shot opens on a different END frame
+        sb.restale_links(db, ordered[0].project_id, before)
     db.commit()
     return sb.shots_out(db, ordered)
 
@@ -296,3 +306,118 @@ def regenerate_chunk(gen_id: str, idx: int, body: ChunkRegenerateIn | None = Non
     job.message = f"Waiting for a worker · redoing {redo} of {len(params['chunks'])} chunks"
     db.commit()
     return job_out(job)
+
+
+# ---------------------------------------------------------------- shot list editing (P3)
+
+@router.post("/shots/merge", response_model=list[ShotOut])
+def merge_shots(body: ShotMergeIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    if len(set(body.shot_ids)) != len(body.shot_ids):
+        raise HTTPException(422, "shot_ids lists a shot twice")
+    shots = [get_owned(db, Shot, i, cur.workspace_id, "Shot") for i in body.shot_ids]
+    kept = sb.merge_shots(db, shots)
+    db.commit()
+    return sb.shots_out(db, sb.scene_shots(db, kept.scene_id))
+
+
+@router.post("/shots/{shot_id}/split", response_model=list[ShotOut])
+def split_shot(shot_id: str, body: ShotSplitIn | None = None, db: Session = Depends(get_db),
+               cur: CurrentUser = Depends(require_editor)):
+    body = body or ShotSplitIn()
+    shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    sb.split_shot(db, shot, body.at_ratio, body.descriptions)
+    db.commit()
+    return sb.shots_out(db, sb.scene_shots(db, shot.scene_id))
+
+
+EXTEND_DEFAULT_S = 5.0
+
+
+@router.post("/shots/{shot_id}/extend", response_model=ShotExtendOut, status_code=201)
+def extend_shot(shot_id: str, body: ShotExtendIn | None = None, db: Session = Depends(get_db),
+                cur: CurrentUser = Depends(require_editor)):
+    """The next beat as a new shot that opens on this one's END frame; the AI writes what happens."""
+    body = body or ShotExtendIn()
+    shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    if bm.closing_of(db, shot):
+        raise HTTPException(409, "The advert's closing shot ends the film; extend the shot before it instead")
+    duration = body.duration_s or EXTEND_DEFAULT_S
+    hint = (body.prompt or "").strip()
+    new = Shot(
+        workspace_id=shot.workspace_id, project_id=shot.project_id, scene_id=shot.scene_id,
+        shot_type="long_take" if longtake.is_long(duration) else
+        (shot.shot_type if shot.shot_type not in ("long_take", "establishing") else "medium"),
+        duration_s=duration, description=hint, camera=shot.camera,
+        character_ids=list(shot.character_ids or []), location_id=shot.location_id, seam_in="continue",
+        brand_placements=[{**p, "source": "ai"} for p in shot.brand_placements or []],
+        source="user" if hint else "ai", locked=bool(hint), prompt_mode="auto",
+    )
+    sb.insert_after(db, shot, new)
+    job = enqueue_ai(db, workspace_id=cur.workspace_id, type="ai_extend_shot", project_id=shot.project_id,
+                     payload={"shot_id": new.id, "from_shot_id": shot.id, "hint": hint})
+    db.commit()
+    return ShotExtendOut(shot=sb.shot_out(db, new), job=job_out(job))
+
+
+@router.post("/shots/{shot_id}/rerender", response_model=ShotRerenderOut, status_code=202)
+def rerender_shot(shot_id: str, body: ShotRerenderIn | None = None, db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(require_editor)):
+    """New versions of this shot's frames or takes only. Neighbours are never queued; a Continue shot after
+    this one is reported so the UI can warn (it goes stale when a new END is approved)."""
+    body = body or ShotRerenderIn()
+    shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    if bm.is_reveal(db, shot):
+        raise HTTPException(409, "The logo reveal is rendered from the brand kit's logo; use Render takes")
+    _, nxt = sb.neighbours(db, shot)
+    if body.what == "takes":
+        project = db.get(Project, shot.project_id)
+        jobs = _queue_takes(db, shot, _take_count(TakesIn(count=body.count), project, longtake.is_long(shot.duration_s)))
+        linked = None
+    else:
+        prev, _ = sb.neighbours(db, shot)
+        kinds = ["keyframe_end"] if sb.is_linked(shot, prev) else ["keyframe_start", "keyframe_end"]
+        jobs = []
+        for kind in kinds:
+            prompt, params = sb.prepare_shot_generation(db, shot, kind, "", dict(body.params or {}))
+            g = enqueue_generation(db, workspace_id=shot.workspace_id, project_id=shot.project_id, target_type="shot",
+                                   target_id=shot.id, kind=kind, prompt=prompt, params=params)
+            jobs.append(db.get(Job, g.job_id))
+        linked = nxt.id if nxt is not None and nxt.seam_in == "continue" else None
+    db.commit()
+    return ShotRerenderOut(jobs=[job_out(j) for j in jobs], linked_next_shot_id=linked)
+
+
+@router.patch("/scenes/{scene_id}/shots-review", response_model=SceneOut)
+def set_shots_review(scene_id: str, body: ShotsReviewIn, db: Session = Depends(get_db),
+                     cur: CurrentUser = Depends(require_editor)):
+    scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
+    sb.set_review(db.get(Project, scene.project_id), scene.id, "pending" if body.status == "pending" else None)
+    db.commit()
+    return scene
+
+
+@router.post("/scenes/{scene_id}/shots-review/approve", response_model=ShotsApproveOut, status_code=202)
+def approve_shot_list(scene_id: str, body: ShotsApproveIn | None = None, db: Session = Depends(get_db),
+                      cur: CurrentUser = Depends(require_editor)):
+    """Ends the review gate and queues the keyframes it held back (only the ones not made yet)."""
+    body = body or ShotsApproveIn()
+    scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
+    shots = sb.scene_shots(db, scene.id)
+    if not shots:
+        raise HTTPException(409, "This scene has no shots to approve yet")
+    sb.set_review(db.get(Project, scene.project_id), scene.id, None)
+    jobs = []
+    if body.generate_frames:
+        for shot in shots:
+            if bm.is_reveal(db, shot):
+                continue
+            prev, _ = sb.neighbours(db, shot)
+            for kind in (["keyframe_end"] if sb.is_linked(shot, prev) else ["keyframe_start", "keyframe_end"]):
+                if sb.has_gens(db, shot.id, (kind,)):
+                    continue
+                prompt, params = sb.prepare_shot_generation(db, shot, kind, "", dict(body.params or {}))
+                g = enqueue_generation(db, workspace_id=shot.workspace_id, project_id=shot.project_id,
+                                       target_type="shot", target_id=shot.id, kind=kind, prompt=prompt, params=params)
+                jobs.append(db.get(Job, g.job_id))
+    db.commit()
+    return ShotsApproveOut(scene=SceneOut.model_validate(scene), jobs=[job_out(j) for j in jobs])

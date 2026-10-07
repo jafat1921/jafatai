@@ -130,6 +130,7 @@ export function ImageEditPage() {
         promptLabel="What should change?"
         prompt={instruction}
         onPrompt={setInstruction}
+        mentions={{ refBudget: max, refsUsed: ids.length }}
         maxLength={2000}
         placeholder={ids.length > 1 ? 'e.g. Put the woman from image 1 in the jacket from image 2, on the street from image 3' : 'What should change? e.g. Make it night, with rain on the window'}
         chips={

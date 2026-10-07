@@ -115,6 +115,11 @@ def test_ten_seconds_end_to_end(client, brain, fast_driver):
     assert stages(job) == {"outline": "done", "cast": "done", "storyboard": "done", "render": "done",
                            "stitch": "done", "upscale": "skipped"}
     assert job.result["eta_s"] == 0 and job.result["preview_ids"]
+    # P3: per-stage thumbnail strips for the progress page
+    media = job.result["stage_media"]
+    assert media["outline"]["text"] == "1 scene" and job.result["eta_range_s"] == [0, 0]
+    assert {m["kind"] for m in media["cast"]} == {"portrait", "establishing"} and media["stitch"][0]["video"]
+    assert all(m["url"] for k in ("cast", "storyboard", "render", "stitch") for m in media[k])
 
     with SessionLocal() as db:
         pid = out["project"]["id"]

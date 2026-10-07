@@ -524,6 +524,35 @@ def compile_messages(project, scene, shot, characters, location, prev_shot=None,
             {"role": "user", "content": user}]
 
 
+class NextBeat(BaseModel):
+    description: str
+    camera: str = ""
+    end_prompt: str
+    motion_prompt: str
+
+
+def extend_messages(project, scene, shot, characters, location, duration_s: float, hint: str = "") -> list[dict]:
+    """The beat right after `shot`: the new shot opens exactly on its last frame (Kling/Runway style extension)."""
+    ask = (f"The director wants this to happen next: {hint}" if hint
+           else "Decide the most natural next beat from the script; keep it small, it is a continuation, not a cut.")
+    parts = [
+        f"Film: {project.title}. {project.logline}",
+        f"People:\n{_people(characters)}",
+        _place(location, scene),
+        f"Scene script:\n{(scene.script_text or '').strip()[:3000]}",
+        f"The shot so far ({shot.shot_type.replace('_', ' ')}): {shot.description or '(see the scene)'}\n"
+        f"Its last frame: {shot.end_prompt or shot.description or '-'}\n"
+        f"Camera so far: {shot.camera or 'unspecified'}",
+        f"Write the next {duration_s:g} seconds as a new shot that starts exactly on that last frame. {ask}",
+        _style(project),
+        FRAME_RULES,
+        "Answer as JSON with description (what happens, one or two sentences), camera (framing and move), "
+        "end_prompt (the new shot's last frame) and motion_prompt.",
+    ]
+    return [{"role": "system", "content": "You are a film director extending a shot by one beat."},
+            {"role": "user", "content": "\n\n".join(parts)}]
+
+
 def scene_frames_messages(project, characters, scene, location, duration_s: float, previous=None,
                           brand: str = "") -> list[dict]:
     before = ""

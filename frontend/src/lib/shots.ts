@@ -90,6 +90,8 @@ export interface StoryboardForm {
   scope: 'all' | 'selected'
   generateFrames: boolean
   includeExisting: boolean
+  // P3: stop at the shot list; frames come when it's approved
+  reviewFirst: boolean
 }
 
 export const DEFAULT_STORYBOARD_FORM: StoryboardForm = {
@@ -98,6 +100,7 @@ export const DEFAULT_STORYBOARD_FORM: StoryboardForm = {
   scope: 'all',
   generateFrames: true,
   includeExisting: false,
+  reviewFirst: true,
 }
 
 export function buildStoryboardRequest(form: StoryboardForm, selectedSceneId?: string): StoryboardRequest {
@@ -109,6 +112,7 @@ export function buildStoryboardRequest(form: StoryboardForm, selectedSceneId?: s
   if (form.scope === 'selected' && selectedSceneId) body.scene_ids = [selectedSceneId]
   // contract: `continuity:"chain"`; omitted means cuts between scenes
   if (form.chain) body.continuity = 'chain'
+  if (form.reviewFirst) body.review_first = true
   return body
 }
 

@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app import brand
 from app import library as lib
+from app import mentions as mn
 from app import models_catalog as mc
 from app import prompt_enhance, uploads
 from app.ai_jobs import rewrite_prompt_from_note
@@ -206,19 +207,27 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
         raise HTTPException(422, f"Unknown style '{body.style}' (expected {', '.join(lib.STYLES)})")
     if not body.prompt.strip():
         raise HTTPException(422, "A prompt is required")
-    model, chosen = mc.choose(body.model, "image", body.prompt, count=body.count)
+    model, chosen = mc.choose(body.model, "image", mn.plain(body.prompt), count=body.count)
     speed = _speed(model, body)
     magic = prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "image",
                                   style=lib.STYLES[body.style][0] if body.style else None,
                                   brand_kit_id=body.brand_kit_id)
     w, h = lib.size_for_aspect(body.aspect)
-    prompt = lib.styled_prompt(body.prompt, body.style)
-    title = (body.title or "").strip() or lib.short_title(body.prompt)
+    # mentioned pictures turn the run into a reference-guided composition on the edit model
+    editor = mc.default_for("edit")
+    mentioned = mn.resolve(db, cur.workspace_id, body.prompt.strip(), budget=editor.max_refs or 3,
+                           model_label=editor.label)
+    prompt = lib.styled_prompt(mn.ref_preamble(mentioned.ref_labels) + mentioned.prompt, body.style)
+    title = (body.title or "").strip() or lib.short_title(mn.plain(body.prompt))
     items, jobs = [], []
     for i in range(body.count):
         params = {"aspect": body.aspect, "width": w, "height": h, "style": body.style,
-                  "user_prompt": body.prompt.strip(), "created_by": {"user_id": cur.id, "flow": "image_generate"},
-                  "magic_prompt": magic, **chosen}
+                  "user_prompt": mn.plain(body.prompt).strip(),
+                  "created_by": {"user_id": cur.id, "flow": "image_generate"}, "magic_prompt": magic, **chosen}
+        if mentioned.mentions:
+            params["mentions"] = mentioned.mentions
+        if mentioned.ref_ids:
+            params["reference_ids"], params["reference_labels"] = list(mentioned.ref_ids), list(mentioned.ref_labels)
         if body.negative:
             params["negative"] = body.negative.strip()
         if body.steps:
@@ -266,23 +275,27 @@ def _edit_source(db: Session, workspace_id: str, sid: str) -> tuple[str | None, 
 def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     if not body.instruction.strip():
         raise HTTPException(422, "Say what to change")
-    model, chosen = mc.choose(body.model, "edit", body.instruction, refs=len(body.source_ids))
+    model, chosen = mc.choose(body.model, "edit", mn.plain(body.instruction), refs=len(body.source_ids))
     mc.check_refs(model, len(body.source_ids))
     sources = [_edit_source(db, cur.workspace_id, sid) for sid in body.source_ids]
+    mentioned = mn.resolve(db, cur.workspace_id, body.instruction.strip(), budget=model.max_refs or 3,
+                           used=len(sources), model_label=model.label)
     if body.aspect:
         w, h = lib.size_for_aspect(body.aspect)
     else:
         # keep the first picture's shape at ~1 MP
         sw, sh = lib._image_dims(sources[0][1])
         w, h = lib.size_for_ratio(sw, sh) if sw and sh else lib.size_for_aspect("1:1")
-    instruction = body.instruction.strip()
-    title = (body.title or "").strip() or f"Edit · {lib.short_title(instruction, 5)}"
+    instruction = mn.ref_preamble(mentioned.ref_labels, len(sources) + 1) + mentioned.prompt
+    title = (body.title or "").strip() or f"Edit · {lib.short_title(mn.plain(body.instruction).strip(), 5)}"
     edit_of = [{"media_id": m, "generation_id": g.id} for m, g in sources]
     items, jobs = [], []
     for i in range(body.count):
         params = {"width": w, "height": h, "aspect": body.aspect, "instruction": instruction, "edit_of": edit_of,
-                  "reference_ids": [g.id for _, g in sources], "model": model.id,
+                  "reference_ids": [g.id for _, g in sources] + mentioned.ref_ids, "model": model.id,
                   "created_by": {"user_id": cur.id, "flow": "image_edit"}, **chosen}
+        if mentioned.mentions:
+            params["mentions"] = mentioned.mentions
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
             db, cur.workspace_id, body.brand_kit_id, instruction, params, edit=True, max_refs=model.max_refs or 3), seed)
@@ -303,22 +316,27 @@ def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = D
     speed = _speed(model, body)
     magic = prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "image", brand_kit_id=body.brand_kit_id)
     media_id, src = _edit_source(db, cur.workspace_id, body.source_id)
+    # the redraw graph has one image input, so mentions stay words
+    mentioned = mn.resolve(db, cur.workspace_id, body.prompt.strip(), budget=0)
     if body.aspect == "source":
         sw, sh = lib._image_dims(src)
         w, h = lib.size_for_ratio(sw, sh) if sw and sh else lib.size_for_aspect("1:1")
     else:
         w, h = lib.size_for_aspect(body.aspect)
-    prompt = body.prompt.strip()
-    title = (body.title or "").strip() or f"Restyle · {lib.short_title(prompt, 5)}"
+    prompt = mentioned.prompt
+    title = (body.title or "").strip() or f"Restyle · {lib.short_title(mn.plain(body.prompt).strip(), 5)}"
     items, jobs = [], []
     for i in range(body.count):
-        params = {"width": w, "height": h, "aspect": body.aspect, "model": model.id, "user_prompt": prompt,
+        params = {"width": w, "height": h, "aspect": body.aspect, "model": model.id,
+                  "user_prompt": mn.plain(body.prompt).strip(),
                   "img2img_of": {"media_id": media_id, "generation_id": src.id, "strength": body.strength},
                   "created_by": {"user_id": cur.id, "flow": "image_img2img"}, "magic_prompt": magic, **chosen}
         if speed:
             params["speed"] = speed.id
         if body.negative:
             params["negative"] = body.negative.strip()
+        if mentioned.mentions:
+            params["mentions"] = mentioned.mentions
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
             db, cur.workspace_id, body.brand_kit_id, prompt, params), seed)

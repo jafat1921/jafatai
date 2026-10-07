@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app import models_catalog
+from app import camera, models_catalog
 from app.config import get_settings
 from app.models import Character, Generation, Location, Project, Scene, Shot, utcnow
 from app.schemas import LocationOut, ShotOut
@@ -150,7 +150,20 @@ def shots_out(db: Session, shots: list[Shot]) -> list[ShotOut]:
         o.approved_take = gen_out(take) if take else None
         o.takes_count = len(takes)
         o.status = derive_status(start_ok, bool(end and end.status == "approved"), takes)
+        o.activity = activity(mine)
         out.append(o)
+    return out
+
+
+def activity(gens: list[Generation]) -> list[dict]:
+    """What the shot card's status pill needs: generations in flight, plus a kind whose newest try failed."""
+    out, newest = [], {}
+    for g in gens:  # newest first
+        newest.setdefault(g.kind, g)
+        if g.status in ("queued", "generating"):
+            out.append({"id": g.id, "kind": g.kind, "status": g.status, "job_id": g.job_id, "version": g.version})
+    out += [{"id": g.id, "kind": k, "status": "failed", "job_id": g.job_id, "version": g.version}
+            for k, g in newest.items() if g.status == "failed"]
     return out
 
 
@@ -294,6 +307,10 @@ def frame_prompt(db: Session, shot: Shot, kind: str) -> str:
         base = shot.motion_prompt.strip()
         if not base:
             return ""
+        # polish P2: the rack's camera sentence rides on the motion prompt
+        move = camera.to_prompt(shot.camera_rack or None)
+        if move and move.rstrip(".").lower() not in base.lower():
+            base = camera.compose(base, shot.camera_rack)
         anchors = world_anchors(db, shot)
         return with_style(project, f"{base}\n{anchors}" if anchors and anchors not in base else base)
     base = (shot.start_prompt if kind == "keyframe_start" else shot.end_prompt).strip()
@@ -408,3 +425,185 @@ def script_duration(text: str, lo: float = 2.0, hi: float = 20.0) -> float:
             action += n
     seconds = dialogue / 2.5 + action / 3.5
     return max(lo, min(hi, round(seconds * 2) / 2))
+
+
+# ---------------------------------------------------------------- shot-list review gate (P3)
+
+REVIEW_KEY = "shots_review"
+
+
+def set_review(project: Project, scene_id: str, state: str | None) -> None:
+    s = dict(project.settings or {})
+    rec = dict(s.get(REVIEW_KEY) or {})
+    if state:
+        rec[scene_id] = state
+    else:
+        rec.pop(scene_id, None)
+    if rec:
+        s[REVIEW_KEY] = rec
+    else:
+        s.pop(REVIEW_KEY, None)
+    project.settings = s
+
+
+def link_map(db: Session, project_id: str) -> dict[str, str | None]:
+    """shot id -> id of the shot before it in film order; snapshot it before reshuffling shots."""
+    shots = project_shots(db, project_id)
+    return {s.id: (shots[i - 1].id if i else None) for i, s in enumerate(shots)}
+
+
+def restale_links(db: Session, project_id: str, before: dict[str, str | None]) -> list[str]:
+    """A Continue shot whose previous shot changed now opens on a different END frame: flag it if it has work."""
+    flagged = []
+    db.flush()
+    for sid, prev in link_map(db, project_id).items():
+        if sid not in before or before[sid] == prev:
+            continue
+        shot = db.get(Shot, sid)
+        if shot.seam_in == "continue" and has_gens(db, sid, SHOT_KINDS):
+            shot.stale = True
+            flagged.append(sid)
+    return flagged
+
+
+def _user_edit(shots: list[Shot]) -> tuple[str, bool]:
+    # merge/split rewrite the description, so the PATCH lock rule applies: the result is the user's
+    return ("ai_edited" if all(s.source in ("ai", "ai_edited") for s in shots) else "user"), True
+
+
+def _union(lists) -> list:
+    out = []
+    for items in lists:
+        for x in items or []:
+            if x not in out:
+                out.append(x)
+    return out
+
+
+def merge_placements(shots: list[Shot]) -> list[dict]:
+    """Union by asset and surface; a hero placement beats a background one, the user's beats the AI's."""
+    out: dict[tuple, dict] = {}
+    for s in shots:
+        for p in s.brand_placements or []:
+            key = (p.get("asset_id"), (p.get("surface") or "").casefold())
+            have = out.get(key)
+            if have is None:
+                # older PATCHes stored placements without the defaults filled in
+                out[key] = {**p, "prominence": p.get("prominence") or "background", "source": p.get("source") or "user"}
+                continue
+            if p.get("prominence") == "hero":
+                have["prominence"] = "hero"
+            if p.get("source") == "user":
+                have["source"] = "user"
+    return list(out.values())
+
+
+def _guard_work(db: Session, shots: list[Shot], what: str) -> None:
+    from app import brand_moments as bm  # imports this module
+
+    for s in shots:
+        if bm.closing_of(db, s):
+            raise HTTPException(409, f"The advert's closing shot can't be {what}")
+        if has_approved_work(db, s):
+            raise HTTPException(409, f"Shot {s.order} has approved frames or takes; {what} it would throw them away. "
+                                     "Unapprove them first.")
+
+
+def merge_shots(db: Session, shots: list[Shot]) -> Shot:
+    """Adjacent shots of one scene become the first of them; the others (and their drafts) go."""
+    from app import longtake
+
+    scene_ids = {s.scene_id for s in shots}
+    if len(scene_ids) != 1:
+        raise HTTPException(422, "Only shots of the same scene can be merged")
+    scene_list = scene_shots(db, shots[0].scene_id)
+    idx = sorted(scene_list.index(s) for s in shots)
+    if idx != list(range(idx[0], idx[0] + len(idx))):
+        raise HTTPException(422, "Merge needs neighbouring shots; reorder them first")
+    _guard_work(db, shots, "merged")
+    ordered = [scene_list[i] for i in idx]
+    keep, rest = ordered[0], ordered[1:]
+    before = link_map(db, keep.project_id)
+
+    cap = get_settings().longtake_max_s
+    total = min(cap, sum(s.duration_s for s in ordered))
+    cameras = [s.camera.strip() for s in ordered if s.camera.strip()]
+    racks = [dict(s.camera_rack or {}) for s in ordered]
+    keep.description = " ".join(s.description.strip() for s in ordered if s.description.strip())
+    keep.camera = (cameras[0] if len(set(cameras)) <= 1 else "; ".join(dict.fromkeys(cameras)))[:300] if cameras else ""
+    keep.duration_s = total
+    keep.camera_rack = racks[0] if all(r == racks[0] for r in racks) else {}
+    if longtake.is_long(total):
+        keep.shot_type = "long_take"
+    keep.character_ids = _union(s.character_ids for s in ordered)
+    keep.brand_placements = merge_placements(ordered)
+    keep.end_prompt = ordered[-1].end_prompt
+    keep.motion_prompt = ""
+    keep.beats = []
+    keep.source, keep.locked = _user_edit(ordered)
+    if has_gens(db, keep.id, SHOT_KINDS):
+        keep.stale = True
+    delete_shots(db, rest)
+    db.flush()
+    renumber(scene_shots(db, keep.scene_id))
+    restale_links(db, keep.project_id, before)
+    return keep
+
+
+def _split_text(text: str, ratio: float) -> tuple[str, str]:
+    text = text.strip()
+    sentences = [x for x in re.split(r"(?<=[.!?])\s+", text) if x]
+    parts = sentences if len(sentences) > 1 else text.split()
+    if len(parts) < 2:
+        return text, text
+    cut = min(len(parts) - 1, max(1, round(len(parts) * ratio)))
+    return " ".join(parts[:cut]), " ".join(parts[cut:])
+
+
+def split_shot(db: Session, shot: Shot, ratio: float = 0.5, descriptions: list[str] | None = None) -> Shot:
+    """Two shots from one: the second continues straight on from the first (Continue seam)."""
+    from app import longtake
+
+    _guard_work(db, [shot], "split")
+    if shot.duration_s < 2:
+        raise HTTPException(422, "A shot under 2 seconds is too short to split")
+    first_s = max(1.0, min(shot.duration_s - 1, round(shot.duration_s * ratio * 2) / 2))
+    second_s = round((shot.duration_s - first_s) * 2) / 2
+    if descriptions:
+        a_text, b_text = (d.strip() for d in descriptions)
+    else:
+        a_text, b_text = _split_text(shot.description, ratio)
+    before = link_map(db, shot.project_id)
+    source, locked = _user_edit([shot])
+
+    second = Shot(
+        workspace_id=shot.workspace_id, project_id=shot.project_id, scene_id=shot.scene_id,
+        shot_type="long_take" if longtake.is_long(second_s) else
+        (shot.shot_type if shot.shot_type != "long_take" else "medium"),
+        duration_s=second_s, description=b_text, camera=shot.camera, prompt=shot.prompt,
+        prompt_mode=shot.prompt_mode, start_prompt="", end_prompt=shot.end_prompt, motion_prompt="",
+        character_ids=list(shot.character_ids or []), location_id=shot.location_id, seam_in="continue",
+        # TODO: give each half only the placements its text mentions; both halves get all of them for now
+        handoff_text="", brand_placements=[dict(p) for p in shot.brand_placements or []],
+        camera_rack=dict(shot.camera_rack or {}),
+        source=source, locked=locked,
+    )
+    shot.duration_s, shot.description = first_s, a_text
+    if shot.shot_type == "long_take" and not longtake.is_long(first_s):
+        shot.shot_type = "medium"
+    shot.end_prompt = shot.motion_prompt = ""
+    shot.beats = []
+    shot.source, shot.locked = source, locked
+    if has_gens(db, shot.id, SHOT_KINDS):
+        shot.stale = True
+    insert_after(db, shot, second)
+    restale_links(db, shot.project_id, before)
+    return second
+
+
+def insert_after(db: Session, shot: Shot, new: Shot) -> None:
+    siblings = scene_shots(db, shot.scene_id)
+    siblings.insert(siblings.index(shot) + 1, new)
+    db.add(new)
+    renumber(siblings)
+    db.flush()

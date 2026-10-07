@@ -1,5 +1,6 @@
 // Mirrors docs/api/contract-v0.md. Keep snake_case so payloads pass through untouched.
 import type { BrandPlacement } from './brand'
+import type { CameraSetting } from './camera'
 
 export type Role = 'owner' | 'editor' | 'viewer'
 
@@ -89,6 +90,8 @@ export interface Scene {
   version: number
   stale: boolean
   location_id?: string | null
+  // P3 review gate: 'pending' while the planned shot list waits for approval; older servers omit it
+  shots_review?: 'pending' | null
   created_at: string
   updated_at: string
 }
@@ -211,8 +214,21 @@ export interface Shot {
   brand_placements_locked?: boolean
   closing?: string | null
   brand_closing?: string | null
+  // P3: generations in flight, and kinds whose newest try failed; older servers omit it
+  activity?: ShotActivity[]
+  // P2 camera rack on a shot (migration 0007); `camera` holds the same in plain words
+  camera_rack?: CameraSetting
+
   created_at: string
   updated_at: string
+}
+
+export interface ShotActivity {
+  id: string
+  kind: GenerationKind
+  status: 'queued' | 'generating' | 'failed'
+  job_id?: string | null
+  version: number
 }
 
 export type ShotPatch = Partial<
@@ -233,6 +249,7 @@ export type ShotPatch = Partial<
     | 'handoff_text'
     | 'beats'
     | 'brand_placements'
+    | 'camera_rack'
   >
 >
 
@@ -242,6 +259,39 @@ export interface StoryboardRequest {
   generate_frames: boolean
   overwrite: boolean
   continuity?: 'chain'
+  // P3: plan the shot list, hold the frames until it's approved
+  review_first?: boolean
+}
+
+// UI polish P3 (contract-v8-polish.md)
+export interface ShotExtendResult {
+  shot: Shot
+  job: Job
+}
+
+export interface ShotRerenderResult {
+  jobs: Job[]
+  linked_next_shot_id?: string | null
+}
+
+export interface ShotsApproveResult {
+  scene: Scene
+  jobs: Job[]
+}
+
+export interface QuickStageThumb {
+  id: string
+  kind: GenerationKind
+  url: string | null
+  video: boolean
+}
+
+export interface QuickStageMedia {
+  outline?: { text?: string }
+  cast?: QuickStageThumb[]
+  storyboard?: QuickStageThumb[]
+  render?: QuickStageThumb[]
+  stitch?: QuickStageThumb[]
 }
 
 export type RegenerateMode = 'same' | 'note' | 'edit'
@@ -509,6 +559,9 @@ export interface QuickJobResult {
   preview_ids?: string[]
   final_render_id?: string | null
   eta_s?: number | null
+  // P3: [low, high] seconds left, and per-stage thumbnail strips; older servers omit both
+  eta_range_s?: [number, number] | null
+  stage_media?: QuickStageMedia
 }
 
 export interface QuickRecent {
@@ -754,6 +807,8 @@ export interface VideoGenerateRequest extends MagicFields {
   seed?: number
   smooth_motion?: boolean
   brand_kit_id?: string
+  // contract v8 P2: ids from lib/camera.ts
+  camera?: { size?: string; angle?: string; motion?: string; speed?: string }
 }
 
 // quality and smooth motion come from project.settings; the server drops them for long takes

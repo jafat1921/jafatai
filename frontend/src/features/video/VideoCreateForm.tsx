@@ -1,11 +1,11 @@
 import { useId } from 'react'
-import { Film, RectangleHorizontal, Timer, Waves } from 'lucide-react'
+import { Film, RectangleHorizontal, Waves } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AspectTiles } from '@/components/studio/aspect-tile'
-import { DurationFields } from '@/components/studio/duration-picker'
 import { ErrorState } from '@/components/studio/states'
 import { SwitchRow } from '@/components/studio/switch-row'
+import { CameraChip } from '@/components/camera/CameraRack'
 import { DockChip } from '@/components/generate/DockChip'
 import { BrandDockChip, ModelChip } from '@/components/generate/DockChips'
 import { GenerateButton } from '@/components/generate/GenerateButton'
@@ -20,8 +20,11 @@ import { formatDuration } from '@/lib/duration'
 import { localEstimate } from '@/lib/estimate'
 import { pickModel } from '@/lib/models'
 import type { VideoAspect, VideoGenerateRequest } from '@/lib/types'
-import { clampDuration, durationPresets, maxDuration, smoothBlockedReason, VIDEO_ASPECTS, videoBlockedReason, videoPayload, type VideoForm } from '@/lib/video'
+import { cameraSummary } from '@/lib/camera'
+import { plainPrompt } from '@/lib/mentions'
+import { clampDuration, smoothBlockedReason, VIDEO_ASPECTS, videoBlockedReason, VIDEO_MENTIONS, videoPayload, type VideoForm } from '@/lib/video'
 import { announce } from '@/stores/ui'
+import { LengthChip } from './videoDock'
 
 export interface VideoRun {
   form: VideoForm
@@ -43,9 +46,9 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
   const uid = useId()
   const brand = useBrandChoice()
   const set = <K extends keyof VideoForm>(k: K, v: VideoForm[K]) => setForm((f) => ({ ...f, [k]: v }))
-  const blockedBy = (m: Parameters<typeof videoBlockedReason>[0]) => videoBlockedReason(m, !!form.imageId)
+  const hasEnd = !!form.imageId && !!form.endImageId
+  const blockedBy = (m: Parameters<typeof videoBlockedReason>[0]) => videoBlockedReason(m, !!form.imageId, hasEnd)
   const { models, model, send, effective } = useDockModels('video', form.model, { blocked: blockedBy, prompt: form.prompt })
-  const max = maxDuration(effective)
   const duration = clampDuration(form.durationS, effective)
   const smoothOff = smoothBlockedReason(effective, duration)
   const magic = useMagicPrompt(form.prompt, { kind: 'video', model: send?.id, brandKitId: brand.sendId })
@@ -56,9 +59,9 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
 
   const blocked = !send
     ? 'No video model is available right now.'
-    : videoBlockedReason(send, !!form.imageId)
-      ? videoBlockedReason(send, !!form.imageId)
-      : form.prompt.trim().length < 3
+    : videoBlockedReason(send, !!form.imageId, hasEnd)
+      ? videoBlockedReason(send, !!form.imageId, hasEnd)
+      : plainPrompt(form.prompt).trim().length < 3
         ? 'Describe the clip first.'
         : null
 
@@ -67,8 +70,14 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
     setForm((f) => ({ ...f, model: id, durationS: clampDuration(f.durationS, m) }))
   }
   const setImage = (id: string | null) => {
-    if (id && model && videoBlockedReason(model, true)) {
-      const next = pickModel(models.filter((m) => !videoBlockedReason(m, true)))
+    if (!id && form.endImageId) {
+      // an end frame alone isn't a thing the models can do
+      setForm((f) => ({ ...f, imageId: null, endImageId: null }))
+      announce('Start image removed, so the end image went too.')
+      return
+    }
+    if (id && model && videoBlockedReason(model, true, hasEnd)) {
+      const next = pickModel(models.filter((m) => !videoBlockedReason(m, true, hasEnd)))
       setForm((f) => ({ ...f, imageId: id, model: next?.id, durationS: clampDuration(f.durationS, next) }))
       announce(`${model.label} can't start from an image, so ${next?.label ?? 'another model'} is selected.`)
       return
@@ -79,7 +88,9 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
   const submit = () => {
     if (blocked || pending || !send) return
     const body = withBrand({ ...videoPayload({ ...form, durationS: duration }, send), ...magic.fields() }, brand.sendId)
-    const summary = [model?.label, formatDuration(duration), form.aspect, form.imageId ? 'from a picture' : null, body.smooth_motion ? 'smooth ×2' : null].filter(Boolean).join(' · ')
+    const summary = [model?.label, formatDuration(duration), form.aspect, body.end_image_id ? 'start → end' : form.imageId ? 'from a picture' : null, cameraSummary(form.camera) || null, body.smooth_motion ? 'smooth ×2' : null]
+      .filter(Boolean)
+      .join(' · ')
     onRun({ form: { ...form, model: model?.id, durationS: duration }, body, summary })
   }
 
@@ -90,29 +101,22 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
       headerExtra={<p className="text-small text-studio-muted max-lg:hidden">One prompt, one clip. For a whole film, use Quick Video.</p>}
       refs={
         <div className="flex items-start gap-3">
-          <RefSlot label="Start image" value={form.imageId} onChange={setImage} removeLabel="Remove the start image" description="The clip opens on this frame and moves from there." />
+          <RefSlot label="Start image" value={form.imageId} onChange={setImage} removeLabel="Remove the start image" description="Optional. The clip opens on this frame and moves from there." />
+          {form.imageId && (
+            <RefSlot label="End image" value={form.endImageId ?? null} onChange={(id) => set('endImageId', id)} removeLabel="Remove the end image" description="Optional. The clip lands on this frame." />
+          )}
         </div>
       }
       promptLabel="Describe the clip"
       prompt={form.prompt}
       onPrompt={(v) => set('prompt', v)}
+      mentions={VIDEO_MENTIONS}
       placeholder="e.g. Slow dolly in on a fisherman mending nets at dawn, gulls calling, waves on the hull"
       chips={
         <>
           <ModelChip models={models} model={model} onChange={chooseModel} blockedBy={blockedBy} highlighted={modelPicked} />
-          <DockChip name="Length" value={formatDuration(duration)} icon={<Timer aria-hidden />}>
-            <DurationFields
-              // remount when the cap changes so the custom box re-validates against it
-              key={`${effective?.id}-${max}`}
-              label="Length"
-              value={duration}
-              onChange={(v) => set('durationS', v)}
-              presets={durationPresets(effective)}
-              max={max}
-              limitNoun={` with ${effective?.label ?? 'this model'}`}
-              estimateLine={null}
-            />
-          </DockChip>
+          <LengthChip model={effective} value={duration} onChange={(v) => set('durationS', v)} estimate={estimate} />
+          <CameraChip value={form.camera ?? {}} onChange={(c) => set('camera', c)} />
           <DockChip name="Aspect" value={form.aspect} icon={<RectangleHorizontal aria-hidden />} wide>
             <div id={`${uid}-aspect`} className="section-label">
               Aspect
@@ -152,7 +156,7 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
           estimate={estimate}
           icon={<Film aria-hidden />}
           blocked={blocked}
-          note={form.imageId ? 'Starts on your image and moves from there.' : 'Made from your words alone.'}
+          note={form.endImageId && form.imageId ? 'Moves from your start picture to your end picture.' : form.imageId ? 'Starts on your image and moves from there.' : 'Made from your words alone.'}
           pending={pending}
         />
       }

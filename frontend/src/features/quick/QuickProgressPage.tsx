@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router'
-import { AlertTriangle, Ban, Clock, PenLine, RotateCcw, X } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { AlertTriangle, Ban, BellRing, Clock, PenLine, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { Progress } from '@/components/ui/progress'
@@ -12,9 +12,11 @@ import { usePreviewGenerations, useQuickJob } from '@/hooks/useQuick'
 import { formatDuration } from '@/lib/duration'
 import { currentStage, etaText, hasStarted, quickResult, readStages } from '@/lib/quick'
 import type { Job } from '@/lib/types'
+import { trackJobs } from '@/stores/toasts'
 import { announce } from '@/stores/ui'
 import { PreviewTiles } from './PreviewTiles'
 import { QuickDone } from './QuickDone'
+import { etaRangeText } from './stageMedia'
 import { StageTimeline } from './StageTimeline'
 
 export function QuickProgressPage() {
@@ -56,14 +58,15 @@ export function QuickProgressPage() {
         ) : job.status === 'done' && project.data ? (
           <QuickDone project={project.data} job={job} />
         ) : (
-          <Running projectId={quickId} job={job} />
+          <Running projectId={quickId} job={job} title={title} />
         )}
       </div>
     </main>
   )
 }
 
-function Running({ projectId, job }: { projectId: string; job: Job }) {
+function Running({ projectId, job, title }: { projectId: string; job: Job; title: string }) {
+  const navigate = useNavigate()
   const stages = readStages(job)
   const current = currentStage(stages)
   const result = quickResult(job)
@@ -91,7 +94,7 @@ function Running({ projectId, job }: { projectId: string; job: Job }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <StageTimeline stages={stages} />
+      <StageTimeline stages={stages} media={result.stage_media} />
 
       {failed || cancelled ? (
         <div role="alert" className="flex flex-col gap-2 rounded-[6px] border border-studio-danger/40 bg-studio-danger/5 p-3">
@@ -133,9 +136,22 @@ function Running({ projectId, job }: { projectId: string; job: Job }) {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="flex items-center gap-1.5 text-small text-studio-muted">
               <Clock aria-hidden className="size-3.5" />
-              {etaText(result.eta_s)}
+              {etaRangeText(result.eta_range_s) ?? etaText(result.eta_s)}
             </span>
             <span className="text-small text-studio-muted">You can close this page — we'll keep working.</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                // the jobs tray toasts "Finished — …" with an Open link when the film is done
+                trackJobs([job], `Quick video: ${title}`, `/quick/${projectId}`)
+                announce("We'll let you know when it's ready.")
+                navigate('/video/projects')
+              }}
+            >
+              <BellRing aria-hidden />
+              Leave — we&apos;ll notify you
+            </Button>
             <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setConfirming(true)} disabled={cancel.isPending}>
               <X aria-hidden />
               Cancel

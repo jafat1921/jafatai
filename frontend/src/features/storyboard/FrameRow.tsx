@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ArrowRight, ListTree, RefreshCcw, Stamp } from 'lucide-react'
 import { CLOSING_LABEL, closingOf, logoRetryNote } from '@/lib/brand'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,10 @@ import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import type { FrameSide, ShotSelection } from '@/stores/workspace'
 import { FrameSlot } from './FrameSlot'
+import { ExtendShotDialog } from './ShotDialogs'
+import { ShotActivityPill } from './ShotActivityPill'
+import { useShotListActions } from './useShotList'
+import { VersionFlip } from './VersionFlip'
 import { ShotFields } from './ShotFields'
 import { ShotMenu } from './ShotMenu'
 import { useRewritePrompts } from './useRewritePrompts'
@@ -23,6 +28,8 @@ interface Props {
   unit: FrameUnit
   view: 'scenes' | 'shots'
   sceneShots: Shot[]
+  // the next shot in film order, so a re-render can warn about a Continue seam that opens on our END
+  nextShot?: Shot
   labelFor: (shot: Shot) => string
   selection: ShotSelection | undefined
   aspectClass: string
@@ -30,7 +37,7 @@ interface Props {
   onOpenShots: () => void
 }
 
-export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectClass, onSelectFrame, onOpenShots }: Props) {
+export function FrameRow({ unit, view, sceneShots, nextShot, labelFor, selection, aspectClass, onSelectFrame, onOpenShots }: Props) {
   const { startShot, endShot, prevShot } = unit
   const { create, regenerate } = useGenerationActions()
   const imageModel = useStudioImageModel(startShot.project_id)
@@ -39,6 +46,10 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
   const reorder = useReorderShots(startShot.project_id)
   const insert = useCreateShot(startShot.project_id)
   const remove = useDeleteShot(startShot.project_id)
+  const act = useShotListActions(startShot.project_id)
+  const [shown, setShown] = useState<{ start?: Generation; end?: Generation }>({})
+  const [rerendering, setRerendering] = useState(false)
+  const [extending, setExtending] = useState(false)
 
   const label = view === 'shots' ? shotLabel(unit.sceneIndex, unit.shotIndex ?? 0) : `Scene ${unit.sceneIndex + 1}`
   const start = startFrameOf(startShot, prevShot)
@@ -68,7 +79,11 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
   }
 
   const selected = isSel(startShot, 'start') || isSel(endShot, 'end')
-  const error = create.error ?? regenerate.error ?? clearStale.error ?? reorder.error ?? insert.error ?? remove.error ?? rewrite.error
+  const error =
+    create.error ?? regenerate.error ?? clearStale.error ?? reorder.error ?? insert.error ?? remove.error ?? rewrite.error ?? act.rerender.error
+  const linkedNext = nextShot?.seam_in === 'continue' ? nextShot : undefined
+  const startShown = shown.start ?? start.frame
+  const endShown = shown.end ?? endShot.end_frame
 
   return (
     <article
@@ -98,7 +113,11 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
             Brand closing · {CLOSING_LABEL[closing]}
           </span>
         )}
-        {view === 'shots' && <StatusPill status={shotStatus(startShot.status)} />}
+        {view === 'shots' ? (
+          <ShotActivityPill shot={startShot} what="frames" fallback={<StatusPill status={shotStatus(startShot.status)} />} />
+        ) : (
+          <ShotActivityPill shot={startShot} what="frames" />
+        )}
         {stale && (
           <span className="inline-flex items-center gap-1 text-small text-studio-warning">
             <RefreshCcw aria-hidden className="size-3" />
@@ -128,6 +147,8 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
             onMove={move}
             onInsertAfter={() => insert.mutate({ sceneId: unit.scene.id, after_shot_id: startShot.id })}
             onRewritePrompts={rewrite.request}
+            onRerender={() => setRerendering(true)}
+            onExtend={() => setExtending(true)}
             onClearStale={() => clearStale.mutate(startShot.id)}
             onDelete={() => remove.mutate(startShot.id, { onSuccess: () => announce(`Shot ${label} deleted.`) })}
           />
@@ -136,30 +157,54 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
 
       <div className={cn('grid gap-3', view === 'shots' && 'xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]')}>
         <div className="flex items-start gap-2">
-          <FrameSlot
-            side="START"
-            frame={start.frame}
-            alt={`START frame of ${label}: ${startShot.description || unit.scene.heading}`}
-            aspectClass={aspectClass}
-            selected={isSel(startShot, 'start')}
-            onSelect={() => onSelectFrame(startShot, 'start')}
-            linkedFrom={start.linked ? (start.from ? labelFor(start.from) : 'previous shot') : undefined}
-            onGenerate={() => generate(startShot, 'keyframe_start')}
-            onRegenerateWithLogo={retryLogo(start.frame, 'START')}
-            regeneratingLogo={regenerate.isPending}
-          />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <FrameSlot
+              side="START"
+              frame={startShown}
+              alt={`START frame of ${label}: ${startShot.description || unit.scene.heading}`}
+              aspectClass={aspectClass}
+              selected={isSel(startShot, 'start')}
+              onSelect={() => onSelectFrame(startShot, 'start')}
+              linkedFrom={start.linked ? (start.from ? labelFor(start.from) : 'previous shot') : undefined}
+              onGenerate={() => generate(startShot, 'keyframe_start')}
+              onRegenerateWithLogo={retryLogo(start.frame, 'START')}
+              regeneratingLogo={regenerate.isPending}
+            />
+            {!start.linked && (
+              <VersionFlip
+                shotId={startShot.id}
+                kind="keyframe_start"
+                current={start.frame}
+                shownId={shown.start?.id}
+                onShow={(g) => setShown((x) => ({ ...x, start: g }))}
+                label={`START frame of ${label}`}
+                enabled={view === 'shots' || (start.frame?.version ?? 0) > 1}
+              />
+            )}
+          </div>
           <ArrowRight aria-hidden className="mt-[22%] size-4 shrink-0 text-studio-gold" />
-          <FrameSlot
-            side="END"
-            frame={endShot.end_frame}
-            alt={`END frame of ${label}: ${endShot.description || unit.scene.heading}`}
-            aspectClass={aspectClass}
-            selected={isSel(endShot, 'end')}
-            onSelect={() => onSelectFrame(endShot, 'end')}
-            onGenerate={() => generate(endShot, 'keyframe_end')}
-            onRegenerateWithLogo={retryLogo(endShot.end_frame, 'END')}
-            regeneratingLogo={regenerate.isPending}
-          />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <FrameSlot
+              side="END"
+              frame={endShown}
+              alt={`END frame of ${label}: ${endShot.description || unit.scene.heading}`}
+              aspectClass={aspectClass}
+              selected={isSel(endShot, 'end')}
+              onSelect={() => onSelectFrame(endShot, 'end')}
+              onGenerate={() => generate(endShot, 'keyframe_end')}
+              onRegenerateWithLogo={retryLogo(endShot.end_frame, 'END')}
+              regeneratingLogo={regenerate.isPending}
+            />
+            <VersionFlip
+              shotId={endShot.id}
+              kind="keyframe_end"
+              current={endShot.end_frame}
+              shownId={shown.end?.id}
+              onShow={(g) => setShown((x) => ({ ...x, end: g }))}
+              label={`END frame of ${label}`}
+              enabled={view === 'shots' || (endShot.end_frame?.version ?? 0) > 1}
+            />
+          </div>
         </div>
         {view === 'shots' ? (
           <ShotFields shot={startShot} label={label} />
@@ -182,6 +227,55 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
         description="This shot's prompts are manual. Rewriting switches it back to Auto and the AI replaces the START, END and motion prompts."
         confirmLabel="Switch to Auto and rewrite"
         onConfirm={rewrite.confirm}
+      />
+      <ConfirmDialog
+        open={rerendering}
+        onOpenChange={setRerendering}
+        title={`Re-render shot ${label}?`}
+        description={
+          <>
+            New versions of this shot&apos;s {start.linked ? 'END frame' : 'START and END frames'} are queued. No other shot is
+            touched; the current versions stay until you approve a new one.
+            {linkedNext && (
+              <span role="note" className="mt-2 block font-medium text-studio-warning">
+                Shot {labelFor(linkedNext)} continues from this END frame. When you approve a new END it is marked stale, not
+                regenerated.
+              </span>
+            )}
+          </>
+        }
+        confirmLabel="Re-render this shot"
+        onConfirm={() =>
+          act.rerender.mutate(
+            { id: startShot.id, what: 'frames', params: imageModel.params },
+            {
+              onSuccess: (r) =>
+                announce(
+                  `${plural(r.jobs.length, 'frame')} queued for ${label}.` +
+                    (r.linked_next_shot_id ? ' The next shot will go stale when you approve a new END.' : ''),
+                ),
+            },
+          )
+        }
+      />
+      <ExtendShotDialog
+        shot={extending ? startShot : null}
+        label={label}
+        pending={act.extend.isPending}
+        error={act.extend.error}
+        onOpenChange={setExtending}
+        onSubmit={(body) =>
+          act.extend.mutate(
+            { id: startShot.id, ...body },
+            {
+              onSuccess: (r) => {
+                setExtending(false)
+                onSelectFrame(r.shot, 'end')
+                announce(`New shot added after ${label}; the AI is writing the next beat. Generate its END frame when ready.`)
+              },
+            },
+          )
+        }
       />
     </article>
   )

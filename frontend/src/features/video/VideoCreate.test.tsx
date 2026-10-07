@@ -80,6 +80,40 @@ describe('Create Video', () => {
     expect(within(await openChip(user, 'Model')).getByRole('radio', { name: 'Wan 2.2 14B' })).toBeEnabled()
   })
 
+  it('adds an optional end frame after a start frame, and sends the camera', async () => {
+    const calls = mockApi((method, path, query) => {
+      if (path === '/media') return { items: query.kind === 'video' ? [] : [media('e1', { title: 'Bay at noon' })] }
+      const item = path.match(/^\/media\/(\w+)$/)
+      if (item) return { ...media(item[1], { title: item[1] === 'm1' ? 'Harbour still' : 'Bay at noon' }), versions: [] }
+      if (method === 'POST' && path === '/videos/generate') return media('v1', { kind: 'video', title: 'New clip', media_url: null })
+    })
+    renderAt('/video/create?image=m1&model=ltx23_distilled', route, seedCatalog)
+    const user = userEvent.setup()
+    expect(await screen.findByRole('img', { name: 'Harbour still' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add end image' }))
+    await user.click(await screen.findByRole('button', { name: 'Pick from Library' }))
+    await user.click(await screen.findByRole('button', { name: /Bay at noon/ }))
+    await user.click(screen.getByRole('button', { name: /Use selected/ }))
+
+    const rack = await openChip(user, 'Camera')
+    await user.click(within(rack).getByRole('radio', { name: 'Static' }))
+    await user.click(within(rack).getByRole('radio', { name: 'Extreme wide' }))
+    await closeChip(user)
+    await user.click(screen.getByRole('textbox', { name: 'Describe the clip' }))
+    await user.paste('Fog lifts off the bay')
+    await user.click(screen.getByRole('button', { name: /^Render/ }))
+    const body = calls.find((c) => c.method === 'POST')?.body as Record<string, unknown>
+    expect(body.camera).toEqual({ size: 'ews', motion: 'static' })
+    expect(body.image_id).toBe('m1')
+    expect(body.end_image_id).toBe('e1')
+
+    // no start frame, no end frame
+    await user.click(screen.getByRole('button', { name: 'Remove the start image' }))
+    expect(screen.queryByRole('button', { name: 'Remove the end image' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add end image' })).not.toBeInTheDocument()
+  })
+
   it('sets the prompt to read in either direction', () => {
     api()
     renderAt('/video/create', route, seedCatalog)

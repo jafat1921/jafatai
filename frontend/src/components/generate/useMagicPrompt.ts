@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { usePromptEnhance } from '@/hooks/useGenEstimate'
+import { plainPrompt, relink, uniqueMentions } from '@/lib/mentions'
 import type { MagicFields, MagicMode, PromptEnhanceRequest } from '@/lib/types'
 
 interface Draft {
@@ -30,7 +31,8 @@ export function useMagicPrompt(prompt: string, ctx: MagicContext) {
     if (current.length < 3) return
     enhance.mutate(
       {
-        prompt: current,
+        // the writer sees names; mentions are linked back up when the draft is used
+        prompt: plainPrompt(current),
         kind: ctx.kind,
         mode: mode === 'off' ? 'on' : mode,
         ...(ctx.model ? { model: ctx.model } : {}),
@@ -48,7 +50,7 @@ export function useMagicPrompt(prompt: string, ctx: MagicContext) {
 
   /** The prompt and magic fields for the request body. */
   const fields = (): { prompt: string } & MagicFields => {
-    if (draft?.accepted && !stale) return { prompt: draft.text.trim(), prompt_enhanced: true }
+    if (draft?.accepted && !stale) return { prompt: relink(draft.text.trim(), uniqueMentions(current)), prompt_enhanced: true }
     // "auto" is the server default, so it isn't sent; older servers never see the field
     return mode === 'auto' ? { prompt: current } : { prompt: current, magic_prompt: mode }
   }

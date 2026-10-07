@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/studio/states'
 import { useMediaRegenerate } from '@/hooks/useMedia'
 import { downloadUrl } from '@/lib/media'
+import { plainPrompt } from '@/lib/mentions'
 import { sessionRows, type SessionRow } from '@/lib/sessions'
 import type { MediaItem } from '@/lib/types'
 import { plural, timeAgo } from '@/lib/utils'
@@ -70,7 +71,8 @@ export function SessionResults<S>({
   reuseItem,
 }: Props<S>) {
   const requests = useSessions((s) => s.requests).filter((r) => r.page === page) as SessionRequest<S>[]
-  const rows = sessionRows(items, requests)
+  // recorded requests keep @-mention tokens; rows show the names
+  const rows = sessionRows(items, requests).map((r) => ({ ...r, prompt: plainPrompt(r.prompt) }))
   const { handlers, host, failure } = useMediaHost({ items, onUseAsRef, refLabel, reuse: reuseItem })
   const regenerate = useMediaRegenerate()
   const sentinel = useRef<HTMLDivElement>(null)

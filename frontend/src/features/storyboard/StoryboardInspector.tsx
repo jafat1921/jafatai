@@ -1,4 +1,4 @@
-import { ImageIcon, Link2, MousePointerClick, RefreshCcw, ScrollText, Wand2 } from 'lucide-react'
+import { ImageIcon, Link2, MousePointerClick, RefreshCcw, ScrollText, Video, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, ErrorState } from '@/components/studio/states'
@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import type { FrameSide } from '@/stores/workspace'
 import { RefsStrip } from './RefsStrip'
+import { ShotCamera } from './ShotCamera'
 import { ShotPrompts } from './ShotPrompts'
 import { useStoryboard } from './useStoryboard'
 
@@ -97,6 +98,10 @@ export function StoryboardInspector() {
             <ScrollText aria-hidden />
             Prompts
           </TabsTrigger>
+          <TabsTrigger value="camera">
+            <Video aria-hidden />
+            Camera
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="frame" className="flex flex-col gap-4">
           {linked ? (
@@ -139,6 +144,9 @@ export function StoryboardInspector() {
         </TabsContent>
         <TabsContent value="prompts">
           <ShotPrompts key={shot.id} shot={shot} />
+        </TabsContent>
+        <TabsContent value="camera">
+          <ShotCamera shot={shot} />
         </TabsContent>
       </Tabs>
     </div>

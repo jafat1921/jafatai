@@ -1,12 +1,11 @@
 import { useId, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { AudioLines, Clapperboard, Film, Timer, Waves } from 'lucide-react'
+import { AudioLines, Clapperboard, Film, Waves } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { DurationFields } from '@/components/studio/duration-picker'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { SwitchRow } from '@/components/studio/switch-row'
-import { DockChip } from '@/components/generate/DockChip'
+import { CameraChip } from '@/components/camera/CameraRack'
 import { BrandDockChip, ModelChip } from '@/components/generate/DockChips'
 import { GenerateButton } from '@/components/generate/GenerateButton'
 import { GeneratorPage, ResultsHeading } from '@/components/generate/GeneratorPage'
@@ -24,8 +23,11 @@ import { formatDuration } from '@/lib/duration'
 import { localEstimate } from '@/lib/estimate'
 import { has, normalizeModelId } from '@/lib/models'
 import type { ModelInfo, VideoGenerateRequest } from '@/lib/types'
-import { clampDuration, DEFAULT_I2V_FORM, durationPresets, i2vBlockedReason, i2vPayload, maxDuration, smoothBlockedReason, videoResult, type I2vForm } from '@/lib/video'
+import { cameraSummary } from '@/lib/camera'
+import { plainPrompt } from '@/lib/mentions'
+import { clampDuration, DEFAULT_I2V_FORM, i2vBlockedReason, i2vPayload, smoothBlockedReason, VIDEO_MENTIONS, videoResult, type I2vForm } from '@/lib/video'
 import { announce } from '@/stores/ui'
+import { LengthChip } from './videoDock'
 
 const PAGE = 'video-i2v'
 
@@ -48,13 +50,12 @@ export function Img2VidPage() {
 
   const blocked = (m: ModelInfo) => i2vBlockedReason(m, !!form.endId)
   const { models, model, send, effective } = useDockModels('video', form.model, { blocked, prompt: form.prompt })
-  const max = maxDuration(effective)
   const duration = clampDuration(form.durationS, effective)
   const smoothOff = smoothBlockedReason(effective, duration)
   const magic = useMagicPrompt(form.prompt, { kind: 'video', model: send?.id, brandKitId: brand.sendId })
   const estimate = useGenEstimate(effective ? { kind: 'video', model: effective.id, duration_s: duration } : null, localEstimate(effective, { durationS: duration }))
 
-  const why = !form.startId ? 'Add a start picture first.' : !send || blocked(send) ? 'Pick a model that can animate a picture.' : form.prompt.trim().length < 3 ? 'Describe the motion first.' : null
+  const why = !form.startId ? 'Add a start picture first.' : !send || blocked(send) ? 'Pick a model that can animate a picture.' : plainPrompt(form.prompt).trim().length < 3 ? 'Describe the motion first.' : null
 
   const run = (r: I2vRun) =>
     generate.mutate(r.body, {
@@ -68,7 +69,9 @@ export function Img2VidPage() {
   const submit = () => {
     if (why || generate.isPending || !send || !form.startId) return
     const body = { ...i2vPayload({ ...form, startId: form.startId, durationS: duration }, send, brand.sendId), ...magic.fields() }
-    const summary = [model?.label, formatDuration(duration), form.endId ? 'start → end' : 'from a picture', body.smooth_motion ? 'smooth ×2' : null].filter(Boolean).join(' · ')
+    const summary = [model?.label, formatDuration(duration), form.endId ? 'start → end' : 'from a picture', cameraSummary(form.camera) || null, body.smooth_motion ? 'smooth ×2' : null]
+      .filter(Boolean)
+      .join(' · ')
     run({ form: { ...form, model: model?.id, durationS: duration }, body, summary })
   }
 
@@ -98,6 +101,7 @@ export function Img2VidPage() {
         promptLabel="Describe the motion"
         prompt={form.prompt}
         onPrompt={(v) => set('prompt', v)}
+        mentions={VIDEO_MENTIONS}
         placeholder="e.g. Slow push in, steam rises from the cup, leaves drift past the window"
         chips={
           <>
@@ -116,18 +120,8 @@ export function Img2VidPage() {
                 </p>
               }
             />
-            <DockChip name="Length" value={formatDuration(duration)} icon={<Timer aria-hidden />}>
-              <DurationFields
-                key={`${effective?.id}-${max}`}
-                label="Length"
-                value={duration}
-                onChange={(v) => set('durationS', v)}
-                presets={durationPresets(effective)}
-                max={max}
-                limitNoun={` with ${effective?.label ?? 'this model'}`}
-                estimateLine={null}
-              />
-            </DockChip>
+            <LengthChip model={effective} value={duration} onChange={(v) => set('durationS', v)} estimate={estimate} />
+            <CameraChip value={form.camera ?? {}} onChange={(c) => set('camera', c)} />
             <BrandDockChip choice={brand} />
           </>
         }

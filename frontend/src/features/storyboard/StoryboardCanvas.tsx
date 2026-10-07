@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { LayoutGrid, ListTree, Rows3, ScrollText, Wand2 } from 'lucide-react'
+import { LayoutGrid, ListChecks, ListTree, Rows3, ScrollText, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -60,6 +60,7 @@ export function StoryboardCanvas() {
   })
 
   const scenesWithShots = groups.filter((g) => g.shots.length > 0).length
+  const pending = groups.filter((g) => g.scene.shots_review === 'pending' && g.shots.length > 0).map((g) => g.scene)
   const openDialog = (scope: 'all' | 'selected', sceneId?: string) => {
     if (sceneId && sceneId !== scene?.id) board.selectScene(sceneId)
     setDialog({ scope })
@@ -127,6 +128,26 @@ export function StoryboardCanvas() {
         onDismiss={() => setDismissed(job?.id ?? null)}
       />
 
+      {pending.length > 0 && !(board.view === 'shots' && scene?.shots_review === 'pending') && (
+        <div role="status" className="mx-5 mb-3 flex flex-wrap items-center gap-2 rounded-[6px] border border-studio-accent bg-studio-accent-soft px-3 py-2">
+          <ListChecks aria-hidden className="size-4 text-studio-accent-hover" />
+          <span className="flex-1 text-body">
+            {plural(pending.length, 'scene')} {pending.length === 1 ? 'has' : 'have'} a shot list waiting for review. No frames are
+            drawn until you approve.
+          </span>
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              board.selectScene(pending[0].id)
+              board.setView('shots')
+            }}
+          >
+            Review {pending.length > 1 ? 'the first' : 'it'}
+          </Button>
+        </div>
+      )}
+
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-5 pb-8">
           {!scenes.data?.length ? (
@@ -180,7 +201,11 @@ export function StoryboardCanvas() {
           setDialog(null)
           setDismissed(null)
           storyboard.run(body)
-          announce('Storyboard started. Frames fill in as they render.')
+          announce(
+            body.review_first
+              ? 'Storyboard started. The shot list opens for review when it is planned; no frames until you approve.'
+              : 'Storyboard started. Frames fill in as they render.',
+          )
         }}
       />
     </div>

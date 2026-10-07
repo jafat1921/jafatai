@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowRight, Clapperboard, ImageOff, RefreshCcw, Timer } from 'lucide-react'
+import { ArrowRight, ChevronLeft, ChevronRight, Clapperboard, FastForward, ImageOff, RefreshCcw, RotateCw, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { DurationPicker } from '@/components/studio/duration-picker'
@@ -17,6 +17,9 @@ import { shotStatus } from '@/lib/status'
 import type { Generation, Shot } from '@/lib/types'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { ExtendShotDialog } from '@/features/storyboard/ShotDialogs'
+import { ShotActivityPill } from '@/features/storyboard/ShotActivityPill'
+import { useShotListActions } from '@/features/storyboard/useShotList'
 import { HQ_LONG_TAKE_REASON, SMOOTH_LONG_TAKE_REASON, useRenderOptions } from './renderOptions'
 import { TakeThumb } from './TakeThumb'
 import { takesInOrder } from './takes'
@@ -46,6 +49,8 @@ interface Props {
   onSelectShot: () => void
   onSelectTake: (take: Generation) => void
   onOpenStoryboard: () => void
+  // P3: called with the new shot after Extend shot
+  onExtended?: (shot: Shot) => void
 }
 
 export function RenderShotRow(p: Props) {
@@ -65,6 +70,15 @@ export function RenderShotRow(p: Props) {
   const start = startFrameOf(shot, p.prev)
   const ready = canRender(shot, p.prev)
   const list = takesInOrder(takes.data)
+  const act = useShotListActions(shot.project_id)
+  const [rerendering, setRerendering] = useState(false)
+  const [extending, setExtending] = useState(false)
+  // ‹ take 2/5 › flips the selected take; with nothing selected it starts from the chosen one
+  const at = list.findIndex((t) => t.id === (p.selectedTakeId ?? shot.approved_take?.id))
+  const flip = (dir: -1 | 1) => {
+    const next = list[at < 0 ? (dir === 1 ? 0 : list.length - 1) : at + dir]
+    if (next) p.onSelectTake(next)
+  }
 
   const submit = () =>
     render.mutate(
@@ -97,7 +111,27 @@ export function RenderShotRow(p: Props) {
           </span>
         )}
         <span className="font-mono text-small text-studio-muted">{formatDuration(shot.duration_s)}</span>
-        <StatusPill status={shotStatus(shot.status)} />
+        <ShotActivityPill shot={shot} what="takes" fallback={<StatusPill status={shotStatus(shot.status)} />} />
+        {list.length > 1 && (
+          <span role="group" aria-label={`Takes of shot ${label}`} className="inline-flex items-center gap-0.5">
+            <Button size="icon-sm" variant="ghost" className="size-6" aria-label={`Previous take of shot ${label}`} disabled={at === 0} onClick={() => flip(-1)}>
+              <ChevronLeft aria-hidden />
+            </Button>
+            <span className="font-mono text-small text-studio-muted" aria-live="polite">
+              take {at < 0 ? '–' : at + 1}/{list.length}
+            </span>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className="size-6"
+              aria-label={`Next take of shot ${label}`}
+              disabled={at === list.length - 1}
+              onClick={() => flip(1)}
+            >
+              <ChevronRight aria-hidden />
+            </Button>
+          </span>
+        )}
         {shot.stale && (
           <span className="inline-flex items-center gap-1 text-small text-studio-warning">
             <RefreshCcw aria-hidden className="size-3" />
@@ -141,6 +175,16 @@ export function RenderShotRow(p: Props) {
             <Button size="sm" variant="primary" onClick={() => setConfirming(true)} loading={render.isPending}>
               <Clapperboard aria-hidden />
               Render takes
+            </Button>
+            {list.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => setRerendering(true)} loading={act.rerender.isPending}>
+                <RotateCw aria-hidden />
+                Re-render this shot
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setExtending(true)}>
+              <FastForward aria-hidden />
+              Extend shot
             </Button>
             {long && (opts.quality === 'hq' || opts.smoothOn) && (
               <span role="note" className="text-small text-studio-muted">
@@ -191,6 +235,7 @@ export function RenderShotRow(p: Props) {
       )}
       {takes.isError && <ErrorState compact className="mt-2" error={takes.error} onRetry={() => takes.refetch()} />}
       {render.isError && <ErrorState compact className="mt-2" title="Couldn't queue takes" error={render.error} />}
+      {act.rerender.isError && <ErrorState compact className="mt-2" title="Couldn't re-render" error={act.rerender.error} />}
 
       <ConfirmDialog
         open={confirming}
@@ -213,6 +258,38 @@ export function RenderShotRow(p: Props) {
         }
         confirmLabel={`Render ${plural(count, 'take')}`}
         onConfirm={submit}
+      />
+      <ConfirmDialog
+        open={rerendering}
+        onOpenChange={setRerendering}
+        title={`Re-render shot ${label}?`}
+        description={`${plural(count, 'new take')} of this shot only, from its approved frames. Other shots and this shot's existing takes are left as they are.`}
+        confirmLabel="Re-render this shot"
+        onConfirm={() =>
+          act.rerender.mutate(
+            { id: shot.id, what: 'takes', count },
+            { onSuccess: (r) => announce(`${plural(r.jobs.length, 'take')} queued for shot ${label}.`) },
+          )
+        }
+      />
+      <ExtendShotDialog
+        shot={extending ? shot : null}
+        label={label}
+        pending={act.extend.isPending}
+        error={act.extend.error}
+        onOpenChange={setExtending}
+        onSubmit={(body) =>
+          act.extend.mutate(
+            { id: shot.id, ...body },
+            {
+              onSuccess: (r) => {
+                setExtending(false)
+                p.onExtended?.(r.shot)
+                announce(`New shot added after ${label}. Approve its END frame in the Storyboard, then render it.`)
+              },
+            },
+          )
+        }
       />
     </article>
   )

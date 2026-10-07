@@ -110,6 +110,7 @@ export function Img2ImgPage() {
         promptLabel="Describe the result"
         prompt={form.prompt}
         onPrompt={(v) => set('prompt', v)}
+        mentions={{ refBudget: 0, namesOnlyNote: 'Image to Image redraws one picture, so each mention adds its name and a short description. To put someone in, use Edit Image.' }}
         placeholder="e.g. Oil painting, warm evening light, visible brush strokes"
         chips={
           <>

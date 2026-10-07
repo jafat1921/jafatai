@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronUp, SlidersHorizontal } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
+import { MentionTextarea, type MentionOptions } from '@/components/mentions/MentionTextarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { readDockMode, writeDockMode, type DockMode } from '@/lib/dockPrefs'
@@ -29,6 +30,8 @@ interface Props {
   // negative, seed, steps…; shown in Advanced mode
   advanced?: React.ReactNode
   magic?: MagicPrompt
+  // @-mentions: on by default; pass the reference budget so the dock can count against it
+  mentions?: MentionOptions | false
   error?: React.ReactNode
   footer: React.ReactNode
   onSubmit: () => void
@@ -56,6 +59,7 @@ export function PromptDock({
   chips,
   advanced,
   magic,
+  mentions = {},
   error,
   footer,
   onSubmit,
@@ -145,19 +149,39 @@ export function PromptDock({
         <label htmlFor={`${uid}-prompt`} className="sr-only">
           {promptLabel}
         </label>
-        <Textarea
-          ref={field}
-          id={`${uid}-prompt`}
-          rows={sheet ? 2 : 3}
-          maxLength={maxLength}
-          value={prompt}
-          onChange={(e) => onPrompt(e.target.value)}
-          placeholder={placeholder}
-          // Urdu or Arabic prompts read right to left
-          dir="auto"
-          aria-describedby={promptHint ? `${uid}-hint` : undefined}
-          className="min-h-14 resize-none text-[15px] leading-6"
-        />
+        {mentions ? (
+          <MentionTextarea
+            {...mentions}
+            textareaRef={field}
+            id={`${uid}-prompt`}
+            rows={sheet ? 2 : 3}
+            maxLength={maxLength}
+            value={prompt}
+            onValueChange={onPrompt}
+            placeholder={placeholder}
+            aria-describedby={[promptHint ? `${uid}-hint` : null, `${uid}-at`].filter(Boolean).join(' ')}
+            className="min-h-14 resize-none text-[15px] leading-6"
+          />
+        ) : (
+          <Textarea
+            ref={field}
+            id={`${uid}-prompt`}
+            rows={sheet ? 2 : 3}
+            maxLength={maxLength}
+            value={prompt}
+            onChange={(e) => onPrompt(e.target.value)}
+            placeholder={placeholder}
+            // Urdu or Arabic prompts read right to left
+            dir="auto"
+            aria-describedby={promptHint ? `${uid}-hint` : undefined}
+            className="min-h-14 resize-none text-[15px] leading-6"
+          />
+        )}
+        {mentions && (
+          <span id={`${uid}-at`} className="sr-only">
+            Type @ to mention cast, locations, products or logos.
+          </span>
+        )}
         {promptHint && (
           <p id={`${uid}-hint`} className="text-small text-studio-muted">
             {promptHint}

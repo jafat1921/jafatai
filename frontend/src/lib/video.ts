@@ -1,8 +1,16 @@
+import type { MentionOptions } from '@/components/mentions/MentionTextarea'
+import { cameraPayload, type CameraSetting } from './camera'
 import { CHUNK_MAX_S, isLongTakeDuration, LONGTAKE_MAX_S } from './duration'
 import { has } from './models'
 import type { Job, MediaBatch, MediaItem, ModelInfo, VideoAspect, VideoGenerateRequest } from './types'
 
 export const VIDEO_ASPECTS: VideoAspect[] = ['16:9', '9:16', '1:1']
+
+// TODO: let a mention compose the start frame on the edit model first, so faces match without a picture
+export const VIDEO_MENTIONS: MentionOptions = {
+  refBudget: 0,
+  namesOnlyNote: 'Video models take no reference pictures, so each mention adds its name and a short description. For a face that must match, start from a picture of them.',
+}
 
 const PRESETS = [
   { value: 5, label: '5 s' },
@@ -10,7 +18,6 @@ const PRESETS = [
   { value: 20, label: '20 s' },
   { value: 30, label: '30 s' },
   { value: 60, label: '1 min' },
-  { value: 120, label: '2 min' },
 ]
 
 export interface VideoForm {
@@ -19,11 +26,14 @@ export interface VideoForm {
   durationS: number
   aspect: VideoAspect
   imageId: string | null
+  // needs a start image and a first+last frame model
+  endImageId?: string | null
   smooth: boolean
   seed: string
+  camera?: CameraSetting
 }
 
-export const DEFAULT_VIDEO_FORM: VideoForm = { prompt: '', durationS: 5, aspect: '16:9', imageId: null, smooth: false, seed: '' }
+export const DEFAULT_VIDEO_FORM: VideoForm = { prompt: '', durationS: 5, aspect: '16:9', imageId: null, endImageId: null, smooth: false, seed: '', camera: {} }
 
 // whole seconds; the server reports caps like 10.67 (256 frames at 24 fps)
 export const maxDuration = (m: ModelInfo | undefined) => Math.max(1, Math.floor(m?.max_duration_s ?? LONGTAKE_MAX_S))
@@ -46,8 +56,9 @@ export function smoothBlockedReason(m: ModelInfo | undefined, durationS: number)
 }
 
 /** Why this model can't make the clip as set up, in words a person can act on; null when it can. */
-export function videoBlockedReason(m: ModelInfo, hasImage: boolean): string | null {
+export function videoBlockedReason(m: ModelInfo, hasImage: boolean, hasEnd = false): string | null {
   if (hasImage && !has(m, 'i2v')) return `${m.label} works from text only. Remove the start image to use it.`
+  if (hasEnd && !has(m, 'flf')) return `${m.label} can't land on an end image. Remove the end image to use it.`
   return null
 }
 
@@ -66,9 +77,10 @@ export interface I2vForm {
   durationS: number
   smooth: boolean
   seed: string
+  camera?: CameraSetting
 }
 
-export const DEFAULT_I2V_FORM: I2vForm = { startId: null, endId: null, prompt: '', durationS: 5, smooth: false, seed: '' }
+export const DEFAULT_I2V_FORM: I2vForm = { startId: null, endId: null, prompt: '', durationS: 5, smooth: false, seed: '', camera: {} }
 
 export function i2vPayload(f: I2vForm & { startId: string }, m: ModelInfo, brandKitId?: string): VideoGenerateRequest {
   // no aspect: the clip takes the start picture's shape
@@ -79,6 +91,8 @@ export function i2vPayload(f: I2vForm & { startId: string }, m: ModelInfo, brand
   if (Number.isFinite(seed) && seed >= 0) body.seed = seed
   if (f.smooth && !smoothBlockedReason(m, body.duration_s)) body.smooth_motion = true
   if (brandKitId) body.brand_kit_id = brandKitId
+  const camera = cameraPayload(f.camera)
+  if (camera) body.camera = camera
   return body
 }
 
@@ -90,9 +104,12 @@ export function videoPayload(f: VideoForm, m: ModelInfo): VideoGenerateRequest {
     aspect: f.aspect,
   }
   if (f.imageId && has(m, 'i2v')) body.image_id = f.imageId
+  if (body.image_id && f.endImageId && has(m, 'flf')) body.end_image_id = f.endImageId
   const seed = Number.parseInt(f.seed, 10)
   if (Number.isFinite(seed) && seed >= 0) body.seed = seed
   if (f.smooth && !smoothBlockedReason(m, body.duration_s)) body.smooth_motion = true
+  const camera = cameraPayload(f.camera)
+  if (camera) body.camera = camera
   return body
 }
 

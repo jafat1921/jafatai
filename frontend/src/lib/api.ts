@@ -21,6 +21,9 @@ import type {
   Suggestion,
   Shot,
   ShotEstimate,
+  ShotExtendResult,
+  ShotRerenderResult,
+  ShotsApproveResult,
   ShotPatch,
   ShotType,
   StitchRequest,
@@ -56,6 +59,10 @@ import type {
   PromptEnhanceResult,
 } from './types'
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
+import type { CameraPreset } from './camera'
+import type { MentionOption } from './mentions'
+
+type CameraPresets = Record<'shot_size' | 'angle' | 'motion' | 'speed', (CameraPreset<string> & { phrase: string })[]> & { default_speed: string }
 
 export const API_BASE = '/api'
 
@@ -255,6 +262,17 @@ export const api = {
       }),
     estimate: (id: string, durationS?: number) => get<ShotEstimate>(`/shots/${id}/estimate`, { duration_s: durationS }),
     renderScene: (sceneId: string, count?: number) => post<Job[]>(`/scenes/${sceneId}/render`, count ? { count } : {}),
+    // UI polish P3
+    merge: (shotIds: string[]) => post<Shot[]>('/shots/merge', { shot_ids: shotIds }),
+    split: (id: string, body: { at_ratio?: number; descriptions?: [string, string] } = {}) =>
+      post<Shot[]>(`/shots/${id}/split`, body),
+    extend: (id: string, body: { duration_s?: number; prompt?: string } = {}) =>
+      post<ShotExtendResult>(`/shots/${id}/extend`, body),
+    rerender: (id: string, body: { what: 'frames' | 'takes'; count?: number; params?: Record<string, unknown> }) =>
+      post<ShotRerenderResult>(`/shots/${id}/rerender`, body),
+    setReview: (sceneId: string, status: 'pending' | null) => patch<Scene>(`/scenes/${sceneId}/shots-review`, { status }),
+    approveShotList: (sceneId: string, params?: Record<string, unknown>) =>
+      post<ShotsApproveResult>(`/scenes/${sceneId}/shots-review/approve`, { generate_frames: true, ...(params ? { params } : {}) }),
   },
   storyboard: {
     fromScript: (projectId: string, body: StoryboardRequest) => post<Job>(`/projects/${projectId}/storyboard`, body),
@@ -302,8 +320,11 @@ export const api = {
     assist: (sceneId: string, body: { action: AssistAction; idea?: string; tone?: string }) =>
       post<Job>(`/scenes/${sceneId}/ai/assist`, body),
     extractLocations: (projectId: string) => post<Job>(`/projects/${projectId}/ai/extract-locations`),
-    suggestShots: (sceneId: string, maxShots?: number) =>
-      post<Job>(`/scenes/${sceneId}/ai/suggest-shots`, maxShots ? { max_shots: maxShots } : {}),
+    suggestShots: (sceneId: string, maxShots?: number, reviewFirst?: boolean) =>
+      post<Job>(`/scenes/${sceneId}/ai/suggest-shots`, {
+        ...(maxShots ? { max_shots: maxShots } : {}),
+        ...(reviewFirst ? { review_first: true } : {}),
+      }),
     compilePrompts: (shotId: string) => post<Job>(`/shots/${shotId}/ai/compile-prompts`),
     beats: (shotId: string) => post<Job>(`/shots/${shotId}/ai/beats`),
     portraitPrompt: (characterId: string) => post<Job>(`/characters/${characterId}/ai/portrait-prompt`),
@@ -337,6 +358,13 @@ export const api = {
   videos: {
     // a MediaItem plus its job; tolerate a batch too
     generate: (body: VideoGenerateRequest) => post<(MediaItem & { job?: Job | null }) | MediaBatch>('/videos/generate', body),
+  },
+  // contract-v8 P2
+  mentions: {
+    search: (q: { q?: string; project_id?: string; types?: string; kit_id?: string }) => get<MentionOption[]>('/mentions', q),
+  },
+  camera: {
+    presets: () => get<CameraPresets>('/camera/presets'),
   },
   // contract-v7
   brandKits: {

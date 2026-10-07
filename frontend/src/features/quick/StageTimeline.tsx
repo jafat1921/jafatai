@@ -1,7 +1,9 @@
 import { AlertTriangle, Check, Circle, Loader2, MinusCircle } from 'lucide-react'
-import type { QuickStage, QuickStageStatus } from '@/lib/types'
+import type { QuickStage, QuickStageMedia, QuickStageStatus, QuickStageThumb } from '@/lib/types'
 import { formatEstimate } from '@/lib/shots'
+import { kindLabel } from '@/lib/status'
 import { cn } from '@/lib/utils'
+import { STRIP_MAX, stageStrip } from './stageMedia'
 
 const VIEW: Record<QuickStageStatus, { text: string; icon: React.ComponentType<{ className?: string }>; cls: string }> = {
   pending: { text: 'Waiting', icon: Circle, cls: 'border-studio-border-strong text-studio-muted' },
@@ -17,30 +19,57 @@ function took(s: QuickStage) {
   return Number.isFinite(secs) && secs > 0 ? formatEstimate(secs) : null
 }
 
-/** Writing → Cast → … → Upscaling. Each step says its state in words, not just colour. */
-export function StageTimeline({ stages }: { stages: QuickStage[] }) {
+function Thumb({ t }: { t: QuickStageThumb }) {
+  const alt = kindLabel(t.kind)
+  return (
+    <li className="darkroom aspect-video w-10 shrink-0 overflow-hidden rounded-[3px] animate-fade-in">
+      {t.video ? (
+        <video src={t.url!} preload="metadata" muted playsInline aria-label={alt} className="size-full object-cover" />
+      ) : (
+        <img src={t.url!} alt={alt} loading="lazy" className="size-full object-cover" />
+      )}
+    </li>
+  )
+}
+
+/** Writing → Cast → … → Upscaling. Each step says its state in words, plus a mini strip of what it made so far. */
+export function StageTimeline({ stages, media }: { stages: QuickStage[]; media?: QuickStageMedia }) {
   return (
     <ol aria-label="Progress" className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
       {stages.map((s, i) => {
         const v = VIEW[s.status] ?? VIEW.pending
         const time = took(s)
+        const strip = stageStrip(s.key, media)
+        const shown = strip.thumbs.slice(-STRIP_MAX)
+        const more = strip.thumbs.length - shown.length
         return (
           <li
             key={s.key}
             aria-current={s.status === 'running' ? 'step' : undefined}
-            className={cn('flex items-center gap-2 rounded-[6px] border px-2.5 py-2', v.cls)}
+            className={cn('flex flex-col gap-1.5 rounded-[6px] border px-2.5 py-2', v.cls)}
           >
-            <v.icon aria-hidden className={cn('size-4 shrink-0', s.status === 'running' && 'animate-spin')} />
-            <span className="flex min-w-0 flex-col">
-              <span className="text-body font-medium text-studio-text">
-                <span className="sr-only">Step {i + 1}: </span>
-                {s.label}
-              </span>
-              <span className="text-small">
-                {v.text}
-                {time && <span className="text-studio-muted"> · {time}</span>}
+            <span className="flex items-center gap-2">
+              <v.icon aria-hidden className={cn('size-4 shrink-0', s.status === 'running' && 'animate-spin')} />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-body font-medium text-studio-text">
+                  <span className="sr-only">Step {i + 1}: </span>
+                  {s.label}
+                </span>
+                <span className="text-small">
+                  {v.text}
+                  {time && <span className="text-studio-muted"> · {time}</span>}
+                </span>
               </span>
             </span>
+            {strip.text && <span className="text-small text-studio-muted">{strip.text}</span>}
+            {shown.length > 0 && (
+              <ul aria-label={`${s.label}: ${strip.thumbs.length} made so far`} className="flex items-center gap-1">
+                {shown.map((t) => (
+                  <Thumb key={t.id} t={t} />
+                ))}
+                {more > 0 && <li className="font-mono text-[11px] text-studio-muted">+{more}</li>}
+              </ul>
+            )}
           </li>
         )
       })}

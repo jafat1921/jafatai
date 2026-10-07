@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import brand
+from app import camera as cam
+from app import mentions as mn
 from app import library as lib
 from app import longtake
 from app import models_catalog as mc
@@ -53,8 +55,11 @@ def _size(m: mc.Model, aspect: str) -> tuple[int, int]:
 @router.post("/generate", response_model=VideoGenerateOut, status_code=202)
 def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     prompt = body.prompt.strip()
-    if not prompt:
+    if not mn.plain(prompt).strip():
         raise HTTPException(422, "A prompt is required")
+    # the video models take no reference pictures: mentions become names plus a short description
+    mentioned = mn.resolve(db, cur.workspace_id, prompt, budget=0)
+    prompt = mentioned.prompt
     m, chosen = mc.choose(body.model, "video", prompt, quality=body.quality)
     mc.check_video(m, has_image=bool(body.image_id or body.end_image_id), duration_s=body.duration_s,
                    smooth_motion=body.smooth_motion)
@@ -81,7 +86,7 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     duration = round((frames - 1) / fps, 3) if m.id == "wan22_t2v" else body.duration_s
     params = {"model": m.id, "aspect_ratio": aspect, "duration_s": duration, "fps": fps,
               "num_frames": frames, "width": w, "height": h,
-              "smooth_motion": body.smooth_motion, "user_prompt": prompt,
+              "smooth_motion": body.smooth_motion, "user_prompt": mn.plain(body.prompt).strip(),
               "created_by": {"user_id": cur.id, "flow": "video_generate"}, **chosen,
               "magic_prompt": prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "video",
                                                     brand_kit_id=body.brand_kit_id)}
@@ -96,9 +101,14 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
         params["negative"] = body.negative.strip()
     if long_take:
         longtake.init_params(params)
+    if mentioned.mentions:
+        params["mentions"] = mentioned.mentions
+    if body.camera is not None and not body.camera.is_empty():
+        params["camera"] = body.camera.model_dump(exclude_none=True)
+        prompt = cam.compose(prompt, body.camera)
 
     prompt, params = brand.apply_to_request(db, cur.workspace_id, body.brand_kit_id, prompt, params)
-    title = (body.title or "").strip() or lib.short_title(body.prompt)
+    title = (body.title or "").strip() or lib.short_title(mn.plain(body.prompt))
     item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="video", origin="generated", title=title,
                      tags=[], width=w, height=h, duration_s=params["duration_s"])
     db.add(item)

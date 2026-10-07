@@ -158,3 +158,41 @@ describe('Quick progress screen', () => {
     expect(await screen.findByRole('dialog', { name: /Upscale/ })).toBeInTheDocument()
   })
 })
+
+describe('Quick progress strips (P3)', () => {
+  it('fills a mini thumbnail strip per stage and shows the ETA as a range', async () => {
+    const thumb = (id: string, kind: string, video = false) => ({ id, kind, url: `/media/${id}.${video ? 'mp4' : 'png'}`, video })
+    renderProgress([
+      autopilotJob(
+        {},
+        {
+          stages: STAGES_RUNNING,
+          eta_s: 600,
+          eta_range_s: [300, 720],
+          stage_media: {
+            outline: { text: '3 scenes' },
+            cast: [thumb('p1', 'portrait'), thumb('l1', 'establishing')],
+            storyboard: ['a', 'b', 'c', 'd', 'e', 'f'].map((x) => thumb(x, 'keyframe_end')),
+            render: [thumb('t1', 'take', true)],
+            stitch: [],
+          },
+        },
+      ),
+    ])
+    const timeline = await screen.findByRole('list', { name: 'Progress' })
+    expect(within(timeline).getByText('3 scenes')).toBeInTheDocument()
+    expect(within(timeline).getByRole('list', { name: 'Cast: 2 made so far' }).querySelectorAll('img')).toHaveLength(2)
+    const board = within(timeline).getByRole('list', { name: 'Storyboard: 6 made so far' })
+    expect(board.querySelectorAll('img')).toHaveLength(4)
+    expect(board).toHaveTextContent('+2')
+    expect(within(timeline).getByRole('list', { name: 'Rendering: 1 made so far' }).querySelector('video')).toHaveAttribute('src', '/media/t1.mp4')
+    expect(screen.getByText('~5–12 min left')).toBeInTheDocument()
+  })
+
+  it('"Leave — we\'ll notify you" hands the job to the jobs tray', async () => {
+    const { useMyJobs } = await import('@/stores/toasts')
+    renderProgress([autopilotJob({}, { stages: STAGES_RUNNING, eta_s: 720 })])
+    await userEvent.setup().click(await screen.findByRole('button', { name: /leave — we.ll notify you/i }))
+    expect(useMyJobs.getState().jobs.j1).toMatchObject({ label: 'Quick video: Lighthouse Fox', to: '/quick/q1' })
+  })
+})

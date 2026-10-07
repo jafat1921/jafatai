@@ -107,7 +107,8 @@ def suggest_shots(scene_id: str, body: SuggestShotsIn | None = None, db: Session
     running = ai_jobs.active_job(db, "ai_suggest_shots", scene.project_id, scene_id=scene.id)
     if running:
         return job_out(running)
-    payload = {"scene_id": scene.id, "max_shots": (body or SuggestShotsIn()).max_shots}
+    body = body or SuggestShotsIn()
+    payload = {"scene_id": scene.id, "max_shots": body.max_shots, "review_first": body.review_first}
     return _queue(db, cur, "ai_suggest_shots", payload, scene.project_id)
 
 
@@ -133,7 +134,8 @@ def build_storyboard(project_id: str, body: StoryboardIn | None = None, db: Sess
         raise HTTPException(409, "There's no script to storyboard yet.")
     payload = {"project_id": p.id, "mode": body.mode, "scene_ids": body.scene_ids,
                "generate_frames": body.generate_frames, "overwrite": body.overwrite,
-               "chain": body.continuity in (True, "chain"), "max_shots": body.max_shots}
+               "chain": body.continuity in (True, "chain"), "max_shots": body.max_shots,
+               "review_first": body.review_first}
     return _queue(db, cur, "ai_storyboard", payload, p.id)
 
 

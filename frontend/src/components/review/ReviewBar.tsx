@@ -1,4 +1,4 @@
-import { Check, ChevronDown, History, Lock, RefreshCw, RotateCcw, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, History, ImageUpscale, Lock, RefreshCw, RotateCcw, Undo2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { Progress } from '@/components/ui/progress'
@@ -29,6 +29,8 @@ export interface ReviewBarProps {
   onRestore: () => void
   onToggleVersions: () => void
   onCancel?: () => void
+  // images only; hidden for videos and while nothing's finished
+  onUpscale?: () => void
   className?: string
 }
 
@@ -118,6 +120,14 @@ export function ReviewBar(props: ReviewBarProps) {
           <Button size="sm" variant="ghost" onClick={props.onReject} disabled={busy} aria-keyshortcuts="X">
             <X aria-hidden />
             Reject
+          </Button>
+        )}
+
+        {props.onUpscale && (status === 'ready' || status === 'approved') && (
+          <Button size="sm" variant="ghost" onClick={props.onUpscale} disabled={busy} aria-keyshortcuts="U" title="Bigger, sharper copy as a new version (U)">
+            <ImageUpscale aria-hidden />
+            Upscale
+            <Kbd>U</Kbd>
           </Button>
         )}
 

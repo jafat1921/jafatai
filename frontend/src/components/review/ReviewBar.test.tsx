@@ -84,4 +84,21 @@ describe('ReviewBar', () => {
     await user.click(await screen.findByRole('menuitem', { name: /edit & regenerate/i }))
     expect(h.onRegenerate).toHaveBeenCalledWith('edit')
   })
+
+  it('offers Upscale on finished images only', async () => {
+    const onUpscale = vi.fn()
+    setup('approved', { onUpscale })
+    await userEvent.setup().click(btn(/^upscale/i)!)
+    expect(onUpscale).toHaveBeenCalledOnce()
+  })
+
+  it('hides Upscale without a handler', () => {
+    setup('ready')
+    expect(btn(/^upscale/i)).not.toBeInTheDocument()
+  })
+
+  it('hides Upscale while generating', () => {
+    setup('generating', { onUpscale: vi.fn() })
+    expect(btn(/^upscale/i)).not.toBeInTheDocument()
+  })
 })

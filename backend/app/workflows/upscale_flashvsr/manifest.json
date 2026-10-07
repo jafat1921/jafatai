@@ -1,7 +1,7 @@
 {
   "name": "upscale_flashvsr",
   "family": "flashvsr",
-  "description": "FlashVSR streaming video super-resolution (ComfyUI-FlashVSR node pack; the Advanced node so tiling and attention are explicit). x2 or x4 only; the pipeline lanczos-scales the result to the exact target. The node pack keeps its weights outside ComfyUI's registered model folders and may download them on first use.",
+  "description": "FlashVSR streaming video super-resolution (ComfyUI-FlashVSR node pack; the Advanced node so tiling and attention are explicit). x2 or x4 only; the pipeline lanczos-scales the result to the exact target. The node pack keeps its weights (FlashVSR v1.1) outside ComfyUI's registered model folders.",
   "inputs": {
     "video":  {"type": "image", "required": true, "targets": [["Source", "video"]]},
     "scale":  {"type": "int", "default": 2, "targets": [["FlashVSR", "scale"]]},

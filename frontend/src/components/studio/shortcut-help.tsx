@@ -6,11 +6,12 @@ import { Tooltip } from '@/components/ui/tooltip'
 export type Shortcut = [keys: string[], description: string]
 
 const REVIEW: Shortcut = [['A', 'R', 'X', 'V'], 'approve, regenerate, reject, versions']
+const IMAGE: Shortcut = [['U', '+', '−', '0'], 'upscale, zoom in, zoom out, reset zoom (images)']
 
 // No global "?" overlay yet, so each stage lists its keys in a header tooltip.
 // TODO: fold these into a real "?" shortcuts sheet once more stages have keys of their own
 export function ShortcutHelp({ shortcuts }: { shortcuts: Shortcut[] }) {
-  const all = [...shortcuts, REVIEW]
+  const all = [...shortcuts, REVIEW, IMAGE]
   return (
     <Tooltip
       content={

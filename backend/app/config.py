@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     upscale_overlap_s: float = 0.5
     upscale_default_engine: str = "best"  # best | fast | quick
     upscale_seedvr2_model: str = "3b"  # 3b | 7b
+    image_upscale_max_mp: float = 8.4  # redraw / faithful image outputs; 3840x2160 is 8.3
 
     @field_validator("cors_origins", "comfy_urls", mode="before")
     @classmethod

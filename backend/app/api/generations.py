@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.ai_jobs import rewrite_prompt_from_note
-from app import reel, storyboard, upscale
+from app import reel, storyboard, upscale, upscale_image
 from app.api.media import resolve_media_path
 from app.config import get_settings
 from app.models import Generation, Job, Location, Project, Shot, utcnow
@@ -83,6 +83,9 @@ def create_generation(body: GenerationCreate, db: Session = Depends(get_db), cur
 def regenerate(gen_id: str, body: RegenerateIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     parent = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
     prompt, params, seed, note = parent.prompt, dict(parent.params or {}), new_seed(), None
+    # regenerating an upscaled image makes a fresh picture, not another upscale of its source
+    if parent.kind in upscale_image.IMAGE_KINDS and params.pop("upscale", None) is not None:
+        params.pop("size", None)
     rewrite_failed = None
 
     if body.mode == "note":
@@ -215,7 +218,14 @@ def upscale_generation(gen_id: str, body: UpscaleIn, db: Session = Depends(get_d
                        cur: CurrentUser = Depends(require_editor)):
     g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
     try:
-        job = upscale.queue_upscale(db, g, body.engine, body.target, body.variant, user_id=cur.id)
+        if upscale_image.is_image(g):
+            job = upscale_image.queue_image_upscale(db, g, body.engine, body.target, body.variant, body.denoise,
+                                                    body.prompt, user_id=cur.id)
+        else:
+            if body.engine in ("redraw", "faithful", "zimage") or body.target in ("2x", "4x", "2k"):
+                raise upscale.UpscaleError(f"'{body.engine or body.target}' is for images; videos take "
+                                           "best/fast/quick and 1080p/1440p/4k")
+            job = upscale.queue_upscale(db, g, body.engine, body.target or "1080p", body.variant, user_id=cur.id)
     except upscale.UpscaleError as e:
         raise HTTPException(422, str(e)) from None
     db.commit()

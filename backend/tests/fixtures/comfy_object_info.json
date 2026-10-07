@@ -1598,7 +1598,7 @@
    "video_info"
   ],
   "name": "VHS_LoadVideo",
-  "category": "Video Helper Suite \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+  "category": "Video Helper Suite 🎥🅥🅗🅢"
  },
  "AILab_FlashVSR_Advanced": {
   "input": {
@@ -2082,5 +2082,62 @@
    false
   ],
   "python_module": "nodes"
+ },
+ "ImageUpscaleWithModel": {
+  "input": {
+   "required": {
+    "upscale_model": [
+     "UPSCALE_MODEL",
+     {}
+    ],
+    "image": [
+     "IMAGE",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "upscale_model",
+    "image"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "IMAGE"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "IMAGE"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "ImageUpscaleWithModel",
+  "display_name": "Upscale Image (using Model)",
+  "description": "",
+  "python_module": "comfy_extras.nodes_upscale_model",
+  "category": "image/upscaling",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "upscale",
+   "upscaler",
+   "upsc",
+   "enlarge image",
+   "super resolution",
+   "hires",
+   "superres",
+   "increase resolution"
+  ],
+  "essentials_category": null,
+  "has_intermediate_output": false
  }
 }

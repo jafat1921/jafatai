@@ -79,6 +79,8 @@ class MockDriver:
             progress_cb(upto * (i + 1) / self.steps, f"{label} {i + 1}/{self.steps}")
 
     def generate_image(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
+        if params.get("upscale"):
+            return self._upscale_image(params["upscale"], out_path, progress_cb)
         self._tick(progress_cb, "Sampling")
         render_placeholder(prompt, params, seed, out_path)
         progress_cb(1.0, "Done")
@@ -125,6 +127,17 @@ class MockDriver:
             raise RuntimeError(f"ffmpeg failed: {e.stderr.decode(errors='replace')[-400:]}") from e
         progress_cb(1.0, "Done")
         return DriverResult(out_path, "video/mp4", {"width": w, "height": h, "template": params.get("template")})
+
+    def _upscale_image(self, up: dict, out_path: Path, progress_cb) -> DriverResult:
+        # lanczos only, but at the exact size the real templates return
+        self._tick(progress_cb, "Upscaling")
+        w, h = int(up["width"]), int(up["height"])
+        with Image.open(get_settings().data_dir / up["source_file"]) as im:
+            big = im.convert("RGB").resize((w, h), Image.LANCZOS)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        big.save(out_path, "PNG", compress_level=1)
+        progress_cb(1.0, "Done")
+        return DriverResult(out_path, "image/png", {"width": w, "height": h, "template": up.get("template")})
 
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         self._tick(progress_cb, "Writing")

@@ -24,6 +24,7 @@ function make() {
     editAndRegenerate: vi.fn(),
     reject: vi.fn(),
     toggleVersions: vi.fn(),
+    upscale: vi.fn(),
   }
 }
 
@@ -68,6 +69,19 @@ describe('useReviewShortcuts', () => {
     expect(h.approve).not.toHaveBeenCalled()
     await user.keyboard('a')
     expect(h.approve).toHaveBeenCalledOnce()
+  })
+
+  it('U upscales, but not while typing', async () => {
+    const h = make()
+    render(<Harness handlers={h} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('textbox', { name: 'title' }))
+    await user.keyboard('u')
+    expect(h.upscale).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: 'title' })).toHaveValue('u')
+    await user.click(screen.getByRole('button', { name: 'focusable' }))
+    await user.keyboard('u')
+    expect(h.upscale).toHaveBeenCalledOnce()
   })
 
   it('does nothing when disabled or when the action is unavailable', async () => {

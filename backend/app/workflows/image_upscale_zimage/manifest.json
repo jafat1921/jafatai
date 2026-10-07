@@ -1,0 +1,26 @@
+{
+  "name": "image_upscale_zimage",
+  "family": "z-image-turbo",
+  "description": "Redraw upscale for one image: RealESRGAN x4 pre-enlarge (left out for small steps, then lanczos only), resize to the exact output size, tiled VAE encode, a low-denoise Z-Image Turbo pass with the image's own prompt to put real detail back, tiled decode. The pipeline caps the size (long side and megapixels) before it gets here.",
+  "inputs": {
+    "image":    {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "pre_enlarge": {"type": "bool",
+                    "if_missing": {"drop": ["UpscaleModel", "Enlarge"], "bypass": {"Enlarge": {"0": "image"}}}},
+    "width":    {"type": "int", "default": 1536, "multiple_of": 16, "targets": [["Resize", "width"]]},
+    "height":   {"type": "int", "default": 2048, "multiple_of": 16, "targets": [["Resize", "height"]]},
+    "prompt":   {"type": "str", "default": "", "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Negative", "text"]]},
+    "denoise":  {"type": "float", "default": 0.33, "targets": [["Sampler", "denoise"]]},
+    "steps":    {"type": "int", "default": 8, "targets": [["Sampler", "steps"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/upscale", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "upscale_models": ["RealESRGAN_x4plus.safetensors"],
+    "diffusion_models": ["z_image_turbo_bf16.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["ae.safetensors"]
+  },
+  "progress_weights": {"Sampler": 8, "Enlarge": 2, "UNet": 2, "TextEncoder": 1, "Encode": 1, "Decode": 2}
+}

@@ -274,8 +274,11 @@ async def main() -> int:
     ap.add_argument("--engines", default="seedvr2,flashvsr,esrgan")
     ap.add_argument("--scale", type=int, default=2, choices=(2, 4))
     ap.add_argument("--warm", action="store_true", help="run each engine twice and report the second (model already loaded)")
+    # FlashVSR v1.1 is installed on the server, so it runs by default; the weight scan only explains a slow start
     ap.add_argument("--allow-download", action="store_true",
-                    help="run FlashVSR even when its weights aren't on disk yet (the node pack downloads them)")
+                    help="give FlashVSR a long stall timeout, in case the node pack has to download its weights")
+    ap.add_argument("--skip-missing-flashvsr", action="store_true",
+                    help="skip FlashVSR when the weight scan finds nothing on disk (the old default)")
     ap.add_argument("--stall", type=float, default=600.0, help="give up on an engine after this many seconds without progress")
     args = ap.parse_args()
     names = [n.strip().lower() for n in args.engines.split(",") if n.strip()]
@@ -315,11 +318,12 @@ async def main() -> int:
                 print("FlashVSR: no weights found on disk " + (f"(looked under {fv['root']}/models and {fv['node_dir']})" if fv["root"] else f"({fv.get('note')})"))
                 if fv["repos"]:
                     print("  the node pack names these Hugging Face repos: " + ", ".join(fv["repos"]))
-                print("  it downloads them on its first run. Either re-run with --allow-download (one long first run), or "
-                      "pre-fetch: uv tool run --from huggingface_hub huggingface-cli download <repo> --local-dir <the folder the node reads>")
-                if not args.allow_download:
+                print("  running it anyway (the server has FlashVSR1_1). If the node pack does download on first run, use "
+                      "--allow-download for a long stall timeout, or pre-fetch: uv tool run --from huggingface_hub "
+                      "huggingface-cli download <repo> --local-dir <the folder the node reads>")
+                if args.skip_missing_flashvsr:
                     names = [n for n in names if n != "flashvsr"]
-                    rows.append({"engine": "flashvsr", "status": "skipped", "error": "weights not on disk; see note above (--allow-download)"})
+                    rows.append({"engine": "flashvsr", "status": "skipped", "error": "weights not found on disk (--skip-missing-flashvsr)"})
         clip_name = await client.upload_image(clip)
         for name in names:
             print(f"{name}:")

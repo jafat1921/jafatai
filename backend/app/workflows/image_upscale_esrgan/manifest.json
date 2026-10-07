@@ -1,0 +1,14 @@
+{
+  "name": "image_upscale_esrgan",
+  "family": "realesrgan",
+  "description": "RealESRGAN x4plus on one image, then lanczos to the exact output size. Quick, adds no new detail.",
+  "inputs": {
+    "image":  {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "width":  {"type": "int", "default": 1536, "multiple_of": 2, "targets": [["Resize", "width"]]},
+    "height": {"type": "int", "default": 2048, "multiple_of": 2, "targets": [["Resize", "height"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/upscale", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"upscale_models": ["RealESRGAN_x4plus.safetensors"]},
+  "progress_weights": {"Upscale": 6, "UpscaleModel": 1, "Resize": 1}
+}

@@ -28,6 +28,8 @@ import type {
   SuggestionResult,
   SystemStatus,
   TargetType,
+  ImageUpscaleOptions,
+  ImageUpscaleRequest,
   UpscaleOptions,
   UpscaleRequest,
   User,
@@ -146,6 +148,8 @@ export const api = {
   system: {
     status: () => get<SystemStatus>('/system/status'),
     upscaleOptions: () => get<UpscaleOptions>('/system/upscale-options'),
+    imageUpscaleOptions: (generationId: string) =>
+      get<ImageUpscaleOptions>(`/system/upscale-options?generation_id=${encodeURIComponent(generationId)}`),
   },
   projects: {
     list: () => get<Project[]>('/projects'),
@@ -222,7 +226,7 @@ export const api = {
     restore: (id: string) => post<Generation>(`/generations/${id}/restore`),
     regenerateChunk: (id: string, idx: number, body: { prompt?: string; seed?: number } = {}) =>
       post<Job>(`/generations/${id}/chunks/${idx}/regenerate`, body),
-    upscale: (id: string, body: UpscaleRequest) => post<Job>(`/generations/${id}/upscale`, body),
+    upscale: (id: string, body: UpscaleRequest | ImageUpscaleRequest) => post<Job>(`/generations/${id}/upscale`, body),
   },
   reel: {
     get: (projectId: string) => get<Reel>(`/projects/${projectId}/reel`),

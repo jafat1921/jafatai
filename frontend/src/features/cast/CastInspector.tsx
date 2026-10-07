@@ -104,7 +104,7 @@ function PortraitSection({ character }: { character: Character }) {
         />
       </div>
       <p className="text-small text-studio-muted">
-        Shortcuts when not typing: <Kbd>A</Kbd> approve · <Kbd>R</Kbd> regenerate · <Kbd>X</Kbd> reject · <Kbd>V</Kbd> versions
+        Shortcuts when not typing: <Kbd>A</Kbd> approve · <Kbd>R</Kbd> regenerate · <Kbd>X</Kbd> reject · <Kbd>V</Kbd> versions · <Kbd>U</Kbd> upscale
       </p>
     </div>
   )

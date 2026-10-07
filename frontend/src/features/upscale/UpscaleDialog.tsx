@@ -60,7 +60,8 @@ function UpscaleForm({ render, projectId, aspectRatio, onDone }: Omit<Props, 'on
   const [engineId, setEngineId] = useState<UpscaleEngineId>()
   const [target, setTarget] = useState<UpscaleTarget>()
   const engine = engines.find((e) => e.id === (engineId ?? pickEngine(engines, options.data?.default_engine)))
-  const targets = TARGETS.filter((t) => !options.data?.targets?.length || options.data.targets.includes(t.id))
+  const offered = (options.data?.targets ?? []).map((t) => (typeof t === 'string' ? t : t.id))
+  const targets = TARGETS.filter((t) => !offered.length || offered.includes(t.id))
   const plans = targets.map((t) => ({ ...t, plan: planUpscale(src, t.id, engine?.scales ?? []) }))
   // keep the user's pick while it's possible; otherwise fall back to the first target that works
   const chosen = plans.find((p) => p.id === target && p.plan.ok) ?? plans.find((p) => p.plan.ok)

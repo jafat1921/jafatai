@@ -7,6 +7,7 @@ import { generationStatus, scoreText } from '@/lib/status'
 import type { Generation } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { promptDiff } from '@/lib/diff'
+import { imageResolutionBadge, upscaledFromText } from '@/lib/imageUpscale'
 import { GenerationMedia } from './media'
 
 interface VersionsPanelProps {
@@ -51,6 +52,8 @@ export function VersionsPanel({
               const diff = promptDiff(prev?.prompt, v.prompt)
               const score = scoreText(v.score)
               const current = v.id === currentId
+              const badge = imageResolutionBadge(v)
+              const from = upscaledFromText(v, versions)
               return (
                 <li
                   key={v.id}
@@ -60,7 +63,7 @@ export function VersionsPanel({
                     v.status === 'rejected' && 'opacity-70',
                   )}
                 >
-                  <div className="darkroom aspect-square overflow-hidden rounded-[4px]">
+                  <div className="darkroom relative aspect-square overflow-hidden rounded-[4px]">
                     {v.media_url ? (
                       <GenerationMedia gen={v} alt={`${subject}, version ${v.version}`} controls={false} lazy />
                     ) : (
@@ -68,13 +71,19 @@ export function VersionsPanel({
                         <ImageOff aria-hidden className="size-5" />
                       </div>
                     )}
+                    {badge && (
+                      <span className="absolute right-1 top-1 rounded-[4px] bg-studio-raised/90 px-1 font-mono text-[11px] font-semibold text-studio-text">
+                        {badge}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-mono text-small font-medium">v{v.version}</span>
                     {score && <span className="font-mono text-small text-studio-muted">★ {score}</span>}
                   </div>
                   <StatusPill status={generationStatus(v.status)} className="self-start" />
-                  {v.seed != null && (
+                  {from && <span className="text-[12px] text-studio-muted">{from}</span>}
+                  {v.seed != null && !from && (
                     <span className="font-mono text-[12px] text-studio-muted">seed {v.seed}</span>
                   )}
                   {diff && (diff.added.length > 0 || diff.removed.length > 0) && (

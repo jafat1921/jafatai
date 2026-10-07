@@ -522,8 +522,14 @@ class ReelEstimateOut(BaseModel):
 
 # Upscale (contract v4)
 class UpscaleIn(BaseModel):
-    # None = UPSCALE_DEFAULT_ENGINE; engine names (seedvr2, flashvsr, esrgan) are accepted as aliases
-    engine: Literal["best", "fast", "quick", "seedvr2", "flashvsr", "esrgan"] | None = None
-    target: Literal["1080p", "1440p", "4k"] = "1080p"
+    # videos: best|fast|quick (None = UPSCALE_DEFAULT_ENGINE); images: redraw|quick|best (None = redraw).
+    # Engine names (seedvr2, flashvsr, esrgan, zimage) are accepted as aliases.
+    engine: Literal["best", "fast", "quick", "redraw", "faithful", "seedvr2", "flashvsr", "esrgan", "zimage"] | None = None
+    # videos take 1080p|1440p|4k (default 1080p), images 2x|4x|2k|4k (default 2x)
+    target: Literal["1080p", "1440p", "4k", "2x", "4x", "2k"] | None = None
     # SeedVR2 size, engine "best" only; None = UPSCALE_SEEDVR2_MODEL
     variant: Literal["3b", "7b"] | None = None
+    # image "redraw" only: how much Z-Image may repaint (detail strength)
+    denoise: float | None = Field(None, ge=0.15, le=0.5)
+    # image "redraw" only: overrides the source's own prompt
+    prompt: str | None = Field(None, max_length=4000)

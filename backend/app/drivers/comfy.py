@@ -31,7 +31,9 @@ VIEW_ALIASES = {"3/4": "three_quarter", "3-4": "three_quarter", "34": "three_qua
 ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
 
 TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23_extend": 3600.0,
-            "upscale_seedvr2": 3600.0, "upscale_flashvsr": 3600.0, "upscale_esrgan": 1800.0}
+            "upscale_seedvr2": 3600.0, "upscale_flashvsr": 3600.0, "upscale_esrgan": 1800.0,
+            "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0}
+IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
 UPSCALE_TEMPLATES = {"upscale_seedvr2", "upscale_flashvsr", "upscale_esrgan"}
 
 
@@ -136,6 +138,10 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
     negative = params.get("negative") or params.get("negative_prompt") or ""
     ref_ids = _ids(params.get("reference_ids"))[:3]
     loras = _loras(params)
+
+    if params.get("upscale") and kind in ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end",
+                                          "keyframe_mid"):
+        return image_upscale_plan(params["upscale"], negative, seed, lookup)
 
     def edit_plan(ids: list[str], text: str, size: tuple[int, int]) -> Plan:
         files = [lookup.generation_file(i) for i in ids]
@@ -256,6 +262,22 @@ def upscale_plan(params: dict, seed: int) -> Plan:
     inputs["seed"] = seed
     return Plan(template, inputs, {"video": Path(params["video_path"])}, [], "video",
                 {"segment": params.get("segment_idx"), "source_id": params.get("source_id")})
+
+
+def image_upscale_plan(up: dict, negative: str, seed: int, lookup) -> Plan:
+    """A new version of an image, made from an older one (app.upscale_image)."""
+    template = up.get("template")
+    if template not in IMAGE_UPSCALE_TEMPLATES:
+        raise ComfyError(f"unknown image upscale template {template!r}")
+    inputs: dict[str, Any] = {"width": up["width"], "height": up["height"], "seed": seed}
+    if template == "image_upscale_zimage":
+        # TODO: carry the source's Z-Image LoRAs over once LoRAs record which model family they're for
+        inputs.update(prompt=up.get("prompt") or "", negative=negative, denoise=up.get("denoise") or 0.33,
+                      pre_enlarge=True if up.get("pre_enlarge", True) else None)
+    elif template == "image_upscale_seedvr2" and up.get("model"):
+        inputs["model"] = up["model"]
+    src = lookup.generation_file(up["source_id"])
+    return Plan(template, inputs, {"image": src}, [], "image", {"source_id": up["source_id"]})
 
 
 def exec_seconds(entry: dict) -> float | None:

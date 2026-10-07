@@ -8,6 +8,7 @@ export interface ReviewShortcutHandlers {
   editAndRegenerate?: () => void
   reject?: () => void
   toggleVersions?: () => void
+  upscale?: () => void
 }
 
 // the Inspector slide-over is a dialog too, but review shortcuts should keep working inside it
@@ -15,7 +16,7 @@ export function isInsideDialog(target: EventTarget | null) {
   return target instanceof HTMLElement && !!target.closest('[role="dialog"]:not([data-review-scope]),[role="alertdialog"],[role="menu"]')
 }
 
-// A / R / Shift+R / E / X / V from design-system §4. Undefined handler = action not available now.
+// A / R / Shift+R / E / X / V from design-system §4, plus U (upscale an image). Undefined handler = action not available now.
 export function useReviewShortcuts(handlers: ReviewShortcutHandlers, enabled = true) {
   const ref = useRef(handlers)
   useEffect(() => {
@@ -35,6 +36,7 @@ export function useReviewShortcuts(handlers: ReviewShortcutHandlers, enabled = t
       else if (key === 'e' && !e.shiftKey) fn = h.editAndRegenerate
       else if (key === 'x' && !e.shiftKey) fn = h.reject
       else if (key === 'v' && !e.shiftKey) fn = h.toggleVersions
+      else if (key === 'u' && !e.shiftKey) fn = h.upscale
       if (fn) {
         e.preventDefault()
         fn()

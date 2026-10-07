@@ -1,0 +1,11 @@
+{
+  "1": {"class_type": "LoadImage", "_meta": {"title": "Source"}, "inputs": {"image": "example.png"}},
+  "2": {"class_type": "UpscaleModelLoader", "_meta": {"title": "UpscaleModel"},
+        "inputs": {"model_name": "RealESRGAN_x4plus.safetensors"}},
+  "3": {"class_type": "ImageUpscaleWithModel", "_meta": {"title": "Upscale"},
+        "inputs": {"upscale_model": ["2", 0], "image": ["1", 0]}},
+  "4": {"class_type": "ImageScale", "_meta": {"title": "Resize"},
+        "inputs": {"image": ["3", 0], "upscale_method": "lanczos", "width": 1536, "height": 2048, "crop": "disabled"}},
+  "5": {"class_type": "SaveImage", "_meta": {"title": "Save"},
+        "inputs": {"images": ["4", 0], "filename_prefix": "mixai/upscale"}}
+}

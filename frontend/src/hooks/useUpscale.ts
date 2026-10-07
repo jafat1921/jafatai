@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { UpscaleRequest } from '@/lib/types'
+import type { Generation, ImageUpscaleRequest, UpscaleRequest } from '@/lib/types'
 import type { Size } from '@/lib/upscale'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
@@ -25,6 +25,27 @@ export function useUpscale(projectId: string) {
       upsertJob(qc, job)
       // the new render row exists as soon as the job is queued
       qc.invalidateQueries({ queryKey: qk.renders(projectId) })
+    },
+  })
+}
+
+export function useImageUpscaleOptions(generationId: string) {
+  return useQuery({
+    queryKey: [...qk.upscaleOptions, generationId],
+    queryFn: () => api.system.imageUpscaleOptions(generationId),
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+export function useImageUpscale(source: Pick<Generation, 'target_type' | 'target_id' | 'kind'>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ImageUpscaleRequest }) => api.generations.upscale(id, body),
+    onSuccess: (job) => {
+      upsertJob(qc, job)
+      // the new version is queued already; pull it into Versions without waiting for SSE
+      qc.invalidateQueries({ queryKey: qk.generationsFor(source.target_type, source.target_id, source.kind) })
     },
   })
 }

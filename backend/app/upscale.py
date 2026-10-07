@@ -344,9 +344,8 @@ def _model_options(object_info: dict, cls: str, field: str) -> list:
     return _enum_options(spec) or []
 
 
-FLASHVSR_WARNING = ("FlashVSR keeps its weights outside ComfyUI's model folders and may download them on the first "
-                    "run (several GB, can take a while). Run scripts/bench_upscale.py on the server once to fetch "
-                    "and check them.")
+# FlashVSR's weights (FlashVSR1_1, plus the older Wan2_1-T2V-1_3B_FlashVSR) are installed on the server.
+# AILab_FlashVSR_Advanced only picks Tiny/Full and loads v1.1 itself, so there's no version to choose.
 
 
 def engine_options(object_info: dict | None, *, driver: str, measured: dict | None = None,
@@ -386,8 +385,6 @@ def engine_options(object_info: dict | None, *, driver: str, measured: dict | No
                     problems.append("FlashVSR node has no 'Tiny (Fast)' model option")
             if problems:
                 item.update(available=False, reason="; ".join(problems))
-        if e.id == "fast" and item["available"]:
-            item["warning"] = FLASHVSR_WARNING
         engines.append(item)
     default = default_engine()
     if not next(x for x in engines if x["id"] == default)["available"]:

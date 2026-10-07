@@ -8,12 +8,17 @@ import { useGenerationActions, useGenerations, type GenerationTarget } from '@/h
 import { useJob, useJobAction } from '@/hooks/useJobs'
 import { useReviewShortcuts } from '@/hooks/useReviewShortcuts'
 import { generationStatus, isPendingGeneration, kindLabel } from '@/lib/status'
+import { comparePartner, isImageKind } from '@/lib/imageUpscale'
+import { isVideo } from '@/lib/media'
 import type { Generation, RegenerateMode } from '@/lib/types'
+import { ImageUpscaleDialog } from '@/features/upscale/ImageUpscaleDialog'
 import { announce } from '@/stores/ui'
 import { ReviewBar } from './ReviewBar'
 import { RegenerateDialog } from './RegenerateDialog'
 import { VersionsPanel } from './VersionsPanel'
 import { GenerationMedia } from './media'
+import { CompareToggle, ImageStage } from './ImageStage'
+import type { CompareMode } from './ZoomView'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -47,6 +52,8 @@ export function GenerationViewer({
   }
   const [dialogMode, setDialogMode] = useState<'note' | 'edit' | null>(null)
   const [confirmMode, setConfirmMode] = useState<RegenerateMode | null>(null)
+  const [upscaling, setUpscaling] = useState<Generation | null>(null)
+  const [compare, setCompare] = useState<CompareMode>('off')
 
   const query = useGenerations(target, showRejected)
   const actions = useGenerationActions()
@@ -102,6 +109,9 @@ export function GenerationViewer({
 
   const ready = current?.status === 'ready'
   const pending = current ? isPendingGeneration(current.status) : false
+  const still = !!current?.media_url && !pending && !isVideo(current)
+  const canUpscale = isImageKind(target.kind) && still && (current?.status === 'ready' || current?.status === 'approved')
+  const partner = still && current ? comparePartner(current, list) : undefined
   useReviewShortcuts(
     {
       approve: ready ? () => approve(current!) : undefined,
@@ -110,8 +120,9 @@ export function GenerationViewer({
       editAndRegenerate: current && !pending ? () => requestRegenerate('edit') : undefined,
       reject: ready ? () => reject(current!) : undefined,
       toggleVersions: current ? () => setVersionsOpen((v) => !v) : undefined,
+      upscale: canUpscale ? () => setUpscaling(current!) : undefined,
     },
-    shortcuts && dialogMode === null && confirmMode === null,
+    shortcuts && dialogMode === null && confirmMode === null && upscaling === null,
   )
 
   if (query.isPending) return <Skeleton className={cn(aspectClass, 'w-full')} />
@@ -134,7 +145,9 @@ export function GenerationViewer({
   return (
     <div className="flex flex-col gap-3">
       <figure className={cn('darkroom relative w-full overflow-hidden rounded-[6px]', aspectClass)}>
-        {current.media_url && !pending ? (
+        {still ? (
+          <ImageStage current={current} partner={partner} subject={subject} mode={compare} />
+        ) : current.media_url && !pending ? (
           <GenerationMedia
             key={current.id}
             gen={current}
@@ -157,6 +170,8 @@ export function GenerationViewer({
         )}
       </figure>
 
+      {partner && <CompareToggle mode={compare} onChange={setCompare} />}
+
       <ReviewBar
         status={current.status}
         version={current.version}
@@ -174,6 +189,7 @@ export function GenerationViewer({
         onRestore={() => restore(current)}
         onToggleVersions={() => setVersionsOpen((v) => !v)}
         onCancel={current.job_id ? () => cancelJob.mutate(current.job_id!) : undefined}
+        onUpscale={canUpscale ? () => setUpscaling(current) : undefined}
       />
 
       {lastError && <ErrorState compact title="That didn't work" error={lastError} />}
@@ -197,6 +213,13 @@ export function GenerationViewer({
         onOpenChange={(open) => !open && setDialogMode(null)}
         onSubmit={(v) => runRegenerate(dialogMode!, v)}
         pending={actions.regenerate.isPending}
+      />
+
+      <ImageUpscaleDialog
+        source={upscaling}
+        subject={kindLabel(target.kind)}
+        onOpenChange={(open) => !open && setUpscaling(null)}
+        onQueued={(job) => job.generation_id && setViewId(job.generation_id)}
       />
 
       <ConfirmDialog

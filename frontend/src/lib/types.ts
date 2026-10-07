@@ -396,12 +396,51 @@ export interface UpscaleEngine {
 export interface UpscaleOptions {
   engines: UpscaleEngine[]
   default_engine: UpscaleEngineId
-  targets: UpscaleTarget[]
+  // the server sends {id, label, width, height}; older builds sent bare ids
+  targets: (UpscaleTarget | { id: UpscaleTarget; label?: string })[]
 }
 
 export interface UpscaleRequest {
   engine: UpscaleEngineId
   target: UpscaleTarget
+}
+
+// image upscaling (contract v4, "Image upscaling")
+export type ImageUpscaleEngineId = 'redraw' | 'quick' | 'best'
+export type ImageUpscaleTarget = '2x' | '4x' | '2k' | '4k'
+
+export interface ImageUpscaleEngine {
+  id: ImageUpscaleEngineId
+  label: string
+  description?: string
+  available: boolean
+  reason?: string | null
+  max_long_side: number
+  multiple?: number
+  max_mp?: number | null
+  denoise?: { min: number; max: number; default: number }
+  variants?: ('3b' | '7b')[]
+  default_variant?: '3b' | '7b'
+}
+
+export type ImageUpscaleEstimate =
+  | { allowed: true; width: number; height: number; capped?: boolean; est_gpu_s: number }
+  | { allowed: false; reason: string }
+
+export interface ImageUpscaleOptions {
+  media: 'image'
+  engines: ImageUpscaleEngine[]
+  default_engine: ImageUpscaleEngineId
+  targets: { id: ImageUpscaleTarget; label: string }[]
+  source: { width: number; height: number; prompt?: string }
+  estimates: Partial<Record<ImageUpscaleEngineId, Partial<Record<ImageUpscaleTarget, ImageUpscaleEstimate>>>>
+}
+
+export interface ImageUpscaleRequest {
+  engine: ImageUpscaleEngineId
+  target: ImageUpscaleTarget
+  variant?: '3b' | '7b'
+  denoise?: number
 }
 
 export type SegmentStatus = 'queued' | 'generating' | 'done' | 'failed'

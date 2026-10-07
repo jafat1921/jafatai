@@ -105,19 +105,24 @@ async def comfy_check(_=Depends(get_current_user)):
 async def upscale_options(generation_id: str | None = None, db: Session = Depends(get_db),
                           cur: CurrentUser = Depends(get_current_user)):
     """Engines with availability from the template checks; with generation_id, sizes and GPU estimates
-    for that video at each target."""
-    from app import upscale
+    for that video (or image) at each target."""
+    from app import upscale, upscale_image
 
-    s = get_settings()
-    info, error = (None, None) if s.gen_driver == "mock" else await upscale.fetch_object_info()
-    measured = upscale.measured_rates(db)
-    out = upscale.engine_options(info, driver=s.gen_driver, measured=measured, error=error)
+    g = None
     if generation_id:
         g = db.get(Generation, generation_id)
         if g is None or g.workspace_id != cur.workspace_id:
             raise HTTPException(404, "Generation not found")
-        try:
+    s = get_settings()
+    info, error = (None, None) if s.gen_driver == "mock" else await upscale.fetch_object_info()
+    try:
+        if g is not None and upscale_image.is_image(g):
+            return upscale_image.options_for(g, info, driver=s.gen_driver, error=error)
+        measured = upscale.measured_rates(db)
+        out = upscale.engine_options(info, driver=s.gen_driver, measured=measured, error=error)
+        out["media"] = "video"
+        if g is not None:
             out.update(upscale.source_estimates(g, measured))
-        except upscale.UpscaleError as e:
-            raise HTTPException(422, str(e)) from None
+    except upscale.UpscaleError as e:
+        raise HTTPException(422, str(e)) from None
     return out

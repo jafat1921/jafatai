@@ -51,10 +51,11 @@ WAN_FRAMES = 81
 
 MODELS: dict[str, Model] = {m.id: m for m in (
     Model("zimage_turbo", "image", "Z-Image Turbo", "FAST",
-          "Photoreal pictures in a few seconds.", ("t2i",), "zimage_t2i", est_seconds=7, default=True),
+          "Photoreal pictures in a few seconds.", ("t2i", "i2i"), "zimage_t2i", extra={"i2i": "zimage_i2i"},
+          est_seconds=7, default=True),
     Model("qwen_image_2512", "image", "Qwen-Image 2512", "TEXT",
           "Best for writing inside the picture: signs, posters, titles, including Urdu.",
-          ("t2i", "text_render"), "qwen_image_t2i",
+          ("t2i", "i2i", "text_render"), "qwen_image_t2i", extra={"i2i": "qwen_image_i2i"},
           speeds=(
               # full: the server template says 50 steps; 30 keeps most of the quality at 60% of the time
               Speed("full", "Full quality", 30, "Slowest, most detail", cfg=4.0, shift=3.1),
@@ -63,7 +64,8 @@ MODELS: dict[str, Model] = {m.id: m for m in (
           ),
           default_speed="lightning", est_seconds=25),
     Model("flux2_klein", "image", "FLUX.2 klein 4B", "FAST",
-          "Very fast general-purpose images.", ("t2i",), "flux2_klein_t2i", est_seconds=5),
+          "Very fast general-purpose images.", ("t2i", "i2i"), "flux2_klein_t2i", extra={"i2i": "flux2_klein_i2i"},
+          est_seconds=5),
 
     Model("qwen_image_edit_2511", "edit", "Qwen-Image-Edit 2511", "BEST",
           "Change a picture or combine up to 3 references; keeps faces and clothes.",
@@ -210,6 +212,22 @@ def known_unavailable(m: Model) -> str | None:
     return None if info is None else availability(m, info)["reason"]
 
 
+def capability_unavailable(m: Model, cap: str) -> str | None:
+    """Why `cap` can't be used right now: not offered at all, or its extra template failed the last
+    /object_info check. None when fine or not known."""
+    from app.config import get_settings
+
+    if cap not in m.capabilities:
+        return f"{m.label} doesn't offer this"
+    if get_settings().gen_driver == "mock" or cap not in m.extra:
+        return None
+    info = _cached_info()
+    if info is None:
+        return None
+    res = check_template(m.extra[cap], info)
+    return None if res["ok"] else "; ".join(_problems(res))
+
+
 def smooth_unavailable(m: Model) -> str | None:
     from app.config import get_settings
 
@@ -283,6 +301,8 @@ def clean_project_settings(current: dict, patch: dict) -> dict:
     """Merge a settings patch, validating the keys this module owns; other keys (brand kits…) pass through."""
     out = dict(current)
     for key, val in patch.items():
+        if key == "brand_closing_shot":
+            continue  # owned by brand_moments, not settable from outside
         if val is None:
             out.pop(key, None)
             continue
@@ -297,6 +317,9 @@ def clean_project_settings(current: dict, patch: dict) -> dict:
                 raise HTTPException(422, f"video_quality must be one of: {', '.join(QUALITIES)}")
         elif key == "smooth_motion":
             val = bool(val)
+        elif key == "brand_closing":
+            if val not in ("auto", "ai_packshot", "logo_reveal", "none"):
+                raise HTTPException(422, "brand_closing must be one of: auto, ai_packshot, logo_reveal, none")
         out[key] = val
     return out
 

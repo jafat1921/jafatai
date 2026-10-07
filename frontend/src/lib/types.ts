@@ -1,4 +1,5 @@
 // Mirrors docs/api/contract-v0.md. Keep snake_case so payloads pass through untouched.
+import type { BrandPlacement } from './brand'
 
 export type Role = 'owner' | 'editor' | 'viewer'
 
@@ -205,6 +206,11 @@ export interface Shot {
   takes_count: number
   // contract-v2: per-chunk action prompts for long takes; older servers omit it
   beats?: Beat[]
+  // contract-v7: where the brand kit's logo/products appear; older servers omit them
+  brand_placements?: BrandPlacement[]
+  brand_placements_locked?: boolean
+  closing?: string | null
+  brand_closing?: string | null
   created_at: string
   updated_at: string
 }
@@ -226,6 +232,7 @@ export type ShotPatch = Partial<
     | 'seam_in'
     | 'handoff_text'
     | 'beats'
+    | 'brand_placements'
   >
 >
 
@@ -482,6 +489,7 @@ export interface QuickRequest {
   // contract-v6, omitted for the server default
   image_model?: string
   video_quality?: 'standard' | 'hq'
+  brand_kit_id?: string
 }
 
 export type QuickStageKey = 'outline' | 'cast' | 'storyboard' | 'render' | 'stitch' | 'upscale'
@@ -569,6 +577,7 @@ export interface ImageGenerateRequest {
   template_id?: string
   model?: string
   speed?: string
+  brand_kit_id?: string
 }
 
 export interface ImageEditRequest {
@@ -578,6 +587,21 @@ export interface ImageEditRequest {
   count?: number
   seed?: number
   model?: string
+  brand_kit_id?: string
+}
+
+export type Img2ImgAspect = 'source' | ImageAspect
+
+export interface Img2ImgRequest {
+  source_id: string
+  prompt: string
+  strength: number
+  count: number
+  aspect: Img2ImgAspect
+  model?: string
+  speed?: string
+  seed?: number
+  brand_kit_id?: string
 }
 
 export interface MediaBatch {
@@ -640,7 +664,7 @@ export interface LlmCheck {
 // contract-v6-models.md
 export type ModelType = 'image' | 'edit' | 'video' | 'upscale'
 export type ModelBadgeId = 'FAST' | 'BEST' | 'TEXT' | 'NEW' | 'HQ' | 'QUICK' | 'UPSCALE'
-export type ModelCapability = 't2i' | 'edit' | 'refs' | 't2v' | 'i2v' | 'flf' | 'audio' | 'longtake' | 'text_render' | 'multi_angle'
+export type ModelCapability = 't2i' | 'edit' | 'refs' | 't2v' | 'i2v' | 'flf' | 'audio' | 'longtake' | 'text_render' | 'multi_angle' | 'i2i'
 
 export interface ModelSpeed {
   id: string
@@ -676,10 +700,13 @@ export interface VideoGenerateRequest {
   prompt: string
   model: string
   duration_s: number
-  aspect: VideoAspect
+  // Image to Video leaves it out so the clip keeps the picture's shape
+  aspect?: VideoAspect
   image_id?: string
+  end_image_id?: string
   seed?: number
   smooth_motion?: boolean
+  brand_kit_id?: string
 }
 
 // quality and smooth motion come from project.settings; the server drops them for long takes

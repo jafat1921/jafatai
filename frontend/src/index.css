@@ -179,6 +179,15 @@
     border: 1px solid var(--accent-gold);
     color: var(--on-darkroom);
   }
+  /* neutral grey squares, so a see-through logo shows its real edges on either light or dark */
+  .checker {
+    background-color: #f4f4f4;
+    background-image:
+      linear-gradient(45deg, #d9d9d9 25%, transparent 25%), linear-gradient(-45deg, #d9d9d9 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #d9d9d9 75%), linear-gradient(-45deg, transparent 75%, #d9d9d9 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
 }
 
 /* Quill cursor (§3b). Opt-out via the user menu; data-quill is set from JS. */

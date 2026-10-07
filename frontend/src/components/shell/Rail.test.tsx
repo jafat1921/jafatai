@@ -180,6 +180,26 @@ describe('rail', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/video/create?model=wan22_t2v')
   })
 
+  it('has a Brand Kits item after Assets, lit on the kit pages', () => {
+    renderRail('/brand-kits/k1', [])
+    const items = within(rail()).getAllByRole('listitem').map((li) => li.textContent)
+    expect(items.slice(0, 3)).toEqual(['Home', 'Assets', 'Brand Kits'])
+    const brand = within(rail()).getByRole('link', { name: 'Brand Kits' })
+    expect(brand).toHaveAttribute('href', '/brand-kits')
+    expect(brand).toHaveAttribute('aria-current', 'page')
+    expect(pageTitle('/brand-kits')).toBe('Brand kits')
+  })
+
+  it('lists Image to Image and Image to Video in the feature menus', async () => {
+    renderRail()
+    const user = userEvent.setup()
+    await user.click(trigger('Image'))
+    expect(within(screen.getByRole('group', { name: 'Image Tools' })).getByRole('link', { name: /Image to Image/ })).toHaveAttribute('href', '/image/img2img')
+    await user.click(trigger('Video'))
+    expect(within(screen.getByRole('group', { name: 'Video Tools' })).getByRole('link', { name: /Image to Video/ })).toHaveAttribute('href', '/video/img2vid')
+    expect(activeRail('/video/img2vid')).toBe('video')
+  })
+
   it('puts connection state on the Settings item', async () => {
     renderRail()
     expect(await within(rail()).findByRole('link', { name: 'Settings. ComfyUI connected, Ollama offline' })).toHaveAttribute('href', '/settings')

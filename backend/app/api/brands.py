@@ -23,7 +23,7 @@ from app.db import get_db
 from app.models import BrandKit, Generation, MediaItem, Project, utcnow
 from app.schemas import JobOut, MediaItemOut
 from app.security import CurrentUser, get_current_user, require_editor
-from app.services import generation_file, get_owned, job_out, media_url
+from app.services import generation_file, get_owned, job_out, media_url, owned_source
 
 router = APIRouter(tags=["brand"])
 PREVIEW_MAX = 1280
@@ -258,7 +258,7 @@ def logo_reveal(kit_id: str, body: LogoRevealIn, db: Session = Depends(get_db),
 @router.post("/generations/{gen_id}/brand", response_model=JobOut, status_code=202)
 def apply_brand(gen_id: str, body: BrandApplyIn, db: Session = Depends(get_db),
                 cur: CurrentUser = Depends(require_editor)):
-    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    g = owned_source(db, cur.workspace_id, gen_id)
     kit = br.get_kit(db, cur.workspace_id, body.kit_id or None, g.project_id) or br.get_kit(db, cur.workspace_id, "default")
     if kit is None:
         raise HTTPException(404 if body.kit_id else 422,

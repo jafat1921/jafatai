@@ -49,7 +49,9 @@ import type {
   ModelType,
   TakesRequest,
   VideoGenerateRequest,
+  Img2ImgRequest,
 } from './types'
+import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 
 export const API_BASE = '/api'
 
@@ -146,6 +148,31 @@ const post = <T>(path: string, body?: unknown) => request<T>('POST', path, body 
 const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body)
 const del = (path: string) => request<void>('DELETE', path)
 
+async function postBlob(path: string, body: unknown): Promise<Blob> {
+  let res: Response
+  try {
+    res = await fetch(API_BASE + path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'image/png' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new ApiError(0, UNREACHABLE)
+  }
+  if (!res.ok) {
+    const text = await res.text()
+    let parsed: unknown = text
+    try {
+      parsed = text ? JSON.parse(text) : null
+    } catch {
+      /* plain text */
+    }
+    throw new ApiError(res.status, messageFrom(res.status, parsed), parsed)
+  }
+  return res.blob()
+}
+
 export interface GenerationQuery {
   target_type: TargetType
   target_id: string
@@ -176,6 +203,8 @@ export const api = {
     create: (body: ProjectCreate) => post<Project>('/projects', body),
     update: (id: string, body: Partial<Project>) => patch<Project>(`/projects/${id}`, body),
     remove: (id: string) => del(`/projects/${id}`),
+    setBrandKit: (id: string, kitId: string | null) =>
+      request<{ project_id: string; brand_kit_id: string | null }>('PUT', `/projects/${id}/brand-kit`, { kit_id: kitId }),
   },
   scenes: {
     list: (projectId: string) => get<Scene[]>(`/projects/${projectId}/scenes`),
@@ -295,6 +324,7 @@ export const api = {
   images: {
     generate: (body: ImageGenerateRequest) => post<MediaBatch>('/images/generate', body),
     edit: (body: ImageEditRequest) => post<MediaBatch>('/images/edit', body),
+    img2img: (body: Img2ImgRequest) => post<MediaBatch>('/images/img2img', body),
   },
   // contract-v6
   models: {
@@ -303,6 +333,18 @@ export const api = {
   videos: {
     // a MediaItem plus its job; tolerate a batch too
     generate: (body: VideoGenerateRequest) => post<(MediaItem & { job?: Job | null }) | MediaBatch>('/videos/generate', body),
+  },
+  // contract-v7
+  brandKits: {
+    list: () => get<BrandKit[]>('/brand-kits'),
+    get: (id: string) => get<BrandKit>(`/brand-kits/${id}`),
+    create: (body: BrandKitPatch & { name: string; is_default?: boolean }) => post<BrandKit>('/brand-kits', body),
+    update: (id: string, body: BrandKitPatch) => patch<BrandKit>(`/brand-kits/${id}`, body),
+    remove: (id: string) => del(`/brand-kits/${id}`),
+    setDefault: (id: string) => post<BrandKit>(`/brand-kits/${id}/default`),
+    // synchronous PNG; settings carry the editor's unsaved changes
+    preview: (id: string, body: { kind: PreviewKind; sample_media_id?: string; settings?: unknown }) => postBlob(`/brand-kits/${id}/preview`, body),
+    logoReveal: (id: string, body: LogoRevealRequest) => post<{ item: MediaItem; job: Job }>(`/brand-kits/${id}/logo-reveal`, body),
   },
   templates: {
     list: (type: 'video' | 'image') => get<Template[]>('/templates', { type }),

@@ -1,6 +1,7 @@
 """Real generation driver: maps a Generation onto one of our ComfyUI templates."""
 import asyncio
 import logging
+import math
 import random
 import time
 from dataclasses import dataclass, field
@@ -38,9 +39,10 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "upscale_seedvr2": 3600.0, "upscale_flashvsr": 3600.0, "upscale_esrgan": 1800.0,
             "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0,
             "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
-            "ltx23_two_stage": 3600.0, "wan22_t2v": 2400.0}
+            "ltx23_two_stage": 3600.0, "wan22_t2v": 2400.0,
+            "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
-LORA_FAMILIES = {"zimage_t2i", "qwen_edit", "ltx23_i2v", "ltx23_extend"}
+LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend"}
 IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
 UPSCALE_TEMPLATES = {"upscale_seedvr2", "upscale_flashvsr", "upscale_esrgan"}
 
@@ -180,10 +182,31 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
             inputs["steps"] = params["steps"]
         return Plan(m.template, inputs, {}, _family(m.template, loras), "image", sources)
 
+    def i2i_plan(size: tuple[int, int]) -> Plan:
+        # the t2i recipe (model, speed, size) on the model's image-to-image graph
+        plan = t2i_plan(size)
+        m = mc.MODELS[plan.sources["model"]]
+        tpl = m.extra.get("i2i")
+        if not tpl:
+            raise ComfyError(f"{m.label} can't redraw an existing picture")
+        src = params["img2img_of"]
+        strength = min(0.9, max(0.1, float(src.get("strength") or 0.45)))
+        plan.template = tpl
+        plan.inputs["denoise"] = strength
+        if tpl == "flux2_klein_i2i":
+            # SplitSigmasDenoise keeps round(steps * strength) steps; stretch so ~4 real steps run
+            plan.inputs["steps"] = max(4, math.ceil(int(plan.inputs.get("steps") or 4) / strength))
+        plan.images = {"image": lookup.generation_file(src["generation_id"])}
+        plan.loras = _family(tpl, loras)
+        plan.sources.update(img2img_of=src["generation_id"], strength=strength)
+        return plan
+
     if kind == "image":
         # Image studio (contract v5): sources make it an edit, otherwise plain text to image.
         # The API already picked a ~1 MP size for the aspect.
         size = (params.get("width") or 1024, params.get("height") or 1024)
+        if params.get("img2img_of"):
+            return i2i_plan(size)
         return edit_plan(ref_ids, prompt, size) if ref_ids else t2i_plan(size)
 
     if kind == "video":
@@ -290,8 +313,13 @@ def clip_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras
         if "i2v" not in m.capabilities:
             raise ComfyError(f"{m.label} can't start from an image")
         images["first_image"] = lookup.generation_file(first)
+    last = params.get("last_frame_id")
+    if last:
+        if "flf" not in m.capabilities:
+            raise ComfyError(f"{m.label} can't end on a given image")
+        images["last_image"] = lookup.generation_file(last)
     duration = float(params.get("duration_s") or 5)
-    sources = {"model": m.id, "first_frame_id": first}
+    sources = {"model": m.id, "first_frame_id": first, "last_frame_id": last}
     if m.id == "wan22_t2v":
         w, h = WAN_SIZES.get(aspect, WAN_SIZES["16:9"])
         inputs = {"prompt": prompt, "width": w, "height": h, "num_frames": mc.wan_frames(duration),

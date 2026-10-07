@@ -257,6 +257,9 @@ from app import brand  # noqa: E402
 HANDLERS[brand.BRAND_JOB] = brand.handle_brand_apply
 HANDLERS[brand.REVEAL_JOB] = brand.handle_logo_reveal
 FINISHED_HOOKS.append(brand.on_job_finished)
+from app import brand_moments  # noqa: E402
+
+FINISHED_HOOKS.append(brand_moments.on_job_finished)
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.
 CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot", brand.BRAND_JOB: "brand",

@@ -10,6 +10,9 @@ import { ChipGroup } from '@/components/studio/chip'
 import { DurationFields } from '@/components/studio/duration-picker'
 import { PlaceholderHint } from '@/components/studio/placeholder-hint'
 import { SwitchRow } from '@/components/studio/switch-row'
+import { BrandChip } from '@/components/brand/BrandChip'
+import { useBrandChoice } from '@/hooks/useBrandKits'
+import { withBrand } from '@/lib/brand'
 import { QuickAdvanced } from './QuickAdvanced'
 import { ErrorState } from '@/components/studio/states'
 import { useCreateQuick } from '@/hooks/useQuick'
@@ -54,6 +57,7 @@ export function QuickCreateForm({
   const navigate = useNavigate()
   const create = useCreateQuick()
   const options = useUpscaleOptions()
+  const brand = useBrandChoice()
   const [form, setForm] = useState<QuickForm>({ ...DEFAULT_QUICK_FORM, ...initial })
   const [open, setOpen] = useState(expanded)
   const set = <K extends keyof QuickForm>(k: K, v: QuickForm[K]) => setForm((f) => ({ ...f, [k]: v }))
@@ -72,7 +76,7 @@ export function QuickCreateForm({
 
   const submit = () => {
     if (!canSubmit) return
-    create.mutate(quickPayload(form, engineId), {
+    create.mutate(withBrand(quickPayload(form, engineId), brand.sendId), {
       onSuccess: ({ project }) => {
         announce(`Started “${project.title}”. Writing the script.`)
         navigate(`/quick/${project.id}`)
@@ -118,6 +122,7 @@ export function QuickCreateForm({
         className="min-h-24 text-[15px] leading-6"
       />
       <PlaceholderHint text={form.prompt} field={field} />
+      <BrandChip choice={brand} />
 
       {!expanded && (
         <button

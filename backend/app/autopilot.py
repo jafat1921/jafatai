@@ -25,7 +25,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import ai_jobs, longtake, models_catalog, storyboard as sb, vision
+from app import ai_jobs, brand, longtake, models_catalog, storyboard as sb, vision
+from app import brand_moments as bm
 from app import reel as rl
 from app.config import get_settings
 from app.llm import LLMError, chat_sync
@@ -130,7 +131,8 @@ NO_DIALOGUE = ("Nobody speaks on screen and there is no voice-over: tell it thro
                "sound only. Write no character cues and no dialogue lines.")
 
 
-def outline_messages(project: Project, style: str, dialogue: bool, duration_s: float) -> list[dict]:
+def outline_messages(project: Project, style: str, dialogue: bool, duration_s: float, brand: str = "",
+                     planner: str = "") -> list[dict]:
     lo, hi = scene_range(duration_s)
     n = target_scenes(duration_s)
     count = "exactly 1 scene" if hi == 1 else f"{n} scenes (anywhere from {lo} to {hi} is fine)"
@@ -145,6 +147,10 @@ def outline_messages(project: Project, style: str, dialogue: bool, duration_s: f
         "like EXT. HARBOUR - NIGHT), logline, purpose, time_of_day (one of: " + ", ".join(P.TIMES) + "), mood "
         "(2-4 words), duration_s and characters (names exactly as in the cast)."
     )
+    if planner:
+        user += f"\n\nFormat notes: {planner}"
+    if brand:
+        user += f"\n\n{P.ADVERT_OUTLINE}\n{brand}"
     return [{"role": "system", "content": P.DIRECTOR_SYSTEM}, {"role": "user", "content": user}]
 
 
@@ -365,6 +371,10 @@ class Autopilot:
         return f"{label} failed: {msg}" if not msg.startswith(label) else msg
 
     # ---- helpers
+    def planner_notes(self) -> str:
+        # the template's planner text, copied into the payload by POST /quick
+        return str(self.p.get("planner") or "")
+
     def scenes(self) -> list[Scene]:
         return ai_jobs.ordered_scenes(self.db, self.project.id)
 
@@ -434,8 +444,14 @@ class Autopilot:
         if pending:
             return pending
         ready = [g for g in gens if g.status == "ready"]
-        threshold = self.s.auto_approve_score
         for g in ready:
+            # hero logo frames: a failed logo check disqualifies the frame and costs a re-roll
+            if (g.params or {}).get("brand_check") and "logo_check" not in g.params:
+                self.tick(message=f"Checking the logo in {label}")
+                bm.logo_verdict(self.db, g)
+        usable = [g for g in ready if bm.logo_ok(g)]
+        threshold = self.s.auto_approve_score
+        for g in usable:
             if (g.score or {}).get("vision") is not None:
                 continue
             down = self.r.get("vision_unavailable")
@@ -454,10 +470,10 @@ class Autopilot:
                     log.warning("vision check unavailable, approving unchecked: %s", e)
                     # remembered for the whole job: a dead model would otherwise cost a timeout per image
                     self.r["vision_unavailable"] = str(e)[:300]
-            newest = ready[-1]
+            newest = usable[-1]
             self._approve(newest, "unchecked", auto_check_reason=self.r["vision_unavailable"])
             return []
-        scored = [g for g in ready if (g.score or {}).get("vision") is not None]
+        scored = [g for g in usable if (g.score or {}).get("vision") is not None]
         best = max(scored, key=lambda g: g.score["vision"], default=None)
         if best is not None and best.score["vision"] >= threshold:
             self._approve(best, "passed")
@@ -469,6 +485,12 @@ class Autopilot:
             return [g.job_id]
         if best is not None:
             self._approve(best, "below_threshold")
+            return []
+        off = [g for g in ready if not bm.logo_ok(g)]
+        if off:
+            # every try drew the logo badly: keep the closest one and flag it for review
+            least_bad = max(off, key=lambda g: g.params["logo_check"].get("score") or 0)
+            self._approve(least_bad, "logo_flagged", auto_issues=least_bad.params["logo_check"].get("issues") or [])
             return []
         raise StageFailed(f"Couldn't generate {label} after {len(gens)} tries: {self._last_error(gens)}")
 
@@ -504,6 +526,29 @@ class Autopilot:
             return []
         raise StageFailed(f"Couldn't render {label} after {len(gens)} tries: {self._last_error(gens)}")
 
+    def reveal_slot(self, shot: Shot) -> list[str]:
+        """The closing logo reveal: a CPU clip from the logo file, approved by the worker hook when it lands."""
+        if sb.approved(self.db, "shot", shot.id, "take"):
+            return []
+        kit = bm.project_kit(self.db, self.project)
+        if kit is None:
+            raise StageFailed("The brand kit for the closing logo reveal is gone")
+        tries = [g for g in self.db.scalars(select(Generation).where(
+            Generation.target_type == "shot", Generation.target_id == shot.id, Generation.kind == "take"))
+            if (g.params or {}).get("source") == "logo_reveal"]
+        live = next((g for g in tries if g.status in ("queued", "generating", "ready")), None)
+        if live is None and len(tries) >= TAKE_ATTEMPTS:
+            raise StageFailed(f"Couldn't render the logo reveal: {self._last_error(tries)}")
+        g = live or bm.queue_reveal_take(self.db, shot, kit, autopilot=self.job.id)
+        if g.status == "ready":
+            self._approve(g, "logo_reveal")
+            return []
+        job = self.db.get(Job, g.job_id) if g.job_id else None
+        if job is not None:
+            job.payload = {**(job.payload or {}), "parent_job_id": self.job.id}
+        self.db.flush()
+        return [g.job_id] if g.job_id else []
+
     def _enqueue_shot(self, shot: Shot, kind: str) -> Generation:
         try:
             prompt, params = sb.prepare_shot_generation(self.db, shot, kind, "", {})
@@ -533,8 +578,11 @@ class Autopilot:
             for s in by_id.values():  # stubs from an attempt that died before it published
                 db.delete(s)
             db.flush()
+            kit = bm.project_kit(db, project)
             try:
-                res = self.llm("Outlining the film", "reasoning", outline_messages(project, style, dialogue, total),
+                res = self.llm("Outlining the film", "reasoning",
+                               outline_messages(project, style, dialogue, total,
+                                                brand.prompt_context(kit) if kit else "", self.planner_notes()),
                                schema=QuickOutline, temperature=0.6, max_tokens=8000)
             except LLMError as e:
                 raise StageFailed(f"The AI writer isn't available: {e}") from e
@@ -648,18 +696,25 @@ class Autopilot:
                             "Planning the shots")
             durations = (self.r.get("outline") or {}).get("durations") or {}
             cap = self.s.longtake_max_s
+            closing = db.get(Shot, bm.closing_record(project).get("shot_id") or "")
             for s in scenes:
-                shots = sb.scene_shots(db, s.id)
+                shots = [x for x in sb.scene_shots(db, s.id) if closing is None or x.id != closing.id]
                 if not shots:
                     raise StageFailed(f"The storyboard has no shot for {s.heading or 'a scene'}")
                 if s.id in durations and len(shots) == 1:
-                    # one shot per scene in quick mode: the shot is the scene's whole planned length
-                    shots[0].duration_s = max(1.0, min(cap, float(durations[s.id])))
+                    # one shot per scene in quick mode: the shot is the scene's whole planned length;
+                    # the closing packshot/reveal comes out of the last scene's time so the film keeps its length
+                    want = float(durations[s.id])
+                    if closing is not None and closing.scene_id == s.id:
+                        want = max(2.0, want - closing.duration_s)
+                    shots[0].duration_s = max(1.0, min(cap, want))
             self.tick(0.2, "Shots planned")
 
         shots = sb.project_shots(db, project.id)
         waits: list[str] = []
         for n, shot in enumerate(shots, start=1):
+            if bm.is_reveal(db, shot):
+                continue  # the exact logo reveal has no frames
             prev, _ = sb.neighbours(db, shot)
             kinds = ["keyframe_end"] if sb.is_linked(shot, prev) else ["keyframe_start", "keyframe_end"]
             ref = self._reference(shot)
@@ -679,7 +734,10 @@ class Autopilot:
         shots = sb.project_shots(self.db, self.project.id)
         waits: list[str] = []
         for n, shot in enumerate(shots, start=1):
-            waits += self.take_slot(shot, f"shot {n} of {len(shots)}")
+            if bm.is_reveal(self.db, shot):
+                waits += self.reveal_slot(shot)
+            else:
+                waits += self.take_slot(shot, f"shot {n} of {len(shots)}")
         if waits:
             done = len(shots) - len(set(waits))
             return Wait(waits, f"{max(0, done)} of {len(shots)} takes approved")

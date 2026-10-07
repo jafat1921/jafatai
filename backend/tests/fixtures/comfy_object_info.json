@@ -1655,7 +1655,7 @@
    "video_info"
   ],
   "name": "VHS_LoadVideo",
-  "category": "Video Helper Suite \u00f0\u0178\u017d\u00a5\u00f0\u0178\u2026\u00a5\u00f0\u0178\u2026\u2014\u00f0\u0178\u2026\u00a2"
+  "category": "Video Helper Suite ðŸŽ¥ðŸ…¥ðŸ…—ðŸ…¢"
  },
  "AILab_FlashVSR_Advanced": {
   "input": {
@@ -2574,5 +2574,62 @@
    "LATENT"
   ],
   "name": "VAEEncode"
+ },
+ "SplitSigmasDenoise": {
+  "input": {
+   "required": {
+    "sigmas": [
+     "SIGMAS",
+     {}
+    ],
+    "denoise": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "sigmas",
+    "denoise"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "SIGMAS",
+   "SIGMAS"
+  ],
+  "output_is_list": [
+   false,
+   false
+  ],
+  "output_name": [
+   "high_sigmas",
+   "low_sigmas"
+  ],
+  "output_tooltips": [
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "SplitSigmasDenoise",
+  "display_name": null,
+  "description": "",
+  "python_module": "comfy_extras.nodes_custom_sampler",
+  "category": "model/sampling/sigmas",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
  }
 }

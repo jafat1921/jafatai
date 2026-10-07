@@ -1,4 +1,6 @@
 """Create Video (contract v6): one prompt (plus an optional start image) to one clip in the Library."""
+import math
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -17,8 +19,8 @@ from app.services import enqueue_generation, job_out
 router = APIRouter(prefix="/videos", tags=["videos"])
 
 
-def _start_image(db: Session, workspace_id: str, image_id: str) -> Generation:
-    """A Library image (MediaItem id) or any finished image generation id."""
+def _start_image(db: Session, workspace_id: str, image_id: str, what: str = "Start image") -> Generation:
+    """A Library image (MediaItem id, uploads included) or any finished image generation id."""
     item = db.get(MediaItem, image_id)
     if item is not None and item.workspace_id == workspace_id:
         g = db.get(Generation, item.generation_id) if item.generation_id else None
@@ -27,10 +29,19 @@ def _start_image(db: Session, workspace_id: str, image_id: str) -> Generation:
         if g is not None and g.workspace_id != workspace_id:
             g = None
     if g is None:
-        raise HTTPException(404, "Start image not found")
+        raise HTTPException(404, f"{what} not found")
     if not (g.media_type or "").startswith("image/") or g.status not in lib.FINISHED or not g.file_path:
-        raise HTTPException(422, "The start image isn't a finished image")
+        raise HTTPException(422, f"The {what.lower()} isn't a finished image")
     return g
+
+
+def _aspect_of(g: Generation) -> str:
+    """The supported video aspect closest to the start image, so a portrait photo stays portrait."""
+    w, h = lib._image_dims(g)
+    if not w or not h:
+        return "16:9"
+    ratios = {"16:9": 16 / 9, "9:16": 9 / 16, "1:1": 1.0, "4:3": 4 / 3, "2.39:1": 2.39}
+    return min(ratios, key=lambda a: abs(math.log((w / h) / ratios[a])))
 
 
 def _size(m: mc.Model, aspect: str) -> tuple[int, int]:
@@ -44,7 +55,13 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     if not prompt:
         raise HTTPException(422, "A prompt is required")
     m = mc.get(body.model, "video")
-    mc.check_video(m, has_image=bool(body.image_id), duration_s=body.duration_s, smooth_motion=body.smooth_motion)
+    mc.check_video(m, has_image=bool(body.image_id or body.end_image_id), duration_s=body.duration_s,
+                   smooth_motion=body.smooth_motion)
+    if body.end_image_id:
+        if not body.image_id:
+            raise HTTPException(422, "An end image needs a start image too")
+        if "flf" not in m.capabilities:
+            raise HTTPException(422, f"{m.label} can't end on a given image; pick LTX-2.3")
     top = get_settings().longtake_max_s
     if body.duration_s > top:
         raise HTTPException(422, f"duration_s must be at most {top:g} seconds")
@@ -53,13 +70,15 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
         raise HTTPException(422, f"Smooth motion works on clips up to {mc.SINGLE_PASS_S:.1f} s; "
                                  "turn it off or make the clip shorter")
     start = _start_image(db, cur.workspace_id, body.image_id) if body.image_id else None
+    end = _start_image(db, cur.workspace_id, body.end_image_id, "End image") if body.end_image_id else None
 
-    w, h = _size(m, body.aspect)
+    aspect = body.aspect or (_aspect_of(start) if start is not None else "16:9")
+    w, h = _size(m, aspect)
     fps = mc.WAN_FPS if m.id == "wan22_t2v" else longtake.FPS
     frames = mc.video_frames(m, body.duration_s, fps)
     # Wan is capped at its trained 81 frames, so report what it will really make
     duration = round((frames - 1) / fps, 3) if m.id == "wan22_t2v" else body.duration_s
-    params = {"model": m.id, "aspect_ratio": body.aspect, "duration_s": duration, "fps": fps,
+    params = {"model": m.id, "aspect_ratio": aspect, "duration_s": duration, "fps": fps,
               "num_frames": frames, "width": w, "height": h,
               "smooth_motion": body.smooth_motion, "user_prompt": prompt,
               "created_by": {"user_id": cur.id, "flow": "video_generate"}}
@@ -67,6 +86,9 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
         params["quality"] = "hq"
     if start is not None:
         params["first_frame_id"] = start.id
+    if end is not None:
+        # long clips pin it on the last chunk (longtake.run_take)
+        params["last_frame_id"] = end.id
     if body.negative:
         params["negative"] = body.negative.strip()
     if long_take:

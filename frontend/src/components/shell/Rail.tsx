@@ -35,7 +35,8 @@ function Face({ item, badge }: { item: RailItem; badge?: number }) {
           </span>
         )}
       </span>
-      <span aria-hidden className="text-small leading-none">
+      {/* two-word labels ("Brand Kits") wrap onto a second line inside the 56 px item */}
+      <span aria-hidden className="text-center text-small leading-[1.1]">
         {item.label}
       </span>
     </>

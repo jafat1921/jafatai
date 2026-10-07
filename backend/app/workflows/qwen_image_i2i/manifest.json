@@ -1,0 +1,33 @@
+{
+  "name": "qwen_image_i2i",
+  "family": "qwen-image-2512",
+  "description": "Qwen-Image 2512 image-to-image: scaled/centre-cropped source, VAE-encoded, KSampler at denoise = strength. Same speed options as qwen_image_t2i (optional speed LoRA plus steps/cfg/shift).",
+  "inputs": {
+    "image":    {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "low resolution, low quality, deformed limbs, deformed fingers, oversaturated, waxy skin, faceless, over-smoothed, AI look, blurry text, distorted text",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "height"]]},
+    "denoise":  {"type": "float", "default": 0.45, "targets": [["Sampler", "denoise"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 4, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 1.0, "targets": [["Sampler", "cfg"]]},
+    "shift":    {"type": "float", "default": 3.1, "targets": [["ModelSampling", "shift"]]},
+    "speed_lora": {"type": "str", "targets": [["SpeedLoRA", "lora_name"]],
+                   "if_missing": {"bypass": {"SpeedLoRA": {"0": "model"}}}},
+    "filename_prefix": {"type": "str", "default": "mixai/qwenimage_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["qwen_image_2512_fp8_e4m3fn.safetensors"],
+    "text_encoders": ["qwen_2.5_vl_7b_fp8_scaled.safetensors"],
+    "vae": ["qwen_image_vae.safetensors"]
+  },
+  "optional_models": {
+    "loras": ["Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors",
+              "Wuli-Qwen-Image-2512-Turbo-LoRA-2steps-V1.0-bf16.safetensors"]
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 8, "UNet": 4, "TextEncoder": 2, "Encode": 1}
+}

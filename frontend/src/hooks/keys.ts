@@ -33,4 +33,8 @@ export const qk = {
   comfyCheck: ['comfy-check'] as const,
   llmCheck: (ping: boolean) => ['llm-check', ping] as const,
   models: (type: ModelType) => ['models', type] as const,
+  // contract-v7
+  brandKits: ['brand-kits'] as const,
+  brandKit: (id: string) => ['brand-kits', 'kit', id] as const,
+  brandPreview: (id: string, kind: string, settings: string) => ['brand-preview', id, kind, settings] as const,
 }

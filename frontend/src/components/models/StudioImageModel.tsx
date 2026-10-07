@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/studio/states'
 import { useModels, useUpdateProjectSettings } from '@/hooks/useModels'
 import { useStudioImageModel } from '@/hooks/useStudioImageModel'
 import { announce } from '@/stores/ui'
+import { ProjectBrandKitField } from '@/components/brand/ProjectBrandKit'
 import { ModelSelect } from './ModelSelect'
 
 function ProjectDefaultPopover({ projectId, current }: { projectId: string; current: string | undefined }) {
@@ -47,6 +48,8 @@ function ProjectDefaultPopover({ projectId, current }: { projectId: string; curr
             Save default
           </Button>
         </div>
+        <hr className="my-1 border-studio-border" />
+        <ProjectBrandKitField projectId={projectId} />
       </PopoverContent>
     </Popover>
   )

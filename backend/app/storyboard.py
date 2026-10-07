@@ -120,6 +120,11 @@ def shots_out(db: Session, shots: list[Shot]) -> list[ShotOut]:
             prev_of[s.id] = order[pid][i - 1] if i > 0 else None
     wanted = {s.id for s in shots} | {p.id for p in prev_of.values() if p is not None}
     gens = _gens_for(db, "shot", list(wanted), SHOT_KINDS)
+    closing = {}
+    for pid in order:
+        rec = ((_project(db, pid).settings or {}).get("brand_closing_shot") or {})
+        if rec.get("shot_id"):
+            closing[rec["shot_id"]] = rec.get("mode")
 
     out = []
     for s in shots:
@@ -127,6 +132,8 @@ def shots_out(db: Session, shots: list[Shot]) -> list[ShotOut]:
         prev = prev_of.get(s.id)
         o = ShotOut.model_validate(s)
         o.character_ids = list(s.character_ids or [])
+        o.brand_closing = o.closing = closing.get(s.id)
+        o.brand_placements_locked = any(p.get("source") == "user" for p in s.brand_placements or [])
         end = current(mine, "keyframe_end")
         if is_linked(s, prev):
             linked = current(gens.get(prev.id, []), "keyframe_end")
@@ -304,15 +311,21 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
     params = dict(params or {})
     params.setdefault("aspect_ratio", project.aspect_ratio)
     prev, _ = neighbours(db, shot)
+    from app import brand_moments as bm  # imports this module
+
+    if bm.is_reveal(db, shot):
+        raise HTTPException(409, "This is the advert's exact logo reveal: it has no frames, and its take is "
+                                 "made from the brand kit's logo file")
 
     if kind in KEYFRAME_KINDS:
         if kind == "keyframe_start" and is_linked(shot, prev):
             raise HTTPException(409, LINKED_DETAIL)
         if "reference_ids" not in params:
             ids, labels = references_for(db, shot)
-            if ids:
+            # a shot with brand placements uses the edit model with the logo/product as references
+            if not bm.keyframe_refs(db, shot, project, params, ids, labels) and ids:
                 params["reference_ids"], params["reference_labels"] = ids, labels
-        prompt = prompt.strip() or frame_prompt(db, shot, kind)
+        prompt = bm.with_fragment(prompt.strip() or frame_prompt(db, shot, kind), params.get("brand_prompt"))
         models_catalog.apply_image_choice(params, project.settings)
     else:
         start, end = take_frames(db, shot)
@@ -341,7 +354,12 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
             for k in ("longtake", "chunks", "assembly", "continuity", "context_frames", "longtake_stats"):
                 params.pop(k, None)
         models_catalog.apply_take_quality(params, project.settings, long_take=longtake.is_long(duration))
-        prompt = prompt.strip() or frame_prompt(db, shot, "take")
+        steady = bm.hero_motion(db, shot, project)
+        if steady:
+            params["brand_prompt"] = steady
+        else:
+            params.pop("brand_prompt", None)
+        prompt = bm.with_fragment(prompt.strip() or frame_prompt(db, shot, "take"), steady)
 
     if not prompt:
         # the worker compiles start/end/motion prompts before rendering

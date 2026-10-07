@@ -1,4 +1,5 @@
-import { ArrowRight, ListTree, RefreshCcw } from 'lucide-react'
+import { ArrowRight, ListTree, RefreshCcw, Stamp } from 'lucide-react'
+import { CLOSING_LABEL, closingOf, logoRetryNote } from '@/lib/brand'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { StatusPill } from '@/components/studio/status-pill'
@@ -9,7 +10,7 @@ import { useClearStale, useCreateShot, useDeleteShot, useReorderShots } from '@/
 import { formatDuration } from '@/lib/duration'
 import { shotLabel, startFrameOf, type FrameUnit } from '@/lib/shots'
 import { shotStatus } from '@/lib/status'
-import type { GenerationKind, Shot } from '@/lib/types'
+import type { Generation, GenerationKind, Shot } from '@/lib/types'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import type { FrameSide, ShotSelection } from '@/stores/workspace'
@@ -31,7 +32,7 @@ interface Props {
 
 export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectClass, onSelectFrame, onOpenShots }: Props) {
   const { startShot, endShot, prevShot } = unit
-  const { create } = useGenerationActions()
+  const { create, regenerate } = useGenerationActions()
   const imageModel = useStudioImageModel(startShot.project_id)
   const clearStale = useClearStale()
   const rewrite = useRewritePrompts(startShot)
@@ -50,6 +51,15 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
       { onSuccess: (g) => announce(`${kind === 'keyframe_start' ? 'START' : 'END'} frame for ${label} queued (v${g.version}).`) },
     )
 
+  // the shot's placements already feed the logo in; the note says what the check didn't like
+  const retryLogo = (frame: Generation | null | undefined, side: string) => (issues: string[]) =>
+    frame &&
+    regenerate.mutate(
+      { id: frame.id, mode: 'note', note: logoRetryNote(issues) },
+      { onSuccess: (g) => announce(`${side} frame for ${label} regenerating with the logo (v${g.version}).`) },
+    )
+  const closing = closingOf(endShot) ?? closingOf(startShot)
+
   const move = (dir: -1 | 1) => {
     const i = sceneShots.indexOf(startShot)
     const ids = sceneShots.map((s) => s.id)
@@ -58,7 +68,7 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
   }
 
   const selected = isSel(startShot, 'start') || isSel(endShot, 'end')
-  const error = create.error ?? clearStale.error ?? reorder.error ?? insert.error ?? remove.error ?? rewrite.error
+  const error = create.error ?? regenerate.error ?? clearStale.error ?? reorder.error ?? insert.error ?? remove.error ?? rewrite.error
 
   return (
     <article
@@ -82,6 +92,12 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
             ? formatDuration(sceneShots.reduce((t, s) => t + s.duration_s, 0))
             : formatDuration(startShot.duration_s)}
         </span>
+        {closing && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">
+            <Stamp aria-hidden className="size-3" />
+            Brand closing · {CLOSING_LABEL[closing]}
+          </span>
+        )}
         {view === 'shots' && <StatusPill status={shotStatus(startShot.status)} />}
         {stale && (
           <span className="inline-flex items-center gap-1 text-small text-studio-warning">
@@ -129,6 +145,8 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
             onSelect={() => onSelectFrame(startShot, 'start')}
             linkedFrom={start.linked ? (start.from ? labelFor(start.from) : 'previous shot') : undefined}
             onGenerate={() => generate(startShot, 'keyframe_start')}
+            onRegenerateWithLogo={retryLogo(start.frame, 'START')}
+            regeneratingLogo={regenerate.isPending}
           />
           <ArrowRight aria-hidden className="mt-[22%] size-4 shrink-0 text-studio-gold" />
           <FrameSlot
@@ -139,6 +157,8 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
             selected={isSel(endShot, 'end')}
             onSelect={() => onSelectFrame(endShot, 'end')}
             onGenerate={() => generate(endShot, 'keyframe_end')}
+            onRegenerateWithLogo={retryLogo(endShot.end_frame, 'END')}
+            regeneratingLogo={regenerate.isPending}
           />
         </div>
         {view === 'shots' ? (

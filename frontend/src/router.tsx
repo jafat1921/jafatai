@@ -23,6 +23,10 @@ export const shellRoutes: RouteObject[] = [
     const { VideoCreatePage } = await import('@/features/video/VideoCreatePage')
     return <VideoCreatePage />
   }),
+  page('video/img2vid', async () => {
+    const { Img2VidPage } = await import('@/features/video/Img2VidPage')
+    return <Img2VidPage />
+  }),
   { path: 'video/projects', element: <ProjectsPage /> },
   page('video/templates', async () => {
     const { TemplatesPage } = await import('@/features/templates/TemplatesPage')
@@ -46,6 +50,10 @@ export const shellRoutes: RouteObject[] = [
     const { ImageEditPage } = await import('@/features/image/ImageEditPage')
     return <ImageEditPage />
   }),
+  page('image/img2img', async () => {
+    const { Img2ImgPage } = await import('@/features/image/Img2ImgPage')
+    return <Img2ImgPage />
+  }),
   page('image/references', async () => {
     const { ImageReferencesPage } = await import('@/features/image/ImageReferencesPage')
     return <ImageReferencesPage />
@@ -68,6 +76,14 @@ export const shellRoutes: RouteObject[] = [
   page('assets', async () => {
     const { AssetsPage } = await import('@/features/assets/AssetsPage')
     return <AssetsPage />
+  }),
+  page('brand-kits', async () => {
+    const { BrandKitsPage } = await import('@/features/brand/BrandKitsPage')
+    return <BrandKitsPage />
+  }),
+  page('brand-kits/:kitId', async () => {
+    const { BrandKitEditorPage } = await import('@/features/brand/BrandKitEditorPage')
+    return <BrandKitEditorPage />
   }),
   page('queue', async () => {
     const { QueuePage } = await import('@/features/queue/QueuePage')

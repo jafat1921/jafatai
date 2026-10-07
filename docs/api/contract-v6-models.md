@@ -83,3 +83,39 @@ Everything above is implemented. Additions and small deviations, all backwards c
 **Smooth motion** is `ltx-2.3-temporal-upscaler-x2-1.0` through `LTXVLatentUpsampler` after the last sampling pass: frames 2N−1, played at 48 fps, same duration. It validates on the server but has not been rendered yet, so treat it as experimental until the server check below passes.
 
 **Templates**: `qwen_image_t2i`, `flux2_klein_t2i`, `flux2_klein_edit`, `ltx23_two_stage`, `wan22_t2v`; `ltx23_i2v` now also does text to video and smooth motion. All appear in `GET /system/comfy-check` (with `features.smooth_motion` for the LTX ones); all 15 templates pass against the live `/object_info`.
+
+## As built: image to image and image to video (Milestone 8A, 2026-10-07)
+
+**Catalog:** new capability `"i2i"` on `zimage_turbo`, `flux2_klein` and `qwen_image_2512`, each backed by its own template (the model's `extra` map). If the i2i template fails the `/object_info` check, `"i2i"` disappears from that model's `capabilities` while text to image stays available.
+
+| Model | Template | Graph |
+|---|---|---|
+| `zimage_turbo` | `zimage_i2i` | LoadImage → ImageScale (lanczos, crop center) → VAEEncode → KSampler `denoise` = strength (8 real steps at any strength) |
+| `flux2_klein` | `flux2_klein_i2i` | LoadImage → ImageScale → VAEEncode; Flux2Scheduler → **SplitSigmasDenoise** (low sigmas) → SamplerCustomAdvanced. The scheduler gets `ceil(4 / strength)` steps, so about 4 real steps run |
+| `qwen_image_2512` | `qwen_image_i2i` | as Z-Image, with Qwen's speeds (Full / Lightning / Turbo) |
+
+All three pass `check_template` against the live `/object_info` (2026-10-07). The test fixture gained `SplitSigmasDenoise`.
+
+**`POST /api/images/img2img`** → `202 ImageBatchOut` (same as `/images/edit`)
+```
+{source_id,            // Library item id (uploads too) or any finished image generation id
+ prompt,               // what the result should be
+ strength: 0.45,       // 0.1 (subtle) – 0.9 (reimagine); outside → 422
+ model?,               // an image model with "i2i" (default Z-Image Turbo); edit/video ids → 422
+ speed?, count: 1–4, aspect: "source" | "1:1"|"16:9"|"9:16"|"4:3"|"3:4"|"2:3"|"3:2",
+ seed?, negative?, title?, brand_kit_id?}
+```
+- `aspect: "source"` keeps the source's shape at about 1 MP (multiples of 64). Any other aspect centre-crops the source to that shape.
+- Each result is a new Library image whose `params.img2img_of = {media_id|null, generation_id, strength}`. Regenerate re-runs the same image to image.
+- `brand_kit_id` adds the palette and look to the prompt, like Create Image.
+- 404 for an unknown source; 422 for a source that isn't a finished image.
+
+**Image to video (`POST /api/videos/generate`)**
+- New `end_image_id` (Library id or generation id, uploads included): first and last frame. It needs `image_id` (422 without it) and a model with `"flf"` (LTX-2.3 Standard and HQ).
+  - Standard and HQ pass `last_image` into `ltx23_i2v` / `ltx23_two_stage`.
+  - A long clip (over one pass, Standard only) pins the end image on its last chunk.
+- `aspect` is now optional. Without it, the clip takes the supported aspect (16:9, 9:16, 1:1, 4:3, 2.39:1) closest to the start image, so a portrait photo makes a 9:16 clip. Without an image the default is 16:9, and an explicit `aspect` always wins.
+- Wan 2.2 with `image_id` or `end_image_id` → 422 ("makes video from text only").
+- `brand_kit_id` works as before.
+
+**Uploads everywhere:** every source-image input takes a Library item id or a generation id: `images/edit`, `images/img2img`, `videos/generate` (`image_id`, `end_image_id`). `POST /generations/{id}/upscale` and `POST /generations/{id}/brand` now also take a Library item id, standing for its current version.

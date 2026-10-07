@@ -40,6 +40,8 @@ class QuickIn(BaseModel):
     video_quality: Literal["standard", "hq"] | None = None
     smooth_motion: bool | None = None
     brand_kit_id: str | None = None  # contract v7: saved as project.settings.brand_kit_id
+    template_id: str | None = Field(None, max_length=80)  # its planner notes steer the outline
+    brand_closing: Literal["auto", "ai_packshot", "logo_reveal", "none"] | None = None
 
 
 class QuickOut(BaseModel):
@@ -71,15 +73,25 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
     p = Project(workspace_id=cur.workspace_id, title=placeholder_title(prompt), authoring_mode="quick", brief=prompt,
                 aspect_ratio=body.aspect_ratio, target_runtime_s=max(1, round(body.duration_s)), takes_per_shot=1,
                 status="in_progress", style_bible=autopilot.STYLE_PRESETS[body.style][0], settings=settings)
+    tpl = None
+    if body.template_id:
+        from app.api.library import templates
+
+        tpl = templates().get(body.template_id)
+        if tpl is None or tpl["type"] != "video":
+            raise HTTPException(404, "Template not found")
     if body.brand_kit_id:
         brand.project_kit_id(db, p, body.brand_kit_id)
+        if body.brand_closing:
+            p.settings = {**(p.settings or {}), "brand_closing": body.brand_closing}
     db.add(p)
     db.flush()
     job = Job(workspace_id=cur.workspace_id, type=autopilot.JOB_TYPE, project_id=p.id, message="Waiting for a worker",
               payload={"project_id": p.id, "prompt": prompt, "duration_s": body.duration_s,
                        "aspect_ratio": body.aspect_ratio, "style": body.style, "dialogue": body.dialogue,
                        "upscale": body.upscale.model_dump() if body.upscale else None, "title_auto": True,
-                       "models": settings},
+                       "models": settings, "template_id": body.template_id,
+                       "planner": (tpl or {}).get("planner") or ""},
               result=autopilot.initial_result(body.upscale is not None))
     db.add(job)
     db.commit()

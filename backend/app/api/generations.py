@@ -14,7 +14,8 @@ from app.schemas import (
 )
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import (
-    READY_STATES, approve, enqueue_generation, gen_out, get_owned, job_out, new_seed, resolve_target_project,
+    READY_STATES, approve, enqueue_generation, gen_out, get_owned, job_out, new_seed, owned_source,
+    resolve_target_project,
 )
 
 router = APIRouter(prefix="/generations", tags=["generations"])
@@ -119,7 +120,14 @@ def regenerate(gen_id: str, body: RegenerateIn, db: Session = Depends(get_db), c
             prev, _ = storyboard.neighbours(db, shot)
             if storyboard.is_linked(shot, prev):
                 raise HTTPException(409, storyboard.LINKED_DETAIL)
-        if parent.kind == "take" or not prompt.strip():
+        # the old verdict belongs to the old picture
+        params.pop("logo_check", None)
+        branded = parent.kind in storyboard.KEYFRAME_KINDS and bool(shot.brand_placements)
+        if branded and body.mode != "edit":
+            # "Regenerate with logo": rebuild the brand references from the shot's current placements
+            for k in ("reference_ids", "reference_labels", "brand_prompt", "brand_check", "brand"):
+                params.pop(k, None)
+        if parent.kind == "take" or not prompt.strip() or branded:
             prompt, params = storyboard.prepare_shot_generation(db, shot, parent.kind, prompt, params)
 
     g = enqueue_generation(
@@ -219,7 +227,7 @@ def restore_generation(gen_id: str, db: Session = Depends(get_db), cur: CurrentU
 @router.post("/{gen_id}/upscale", response_model=JobOut, status_code=202)
 def upscale_generation(gen_id: str, body: UpscaleIn, db: Session = Depends(get_db),
                        cur: CurrentUser = Depends(require_editor)):
-    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    g = owned_source(db, cur.workspace_id, gen_id)
     try:
         if upscale_image.is_image(g):
             job = upscale_image.queue_image_upscale(db, g, body.engine, body.target, body.variant, body.denoise,

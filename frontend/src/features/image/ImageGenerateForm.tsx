@@ -17,12 +17,15 @@ import { PlaceholderHint } from '@/components/studio/placeholder-hint'
 import { ErrorState } from '@/components/studio/states'
 import { ModelPicker } from '@/components/models/ModelPicker'
 import { SpeedPicker } from '@/components/models/SpeedPicker'
+import { BrandChip } from '@/components/brand/BrandChip'
+import { useBrandChoice } from '@/hooks/useBrandKits'
 import { useImageGenerate } from '@/hooks/useMedia'
 import { useModels } from '@/hooks/useModels'
 import { useTemplates } from '@/hooks/useStudio'
 import { IMAGE_STYLES, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
 import { modKey } from '@/lib/keyboard'
 import { defaultSpeed, estimateSeconds, has, pickModel, secondsText } from '@/lib/models'
+import { withBrand } from '@/lib/brand'
 import { imageFormFrom } from '@/lib/templates'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
@@ -43,6 +46,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
   const generate = useImageGenerate()
   const templates = useTemplates('image')
   const { models } = useModels('image')
+  const brand = useBrandChoice()
   const set = <K extends keyof ImageForm>(k: K, v: ImageForm[K]) => setForm((f) => ({ ...f, [k]: v }))
   const model = pickModel(models, form.model)
   const speed = model?.speeds?.find((s) => s.id === form.speed && s.available !== false) ?? defaultSpeed(model)
@@ -53,7 +57,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
 
   const submit = () => {
     if (!canSubmit) return
-    generate.mutate(imagePayload({ ...form, model: model?.id, speed: speed?.id }), {
+    generate.mutate(withBrand(imagePayload({ ...form, model: model?.id, speed: speed?.id }), brand.sendId), {
       onSuccess: ({ items }) => announce(`Creating ${plural(items?.length ?? form.count, 'image')}. They appear below as they finish.`),
     })
   }
@@ -113,6 +117,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
       </div>
 
       <ModelPicker label="Model" models={models} value={model?.id} onChange={(id) => setForm((f) => ({ ...f, model: id, speed: undefined }))} highlighted={modelPicked} />
+      <BrandChip choice={brand} />
       {model?.speeds?.length ? <SpeedPicker model={model} value={speed?.id} onChange={(id) => set('speed', id)} /> : null}
 
       <div className="flex flex-col gap-2">

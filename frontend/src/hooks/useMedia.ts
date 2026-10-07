@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { tileState } from '@/lib/images'
-import type { Generation, ImageEditRequest, ImageGenerateRequest, MediaDetail, MediaItem, MediaKind, MediaOrigin, MediaPage, MediaQuery, RegenerateMode } from '@/lib/types'
+import type { Generation, ImageEditRequest, ImageGenerateRequest, Img2ImgRequest, MediaDetail, MediaItem, MediaKind, MediaOrigin, MediaPage, MediaQuery, RegenerateMode } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob, useJobs } from './useJobs'
 
@@ -96,6 +96,7 @@ function useBatch<B>(fn: (body: B) => ReturnType<typeof api.images.generate>) {
 
 export const useImageGenerate = () => useBatch((body: ImageGenerateRequest) => api.images.generate(body))
 export const useImageEdit = () => useBatch((body: ImageEditRequest) => api.images.edit(body))
+export const useImg2Img = () => useBatch((body: Img2ImgRequest) => api.images.img2img(body))
 
 export function useMediaRegenerate() {
   const qc = useQueryClient()

@@ -8,6 +8,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { MediaGrid } from '@/components/media/MediaGrid'
 import { ModelPicker } from '@/components/models/ModelPicker'
+import { BrandChip } from '@/components/brand/BrandChip'
+import { useBrandChoice } from '@/hooks/useBrandKits'
+import { withBrand } from '@/lib/brand'
 import { flatItems, useImageEdit, useMediaList } from '@/hooks/useMedia'
 import { useModels } from '@/hooks/useModels'
 import { addSources, editPayload, MAX_EDIT_SOURCES } from '@/lib/images'
@@ -35,6 +38,7 @@ export function ImageEditPage() {
   const edit = useImageEdit()
   const results = useMediaList({ kind: 'image', origin: 'generated' })
   const { models } = useModels('edit')
+  const brand = useBrandChoice()
   const wanted = normalizeModelId(params.get('model'))
   const [modelId, setModelId] = useState<string | undefined>(wanted ?? undefined)
   const model = pickModel(models, modelId)
@@ -50,7 +54,7 @@ export function ImageEditPage() {
 
   const submit = () => {
     if (!canSubmit) return
-    edit.mutate(editPayload(ids, instruction, count, aspect, model), {
+    edit.mutate(withBrand(editPayload(ids, instruction, count, aspect, model), brand.sendId), {
       onSuccess: ({ items }) => announce(`Editing. ${plural(items?.length ?? count, 'result')} on the way.`),
     })
   }
@@ -79,6 +83,7 @@ export function ImageEditPage() {
             </h1>
           </div>
           <ModelPicker label="Model" models={models} value={model?.id} onChange={setModelId} highlighted={!!wanted} />
+          <BrandChip choice={brand} />
           <EditSources
             ids={ids}
             max={max}

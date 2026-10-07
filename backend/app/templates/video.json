@@ -6,6 +6,8 @@
       "title": "30 s product ad",
       "description": "Hook, hero shots and a clear call to action for one product.",
       "thumb": null,
+      "requires_brand": true,
+      "planner": "A 30-second product advert: a three-second hook, then the product in use. Put the product and logo on real things in the scenes (packaging, a counter, signage, a screen), with at least one hero moment where the product fills the frame and the camera moves slowly. The film closes on a packshot or logo reveal.",
       "defaults": {
         "prompt_scaffold": "A 30-second product ad for [product], aimed at [audience]. Open on a three-second hook: [problem the product solves] shown in a real everyday moment. Reveal the product in a slow hero shot on [surface or setting] with soft studio light and crisp reflections. Show two quick close-ups of [key feature 1] and [key feature 2] in use. End on the product centred in frame with the line \"[tagline]\".",
         "duration_s": 30,
@@ -19,6 +21,8 @@
       "title": "60 s brand story",
       "description": "Where the brand came from, who it is for and why it matters, in one minute.",
       "thumb": null,
+      "requires_brand": true,
+      "planner": "A 60-second brand story. Let the brand live in the world of the film: the logo on a shop front, apparel, a van or a mug, products in the hands of the people who make and use them. Keep the brand moments natural, one hero moment late in the film, and close on the logo.",
       "defaults": {
         "prompt_scaffold": "A 60-second brand story for [brand], told by [founder or narrator]. Begin with the moment the idea started: [origin moment] in [place]. Follow the people who make it, hands at work on [craft or process], in warm natural light. Show [customer] using it in their own life and what changes for them. Close on the brand mark over [closing image] with the line \"[brand promise]\".",
         "duration_s": 60,
@@ -71,6 +75,8 @@
       "title": "Social vertical teaser (15 s)",
       "description": "A punchy 9:16 teaser for Reels, Shorts and TikTok.",
       "thumb": null,
+      "requires_brand": true,
+      "planner": "A 15-second vertical teaser, framed for a phone. Few, bold beats; the product or logo appears large and centred in at least one beat (packaging, a screen, a sign). Keep it to one or two scenes and end on the brand.",
       "defaults": {
         "prompt_scaffold": "A 15-second vertical teaser for [thing being announced]. First second: a bold close-up of [striking image] to stop the scroll. Three fast beats showing [beat 1], [beat 2] and [beat 3]. End on [final frame] with the text \"[date or call to action]\".",
         "duration_s": 15,

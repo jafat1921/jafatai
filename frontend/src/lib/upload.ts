@@ -1,4 +1,5 @@
 import { API_BASE, ApiError } from './api'
+import type { BrandPurpose } from './brand'
 import type { MediaItem, MediaKind } from './types'
 
 const MB = 1024 * 1024
@@ -42,23 +43,35 @@ export function uploadErrorText(status: number, detail: string | undefined, file
   return detail || `The upload didn't go through (${status}).`
 }
 
-export interface UploadHandle {
-  promise: Promise<MediaItem>
+/** Pasted files: screenshots arrive as items rather than files in some browsers. */
+export function filesFromClipboard(data: DataTransfer | null): File[] {
+  if (!data) return []
+  if (data.files?.length) return Array.from(data.files)
+  return Array.from(data.items ?? [])
+    .filter((i) => i.kind === 'file')
+    .map((i) => i.getAsFile())
+    .filter((f): f is File => !!f)
+}
+
+export interface UploadHandle<T = MediaItem> {
+  promise: Promise<T>
   abort: () => void
 }
 
+type ErrorText = (status: number, detail: string | undefined, fileName: string) => string
+
 /** XHR rather than fetch: fetch still can't report upload progress. */
-export function uploadMedia(file: File, onProgress: (fraction: number) => void, title?: string): UploadHandle {
+function xhrUpload<T>(path: string, file: File, onProgress: (fraction: number) => void, errorText: ErrorText, title?: string): UploadHandle<T> {
   const xhr = new XMLHttpRequest()
-  const promise = new Promise<MediaItem>((resolve, reject) => {
+  const promise = new Promise<T>((resolve, reject) => {
     const form = new FormData()
     form.append('file', file)
     if (title) form.append('title', title)
-    xhr.open('POST', `${API_BASE}/media/upload`)
+    xhr.open('POST', `${API_BASE}${path}`)
     xhr.withCredentials = true
     xhr.setRequestHeader('Accept', 'application/json')
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
-    xhr.onerror = () => reject(new ApiError(0, uploadErrorText(0, undefined, file.name)))
+    xhr.onerror = () => reject(new ApiError(0, errorText(0, undefined, file.name)))
     xhr.onabort = () => reject(new ApiError(0, 'Upload cancelled.'))
     xhr.onload = () => {
       let body: unknown
@@ -67,11 +80,56 @@ export function uploadMedia(file: File, onProgress: (fraction: number) => void, 
       } catch {
         body = null
       }
-      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as MediaItem)
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as T)
       const detail = (body as { detail?: unknown } | null)?.detail
-      reject(new ApiError(xhr.status, uploadErrorText(xhr.status, typeof detail === 'string' ? detail : undefined, file.name), body))
+      reject(new ApiError(xhr.status, errorText(xhr.status, typeof detail === 'string' ? detail : undefined, file.name), body))
     }
     xhr.send(form)
   })
   return { promise, abort: () => xhr.abort() }
 }
+
+export const uploadMedia = (file: File, onProgress: (fraction: number) => void, title?: string) =>
+  xhrUpload<MediaItem>('/media/upload', file, onProgress, uploadErrorText, title)
+
+// contract-v7: brand assets go through their own endpoint, which sniffs each purpose differently
+export const BRAND_RULES: Record<BrandPurpose, { exts: string[]; types: string[]; maxBytes: number; label: string }> = {
+  logo: { exts: ['png', 'webp', 'svg'], types: ['image/png', 'image/webp', 'image/svg+xml'], maxBytes: 5 * MB, label: 'PNG, WebP or SVG up to 5 MB' },
+  font: { exts: ['ttf', 'otf'], types: ['font/ttf', 'font/otf', 'font/sfnt', 'application/x-font-ttf', 'application/font-sfnt'], maxBytes: 10 * MB, label: 'TTF or OTF up to 10 MB' },
+  product: { ...UPLOAD_RULES.image },
+  reference: { ...UPLOAD_RULES.image },
+}
+
+export const brandAccept = (p: BrandPurpose) => [...BRAND_RULES[p].types, ...BRAND_RULES[p].exts.map((e) => `.${e}`)].join(',')
+
+/** Brand-specific refusal in plain words, or null. Extensions win: browsers rarely know a font's MIME type. */
+export function checkBrandFile(file: File, purpose: BrandPurpose): string | null {
+  const rule = BRAND_RULES[purpose]
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (purpose === 'logo' && (ext === 'jpg' || ext === 'jpeg' || file.type === 'image/jpeg')) {
+    return `“${file.name}” is a JPEG, which can't be see-through. Export the logo as PNG or SVG.`
+  }
+  // the server insists the name's extension matches the bytes, so don't guess from the MIME type
+  if (!rule.exts.includes(ext)) {
+    return `“${file.name}” isn't a file type we can use here. Try ${rule.label}.`
+  }
+  if (file.size > rule.maxBytes) return `“${file.name}” is ${sizeText(file.size)}, bigger than the ${sizeText(rule.maxBytes)} limit.`
+  return null
+}
+
+export const brandUploadErrorText =
+  (purpose: BrandPurpose): ErrorText =>
+  (status, detail, fileName) => {
+    if (status === 413) return `“${fileName}” is too big for the server. The limit is ${BRAND_RULES[purpose].label.replace(/^.* up to /, '')}.`
+    if (status === 415) {
+      return purpose === 'font'
+        ? `“${fileName}” isn't a working TTF or OTF font, even if its name says so.`
+        : purpose === 'logo'
+          ? `“${fileName}” couldn't be used as a logo. Try a PNG with transparency, or a plain SVG without scripts or links.`
+          : `“${fileName}” isn't a supported image, even if its name says so. Try PNG, JPG or WebP.`
+    }
+    return uploadErrorText(status, detail, fileName)
+  }
+
+export const uploadBrandAsset = (file: File, purpose: BrandPurpose, onProgress: (fraction: number) => void) =>
+  xhrUpload<{ item: MediaItem; warnings: string[] }>(`/brand-kits/assets?purpose=${purpose}`, file, onProgress, brandUploadErrorText(purpose))

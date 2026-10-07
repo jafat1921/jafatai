@@ -2,6 +2,7 @@ import { CheckCheck, Loader2, Plus, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import { ErrorState } from '@/components/studio/states'
+import { ProjectBrandKitButton } from '@/components/brand/ProjectBrandKit'
 import { useAiJob } from '@/hooks/useAi'
 import { useCreateShot } from '@/hooks/useShots'
 import { api } from '@/lib/api'
@@ -85,6 +86,9 @@ export function StoryboardToolbar({
           <CheckCheck aria-hidden />
           Approve all ready{batch.approveCount ? ` (${batch.approveCount})` : ''}
         </Button>
+        <span className="ml-auto">
+          <ProjectBrandKitButton projectId={scene.project_id} />
+        </span>
       </div>
       {suggest.error || add.error || batch.error ? (
         <ErrorState compact title="That didn't work" error={suggest.error ?? add.error ?? batch.error} />

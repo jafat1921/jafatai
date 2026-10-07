@@ -102,8 +102,8 @@ All assets are tagged `brand` + the purpose.
   - When the branded film is ready, the Quick Create job's `result.final_render_id` moves to it (`clean_render_id` keeps the original).
 - **Quick Create:** `brand_kit_id` is stored as `project.settings.brand_kit_id`.
 
-## Integration points (for the follow-up task: planner, keyframes, autopilot)
-All in `backend/app/brand.py`. None of these are wired into storyboard, ai_jobs or the autopilot yet.
+## Integration points (planner, keyframes, autopilot)
+All in `backend/app/brand.py`. They are now wired in through `app/brand_moments.py`; see "As built: brand moments" below.
 | Function | Use |
 |---|---|
 | `get_kit(db, workspace_id, kit_id=None, project_id=None)` | `kit_id`, `"default"`, or the project's kit; `None` when unset |
@@ -121,6 +121,81 @@ Suggested wiring:
   - use the edit model.
 - In the autopilot's image slot, run `check_logo` against the logo for hero placements.
 - For hero shots, the planner asks for stable camera moves.
+
+## As built: brand moments inside adverts (2026-10-07)
+The integration points above are wired in. The glue is `backend/app/brand_moments.py`. No migration was needed: the closing shot is recorded in `project.settings`.
+
+**Settings**
+- `BrandSettings.closing: "auto"|"ai_packshot"|"logo_reveal"|"none" = "auto"`. It is a top-level scalar, set with `PATCH /brand-kits/{id} {"settings": {"closing": "logo_reveal"}}`.
+- `project.settings.brand_closing` (same values) overrides the kit. It is also set by Quick Create's `brand_closing`.
+- `auto` means `ai_packshot` when the kit has a product image, otherwise `logo_reveal`.
+- A mode the kit can't do falls back to the other one: no logo means a packshot, no product means the reveal. With neither, there is no closing shot.
+- `project.settings.brand_closing_shot = {shot_id, mode, kit_id}` is owned by the server. PATCH ignores it.
+
+**Planning** (only when the project has a kit, via `project.settings.brand_kit_id`)
+- The outline (`/ai/outline`, Quick Create) gets the kit's `prompt_context` plus an "this is an advert" note.
+- `suggest-shots`, `storyboard` (both modes) and the autopilot's storyboard get a brand brief:
+  - the context;
+  - the placeable assets with short ids (`logo`, `product1`…);
+  - the rules: real surfaces, at most two per shot, at least one hero, never a watermark, calm camera for hero moments.
+- `ShotList` and `SceneFrames` items carry `brand_placements: [{asset_id, surface, prominence}]`.
+  - Handles map back to media ids. Unknown assets are dropped, and each shot keeps at most 3.
+  - Stored as `{asset_id, asset_type, surface, prominence, source: "ai"}`.
+- **Locks:**
+  - `PATCH /shots/{id} {brand_placements}` stores each item as sent: `source` (`"ai"|"user"`) and any extra keys are kept. An item without `source` is stored as `"user"`.
+  - User-sourced placements are locked. `ShotOut.brand_placements_locked` is true when the shot has any of them.
+  - A shot with user placements counts as touched, so a re-plan of its scene becomes the usual `shots` Suggestion.
+  - An empty list is an empty field, which the AI may fill (same rule as `ai_may_write`).
+- **`POST /api/projects/{id}/ai/brand-moments`** → `202 Job` (`ai_brand_moments`). It re-plans placements over the existing shots in one reasoning call:
+  - shots with user placements get a Suggestion `{target_type: "shot", field: "brand_placements", current_text/proposed_text: JSON}`;
+  - other shots are written directly;
+  - result `{shot_ids, suggestion_ids, closing_shot_id}`;
+  - 422 without a kit, 409 without shots.
+  - Accepting the Suggestion stores the placements as `source: "user"`. `SuggestionResult` gained `shot: ShotOut`.
+
+**Closing shot**
+- After `storyboard` and `suggest-shots` write shots, `ensure_closing` appends one closing shot to the last storyboarded scene: `source: "ai"`, `seam_in: "cut"`, `prompt_mode: "manual"`. It is idempotent:
+  - it stays last;
+  - re-planning a scene keeps it;
+  - changing the mode replaces it.
+- `ShotOut.closing` (and the same value as `brand_closing`): `"ai_packshot"|"logo_reveal"|null` marks it.
+- `ai_packshot`:
+  - an `insert` shot of 4 s with deterministic start, end and motion prompts (the product on a clean surface, the logo on the packaging, slow steady push-in);
+  - hero placements for the product and the logo;
+  - normal keyframes and take.
+- `logo_reveal`:
+  - a 3 s shot with no keyframes: generating keyframes for it returns 409;
+  - its take is a `brand_reveal` CPU job: target shot, `kind: "take"`, `params.source: "logo_reveal"`, rendered from the real logo file;
+  - the clip uses the reel's draft size for the project aspect, 24 fps, with a silent 48 kHz stereo track;
+  - the worker approves it when it lands (`approved_by: "brand_closing"`), so Reel and stitch include it like any take;
+  - `POST /shots/{id}/takes` on this shot returns the reveal job instead of queueing LTX.
+- In Quick Create, the closing shot's length comes out of the last scene, so the film keeps the length that was asked for.
+
+**Keyframes with placements** (`storyboard.prepare_shot_generation`, used by studio and autopilot)
+- When the shot has `brand_placements` and the project has a kit, the edit model is used: `params.edit_model`, or the project's, or Qwen-Image-Edit 2511.
+- References come from `brand_reference_set`, ordered hero placements, then characters and location, then background placements, capped at the model's `max_refs`.
+  - They are resolved to generation ids, with labels such as `"the Leaf Coffee logo"` and the character's name.
+  - `params.brand = {kit_id, placements, dropped}`.
+- `params.brand_prompt` (the surface phrases) is appended to the frame prompt, including prompts compiled later by the worker.
+- A hero **logo** placement sets `params.brand_check = {kit_id, logo_media_id, surface}`.
+- Takes of a shot with any hero placement get a steady-camera tail on the motion prompt ("Slow, steady camera move, no shake…").
+
+**Logo check**
+- Studio: when a keyframe with `brand_check` finishes, a worker hook runs `check_logo` and stores `params.logo_check = {checked, passed, present, legible, distorted, score, issues, reason?, needs_review}`. `needs_review` is true only when the check ran and failed; the UI shows "check the logo".
+- Autopilot:
+  - a frame whose logo check fails is not vision-scored and costs a re-roll, up to `AUTO_RETRIES`;
+  - if every try fails, the frame with the best logo score is approved with `auto_check: "logo_flagged"` and `auto_issues`;
+  - "couldn't check" (`checked: false`) never blocks.
+- "Regenerate with logo" is `POST /generations/{id}/regenerate {mode: "note", note}` on a keyframe of a shot with placements.
+  - The brand references, `brand_check` and the surface fragment are rebuilt from the shot's current placements.
+  - The fragment goes back on even if the LLM's rewrite dropped it.
+  - The old `logo_check` isn't copied, so the new frame is checked afresh.
+
+**Advert templates** (`templates/video.json`)
+- `video-product-ad-30s`, `video-brand-story-60s` and `video-vertical-teaser-15s` have `requires_brand: true`. It is a hint, not enforced. It shows in `GET /templates` (`TemplateOut.requires_brand`) and in the start prefill.
+- They also have `planner` notes.
+- `POST /quick` accepts `template_id` (404 if unknown) and `brand_closing`. The template's planner notes go into the outline prompt ("Format notes: …").
+- Tested end to end on the mock driver with a kit, for both packshot and logo-reveal closings.
 
 ## Limits
 - **Urdu and RTL text:** shaped by Pillow+libraqm when it is available. Otherwise `arabic-reshaper` + `python-bidi` fall back to joined glyphs in visual order (Naskh style; Nastaliq ligatures need raqm).

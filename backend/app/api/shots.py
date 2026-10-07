@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import brand_moments as bm
 from app import longtake
 from app import storyboard as sb
 from app.ai_jobs import active_job, enqueue_ai
@@ -91,6 +92,9 @@ def patch_shot(shot_id: str, body: ShotPatch, db: Session = Depends(get_db), cur
         if changes.get(flag) is not None:
             setattr(shot, flag, changes.pop(flag))
         changes.pop(flag, None)
+    if changes.get("brand_placements") is not None:
+        # model_dump drops nothing extra; a placement without a source is the user's (locked)
+        changes["brand_placements"] = [{**p, "source": p.get("source") or "user"} for p in changes["brand_placements"]]
 
     if "beats" in changes:
         beats = changes.pop("beats")
@@ -200,6 +204,14 @@ def _queue_takes(db: Session, shot: Shot, count: int, duration_s: float | None =
 def queue_takes(shot_id: str, body: TakesIn | None = None, db: Session = Depends(get_db),
                 cur: CurrentUser = Depends(require_editor)):
     shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    if bm.is_reveal(db, shot):
+        # the closing logo reveal is rendered from the kit's logo file, never by LTX
+        kit = bm.project_kit(db, db.get(Project, shot.project_id))
+        if kit is None:
+            raise HTTPException(422, "The project's brand kit is gone; pick one to render the logo reveal")
+        g = bm.queue_reveal_take(db, shot, kit)
+        db.commit()
+        return [job_out(db.get(Job, g.job_id))] if g.job_id else []
     duration = (body.duration_s if body else None) or shot.duration_s
     count = _take_count(body, db.get(Project, shot.project_id), longtake.is_long(duration))
     jobs = _queue_takes(db, shot, count, duration, _render_choice(body))

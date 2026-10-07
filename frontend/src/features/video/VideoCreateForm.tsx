@@ -6,6 +6,9 @@ import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ModelPicker } from '@/components/models/ModelPicker'
+import { BrandChip } from '@/components/brand/BrandChip'
+import { useBrandChoice } from '@/hooks/useBrandKits'
+import { withBrand } from '@/lib/brand'
 import { AspectTiles } from '@/components/studio/aspect-tile'
 import { DurationFields } from '@/components/studio/duration-picker'
 import { ErrorState } from '@/components/studio/states'
@@ -35,6 +38,7 @@ export function VideoCreateForm({ initial, modelPicked }: { initial: VideoForm; 
   const [form, setForm] = useState<VideoForm>(initial)
   const [advanced, setAdvanced] = useState(false)
   const generate = useVideoGenerate()
+  const brand = useBrandChoice()
   const set = <K extends keyof VideoForm>(k: K, v: VideoForm[K]) => setForm((f) => ({ ...f, [k]: v }))
 
   const blocked = (id: string | undefined, hasImage: boolean) => {
@@ -63,7 +67,7 @@ export function VideoCreateForm({ initial, modelPicked }: { initial: VideoForm; 
 
   const submit = () => {
     if (!canSubmit || !model) return
-    generate.mutate(videoPayload({ ...form, durationS: duration }, model), {
+    generate.mutate(withBrand(videoPayload({ ...form, durationS: duration }, model), brand.sendId), {
       onSuccess: () => announce('Making your clip. It appears below when it finishes.'),
     })
   }
@@ -115,6 +119,7 @@ export function VideoCreateForm({ initial, modelPicked }: { initial: VideoForm; 
         blockedBy={(m) => videoBlockedReason(m, !!form.imageId)}
         highlighted={modelPicked}
       />
+      <BrandChip choice={brand} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <DurationFields

@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 from app.llm import LLMError, chat_sync
 from app.llm import prompts as P
 from app.llm.client import is_warm, model_for
+from app import brand
+from app import brand_moments as bm
 from app import storyboard as sb
 from app.models import Character, Job, Location, Project, Scene, SceneVersion, Shot, Suggestion, utcnow
 from app.schemas import flush_left
@@ -37,6 +39,7 @@ PRIORITY = {
     "ai_suggest_shots": 4,
     "ai_extract_locations": 3,
     "ai_storyboard": 1,
+    "ai_brand_moments": 3,
     "ai_summarize": -10,
 }
 SUMMARY_QUIET = timedelta(seconds=8)
@@ -212,10 +215,16 @@ def upsert_character(db: Session, project: Project, name: str, description: str,
 
 
 def accept(db: Session, s: Suggestion, user_id: str):
-    model = {"scene": Scene, "character": Character, "location": Location}.get(s.target_type)
+    model = {"scene": Scene, "character": Character, "location": Location, "shot": Shot}.get(s.target_type)
     target = db.get(model, s.target_id) if model else None
     if target is None:
         raise LookupError(f"The {s.target_type} for this suggestion no longer exists")
+    if s.field == "brand_placements":
+        # chosen by the user, so it's theirs now and later AI passes only suggest
+        target.brand_placements = [{**p, "source": "user"} for p in json.loads(s.proposed_text or "[]")]
+        s.status = "accepted"
+        s.resolved_at = utcnow()
+        return target
     if s.field == "shots":
         # the user picked the AI's shot list over what was there, so it replaces the lot
         replace_shots(db, target, json.loads(s.proposed_text or "[]"), source="ai_edited", locked=True)
@@ -353,7 +362,9 @@ def handle_outline(ctx) -> dict:
         for s in existing:  # empty stubs only
             db.delete(s)
 
-        res = run.call("The AI Director is outlining your film", 0.03, "reasoning", P.outline_messages(project),
+        kit = bm.project_kit(db, project)
+        res = run.call("The AI Director is outlining your film", 0.03, "reasoning",
+                       P.outline_messages(project, brand.prompt_context(kit) if kit else ""),
                        schema=P.Outline, temperature=0.6, max_tokens=8000)
         outline: P.Outline = res.data
         if not project.logline.strip():
@@ -584,8 +595,15 @@ def _char_ids(names: list[str], chars: list[Character]) -> list[str]:
     return out
 
 
+def _closing_id(db: Session, project_id: str) -> str | None:
+    return bm.closing_record(db.get(Project, project_id)).get("shot_id")
+
+
 def replace_shots(db: Session, scene: Scene, plans: list[dict], *, source: str = "ai", locked: bool = False) -> list[Shot]:
-    sb.delete_shots(db, sb.scene_shots(db, scene.id))
+    # the advert's closing shot isn't part of any plan; it stays and moves to the end
+    keep = _closing_id(db, scene.project_id)
+    old = sb.scene_shots(db, scene.id)
+    sb.delete_shots(db, [s for s in old if s.id != keep])
     db.flush()
     shots = []
     for i, plan in enumerate(plans, start=1):
@@ -593,16 +611,21 @@ def replace_shots(db: Session, scene: Scene, plans: list[dict], *, source: str =
                     source=source, locked=locked, prompt_mode="auto",
                     **{k: plan[k] for k in PLAN_FIELDS if plan.get(k) is not None})
         shot.character_ids = list(plan.get("character_ids") or [])
+        shot.brand_placements = list(plan.get("brand_placements") or [])
         shots.append(shot)
     db.add_all(shots)
     db.flush()
+    sb.renumber(shots + [s for s in old if s.id == keep])
     return shots
 
 
 def apply_shot_plan(db: Session, scene: Scene, plans: list[dict], *, action: str, job_id: str | None):
-    """Lock rule for shots: AI replaces a scene's shots only while they are all untouched AI drafts."""
-    existing = sb.scene_shots(db, scene.id)
-    touched = [s for s in existing if s.locked or s.source != "ai" or sb.has_approved_work(db, s)]
+    """Lock rule for shots: AI replaces a scene's shots only while they are all untouched AI drafts.
+    Brand placements the user edited count as touched too."""
+    keep = _closing_id(db, scene.project_id)
+    existing = [s for s in sb.scene_shots(db, scene.id) if s.id != keep]
+    touched = [s for s in existing
+               if s.locked or s.source != "ai" or bm.user_placed(s) or sb.has_approved_work(db, s)]
     if not touched:
         return replace_shots(db, scene, plans), None
     db.execute(
@@ -632,8 +655,10 @@ def _previous_scene(db: Session, scene: Scene) -> Scene | None:
 def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_shots: int, frac: float,
                 first_seam: str = "cut") -> list[dict]:
     chars = _characters(db, project.id)
+    kit = bm.project_kit(db, project)
     ideas = run.call(f"Planning shots for {scene.heading or 'the scene'}", frac, "reasoning",
-                     P.suggest_shots_messages(project, chars, scene, max_shots, _previous_scene(db, scene)),
+                     P.suggest_shots_messages(project, chars, scene, max_shots, _previous_scene(db, scene),
+                                              brand=bm.planner_brief(kit) if kit else ""),
                      schema=P.ShotList, temperature=0.5, max_tokens=5000).data.shots[:max_shots]
     plans = []
     for i, idea in enumerate(ideas):
@@ -643,6 +668,7 @@ def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_sho
             "camera": idea.camera.strip()[:300], "character_ids": _char_ids(idea.characters, chars),
             "location_id": scene.location_id, "seam_in": seam, "handoff_text": idea.handoff.strip() if i else "",
             "start_prompt": _text(idea.start_visual), "end_prompt": _text(idea.end_visual), "motion_prompt": "",
+            "brand_placements": bm.placements_from(kit, idea.brand_placements) if kit else [],
         })
     return plans
 
@@ -683,7 +709,8 @@ def fill_shot_prompt(ctx, gen) -> str:
     if not prompt.strip():
         raise RuntimeError("This shot has no prompt and no description to work from. Describe the shot first.")
     ctx.progress(0.05, "Prompt ready")
-    return prompt
+    # brand surfaces (keyframes) or the steady-camera note (takes) decided when it was queued
+    return bm.with_fragment(prompt, (gen.params or {}).get("brand_prompt"))
 
 
 def handle_suggest_shots(ctx) -> dict:
@@ -695,8 +722,10 @@ def handle_suggest_shots(ctx) -> dict:
     run = AiRun(ctx)
     plans = _plan_shots(run, db, project, scene, int(job.payload.get("max_shots") or 6), 0.1)
     shots, sug = apply_shot_plan(db, scene, plans, action="suggest_shots", job_id=job.id)
+    closing = bm.ensure_closing(db, project) if shots else None
     return run.result(outcome="suggested" if sug else "written", scene_ids=[scene.id],
-                      shot_ids=[s.id for s in shots], suggestion_ids=[sug] if sug else [])
+                      shot_ids=[s.id for s in shots], suggestion_ids=[sug] if sug else [],
+                      closing_shot_id=closing.id if closing else None)
 
 
 def handle_compile_prompts(ctx) -> dict:
@@ -775,6 +804,8 @@ def handle_extract_locations(ctx) -> dict:
 
 
 def queue_frames(db: Session, shot: Shot) -> list:
+    if bm.is_reveal(db, shot):
+        return []  # the exact logo reveal has no frames; its take is already queued
     prev, _ = sb.neighbours(db, shot)
     kinds = ["keyframe_end"] if sb.is_linked(shot, prev) else ["keyframe_start", "keyframe_end"]
     gens = []
@@ -789,9 +820,11 @@ def _scene_plan(run: AiRun, db: Session, project: Project, scene: Scene, frac: f
     chars = _characters(db, project.id)
     location = db.get(Location, scene.location_id) if scene.location_id else None
     duration = sb.script_duration(scene.script_text)
+    kit = bm.project_kit(db, project)
     d: P.SceneFrames = run.call(
         f"Writing first and last frames for {scene.heading or 'the scene'}", frac, "creative",
-        P.scene_frames_messages(project, chars, scene, location, duration, _previous_scene(db, scene)),
+        P.scene_frames_messages(project, chars, scene, location, duration, _previous_scene(db, scene),
+                                brand=bm.planner_brief(kit) if kit else ""),
         schema=P.SceneFrames, temperature=0.5, max_tokens=1800,
     ).data
     return {
@@ -800,6 +833,7 @@ def _scene_plan(run: AiRun, db: Session, project: Project, scene: Scene, frac: f
         "camera": d.camera.strip()[:300], "character_ids": _char_ids(d.characters, chars),
         "location_id": scene.location_id, "seam_in": seam, "handoff_text": "",
         "start_prompt": _text(d.start_prompt), "end_prompt": _text(d.end_prompt), "motion_prompt": _text(d.motion_prompt),
+        "brand_placements": bm.placements_from(kit, d.brand_placements) if kit else [],
     }
 
 
@@ -817,9 +851,10 @@ def handle_storyboard(ctx) -> dict:
     done: dict[str, list] = {"scene_ids": [], "skipped_scene_ids": [], "shot_ids": [], "suggestion_ids": [],
                              "generation_ids": [], "frame_job_ids": []}
 
+    keep = _closing_id(db, project.id)
     for k, scene in enumerate(targets):
         frac = 0.05 + 0.9 * k / len(targets)
-        if sb.scene_shots(db, scene.id) and not p.get("overwrite"):
+        if [s for s in sb.scene_shots(db, scene.id) if s.id != keep] and not p.get("overwrite"):
             done["skipped_scene_ids"].append(scene.id)
             continue
         seam = "continue" if chain else "cut"
@@ -847,8 +882,26 @@ def handle_storyboard(ctx) -> dict:
         done["shot_ids"] += [s.id for s in shots]
         run.publish(**done)
         ctx.progress(frac, f"Storyboarded {len(done['scene_ids'])} of {len(targets)} scenes")
+    if done["shot_ids"]:
+        had = bm.closing_record(project).get("shot_id")
+        closing = bm.ensure_closing(db, project)
+        if closing is not None:
+            done["closing_shot_id"] = closing.id
+            if closing.id != had and p.get("generate_frames", True):
+                for g in queue_frames(db, closing):
+                    done["generation_ids"].append(g.id)
+                    done["frame_job_ids"].append(g.job_id)
     project.updated_at = utcnow()
     return run.result(outcome="suggested" if done["suggestion_ids"] and not done["shot_ids"] else "written", **done)
+
+
+def handle_brand_moments(ctx) -> dict:
+    db, job = ctx.db, ctx.job
+    project = _owned(db, Project, job.payload.get("project_id"), job, "Project")
+    run = AiRun(ctx)
+    out = bm.plan_existing(run, db, project, job.id)
+    project.updated_at = utcnow()
+    return run.result(outcome="suggested" if out["suggestion_ids"] and not out["shot_ids"] else "written", **out)
 
 
 AI_HANDLERS = {
@@ -856,6 +909,7 @@ AI_HANDLERS = {
     "ai_compile_prompts": handle_compile_prompts,
     "ai_extract_locations": handle_extract_locations,
     "ai_storyboard": handle_storyboard,
+    "ai_brand_moments": handle_brand_moments,
     "ai_outline": handle_outline,
     "ai_write_missing": handle_write_missing,
     "ai_continue": handle_continue,

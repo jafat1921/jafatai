@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import ai_jobs
+from app import brand_moments as bm
 from app.config import get_settings
 from app.db import get_db
 from app.llm import LLMError, chat
@@ -23,7 +24,7 @@ from app.schemas import (
 )
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import character_out, get_owned, job_out
-from app.storyboard import location_out
+from app.storyboard import location_out, shot_out
 
 router = APIRouter(tags=["ai"])
 
@@ -136,6 +137,18 @@ def build_storyboard(project_id: str, body: StoryboardIn | None = None, db: Sess
     return _queue(db, cur, "ai_storyboard", payload, p.id)
 
 
+@router.post("/projects/{project_id}/ai/brand-moments", response_model=JobOut, status_code=202)
+def brand_moments(project_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    """Re-plan where the logo and products appear across the existing shots (contract v7, as built)."""
+    p = get_owned(db, Project, project_id, cur.workspace_id, "Project")
+    if bm.project_kit(db, p) is None:
+        raise HTTPException(422, "This project has no brand kit. Pick one in the project settings first.")
+    if not db.scalar(select(Shot.id).where(Shot.project_id == p.id).limit(1)):
+        raise HTTPException(409, "There are no shots yet. Storyboard the film first.")
+    running = ai_jobs.active_job(db, "ai_brand_moments", p.id)
+    return job_out(running) if running else _queue(db, cur, "ai_brand_moments", {"project_id": p.id}, p.id)
+
+
 @router.post("/scenes/{scene_id}/ai/assist", response_model=JobOut, status_code=202)
 def assist(scene_id: str, body: AssistIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
@@ -189,6 +202,8 @@ def accept_suggestion(suggestion_id: str, db: Session = Depends(get_db), cur: Cu
         out.scene = SceneOut.model_validate(target)
     elif s.target_type == "location":
         out.location = location_out(db, target)
+    elif s.target_type == "shot":
+        out.shot = shot_out(db, target)
     else:
         out.character = character_out(db, target)
     return out

@@ -51,6 +51,37 @@ export function videoBlockedReason(m: ModelInfo, hasImage: boolean): string | nu
   return null
 }
 
+/** Image to Video: the start picture is required, so text-only models are out; an end picture needs first+last frame. */
+export function i2vBlockedReason(m: ModelInfo, hasEnd: boolean): string | null {
+  if (!has(m, 'i2v')) return `${m.label} works from text only, so it can't animate a picture. Use Create Video for text clips.`
+  if (hasEnd && !has(m, 'flf')) return `${m.label} can't land on an end image. Remove the end image to use it.`
+  return null
+}
+
+export interface I2vForm {
+  startId: string | null
+  endId: string | null
+  prompt: string
+  model?: string
+  durationS: number
+  smooth: boolean
+  seed: string
+}
+
+export const DEFAULT_I2V_FORM: I2vForm = { startId: null, endId: null, prompt: '', durationS: 5, smooth: false, seed: '' }
+
+export function i2vPayload(f: I2vForm & { startId: string }, m: ModelInfo, brandKitId?: string): VideoGenerateRequest {
+  // no aspect: the clip takes the start picture's shape
+  // TODO: add an aspect picker if the server ends up cropping image-to-video to its 16:9 default
+  const body: VideoGenerateRequest = { prompt: f.prompt.trim(), model: m.id, duration_s: clampDuration(f.durationS, m), image_id: f.startId }
+  if (f.endId && has(m, 'flf')) body.end_image_id = f.endId
+  const seed = Number.parseInt(f.seed, 10)
+  if (Number.isFinite(seed) && seed >= 0) body.seed = seed
+  if (f.smooth && !smoothBlockedReason(m, body.duration_s)) body.smooth_motion = true
+  if (brandKitId) body.brand_kit_id = brandKitId
+  return body
+}
+
 export function videoPayload(f: VideoForm, m: ModelInfo): VideoGenerateRequest {
   const body: VideoGenerateRequest = {
     prompt: f.prompt.trim(),

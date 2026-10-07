@@ -6,6 +6,7 @@ import { useJob } from '@/hooks/useJobs'
 import { generationStatus, isPendingGeneration, scoreText } from '@/lib/status'
 import type { Generation } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LogoCheckBadge } from './LogoCheckBadge'
 
 interface Props {
   side: 'START' | 'END'
@@ -18,9 +19,12 @@ interface Props {
   linkedFrom?: string
   onGenerate?: () => void
   generating?: boolean
+  // contract-v7: frames with brand placements carry params.logo_check
+  onRegenerateWithLogo?: (issues: string[]) => void
+  regeneratingLogo?: boolean
 }
 
-export function FrameSlot({ side, frame, alt, aspectClass, selected, onSelect, linkedFrom, onGenerate, generating }: Props) {
+export function FrameSlot({ side, frame, alt, aspectClass, selected, onSelect, linkedFrom, onGenerate, generating, onRegenerateWithLogo, regeneratingLogo }: Props) {
   const job = useJob(frame?.job_id)
   const pending = frame ? isPendingGeneration(frame.status) : false
   const score = scoreText(frame?.score)
@@ -96,6 +100,7 @@ export function FrameSlot({ side, frame, alt, aspectClass, selected, onSelect, l
           )
         )}
       </div>
+      {frame && !pending && <LogoCheckBadge frame={frame} onRegenerate={linked ? undefined : onRegenerateWithLogo} busy={regeneratingLogo} />}
     </div>
   )
 }

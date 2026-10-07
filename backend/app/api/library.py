@@ -23,7 +23,8 @@ from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db
 from app.models import Generation, Job, MediaItem, Project, new_id
 from app.schemas import (
-    DashboardOut, ImageBatchOut, ImageEditIn, ImageGenerateIn, JobOut, MediaDetailOut, MediaItemOut, MediaPage,
+    DashboardOut, ImageBatchOut, ImageEditIn, ImageGenerateIn, Img2ImgIn, JobOut, MediaDetailOut, MediaItemOut,
+    MediaPage,
     MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut,
 )
 from app.security import CurrentUser, get_current_user, require_editor
@@ -279,6 +280,41 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
     return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs])
 
 
+@router.post("/images/img2img", response_model=ImageBatchOut, status_code=202)
+def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    if not body.prompt.strip():
+        raise HTTPException(422, "Describe the picture you want")
+    model = mc.get(body.model, "image")
+    reason = mc.capability_unavailable(model, "i2i")
+    if reason:
+        raise HTTPException(422, f"Image to image with {model.label} isn't available: {reason}")
+    speed = mc.speed_of(model, body.speed)
+    media_id, src = _edit_source(db, cur.workspace_id, body.source_id)
+    if body.aspect == "source":
+        sw, sh = lib._image_dims(src)
+        w, h = lib.size_for_ratio(sw, sh) if sw and sh else lib.size_for_aspect("1:1")
+    else:
+        w, h = lib.size_for_aspect(body.aspect)
+    prompt = body.prompt.strip()
+    title = (body.title or "").strip() or f"Restyle · {lib.short_title(prompt, 5)}"
+    items, jobs = [], []
+    for i in range(body.count):
+        params = {"width": w, "height": h, "aspect": body.aspect, "model": model.id, "user_prompt": prompt,
+                  "img2img_of": {"media_id": media_id, "generation_id": src.id, "strength": body.strength},
+                  "created_by": {"user_id": cur.id, "flow": "image_img2img"}}
+        if speed:
+            params["speed"] = speed.id
+        if body.negative:
+            params["negative"] = body.negative.strip()
+        seed = (body.seed + i) % 2**31 if body.seed is not None else None
+        item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
+            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed)
+        items.append(item)
+        jobs.append(job)
+    db.commit()
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs])
+
+
 # ---------------------------------------------------------------- templates
 
 @lru_cache
@@ -293,7 +329,8 @@ def templates() -> dict[str, dict]:
 
 @router.get("/templates", response_model=list[TemplateOut])
 def list_templates(type: Literal["video", "image"] | None = None, cur: CurrentUser = Depends(get_current_user)):
-    return [TemplateOut(**{k: t.get(k) for k in ("id", "type", "title", "description", "thumb", "defaults")})
+    return [TemplateOut(**{k: t.get(k) for k in ("id", "type", "title", "description", "thumb", "defaults")},
+                        requires_brand=bool(t.get("requires_brand")))
             for t in templates().values() if type in (None, t["type"])]
 
 
@@ -322,6 +359,8 @@ def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user
                    "style": d.get("style"), "dialogue": d.get("dialogue"), "template_id": t["id"]}
         target = "quick"
     prefill["placeholders"] = placeholders(scaffold)
+    if t.get("requires_brand"):
+        prefill["requires_brand"] = True
     return TemplateStartOut(target=target, prefill=prefill)
 
 

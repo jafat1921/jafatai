@@ -1,0 +1,25 @@
+{
+  "name": "flux2_klein_i2i",
+  "family": "flux.2-klein-4b",
+  "description": "FLUX.2 [klein] 4B distilled image-to-image: scaled/centre-cropped source, VAE-encoded, Flux2Scheduler sigmas cut by SplitSigmasDenoise (its low half, output 1) so only the last 'strength' of the schedule runs. The driver stretches the scheduler's steps (4 / strength) so about 4 real steps run at any strength.",
+  "inputs": {
+    "image":   {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":  {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "width":   {"type": "int", "default": 1024, "multiple_of": 16,
+                "targets": [["Resize", "width"], ["Scheduler", "width"]]},
+    "height":  {"type": "int", "default": 1024, "multiple_of": 16,
+                "targets": [["Resize", "height"], ["Scheduler", "height"]]},
+    "denoise": {"type": "float", "default": 0.45, "targets": [["Strength", "denoise"]]},
+    "steps":   {"type": "int", "default": 9, "targets": [["Scheduler", "steps"]]},
+    "seed":    {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/flux2klein_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["flux-2-klein-4b-fp8.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["flux2-vae.safetensors"]
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 4, "UNet": 2, "TextEncoder": 2, "Encode": 1}
+}

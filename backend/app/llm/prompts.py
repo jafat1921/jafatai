@@ -158,7 +158,13 @@ WRITER_SYSTEM = (
 )
 
 
-def outline_messages(project) -> list[dict]:
+ADVERT_OUTLINE = ("This film is an advert for the brand below. Build the story around a moment where the product "
+                  "belongs naturally, keep the brand's tone of voice, and leave room for the product and logo to be "
+                  "seen on real things in the scenes (packaging, signage, screens, clothing, vehicles). The film ends on "
+                  "a short packshot or logo reveal that is added for you, so the last scene should lead into it.")
+
+
+def outline_messages(project, brand: str = "") -> list[dict]:
     n = target_scene_count(project.target_runtime_s)
     user = (
         f"{film_block(project)}\n\n"
@@ -169,6 +175,8 @@ def outline_messages(project) -> list[dict]:
         "Also give the film's logline in one sentence and the main characters (name plus a few words on their role). "
         "Keep the cast small and reuse names exactly."
     )
+    if brand:
+        user += f"\n\n{ADVERT_OUTLINE}\n{brand}"
     return [{"role": "system", "content": DIRECTOR_SYSTEM}, {"role": "user", "content": user}]
 
 
@@ -329,6 +337,18 @@ def _shot_type(v) -> str:
     return "medium"
 
 
+class PlacementIdea(BaseModel):
+    """One brand moment as the planner proposes it; asset_id is a handle from the brief ("logo", "product1")."""
+    asset_id: str
+    surface: str = ""
+    prominence: str = "background"
+
+    @field_validator("prominence", mode="before")
+    @classmethod
+    def _prom(cls, v):
+        return "hero" if str(v or "").strip().lower() in ("hero", "foreground", "primary", "main") else "background"
+
+
 class ShotIdea(BaseModel):
     shot_type: str = "medium"
     duration_s: float = 4.0
@@ -339,6 +359,7 @@ class ShotIdea(BaseModel):
     end_visual: str = ""
     handoff: str = ""
     continuous: bool = False
+    brand_placements: list[PlacementIdea] = []
 
     @field_validator("shot_type", mode="before")
     @classmethod
@@ -369,6 +390,7 @@ class SceneFrames(FramePrompts):
     description: str = ""
     camera: str = ""
     characters: list[str] = []
+    brand_placements: list[PlacementIdea] = []
 
     @field_validator("shot_type", mode="before")
     @classmethod
@@ -427,7 +449,7 @@ SHOTLIST_SYSTEM = (
 )
 
 
-def suggest_shots_messages(project, characters, scene, max_shots: int, previous=None) -> list[dict]:
+def suggest_shots_messages(project, characters, scene, max_shots: int, previous=None, brand: str = "") -> list[dict]:
     before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}" if previous else ""
     user = (
         f"{film_block(project, characters)}\n\nScene: {scene.heading or '(no heading)'}\n---\n"
@@ -438,6 +460,40 @@ def suggest_shots_messages(project, characters, scene, max_shots: int, previous=
         "as in the cast list), start_visual and end_visual (what the first and the last frame show), handoff (what "
         "carries over from the previous shot: a prop, a look, an emotion; empty for the first shot), and continuous "
         "(true only when the action flows straight on from the previous shot with no jump in time or place)."
+    )
+    if brand:
+        user += "\n\n" + brand + "\nGive each shot brand_placements (an empty list where the brand doesn't fit)."
+    return [{"role": "system", "content": SHOTLIST_SYSTEM}, {"role": "user", "content": user}]
+
+
+BRAND_RULES = """Brand moments: this film is an advert. The brand's logo and products must appear INSIDE the scenes, on real things the story already has: packaging, a cup sleeve, signage, a billboard, a shop front, a phone or laptop screen, apparel, a vehicle, a tote bag.
+- For a shot where it fits, give brand_placements: a list of {"asset_id": one of the ids below, "surface": the exact object it is printed on or the place it sits, "prominence": "hero" (the subject of the shot, front-facing and sharp) or "background" (visible but not the focus)}.
+- At most two placements per shot. Not every shot needs one; it must feel natural, never a watermark, sticker or overlay. Plan at least one hero moment in the film.
+- Hero moments need a calm frame: keep the camera slow and steady in those shots.
+- Don't plan the closing packshot or logo reveal; it is added after your last shot."""
+
+
+def brand_brief(context: str, assets: list[tuple[str, str]]) -> str:
+    """The kit as the planner sees it: prompt_context, the placeable assets with their ids, and the rules."""
+    rows = "\n".join(f"- {aid}: {what}" for aid, what in assets) or "- (no logo or product images yet)"
+    return f"{context}\n\nBrand assets you can place (use the id exactly):\n{rows}\n\n{BRAND_RULES}"
+
+
+class ShotPlacements(BaseModel):
+    shot: int
+    brand_placements: list[PlacementIdea] = []
+
+
+class BrandMoments(BaseModel):
+    shots: list[ShotPlacements] = []
+
+
+def brand_moments_messages(project, shots: list[tuple[int, str]], brand: str) -> list[dict]:
+    listing = "\n".join(f"Shot {n}: {text}" for n, text in shots)
+    user = (
+        f"Film: {project.title}. {project.logline}\n\nThe shot list, in order:\n{listing[:12000]}\n\n{brand}\n\n"
+        "Answer as JSON: shots = a list of {\"shot\": the shot number, \"brand_placements\": [...]} for the shots "
+        "that get a brand moment. Leave the others out."
     )
     return [{"role": "system", "content": SHOTLIST_SYSTEM}, {"role": "user", "content": user}]
 
@@ -468,7 +524,8 @@ def compile_messages(project, scene, shot, characters, location, prev_shot=None,
             {"role": "user", "content": user}]
 
 
-def scene_frames_messages(project, characters, scene, location, duration_s: float, previous=None) -> list[dict]:
+def scene_frames_messages(project, characters, scene, location, duration_s: float, previous=None,
+                          brand: str = "") -> list[dict]:
     before = ""
     if previous is not None:
         before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}"
@@ -480,6 +537,9 @@ def scene_frames_messages(project, characters, scene, location, duration_s: floa
         "only those on screen), start_prompt = the frame the scene OPENS on, end_prompt = the frame it ENDS on, and "
         f"motion_prompt = what happens in between.\n\n{_style(project)}\n\n{FRAME_RULES}"
     )
+    if brand:
+        user += ("\n\n" + brand + "\nAlso give brand_placements for this shot (an empty list if the brand doesn't "
+                 "fit here), and describe those objects in the start and end prompts.")
     return [{"role": "system", "content": "You are a director of photography writing prompts for image and video models. "
                                           "Answer only with JSON."},
             {"role": "user", "content": user}]

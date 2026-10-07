@@ -4,7 +4,7 @@ import { ImagePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MediaPicker } from '@/components/media/MediaPicker'
-import { UploadZone } from '@/components/media/UploadZone'
+import { SourceDropZone } from '@/components/media/SourceDropZone'
 import { qk } from '@/hooks/keys'
 import { api } from '@/lib/api'
 import { MAX_EDIT_SOURCES } from '@/lib/images'
@@ -75,7 +75,8 @@ export function EditSources({ ids, onAdd, onRemove, notice, max = MAX_EDIT_SOURC
           })}
         </ul>
       )}
-      {!full && <UploadZone compact kinds={['image']} onUploaded={(m) => onAdd([m])} />}
+      {/* the header button already opens the Library, so the zone only drops, pastes and uploads */}
+      {!full && <SourceDropZone label="Source images" multiple pickMax={0} onAdd={(items) => onAdd(items)} />}
       {notice && (
         <p className="text-small text-studio-warning" role="status">
           {notice}

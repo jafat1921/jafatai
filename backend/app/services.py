@@ -172,6 +172,19 @@ def approve(db: Session, g: Generation) -> Generation:
     return g
 
 
+def owned_source(db: Session, workspace_id: str, any_id: str, label: str = "Generation") -> Generation:
+    """A generation id, or a Library item id standing for its current version (uploads included), so
+    pickers can pass whichever id they hold."""
+    from app.models import MediaItem
+
+    item = db.get(MediaItem, any_id)
+    if item is not None and item.workspace_id == workspace_id and item.generation_id:
+        g = db.get(Generation, item.generation_id)
+        if g is not None:
+            return g
+    return get_owned(db, Generation, any_id, workspace_id, label)
+
+
 def generation_file(g: Generation) -> Path | None:
     if not g.file_path:
         return None

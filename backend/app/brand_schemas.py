@@ -68,6 +68,8 @@ class BrandSettings(BaseModel):
     intro_card: CardSettings = Field(default_factory=_intro_default)
     lower_third: LowerThirdSettings = LowerThirdSettings()
     grade: GradeSettings = GradeSettings()
+    # how an advert planned with this kit ends (brand_moments.closing_mode); "none" plans no closing shot
+    closing: Literal["auto", "ai_packshot", "logo_reveal", "none"] = "auto"
 
     def enabled(self) -> list[str]:
         return [k for k in ("watermark", "intro_card", "end_card", "lower_third", "grade") if getattr(self, k).enabled]
@@ -78,12 +80,16 @@ def merged_settings(base: dict | None, override: dict | None = None) -> BrandSet
     # start from the defaults section by section: the intro card's own defaults differ from CardSettings'
     data = BrandSettings().model_dump()
     for k, v in (base or {}).items():
-        if isinstance(v, dict) and k in data:
+        if isinstance(v, dict) and isinstance(data.get(k), dict):
             data[k].update(v)
+        elif k in data and not isinstance(data[k], dict):
+            data[k] = v
     for k, v in (override or {}).items():
         if k not in data:
             continue
-        if isinstance(v, bool):
+        if not isinstance(data[k], dict):
+            data[k] = v  # scalar settings (closing) replace outright
+        elif isinstance(v, bool):
             data[k]["enabled"] = v
         elif isinstance(v, dict):
             data[k].update(v)

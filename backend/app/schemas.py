@@ -347,6 +347,11 @@ class ShotOut(Out):
     takes_count: int = 0
     beats: list[dict[str, Any]] = []
     brand_placements: list[dict[str, Any]] = []
+    # set on the advert's closing shot: "ai_packshot" or "logo_reveal" (exact clip, no keyframes);
+    # `closing` is the same value under the name the UI reads
+    brand_closing: str | None = None
+    closing: str | None = None
+    brand_placements_locked: bool = False
     created_at: Utc
     updated_at: Utc
 
@@ -392,10 +397,15 @@ class ShotPatch(BaseModel):
 
 
 class BrandPlacement(BaseModel):
+    # extra keys the UI sends along are kept as they are
+    model_config = ConfigDict(extra="allow")
+
     asset_id: str
     asset_type: Literal["logo", "product"]
     surface: str = Field("", max_length=200)
     prominence: Literal["hero", "background"] = "background"
+    # "user" placements are locked: AI re-plans only suggest changes to them
+    source: Literal["ai", "user"] = "user"
 
 
 ShotPatch.model_rebuild()
@@ -447,6 +457,7 @@ class SuggestionResult(BaseModel):
     scene: SceneOut | None = None
     character: CharacterOut | None = None
     location: LocationOut | None = None
+    shot: ShotOut | None = None
 
 
 # reel (contract v3)
@@ -630,13 +641,28 @@ class VideoGenerateIn(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     model: str | None = Field(None, max_length=60)
     duration_s: float = Field(5.0, ge=1)
-    aspect: VideoAspect = "16:9"
+    aspect: VideoAspect | None = None  # None: the start image's shape (nearest supported), else 16:9
     image_id: str | None = None
+    end_image_id: str | None = None  # first+last frame (LTX "flf"); needs image_id
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     smooth_motion: bool = False
     negative: str | None = Field(None, max_length=2000)
     title: str | None = Field(None, max_length=300)
     brand_kit_id: str | None = None  # contract v7
+
+
+class Img2ImgIn(BaseModel):
+    source_id: str  # a Library item (uploads too) or a finished image generation id
+    prompt: str = Field(min_length=1, max_length=4000)
+    strength: float = Field(0.45, ge=0.1, le=0.9)
+    model: str | None = Field(None, max_length=60)
+    speed: str | None = Field(None, max_length=30)
+    count: int = Field(1, ge=1, le=4)
+    aspect: Literal["source", "1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2"] = "source"
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    negative: str | None = Field(None, max_length=2000)
+    title: str | None = Field(None, max_length=300)
+    brand_kit_id: str | None = None
 
 
 class VideoGenerateOut(MediaItemOut):
@@ -655,6 +681,7 @@ class TemplateOut(BaseModel):
     description: str
     thumb: str | None = None
     defaults: dict[str, Any]
+    requires_brand: bool = False  # advert templates: the UI asks for a brand kit
 
 
 class TemplateStartOut(BaseModel):

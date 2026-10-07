@@ -9,6 +9,7 @@ import { SHOT_TYPES } from '@/lib/shots'
 import type { Shot, ShotPatch, ShotType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LocationPicker } from '@/features/workspace/LocationPicker'
+import { BrandPlacements } from './BrandPlacements'
 
 // Inline shot details on a Storyboard row: type, duration, description, cast and location.
 export function ShotFields({ shot, label }: { shot: Shot; label: string }) {
@@ -98,6 +99,7 @@ export function ShotFields({ shot, label }: { shot: Shot; label: string }) {
           ))}
         </div>
       )}
+      <BrandPlacements shot={shot} label={label} />
       {update.isError && (
         <p role="alert" className="text-small text-studio-danger">
           Couldn&apos;t save: {update.error.message}

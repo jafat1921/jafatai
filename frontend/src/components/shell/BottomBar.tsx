@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { Clapperboard, Home, ImageIcon, ListOrdered, LogOut, Menu, Settings, X } from 'lucide-react'
+import { Clapperboard, Home, ImageIcon, ListOrdered, LogOut, Menu, Settings, Stamp, X } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { useLogout, useMe } from '@/hooks/useAuth'
 import { useConnections } from '@/hooks/useConnections'
@@ -52,6 +52,10 @@ function MoreSheet({ onPick }: { onPick: () => void }) {
   return (
     <>
       <SectionList section={menus.assets} onPick={onPick} />
+      <Link to="/brand-kits" onClick={onPick} className="flex items-center gap-3 rounded-[6px] p-2 hover:bg-studio-panel-hover">
+        <Stamp aria-hidden className="size-4 text-studio-accent" />
+        <span className="flex-1 text-body">Brand Kits</span>
+      </Link>
       <SectionList section={menus.upscale} onPick={onPick} />
       <h3 className="section-label px-2 pt-3">System &amp; account</h3>
       <Link to="/settings" onClick={onPick} className="flex items-center gap-3 rounded-[6px] p-2 hover:bg-studio-panel-hover">
@@ -86,7 +90,7 @@ export function BottomBar() {
   const [sheet, setSheet] = useState<Sheet>(null)
   const { running } = useRunningCount()
   const close = () => setSheet(null)
-  const on = (id: string) => (id === 'more' ? ['assets', 'upscale', 'settings'].includes(active ?? '') : active === id)
+  const on = (id: string) => (id === 'more' ? ['assets', 'brand', 'upscale', 'settings'].includes(active ?? '') : active === id)
 
   const button = (id: 'image' | 'video' | 'more', label: string, Icon: typeof Home) => (
     <button

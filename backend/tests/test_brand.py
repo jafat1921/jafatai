@@ -195,7 +195,8 @@ def test_shot_brand_placements_patch(client, project):
     assert shot["brand_placements"] == []
     pl = [{"asset_id": "m1", "asset_type": "logo", "surface": "cup sleeve", "prominence": "hero"}]
     r = client.patch(f"/api/shots/{shot['id']}", json={"brand_placements": pl})
-    assert r.status_code == 200 and r.json()["brand_placements"] == pl
+    # the user's placements are tagged so AI re-plans only suggest changes to them
+    assert r.status_code == 200 and r.json()["brand_placements"] == [{**pl[0], "source": "user"}]
     bad = [{"asset_id": "m1", "asset_type": "sticker"}]
     assert client.patch(f"/api/shots/{shot['id']}", json={"brand_placements": bad}).status_code == 422
 

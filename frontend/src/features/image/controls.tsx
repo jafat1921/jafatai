@@ -8,11 +8,13 @@ export function ImageAspectTiles({
   value,
   onChange,
   allowAuto,
+  autoLabel = 'Source',
 }: {
   value: ImageAspect | null
   onChange: (v: ImageAspect | null) => void
   // Edit can keep the source's own shape
   allowAuto?: boolean
+  autoLabel?: string
 }) {
   const id = useId()
   const tile =
@@ -34,7 +36,7 @@ export function ImageAspectTiles({
               ⟲
             </span>
             <span aria-hidden className="text-small font-medium">
-              Source
+              {autoLabel}
             </span>
           </RadioGroup.Item>
         )}

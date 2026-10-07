@@ -1,0 +1,24 @@
+{
+  "name": "zimage_i2i",
+  "family": "z-image-turbo",
+  "description": "Z-Image Turbo image-to-image: the source is scaled and centre-cropped to the output size (the API keeps its aspect unless another one was asked for), VAE-encoded, then partially re-noised. denoise = the 'how much to change' strength (0.1 subtle to 0.9 reimagine); KSampler keeps the 8 real steps at any strength.",
+  "inputs": {
+    "image":    {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "height"]]},
+    "denoise":  {"type": "float", "default": 0.45, "targets": [["Sampler", "denoise"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 8, "targets": [["Sampler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/zimage_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["z_image_turbo_bf16.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["ae.safetensors"]
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 8, "UNet": 2, "TextEncoder": 2, "Encode": 1}
+}

@@ -13,6 +13,8 @@ import {
   MapPin,
   Maximize2,
   Settings,
+  Shuffle,
+  Stamp,
   UserRound,
   Users,
   Video,
@@ -55,7 +57,7 @@ export interface MenuSection {
   modelsNote?: string
 }
 
-export type RailId = 'home' | 'assets' | 'image' | 'video' | 'upscale' | 'queue' | 'settings'
+export type RailId = 'home' | 'assets' | 'brand' | 'image' | 'video' | 'upscale' | 'queue' | 'settings'
 
 export interface RailItem {
   id: RailId
@@ -70,6 +72,7 @@ const IMAGE_MENU: MenuSection = {
   features: [
     { id: 'create', title: 'Create Image', description: 'Generate images from text', to: '/image/generate', icon: Wand2 },
     { id: 'edit', title: 'Edit Image', description: 'Change an image with words', to: '/image/edit', icon: Brush },
+    { id: 'img2img', title: 'Image to Image', description: 'Restyle or vary your picture', to: '/image/img2img', icon: Shuffle },
     { id: 'refs', title: 'References', description: 'Keep a face, product or style', to: '/image/references', icon: Layers },
     { id: 'upscale', title: 'Image Upscale', description: 'Sharper, bigger, 2× to 4K', to: '/image/upscale', icon: ImageUpscale },
     { id: 'templates', title: 'Templates', description: 'Portrait, product, poster…', to: '/image/templates', icon: LayoutTemplate },
@@ -85,6 +88,7 @@ const VIDEO_MENU: MenuSection = {
   title: 'Video Tools',
   features: [
     { id: 'create', title: 'Create Video', description: 'One prompt, one clip', to: '/video/create', icon: Video },
+    { id: 'img2vid', title: 'Image to Video', description: 'Animate your picture', to: '/video/img2vid', icon: Film },
     { id: 'quick', title: 'Quick Video', description: 'One prompt, a finished video', to: '/video/quick', icon: Wand2 },
     { id: 'projects', title: 'Studio Projects', description: 'Script, cast, storyboard, render', to: '/video/projects', icon: Clapperboard },
     { id: 'templates', title: 'Templates', description: 'Product ad, documentary, teaser…', to: '/video/templates', icon: LayoutTemplate },
@@ -127,6 +131,7 @@ const ASSETS_MENU: MenuSection = {
 export const RAIL_ITEMS: RailItem[] = [
   { id: 'home', label: 'Home', icon: Home, to: '/' },
   { id: 'assets', label: 'Assets', icon: UserRound, to: '/assets', menu: ASSETS_MENU },
+  { id: 'brand', label: 'Brand Kits', icon: Stamp, to: '/brand-kits' },
   { id: 'image', label: 'Image', icon: ImageIcon, to: '/image/generate', menu: IMAGE_MENU },
   { id: 'video', label: 'Video', icon: Clapperboard, to: '/video/quick', menu: VIDEO_MENU },
   { id: 'upscale', label: 'Upscale', icon: ImageUpscale, to: '/image/upscale', menu: UPSCALE_MENU },
@@ -177,6 +182,7 @@ export function activeRail(pathname: string): RailId | null {
   if (p.startsWith('/image')) return 'image'
   if (p.startsWith('/video') || p.startsWith('/projects') || p === '/create' || p.startsWith('/quick')) return 'video'
   if (p.startsWith('/assets')) return 'assets'
+  if (p.startsWith('/brand-kits')) return 'brand'
   if (p.startsWith('/queue')) return 'queue'
   if (p.startsWith('/settings')) return 'settings'
   return null
@@ -198,6 +204,9 @@ const TITLES: [RegExp, string][] = [
   [/^\/image\/upscale/, 'Image upscale'],
   [/^\/image\/library/, 'Image library'],
   [/^\/assets/, 'Assets'],
+  [/^\/brand-kits/, 'Brand kits'],
+  [/^\/image\/img2img/, 'Image to image'],
+  [/^\/video\/img2vid/, 'Image to video'],
   [/^\/queue/, 'Queue'],
   [/^\/settings/, 'Settings'],
 ]

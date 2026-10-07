@@ -111,7 +111,7 @@ describe('Output gallery', () => {
 
     await user.click(within(screen.getByRole('article', { name: 'Full film' })).getAllByRole('button', { name: 'Play Full film' })[0])
     const dialog = screen.getByRole('dialog', { name: 'Full film' })
-    expect(within(dialog).getByLabelText('Full film, version 2')).toHaveAttribute('src', '/api/media/r2.mp4')
+    expect(within(dialog).getByLabelText('Full film, Original · v2')).toHaveAttribute('src', '/api/media/r2.mp4')
   })
 
   it('guides to the Reel when nothing has been stitched', async () => {
@@ -119,5 +119,24 @@ describe('Output gallery', () => {
     renderStage(<OutputCanvas />, { scenes: [], shots: [], stage: 'output' })
     expect(await screen.findByText('Nothing stitched yet')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Go to Reel' })).toHaveAttribute('href', `/projects/${PID}/reel`)
+  })
+
+  it('links an upscaled copy to its source, with a resolution badge and segment progress', async () => {
+    const segments = Array.from({ length: 4 }, (_, i) => ({ idx: i, t_start: i * 4, t_end: i * 4 + 4.5, status: i < 1 ? 'done' : i === 1 ? 'generating' : 'queued' }))
+    const up = render('r4', 4, { status: 'generating', parent_id: 'r2' }, {
+      title: 'Full film · 1080p',
+      full: true,
+      upscale: { engine: 'fast', target: '1080p', width: 1920, height: 1080, source_id: 'r2' },
+      segments,
+    })
+    mockOutputApi([up, ...list])
+    renderStage(<OutputCanvas />, { scenes: [], shots: [], stage: 'output' })
+    const card = await screen.findByRole('article', { name: 'Full film · 1080p' })
+    expect(within(card).getByText(/Upscaled from v2 · 1080p · fast/)).toBeInTheDocument()
+    expect(within(card).getByText('1080p')).toBeInTheDocument()
+    expect(within(card).getByText('Segment 2 of 4')).toBeInTheDocument()
+    expect(within(card).getByRole('img', { name: '1 of 4 segments done' })).toBeInTheDocument()
+    // the source offers Upscale
+    expect(within(screen.getByRole('article', { name: 'Full film' })).getByRole('button', { name: 'Upscale Full film' })).toBeInTheDocument()
   })
 })

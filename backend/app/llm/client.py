@@ -95,6 +95,27 @@ def extract_json(text: str) -> str:
     return t
 
 
+def _data_url(b64: str) -> str:
+    # base64 of a JPEG starts with /9j/, PNG with iVBOR; good enough to label the data URL
+    mime = "image/jpeg" if b64.startswith("/9j/") else "image/png"
+    return f"data:{mime};base64,{b64}"
+
+
+def openai_messages(messages: list[dict]) -> list[dict]:
+    """Messages may carry Ollama-style `images` (base64 strings). The OpenAI-compatible API
+    wants them as image_url content parts instead."""
+    out = []
+    for m in messages:
+        imgs = m.get("images")
+        if not imgs:
+            out.append(m)
+            continue
+        parts = [{"type": "text", "text": m.get("content") or ""}]
+        parts += [{"type": "image_url", "image_url": {"url": _data_url(b)}} for b in imgs]
+        out.append({k: v for k, v in m.items() if k != "images"} | {"content": parts})
+    return out
+
+
 def _client(timeout: float) -> httpx.AsyncClient:
     s = get_settings()
     headers = {"Authorization": f"Bearer {s.llm_api_key}"} if s.llm_api_key else {}
@@ -182,7 +203,7 @@ async def _raw_chat(
     else:
         body = {
             "model": model,
-            "messages": messages,
+            "messages": openai_messages(messages),
             "temperature": temperature,
             "max_tokens": max_tokens,
         }

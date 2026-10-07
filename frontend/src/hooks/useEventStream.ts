@@ -9,6 +9,7 @@ import { upsertGeneration } from './useGenerations'
 import { syncAiJob } from './useAi'
 import { upsertShot } from './useShots'
 import { setReel, syncReelJob } from './useReel'
+import { syncQuickJob } from './useQuick'
 import { announce, useUi } from '@/stores/ui'
 
 function parse<T>(e: MessageEvent): T | null {
@@ -60,6 +61,7 @@ export function useEventStream(enabled: boolean) {
       syncAiJob(qc, job, before)
       syncStoryboardJob(qc, job, before)
       syncReelJob(qc, job, before)
+      syncQuickJob(qc, job, before)
       if (before?.status !== job.status) {
         if (job.status === 'done') announce(`${jobLabel(job.type)} finished.`)
         else if (job.status === 'failed') announce(`${jobLabel(job.type)} failed${job.error ? `: ${job.error}` : '.'}`)
@@ -68,7 +70,9 @@ export function useEventStream(enabled: boolean) {
 
     es.addEventListener('generation', (e) => {
       const gen = parse<Generation>(e as MessageEvent)
-      if (gen) upsertGeneration(qc, gen)
+      if (!gen) return
+      upsertGeneration(qc, gen)
+      qc.setQueryData(qk.generation(gen.id), gen)
     })
 
     es.addEventListener('shot', (e) => {

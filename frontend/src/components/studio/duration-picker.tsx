@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { ChevronDown, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { fieldClass } from '@/components/ui/input'
@@ -24,14 +24,30 @@ interface Props {
   max?: number
   label?: string
   className?: string
+  // Quick Create brings its own lengths, limits and estimate line
+  presets?: { value: number; label: string }[]
+  min?: number
+  limitNoun?: string
+  estimateLine?: ReactNode
 }
 
-const isPreset = (v: number) => DURATION_PRESETS.some((p) => p.value === v)
-
 /** Presets plus a free-text box; the estimate line updates with whatever is picked. */
-export function DurationFields({ value, onChange, shotId, count = 1, max: maxProp, label = 'Duration', className }: Props) {
+export function DurationFields({
+  value,
+  onChange,
+  shotId,
+  count = 1,
+  max: maxProp,
+  label = 'Duration',
+  className,
+  presets = DURATION_PRESETS,
+  min = 1,
+  limitNoun = ' per take',
+  estimateLine,
+}: Props) {
   const uid = useId()
-  const { estimate, exact, max: serverMax } = useShotEstimate(shotId, value)
+  const { estimate, exact, max: serverMax } = useShotEstimate(estimateLine === undefined ? shotId : undefined, value)
+  const isPreset = (v: number) => presets.some((p) => p.value === v)
   const max = maxProp ?? serverMax
   const [text, setText] = useState(isPreset(value) ? '' : String(value))
   const [seen, setSeen] = useState(value)
@@ -48,7 +64,7 @@ export function DurationFields({ value, onChange, shotId, count = 1, max: maxPro
       return
     }
     const secs = parseDuration(text)
-    const err = durationError(secs, max)
+    const err = durationError(secs, max, min, limitNoun)
     setError(err)
     if (!err && secs !== value) onChange(secs!)
   }
@@ -59,7 +75,7 @@ export function DurationFields({ value, onChange, shotId, count = 1, max: maxPro
         {label}
       </span>
       <div className="flex flex-wrap gap-1">
-        {DURATION_PRESETS.map((p) => (
+        {presets.map((p) => (
           <Chip
             key={p.value}
             selected={value === p.value}
@@ -99,13 +115,15 @@ export function DurationFields({ value, onChange, shotId, count = 1, max: maxPro
           </p>
         )}
       </div>
-      {estimate && (
+      {estimateLine !== undefined ? (
+        estimateLine
+      ) : estimate ? (
         <p aria-live="polite" className="text-small text-studio-muted">
           <span className="font-mono text-studio-text">{formatDuration(value)}</span> · {estimateText(estimate, count)}
           {!exact && ' (rough)'}
         </p>
-      )}
-      {isLongTakeDuration(value) && (
+      ) : null}
+      {estimateLine === undefined && isLongTakeDuration(value) && (
         <p className="text-small text-studio-muted">
           Long take: made in chunks and joined into one continuous shot. Needs an approved START frame.
         </p>

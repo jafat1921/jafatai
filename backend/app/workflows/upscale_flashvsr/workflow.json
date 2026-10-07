@@ -1,0 +1,14 @@
+{
+  "1": {"class_type": "VHS_LoadVideo", "_meta": {"title": "Source"},
+        "inputs": {"video": "example.mp4", "force_rate": 0, "custom_width": 0, "custom_height": 0,
+                   "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1, "format": "None"}},
+  "2": {"class_type": "AILab_FlashVSR_Advanced", "_meta": {"title": "FlashVSR"},
+        "inputs": {"frames": ["1", 0], "model_version": "Tiny (Fast)", "scale": 2, "enable_tiling": true,
+                   "tile_size": 384, "tile_overlap": 32, "speed_optimization": 2.0, "quality_boost": 2.0,
+                   "stability_level": 11, "color_fix": true, "vae_tiling": true, "unload_model": false,
+                   "sageattention": "disable", "device": "auto", "precision": "bf16", "seed": 1}},
+  "3": {"class_type": "VHS_VideoCombine", "_meta": {"title": "Save"},
+        "inputs": {"images": ["2", 0], "frame_rate": 24.0, "loop_count": 0, "filename_prefix": "mixai/upscale",
+                   "format": "video/h264-mp4", "pingpong": false, "save_output": true, "pix_fmt": "yuv420p",
+                   "crf": 12, "save_metadata": false, "trim_to_audio": false}}
+}

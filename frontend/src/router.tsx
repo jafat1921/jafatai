@@ -17,6 +17,15 @@ const routes: RouteObject[] = [
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:projectId', element: <Navigate to="script" replace /> },
           {
+            path: 'create',
+            lazy: async () => ({ Component: (await import('@/features/quick/QuickCreatePage')).QuickCreatePage }),
+          },
+          {
+            // not :projectId, so the top bar stays out of studio mode on the progress screen
+            path: 'quick/:quickId',
+            lazy: async () => ({ Component: (await import('@/features/quick/QuickProgressPage')).QuickProgressPage }),
+          },
+          {
             path: 'projects/:projectId/:stage',
             lazy: async () => ({ Component: (await import('@/features/workspace/WorkspacePage')).WorkspacePage }),
           },

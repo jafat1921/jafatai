@@ -127,6 +127,10 @@ const JOB_LABELS: Record<string, string> = {
   reel_assemble: 'Assemble film',
   assemble: 'Assemble film',
   mezzanine: 'Scene mezzanine',
+  autopilot: 'Quick video',
+  quick: 'Quick video',
+  quick_autopilot: 'Quick video',
+  upscale: 'Upscale',
 }
 
 export const jobLabel = (type: string) => JOB_LABELS[type] ?? humanize(type)

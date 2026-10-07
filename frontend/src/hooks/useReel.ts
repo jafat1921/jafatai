@@ -41,7 +41,8 @@ export function upsertRender(qc: QueryClient, gen: Generation | Render) {
   })
 }
 
-const REEL_JOB = /reel|assemble|mezzanine/
+// upscales and quick-create autopilots also end in a new render row
+const REEL_JOB = /reel|assemble|mezzanine|upscale|autopilot|quick/
 
 /** Assembly finishing creates a render the list hasn't seen; refetch once it lands. */
 export function syncReelJob(qc: QueryClient, job: Job, before: Job | undefined) {

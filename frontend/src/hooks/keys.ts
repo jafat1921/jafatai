@@ -19,4 +19,9 @@ export const qk = {
   reelEstimate: (projectId: string) => ['reel-estimate', projectId] as const,
   renders: (projectId: string) => ['renders', projectId] as const,
   suggestions: (projectId: string) => ['suggestions', projectId] as const,
+  // single generations seen over SSE, so quick-create thumbnails can resolve preview_ids
+  generation: (id: string) => ['generation', id] as const,
+  upscaleOptions: ['upscale-options'] as const,
+  quickRecent: ['quick-recent'] as const,
+  quickJob: (projectId: string) => ['quick-job', projectId] as const,
 }

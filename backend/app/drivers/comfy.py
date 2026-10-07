@@ -30,7 +30,9 @@ VIEW_PROMPTS = {
 VIEW_ALIASES = {"3/4": "three_quarter", "3-4": "three_quarter", "34": "three_quarter", "profile": "side"}
 ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
 
-TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23_extend": 3600.0}
+TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23_extend": 3600.0,
+            "upscale_seedvr2": 3600.0, "upscale_flashvsr": 3600.0, "upscale_esrgan": 1800.0}
+UPSCALE_TEMPLATES = {"upscale_seedvr2", "upscale_flashvsr", "upscale_esrgan"}
 
 
 @dataclass
@@ -206,6 +208,9 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
     if kind == "take_chunk":
         return chunk_plan(prompt, params, seed, lookup, negative, loras)
 
+    if kind == "upscale_segment":
+        return upscale_plan(params, seed)
+
     raise ComfyError(f"The ComfyUI driver doesn't handle '{kind}' generations")
 
 
@@ -239,6 +244,18 @@ def chunk_plan(prompt: str, params: dict, seed: int, lookup, negative: str, lora
     else:
         raise ComfyError("A take chunk needs the START frame, a context clip or a first image")
     return Plan("ltx23_i2v", inputs, images, loras, "video", sources)
+
+
+def upscale_plan(params: dict, seed: int) -> Plan:
+    """One segment of an upscale job (app.upscale): a short video-only clip in, frames out."""
+    template = params.get("template")
+    if template not in UPSCALE_TEMPLATES:
+        raise ComfyError(f"unknown upscale template {template!r}")
+    inputs = {k: params[k] for k in ("width", "height", "fps", "scale", "model", "model_version", "color_correction")
+              if params.get(k) is not None}
+    inputs["seed"] = seed
+    return Plan(template, inputs, {"video": Path(params["video_path"])}, [], "video",
+                {"segment": params.get("segment_idx"), "source_id": params.get("source_id")})
 
 
 def exec_seconds(entry: dict) -> float | None:
@@ -335,9 +352,11 @@ class ComfyDriver:
         if "view" in plan.inputs:
             record["view"] = plan.inputs["view"]
         meta: dict[str, Any] = {"template": plan.template, "gpu_seconds": gpu_seconds}
-        if plan.media == "video":
+        if plan.media == "video" and "num_frames" in resolved:
             fps = float(resolved.get("fps") or 24)
             meta.update(duration_s=round(resolved["num_frames"] / fps, 3), width=resolved["width"], height=resolved["height"])
+        elif plan.media == "video":
+            meta.update(width=resolved.get("width"), height=resolved.get("height"))
         else:
             meta.update(width=resolved.get("width"), height=resolved.get("height"))
         progress_cb(1.0, "Done")

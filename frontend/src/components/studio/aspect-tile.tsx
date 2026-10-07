@@ -12,19 +12,22 @@ export function AspectTiles({
   value,
   onChange,
   labelledBy,
+  only,
 }: {
   value: string
   onChange: (v: string) => void
   labelledBy?: string
+  only?: readonly string[]
 }) {
+  const tiles = only ? ASPECTS.filter((a) => only.includes(a.value)) : ASPECTS
   return (
     <RadioGroup.Root
       value={value}
       onValueChange={onChange}
       aria-labelledby={labelledBy}
-      className="grid grid-cols-4 gap-2"
+      className={cn('grid gap-2', tiles.length === 3 ? 'grid-cols-3' : 'grid-cols-4')}
     >
-      {ASPECTS.map((a) => (
+      {tiles.map((a) => (
         <RadioGroup.Item
           key={a.value}
           value={a.value}

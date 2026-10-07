@@ -1,0 +1,22 @@
+{
+  "name": "upscale_seedvr2",
+  "family": "seedvr2",
+  "description": "SeedVR2 one-step video restoration/upscale on core ComfyUI nodes. Frames are resized to the output size, padded, tile-encoded, split into temporal chunks that fit free VRAM, sampled in one step, merged with a Hann crossfade, decoded, then aligned and LAB colour-matched to the resized input. Video only: the pipeline remuxes the original audio.",
+  "inputs": {
+    "video":     {"type": "image", "required": true, "targets": [["Source", "video"]]},
+    "width":     {"type": "int", "default": 1536, "multiple_of": 2, "targets": [["Resize", "width"]]},
+    "height":    {"type": "int", "default": 896, "multiple_of": 2, "targets": [["Resize", "height"]]},
+    "fps":       {"type": "float", "default": 24.0, "targets": [["Save", "frame_rate"]]},
+    "model":     {"type": "str", "default": "seedvr2_3b_int8_convrot.safetensors", "targets": [["Model", "unet_name"]]},
+    "color_correction": {"type": "str", "default": "lab", "targets": [["Post", "color_correction_method"]]},
+    "seed":      {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/upscale", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {
+    "diffusion_models": ["seedvr2_3b_int8_convrot.safetensors", "seedvr2_7b_int8_convrot.safetensors"],
+    "vae": ["seedvr2_ema_vae_fp16.safetensors"]
+  },
+  "variants": {"3b": "seedvr2_3b_int8_convrot.safetensors", "7b": "seedvr2_7b_int8_convrot.safetensors"},
+  "progress_weights": {"Sampler": 10, "Encode": 3, "Decode": 4, "Model": 2, "Post": 1, "Save": 1}
+}

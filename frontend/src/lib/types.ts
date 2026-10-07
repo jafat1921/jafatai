@@ -23,7 +23,7 @@ export interface SystemStatus {
   worker: { alive: boolean; last_heartbeat?: string }
 }
 
-export type AuthoringMode = 'ai_director' | 'scene_by_scene' | 'import'
+export type AuthoringMode = 'ai_director' | 'scene_by_scene' | 'import' | 'quick'
 export type Quality = 'draft' | 'final'
 export type ProjectStatus = 'draft' | 'in_progress' | 'rendering' | 'done'
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '2.39:1'
@@ -378,4 +378,75 @@ export interface StitchRequest {
   quality: 'draft'
   scene_ids?: string[]
   title?: string
+}
+
+// contract-v4-upscale-quick.md
+export type UpscaleEngineId = 'best' | 'fast' | 'quick'
+export type UpscaleTarget = '1080p' | '1440p' | '4k'
+
+export interface UpscaleEngine {
+  id: UpscaleEngineId
+  label: string
+  available: boolean
+  reason?: string | null
+  scales: number[]
+  est_gpu_s_per_output_s: number
+}
+
+export interface UpscaleOptions {
+  engines: UpscaleEngine[]
+  default_engine: UpscaleEngineId
+  targets: UpscaleTarget[]
+}
+
+export interface UpscaleRequest {
+  engine: UpscaleEngineId
+  target: UpscaleTarget
+}
+
+export type SegmentStatus = 'queued' | 'generating' | 'done' | 'failed'
+
+export interface UpscaleSegment {
+  idx: number
+  t_start: number
+  t_end: number
+  status: SegmentStatus
+  file?: string | null
+}
+
+export type QuickStyle = 'cinematic' | 'documentary' | 'animated' | 'commercial'
+export type QuickAspect = '16:9' | '9:16' | '1:1'
+
+export interface QuickRequest {
+  prompt: string
+  duration_s: number
+  aspect_ratio: QuickAspect
+  style: QuickStyle
+  dialogue: boolean
+  upscale: UpscaleRequest | null
+}
+
+export type QuickStageKey = 'outline' | 'cast' | 'storyboard' | 'render' | 'stitch' | 'upscale'
+export type QuickStageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped'
+
+export interface QuickStage {
+  key: QuickStageKey
+  label: string
+  status: QuickStageStatus
+  started_at?: string | null
+  finished_at?: string | null
+  detail?: string | null
+}
+
+export interface QuickJobResult {
+  stages?: QuickStage[]
+  preview_ids?: string[]
+  final_render_id?: string | null
+  eta_s?: number | null
+}
+
+export interface QuickRecent {
+  project: Project
+  job: Job
+  final_render?: Generation | null
 }

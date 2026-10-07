@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     chunk_context_frames: int = 9
     longtake_method: str = "extend"  # extend | i2v
 
+    # Quick Create autopilot (contract v4)
+    auto_approve_score: float = 6.0
+    auto_retries: int = 2
+    vision_timeout_s: float = 180.0
+
+    # upscaling (contract v4)
+    upscale_segment_s: float = 4.0
+    upscale_overlap_s: float = 0.5
+    upscale_default_engine: str = "best"  # best | fast | quick
+    upscale_seedvr2_model: str = "3b"  # 3b | 7b
+
     @field_validator("cors_origins", "comfy_urls", mode="before")
     @classmethod
     def _split_csv(cls, v):

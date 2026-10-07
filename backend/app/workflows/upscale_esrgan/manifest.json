@@ -1,0 +1,15 @@
+{
+  "name": "upscale_esrgan",
+  "family": "realesrgan",
+  "description": "RealESRGAN x4plus frame by frame (no temporal model, so fine texture can shimmer), then lanczos down to the output size inside the graph. Quick preview quality.",
+  "inputs": {
+    "video":  {"type": "image", "required": true, "targets": [["Source", "video"]]},
+    "width":  {"type": "int", "default": 1536, "multiple_of": 2, "targets": [["Resize", "width"]]},
+    "height": {"type": "int", "default": 896, "multiple_of": 2, "targets": [["Resize", "height"]]},
+    "fps":    {"type": "float", "default": 24.0, "targets": [["Save", "frame_rate"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/upscale", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {"upscale_models": ["RealESRGAN_x4plus.safetensors"]},
+  "progress_weights": {"Upscale": 10, "UpscaleModel": 1, "Resize": 1, "Save": 2}
+}

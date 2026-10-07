@@ -85,6 +85,8 @@ class MockDriver:
         return DriverResult(out_path, "image/png", {"width": _size(params)[0], "height": _size(params)[1]})
 
     def generate_video(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
+        if params.get("kind") == "upscale_segment":
+            return self._upscale(params, out_path, progress_cb)
         self._tick(progress_cb, "Rendering", upto=0.8)
         frame = out_path.with_suffix(".frame.png")
         render_placeholder(prompt, params, seed, frame)
@@ -108,6 +110,21 @@ class MockDriver:
             frame.unlink(missing_ok=True)
         progress_cb(1.0, "Done")
         return DriverResult(out_path, "video/mp4", {"duration_s": seconds})
+
+    def _upscale(self, params, out_path: Path, progress_cb) -> DriverResult:
+        # plain lanczos, video only, same frames: what the real engines return minus the detail
+        self._tick(progress_cb, "Upscaling", upto=0.8)
+        w, h = int(params["out_width"]), int(params["out_height"])
+        cmd = [get_settings().ffmpeg_path(), "-y", "-loglevel", "error", "-i", str(params["video_path"]),
+               "-vf", f"scale={w}:{h}:flags=lanczos,setsar=1", "-an", "-fps_mode", "passthrough",
+               "-c:v", "libx264", "-preset", "ultrafast", "-crf", "16", "-pix_fmt", "yuv420p", str(out_path)]
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=300)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"ffmpeg failed: {e.stderr.decode(errors='replace')[-400:]}") from e
+        progress_cb(1.0, "Done")
+        return DriverResult(out_path, "video/mp4", {"width": w, "height": h, "template": params.get("template")})
 
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         self._tick(progress_cb, "Writing")

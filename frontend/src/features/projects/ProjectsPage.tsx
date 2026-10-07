@@ -11,7 +11,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EmptyState, ErrorState } from '@/components/studio/states'
+import { useJobs } from '@/hooks/useJobs'
 import { useProjects } from '@/hooks/useProjects'
+import { QuickCreateForm } from '@/features/quick/QuickCreateForm'
+import { RecentQuick } from '@/features/quick/RecentQuick'
+import { quickJobFor } from '@/lib/quick'
+import { isActiveJob } from '@/lib/status'
 import type { Project } from '@/lib/types'
 import { ProjectCard, ProjectCardSkeleton } from './ProjectCard'
 import { NewProjectDialog } from './NewProjectDialog'
@@ -25,6 +30,7 @@ type SortKey = keyof typeof SORTS
 
 export function ProjectsPage() {
   const projects = useProjects()
+  const jobs = useJobs()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('updated')
   const [creating, setCreating] = useState(false)
@@ -38,10 +44,17 @@ export function ProjectsPage() {
   }, [projects.data, query, sort])
 
   const hasAny = (projects.data?.length ?? 0) > 0
+  const linkFor = (p: Project) => {
+    if (p.authoring_mode !== 'quick') return undefined
+    const job = quickJobFor(jobs.data, p.id)
+    return job && isActiveJob(job.status) ? `/quick/${p.id}` : undefined
+  }
 
   return (
     <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="projects-title">
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+        <QuickCreateForm className="mb-3" />
+        <RecentQuick className="mb-6" />
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 id="projects-title" className="text-title font-display font-semibold">
@@ -127,7 +140,7 @@ export function ProjectsPage() {
             {visible.map((p) => (
               <li key={p.id} className="flex">
                 <div className="flex w-full [&>a]:w-full">
-                  <ProjectCard project={p} />
+                  <ProjectCard project={p} to={linkFor(p)} />
                 </div>
               </li>
             ))}

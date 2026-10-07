@@ -5,14 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.ai_jobs import rewrite_prompt_from_note
-from app import reel, storyboard
+from app import reel, storyboard, upscale
 from app.api.media import resolve_media_path
 from app.config import get_settings
 from app.models import Generation, Job, Location, Project, Shot, utcnow
-from app.schemas import GenerationCreate, GenerationOut, GenerationPatch, RegenerateIn, RejectIn, RenderOut
+from app.schemas import (
+    GenerationCreate, GenerationOut, GenerationPatch, JobOut, RegenerateIn, RejectIn, RenderOut, UpscaleIn,
+)
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import (
-    READY_STATES, approve, enqueue_generation, gen_out, get_owned, new_seed, resolve_target_project,
+    READY_STATES, approve, enqueue_generation, gen_out, get_owned, job_out, new_seed, resolve_target_project,
 )
 
 router = APIRouter(prefix="/generations", tags=["generations"])
@@ -41,6 +43,12 @@ def list_generations(
         q = q.where(Generation.status != "rejected")
     q = q.order_by(Generation.version.desc(), Generation.created_at.desc()).limit(500)
     return [gen_out(g) for g in db.scalars(q).all()]
+
+
+@router.get("/{gen_id}", response_model=GenerationOut)
+def get_generation(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    # Quick Create resolves its preview_ids one by one
+    return gen_out(get_owned(db, Generation, gen_id, cur.workspace_id, "Generation"))
 
 
 @router.post("", response_model=GenerationOut, status_code=201)
@@ -200,3 +208,15 @@ def restore_generation(gen_id: str, db: Session = Depends(get_db), cur: CurrentU
     g.updated_at = utcnow()
     db.commit()
     return gen_out(g)
+
+
+@router.post("/{gen_id}/upscale", response_model=JobOut, status_code=202)
+def upscale_generation(gen_id: str, body: UpscaleIn, db: Session = Depends(get_db),
+                       cur: CurrentUser = Depends(require_editor)):
+    g = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    try:
+        job = upscale.queue_upscale(db, g, body.engine, body.target, body.variant, user_id=cur.id)
+    except upscale.UpscaleError as e:
+        raise HTTPException(422, str(e)) from None
+    db.commit()
+    return job_out(job)

@@ -35,10 +35,10 @@ export function parseDuration(input: string): number | null {
   return Number.isFinite(total) ? Math.round(total) : null
 }
 
-export function durationError(seconds: number | null, max = LONGTAKE_MAX_S): string | null {
+export function durationError(seconds: number | null, max = LONGTAKE_MAX_S, min = 1, per = ' per take'): string | null {
   if (seconds === null) return 'Use seconds (75), minutes (2m) or m:ss (1:15).'
-  if (seconds < 1) return 'At least 1 second.'
-  if (seconds > max) return `Up to ${formatDuration(max)} per take.`
+  if (seconds < min) return min === 1 ? 'At least 1 second.' : `At least ${formatDuration(min)}.`
+  if (seconds > max) return `Up to ${formatDuration(max)}${per}.`
   return null
 }
 

@@ -8,6 +8,8 @@ import type {
   Location,
   Project,
   ProjectCreate,
+  QuickRecent,
+  QuickRequest,
   RegenerateMode,
   Reel,
   ReelClip,
@@ -26,6 +28,8 @@ import type {
   SuggestionResult,
   SystemStatus,
   TargetType,
+  UpscaleOptions,
+  UpscaleRequest,
   User,
 } from './types'
 
@@ -141,6 +145,7 @@ export const api = {
   },
   system: {
     status: () => get<SystemStatus>('/system/status'),
+    upscaleOptions: () => get<UpscaleOptions>('/system/upscale-options'),
   },
   projects: {
     list: () => get<Project[]>('/projects'),
@@ -217,6 +222,7 @@ export const api = {
     restore: (id: string) => post<Generation>(`/generations/${id}/restore`),
     regenerateChunk: (id: string, idx: number, body: { prompt?: string; seed?: number } = {}) =>
       post<Job>(`/generations/${id}/chunks/${idx}/regenerate`, body),
+    upscale: (id: string, body: UpscaleRequest) => post<Job>(`/generations/${id}/upscale`, body),
   },
   reel: {
     get: (projectId: string) => get<Reel>(`/projects/${projectId}/reel`),
@@ -248,6 +254,10 @@ export const api = {
     suggestions: (projectId: string) => get<Suggestion[]>(`/projects/${projectId}/suggestions`, { status: 'pending' }),
     accept: (id: string) => post<SuggestionResult>(`/suggestions/${id}/accept`),
     reject: (id: string) => post<SuggestionResult>(`/suggestions/${id}/reject`),
+  },
+  quick: {
+    create: (body: QuickRequest) => post<{ project: Project; job: Job }>('/quick', body),
+    recent: () => get<QuickRecent[]>('/quick/recent'),
   },
   jobs: {
     list: (q?: { status?: JobStatus; project_id?: string }) => get<Job[]>('/jobs', q),

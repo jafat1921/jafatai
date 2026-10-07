@@ -1,0 +1,16 @@
+{
+  "1": {"class_type": "VHS_LoadVideo", "_meta": {"title": "Source"},
+        "inputs": {"video": "example.mp4", "force_rate": 0, "custom_width": 0, "custom_height": 0,
+                   "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1, "format": "None"}},
+  "2": {"class_type": "UpscaleModelLoader", "_meta": {"title": "UpscaleModel"},
+        "inputs": {"model_name": "RealESRGAN_x4plus.safetensors"}},
+  "3": {"class_type": "ImageUpscaleWithModelBatched", "_meta": {"title": "Upscale"},
+        "inputs": {"upscale_model": ["2", 0], "images": ["1", 0], "per_batch": 8,
+                   "downscale_ratio": 1.0, "downscale_method": "lanczos", "precision": "float16"}},
+  "4": {"class_type": "ImageScale", "_meta": {"title": "Resize"},
+        "inputs": {"image": ["3", 0], "upscale_method": "lanczos", "width": 1536, "height": 896, "crop": "disabled"}},
+  "5": {"class_type": "VHS_VideoCombine", "_meta": {"title": "Save"},
+        "inputs": {"images": ["4", 0], "frame_rate": 24.0, "loop_count": 0, "filename_prefix": "mixai/upscale",
+                   "format": "video/h264-mp4", "pingpong": false, "save_output": true, "pix_fmt": "yuv420p",
+                   "crf": 12, "save_metadata": false, "trim_to_audio": false}}
+}

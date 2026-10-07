@@ -518,3 +518,12 @@ class ReelEstimateOut(BaseModel):
     duration_s: float
     stale_scenes: int
     est_seconds: float
+
+
+# Upscale (contract v4)
+class UpscaleIn(BaseModel):
+    # None = UPSCALE_DEFAULT_ENGINE; engine names (seedvr2, flashvsr, esrgan) are accepted as aliases
+    engine: Literal["best", "fast", "quick", "seedvr2", "flashvsr", "esrgan"] | None = None
+    target: Literal["1080p", "1440p", "4k"] = "1080p"
+    # SeedVR2 size, engine "best" only; None = UPSCALE_SEEDVR2_MODEL
+    variant: Literal["3b", "7b"] | None = None

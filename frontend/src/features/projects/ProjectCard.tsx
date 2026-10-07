@@ -1,16 +1,18 @@
 import { Link } from 'react-router'
-import { Film } from 'lucide-react'
+import { Film, Wand2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill } from '@/components/studio/status-pill'
 import { projectStatus } from '@/lib/status'
 import type { Project } from '@/lib/types'
 import { formatRuntime, plural, timeAgo } from '@/lib/utils'
 
-export function ProjectCard({ project }: { project: Project }) {
+// `to` lets the grid send a quick video that's still being made to its progress screen
+export function ProjectCard({ project, to }: { project: Project; to?: string }) {
   const { counts } = project
   return (
     <Link
-      to={`/projects/${project.id}/script`}
+      to={to ?? `/projects/${project.id}/script`}
       className="group flex flex-col overflow-hidden rounded-[6px] border border-studio-border-strong bg-studio-panel shadow-card transition-colors duration-150 hover:border-studio-border-hover hover:bg-studio-panel-hover"
     >
       <div className="darkroom relative aspect-video border-x-0 border-t-0">
@@ -24,6 +26,12 @@ export function ProjectCard({ project }: { project: Project }) {
         <span className="absolute bottom-2 right-2 rounded-[4px] bg-studio-darkroom/85 px-1.5 font-mono text-[12px] text-studio-on-dark">
           {project.aspect_ratio} · {formatRuntime(project.target_runtime_s)}
         </span>
+        {project.authoring_mode === 'quick' && (
+          <Badge tone="accent" className="absolute left-2 top-2 border-studio-gold/70 bg-studio-darkroom/85 text-studio-on-dark">
+            <Wand2 aria-hidden />
+            Quick
+          </Badge>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <div className="flex items-start justify-between gap-2">

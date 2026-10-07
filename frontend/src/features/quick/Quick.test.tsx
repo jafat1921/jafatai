@@ -1,0 +1,150 @@
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { qk } from '@/hooks/keys'
+import { autopilotJob, mockFetch, quickProject, renderRoutes, stage, upscaleOptions, video } from '@/test/quick-fixtures'
+import { QuickCreateForm } from './QuickCreateForm'
+import { QuickProgressPage } from './QuickProgressPage'
+
+afterEach(() => vi.unstubAllGlobals())
+
+const STAGES_RUNNING = [
+  stage('outline', 'Writing', 'done', { started_at: '2026-10-07T10:00:00Z', finished_at: '2026-10-07T10:01:00Z' }),
+  stage('cast', 'Cast', 'done'),
+  stage('storyboard', 'Storyboard', 'done'),
+  stage('render', 'Rendering', 'running'),
+  stage('stitch', 'Stitching', 'pending'),
+  stage('upscale', 'Upscaling', 'skipped'),
+]
+
+describe('Quick Create form', () => {
+  it('sends prompt, preset length, aspect, style and toggles, then opens the progress screen', async () => {
+    const calls = mockFetch((method, path) => {
+      if (path === '/system/upscale-options') return upscaleOptions
+      if (method === 'POST' && path === '/quick') return { project: quickProject, job: autopilotJob({ status: 'queued' }) }
+    })
+    renderRoutes('/create', [{ path: '/create', element: <QuickCreateForm expanded /> }])
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('textbox', { name: 'Describe your video' }), 'A fox rescued from a storm')
+    await user.click(screen.getByRole('button', { name: '2 min' }))
+    await user.click(screen.getByRole('radio', { name: /9:16 Portrait/ }))
+    await user.click(screen.getByRole('button', { name: 'Documentary' }))
+    await user.click(screen.getByRole('switch', { name: /Dialogue/ }))
+    await user.click(await screen.findByRole('switch', { name: /Upscale to 1080p/ }))
+    expect(screen.getByText(/Roughly .* of GPU time/)).toBeInTheDocument()
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(calls).toContainEqual({
+      method: 'POST',
+      path: '/quick',
+      body: {
+        prompt: 'A fox rescued from a storm',
+        duration_s: 120,
+        aspect_ratio: '9:16',
+        style: 'documentary',
+        dialogue: false,
+        upscale: { engine: 'fast', target: '1080p' },
+      },
+    })
+    expect(await screen.findByTestId('location')).toHaveTextContent('/quick/q1')
+  })
+
+  it('takes a custom length and keeps upscale off when the server has no engines', async () => {
+    const calls = mockFetch((method, path) => {
+      if (path === '/system/upscale-options') return new Response('{"detail":"Not Found"}', { status: 404 })
+      if (method === 'POST' && path === '/quick') return { project: quickProject, job: autopilotJob() }
+    })
+    renderRoutes('/projects', [{ path: '/projects', element: <QuickCreateForm /> }])
+    const user = userEvent.setup()
+
+    // options are folded on the Projects page
+    expect(screen.queryByRole('button', { name: '2 min' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Options/ }))
+    await user.type(screen.getByRole('textbox', { name: /custom/i }), '1:30{Enter}')
+    expect(await screen.findByRole('switch', { name: /Upscale to 1080p/ })).toBeDisabled()
+    expect(screen.getByText(/isn't available on this server/)).toBeInTheDocument()
+
+    expect(screen.getByRole('button', { name: /Create video/ })).toBeDisabled()
+    await user.type(screen.getByRole('textbox', { name: 'Describe your video' }), 'Neon city at dawn')
+    await user.click(screen.getByRole('button', { name: /Create video/ }))
+    const post = calls.find((c) => c.path === '/quick')!
+    expect(post.body).toMatchObject({ duration_s: 90, upscale: null, style: 'cinematic', aspect_ratio: '16:9' })
+  })
+})
+
+function renderProgress(jobs: ReturnType<typeof autopilotJob>[], renders: ReturnType<typeof video>[] = []) {
+  const calls = mockFetch((method, path) => {
+    if (path === '/jobs' && method === 'GET') return jobs
+    if (path === `/projects/q1/renders`) return renders
+    if (path === '/projects/q1') return quickProject
+    if (path === '/system/upscale-options') return upscaleOptions
+    if (method === 'POST' && path === '/jobs/j1/retry') return { ...jobs[0], status: 'queued', error: null }
+  })
+  const r = renderRoutes(
+    '/quick/q1',
+    [
+      { path: '/quick/:quickId', element: <QuickProgressPage /> },
+      { path: '/projects/:projectId/:stage', element: <p>studio</p> },
+    ],
+    (qc) => qc.setQueryData(qk.project('q1'), quickProject),
+  )
+  return { calls, ...r }
+}
+
+describe('Quick progress screen', () => {
+  it('lays out the stage timeline with words for each state, plus detail, ETA and previews', async () => {
+    const { qc } = renderProgress([
+      autopilotJob({}, { stages: STAGES_RUNNING, eta_s: 720, preview_ids: ['f1', 'gone'] }),
+    ])
+    qc.setQueryData(qk.generation('f1'), { ...video('f1'), kind: 'keyframe_start', target_type: 'shot', media_url: '/media/f1.png', prompt: 'Fox on rocks' })
+
+    const timeline = await screen.findByRole('list', { name: 'Progress' })
+    const steps = within(timeline).getAllByRole('listitem')
+    expect(steps.map((s) => s.textContent)).toEqual([
+      'Step 1: WritingDone · 60 s',
+      'Step 2: CastDone',
+      'Step 3: StoryboardDone',
+      'Step 4: RenderingIn progress',
+      'Step 5: StitchingWaiting',
+      'Step 6: UpscalingSkipped',
+    ])
+    expect(steps[3]).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('heading', { name: 'Rendering' })).toBeInTheDocument()
+    expect(screen.getByText('Rendering shot 2 of 3')).toBeInTheDocument()
+    expect(screen.getByText('About 12 min left')).toBeInTheDocument()
+    expect(screen.getByText(/You can close this page/)).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'Start frame: Fox on rocks' })).toHaveAttribute('src', '/media/f1.png')
+    expect(screen.getByRole('heading', { name: 'Lighthouse Fox' })).toHaveFocus()
+  })
+
+  it('explains a failure and retries from the failed stage', async () => {
+    const stages = [...STAGES_RUNNING.slice(0, 3), stage('render', 'Rendering', 'failed', { detail: 'Shot 2 kept coming out black' }), ...STAGES_RUNNING.slice(4)]
+    const { calls } = renderProgress([autopilotJob({ status: 'failed', error: 'Shot 2 kept coming out black' }, { stages })])
+    const user = userEvent.setup()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Stopped at Rendering')
+    expect(alert).toHaveTextContent('Shot 2 kept coming out black')
+    expect(alert).toHaveTextContent(/carries on from “Rendering”/)
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
+    expect(calls).toContainEqual({ method: 'POST', path: '/jobs/j1/retry', body: {} })
+  })
+
+  it('shows the finished film with download, upscale, open in studio and make another', async () => {
+    renderProgress(
+      [autopilotJob({ status: 'done', progress: 1 }, { stages: STAGES_RUNNING.map((s) => ({ ...s, status: 'done' as const })), final_render_id: 'r1' })],
+      [video('r1')],
+    )
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole('heading', { name: 'Your video is ready' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Lighthouse Fox, Original · v1')).toHaveAttribute('src', '/media/r1.mp4')
+    expect(screen.getByRole('link', { name: 'Download Lighthouse Fox' })).toHaveAttribute('href', '/api/generations/r1/download')
+    expect(screen.getByRole('link', { name: /Open in Studio/ })).toHaveAttribute('href', '/projects/q1/script')
+    expect(screen.getByRole('link', { name: /Make another/ })).toHaveAttribute('href', '/create')
+
+    await user.click(screen.getByRole('button', { name: 'Upscale' }))
+    expect(await screen.findByRole('dialog', { name: /Upscale/ })).toBeInTheDocument()
+  })
+})

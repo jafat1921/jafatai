@@ -46,6 +46,18 @@ class WorkerStopping(Exception):
     pass
 
 
+class JobDeferred(Exception):
+    """A parent job handing itself back to the queue until the jobs it enqueued have run.
+
+    One worker runs one job at a time, so a parent that blocked waiting for its children
+    would starve them (see app.autopilot). Whatever the handler committed is kept."""
+
+    def __init__(self, message: str = "Waiting", priority: int | None = None):
+        super().__init__(message)
+        self.message = message
+        self.priority = priority
+
+
 def claim_next(db: Session, gpu: str | None = None) -> Job | None:
     # stitches of one project share scene mezzanines, so they run one after another
     other = aliased(Job)
@@ -92,6 +104,13 @@ def recover_stuck(db: Session, stale_after: timedelta | None = None) -> int:
     n = 0
     for job in db.scalars(q).all():
         gen = db.get(Generation, job.generation_id) if job.generation_id else None
+        if (job.payload or {}).get("inline_of"):
+            # ran inside an autopilot job, which redoes the step itself when it resumes
+            job.status = "failed"
+            job.error = "Interrupted by a worker restart; the autopilot redoes this step"
+            job.finished_at = utcnow()
+            n += 1
+            continue
         if job.attempts >= MAX_ATTEMPTS:
             job.status = "failed"
             job.error = f"Gave up after {job.attempts} attempts (worker kept dying mid-job)"
@@ -217,8 +236,19 @@ HANDLERS["ai_beats"] = handle_beats
 from app.reel import ASSEMBLE_JOB, handle_assemble  # noqa: E402
 
 HANDLERS[ASSEMBLE_JOB] = handle_assemble
-# CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result)
-CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly"}
+from app.upscale import JOB_TYPE as UPSCALE_JOB, handle_upscale  # noqa: E402
+
+HANDLERS[UPSCALE_JOB] = handle_upscale
+# called after a job reaches done/failed/cancelled in the worker; failures are logged, never fatal
+FINISHED_HOOKS: list[Callable[[Session, Job], None]] = []
+
+from app.autopilot import JOB_TYPE as AUTOPILOT_JOB, handle_autopilot, wake_parent  # noqa: E402
+
+HANDLERS[AUTOPILOT_JOB] = handle_autopilot
+FINISHED_HOOKS.append(wake_parent)
+# CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
+# The autopilot only orchestrates; its children bill their own GPU time.
+CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot"}
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:
@@ -244,6 +274,19 @@ def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver
         job.finished_at = utcnow()
         _close_generation(db, job)
         log.info("job %s cancelled", job.id)
+    except JobDeferred as d:
+        db.commit()
+        db.refresh(job)
+        if job.status == "cancelled":
+            job.message = "Cancelled"
+            job.finished_at = utcnow()
+        else:
+            job.status = "queued"
+            # waiting isn't a failed attempt
+            job.attempts = max(0, job.attempts - 1)
+            job.message = d.message[:500]
+            if d.priority is not None:
+                job.priority = d.priority
     except WorkerStopping:
         db.rollback()
         db.refresh(job)
@@ -279,6 +322,14 @@ def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver
         db.add(UsageLedger(workspace_id=job.workspace_id, job_id=job.id, gpu_seconds=elapsed,
                            kind=CPU_JOB_LEDGER.get(job.type, job.type)))
     db.commit()
+    if job.status in ("done", "failed", "cancelled"):
+        for hook in FINISHED_HOOKS:
+            try:
+                hook(db, job)
+                db.commit()
+            except Exception:
+                db.rollback()
+                log.exception("finished-hook %s failed for job %s", getattr(hook, "__name__", hook), job.id)
 
 
 def process_one(

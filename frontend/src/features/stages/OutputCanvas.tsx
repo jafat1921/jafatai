@@ -8,14 +8,18 @@ import { Switch } from '@/components/ui/switch'
 import { Chip } from '@/components/studio/chip'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { DownloadButton } from '@/features/reel/ReelRenders'
+import { ComparePlayer } from '@/features/upscale/ComparePlayer'
+import { UpscaleDialog } from '@/features/upscale/UpscaleDialog'
 import { useProjectId } from '@/features/workspace/selection'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useGenerationActions } from '@/hooks/useGenerations'
 import { useRenameRender, useRenders } from '@/hooks/useReel'
-import { useProjectAspectClass } from '@/lib/aspect'
+import { useProject } from '@/hooks/useProjects'
+import { aspectClassFor } from '@/lib/aspect'
 import { formatTimecode } from '@/lib/duration'
 import { filterRenders, renderInfo, shortDate, type OutputFilter } from '@/lib/stitch'
 import type { Render } from '@/lib/types'
+import { compareSources, upscaleInfo } from '@/lib/upscale'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { OutputCard } from './OutputCard'
@@ -26,23 +30,30 @@ const FILTERS: { value: OutputFilter; label: string }[] = [
   { value: 'partial', label: 'Partial' },
 ]
 
-// TODO: final (upscaled) pass and EDL/XML export land here next milestone.
+// TODO: EDL/XML export lands here once the Reel exposes clip timecodes.
 export function OutputCanvas() {
   const projectId = useProjectId()
   const renders = useRenders(projectId)
-  const aspect = useProjectAspectClass()
+  const project = useProject(projectId).data
+  const aspect = aspectClassFor(project?.aspect_ratio)
   const reviewOnly = useBreakpoint() === 'mobile'
   const actions = useGenerationActions()
   const rename = useRenameRender(projectId)
   const [filter, setFilter] = useState<OutputFilter>('all')
   const [showRejected, setShowRejected] = useState(false)
   const [playingId, setPlayingId] = useState<string>()
+  const [upscaleId, setUpscaleId] = useState<string>()
 
   const all = renders.data ?? []
   const final = all.find((r) => r.status === 'approved')
   const visible = filterRenders(all, filter, showRejected && !reviewOnly)
   const playing = all.find((r) => r.id === playingId)
   const playingInfo = playing && renderInfo(playing)
+  const byId = new Map(all.map((r) => [r.id, r]))
+  const sourceOf = (r: Render) => {
+    const id = upscaleInfo(r)?.sourceId
+    return id ? byId.get(id) : undefined
+  }
   const busy = actions.approve.isPending || actions.unapprove.isPending || actions.reject.isPending || actions.restore.isPending
   const err = [actions.approve, actions.unapprove, actions.reject, actions.restore, rename].find((m) => m.isError)?.error
 
@@ -55,6 +66,7 @@ export function OutputCanvas() {
       onReject: () => actions.reject.mutate(r.id, { onSuccess: () => announce(`${title} rejected.`) }),
       onRestore: () => actions.restore.mutate(r.id),
       onRename: (t: string) => rename.mutate({ id: r.id, title: t }, { onSuccess: () => announce(`Renamed to ${t}.`) }),
+      onUpscale: () => setUpscaleId(r.id),
     }
   }
 
@@ -115,7 +127,14 @@ export function OutputCanvas() {
           <ul aria-label={`Stitched videos, ${plural(visible.length, 'video')}`} className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
             {visible.map((r) => (
               <li key={r.id}>
-                <OutputCard render={r} aspectClass={aspect} reviewOnly={reviewOnly} busy={busy} {...handlers(r)} />
+                <OutputCard
+                  render={r}
+                  aspectClass={aspect}
+                  reviewOnly={reviewOnly}
+                  busy={busy}
+                  sourceVersion={sourceOf(r)?.version}
+                  {...handlers(r)}
+                />
               </li>
             ))}
           </ul>
@@ -131,16 +150,8 @@ export function OutputCanvas() {
                 .filter(Boolean)
                 .join(' · ')}
             </DialogDescription>
-            <div className={cn('darkroom mt-3 w-full overflow-hidden rounded-[6px]', aspect)}>
-              <video
-                key={playing.id}
-                src={playing.media_url ?? undefined}
-                controls
-                autoPlay
-                playsInline
-                className="size-full object-contain"
-                aria-label={`${playingInfo.title}, version ${playing.version}`}
-              />
+            <div className="mt-3">
+              <ComparePlayer key={playing.id} sources={compareSources(playing, all, sourceOf(playing))} aspectClass={aspect} title={playingInfo.title} />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <DownloadButton render={playing} size="md" />
@@ -153,6 +164,12 @@ export function OutputCanvas() {
           </DialogContent>
         )}
       </Dialog>
+      <UpscaleDialog
+        render={all.find((r) => r.id === upscaleId) ?? null}
+        projectId={projectId}
+        aspectRatio={project?.aspect_ratio}
+        onOpenChange={(open) => !open && setUpscaleId(undefined)}
+      />
     </div>
   )
 }

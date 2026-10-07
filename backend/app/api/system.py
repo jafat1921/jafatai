@@ -2,15 +2,15 @@ import asyncio
 from datetime import timedelta
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.models import WorkerHeartbeat, utcnow
+from app.models import Generation, WorkerHeartbeat, utcnow
 from app.schemas import _iso
-from app.security import get_current_user
+from app.security import CurrentUser, get_current_user
 
 router = APIRouter(tags=["system"])
 
@@ -99,3 +99,25 @@ async def comfy_check(_=Depends(get_current_user)):
         await client.close()
     templates = {name: check_template(name, info) for name in list_templates()}
     return {"ok": all(t["ok"] for t in templates.values()), "url": client.base_url, "templates": templates}
+
+
+@router.get("/system/upscale-options")
+async def upscale_options(generation_id: str | None = None, db: Session = Depends(get_db),
+                          cur: CurrentUser = Depends(get_current_user)):
+    """Engines with availability from the template checks; with generation_id, sizes and GPU estimates
+    for that video at each target."""
+    from app import upscale
+
+    s = get_settings()
+    info, error = (None, None) if s.gen_driver == "mock" else await upscale.fetch_object_info()
+    measured = upscale.measured_rates(db)
+    out = upscale.engine_options(info, driver=s.gen_driver, measured=measured, error=error)
+    if generation_id:
+        g = db.get(Generation, generation_id)
+        if g is None or g.workspace_id != cur.workspace_id:
+            raise HTTPException(404, "Generation not found")
+        try:
+            out.update(upscale.source_estimates(g, measured))
+        except upscale.UpscaleError as e:
+            raise HTTPException(422, str(e)) from None
+    return out

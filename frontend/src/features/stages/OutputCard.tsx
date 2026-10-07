@@ -1,15 +1,17 @@
 import { useId, useRef, useState } from 'react'
-import { AlertTriangle, Check, Loader2, Pencil, Play, RotateCcw, Undo2, X } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, Check, Loader2, Pencil, Play, RotateCcw, Undo2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { DownloadButton } from '@/features/reel/ReelRenders'
+import { SegmentStrip } from '@/features/upscale/SegmentStrip'
 import { useJob, useJobAction } from '@/hooks/useJobs'
 import { formatTimecode } from '@/lib/duration'
 import { renderInfo, shortDate } from '@/lib/stitch'
 import { isPendingGeneration } from '@/lib/status'
 import type { Render } from '@/lib/types'
+import { readSegments, resolutionLabel, targetLabel, upscaleInfo } from '@/lib/upscale'
 import { cn } from '@/lib/utils'
 
 export interface OutputCardActions {
@@ -19,6 +21,7 @@ export interface OutputCardActions {
   onReject: () => void
   onRestore: () => void
   onRename: (title: string) => void
+  onUpscale?: () => void
 }
 
 interface Props extends OutputCardActions {
@@ -26,10 +29,14 @@ interface Props extends OutputCardActions {
   aspectClass: string
   reviewOnly: boolean
   busy: boolean
+  // version of the render this one was upscaled from, when it's in the list
+  sourceVersion?: number
 }
 
-export function OutputCard({ render, aspectClass, reviewOnly, busy, ...on }: Props) {
+export function OutputCard({ render, aspectClass, reviewOnly, busy, sourceVersion, ...on }: Props) {
   const info = renderInfo(render)
+  const up = upscaleInfo(render)
+  const res = resolutionLabel(render)
   const job = useJob(render.job_id)
   const cancel = useJobAction('cancel')
   const titleId = useId()
@@ -71,7 +78,7 @@ export function OutputCard({ render, aspectClass, reviewOnly, busy, ...on }: Pro
         ) : (
           <span className="flex size-full items-center justify-center gap-2 text-small text-studio-on-dark-muted">
             <AlertTriangle aria-hidden className="size-4" />
-            {render.status === 'failed' ? 'Stitch failed' : 'No file'}
+            {render.status === 'failed' ? (up ? 'Upscale failed' : 'Stitch failed') : 'No file'}
           </span>
         )}
         {render.status === 'approved' && (
@@ -80,18 +87,42 @@ export function OutputCard({ render, aspectClass, reviewOnly, busy, ...on }: Pro
             Final film
           </Badge>
         )}
+        {res && (
+          <span className="absolute right-2 top-2 rounded-[4px] border border-studio-gold/70 bg-studio-darkroom/85 px-1.5 font-mono text-[12px] text-studio-on-dark">
+            <span className="sr-only">Resolution </span>
+            {res}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <Title id={titleId} title={info.title} editable={!reviewOnly && !pending} onRename={on.onRename} />
         <p className="text-small text-studio-muted">{meta}</p>
+        {up && (
+          <p className="flex items-center gap-1 text-small text-studio-muted">
+            <ArrowUpRight aria-hidden className="size-3.5" />
+            {sourceVersion != null ? `Upscaled from v${sourceVersion}` : 'Upscaled copy'} · {targetLabel(up.target)}
+            {up.engine && ` · ${up.engine}`}
+          </p>
+        )}
 
         {pending ? (
           <div className="flex flex-col gap-1.5" role="status">
-            <span className="text-small text-studio-muted">
-              {render.status === 'queued' ? 'Waiting its turn' : job?.message || 'Stitching…'}
-            </span>
-            <Progress value={render.status === 'generating' ? (job?.progress ?? null) : null} label={`Stitching ${info.title}`} />
+            {up ? (
+              render.status === 'queued' ? (
+                <span className="text-small text-studio-muted">Waiting its turn</span>
+              ) : (
+                <SegmentStrip segments={readSegments(render)} message={job?.message} />
+              )
+            ) : (
+              <span className="text-small text-studio-muted">
+                {render.status === 'queued' ? 'Waiting its turn' : job?.message || 'Stitching…'}
+              </span>
+            )}
+            <Progress
+              value={render.status === 'generating' ? (job?.progress ?? null) : null}
+              label={`${up ? 'Upscaling' : 'Stitching'} ${info.title}`}
+            />
             {render.job_id && !reviewOnly && (
               <Button size="sm" variant="ghost" className="self-start" onClick={() => cancel.mutate(render.job_id!)}>
                 <X aria-hidden />
@@ -108,6 +139,12 @@ export function OutputCard({ render, aspectClass, reviewOnly, busy, ...on }: Pro
               </Button>
             )}
             <DownloadButton render={render} label={`Download ${info.title}`} />
+            {playable && on.onUpscale && (
+              <Button size="sm" variant="secondary" onClick={on.onUpscale} aria-label={`Upscale ${info.title}`}>
+                <ArrowUpRight aria-hidden />
+                Upscale
+              </Button>
+            )}
             {render.status === 'ready' && (
               <Button size="sm" variant="primary" onClick={on.onApprove} disabled={busy}>
                 <Check aria-hidden />

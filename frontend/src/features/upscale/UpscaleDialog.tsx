@@ -33,22 +33,38 @@ const ENGINE_COPY: Record<UpscaleEngineId, { name: string; blurb: string; icon: 
 
 interface Props {
   render: Generation | null
-  projectId: string
+  // absent for a standalone library video
+  projectId?: string
   aspectRatio?: string
+  initialEngine?: UpscaleEngineId
   onOpenChange: (open: boolean) => void
 }
 
-export function UpscaleDialog({ render, projectId, aspectRatio, onOpenChange }: Props) {
+export function UpscaleDialog({ render, projectId, aspectRatio, initialEngine, onOpenChange }: Props) {
   return (
     <Dialog open={!!render} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
-        {render && <UpscaleForm render={render} projectId={projectId} aspectRatio={aspectRatio} onDone={() => onOpenChange(false)} />}
+        {render && (
+          <UpscaleForm
+            render={render}
+            projectId={projectId}
+            aspectRatio={aspectRatio}
+            initialEngine={initialEngine}
+            onDone={() => onOpenChange(false)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )
 }
 
-function UpscaleForm({ render, projectId, aspectRatio, onDone }: Omit<Props, 'onOpenChange' | 'render'> & { render: Generation; onDone: () => void }) {
+function UpscaleForm({
+  render,
+  projectId,
+  aspectRatio,
+  initialEngine,
+  onDone,
+}: Omit<Props, 'onOpenChange' | 'render'> & { render: Generation; onDone: () => void }) {
   const ids = { engine: useId(), target: useId() }
   const options = useUpscaleOptions()
   const upscale = useUpscale(projectId)
@@ -57,9 +73,11 @@ function UpscaleForm({ render, projectId, aspectRatio, onDone }: Omit<Props, 'on
   const src: Size = probed ?? aspectSize(aspectRatio)
 
   const engines = options.data?.engines ?? []
-  const [engineId, setEngineId] = useState<UpscaleEngineId>()
+  const [engineId, setEngineId] = useState<UpscaleEngineId | undefined>(initialEngine)
   const [target, setTarget] = useState<UpscaleTarget>()
-  const engine = engines.find((e) => e.id === (engineId ?? pickEngine(engines, options.data?.default_engine)))
+  // a preselected engine that isn't installed falls back to the default
+  const picked = engines.find((e) => e.id === engineId && e.available)
+  const engine = picked ?? engines.find((e) => e.id === pickEngine(engines, options.data?.default_engine))
   const offered = (options.data?.targets ?? []).map((t) => (typeof t === 'string' ? t : t.id))
   const targets = TARGETS.filter((t) => !offered.length || offered.includes(t.id))
   const plans = targets.map((t) => ({ ...t, plan: planUpscale(src, t.id, engine?.scales ?? []) }))

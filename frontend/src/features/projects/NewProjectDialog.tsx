@@ -16,7 +16,7 @@ import { ErrorState } from '@/components/studio/states'
 import { useCreateProject } from '@/hooks/useProjects'
 import { upsertJob } from '@/hooks/useJobs'
 import { api } from '@/lib/api'
-import type { AuthoringMode, Quality } from '@/lib/types'
+import type { AuthoringMode, ProjectCreate, Quality } from '@/lib/types'
 import { modKey } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
@@ -51,25 +51,36 @@ const RUNTIMES = [
   { s: 7200, label: '2 h' },
 ]
 
-export function NewProjectDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function NewProjectDialog({
+  open,
+  onOpenChange,
+  initial,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  // from a studio template; the user still confirms
+  initial?: Partial<ProjectCreate>
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">{open && <NewProjectForm onDone={() => onOpenChange(false)} />}</DialogContent>
+      <DialogContent className="max-w-2xl">{open && <NewProjectForm initial={initial} onDone={() => onOpenChange(false)} />}</DialogContent>
     </Dialog>
   )
 }
 
-function NewProjectForm({ onDone }: { onDone: () => void }) {
+const nearestRuntime = (s: number) => RUNTIMES.map((r) => r.s).reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a))
+
+function NewProjectForm({ onDone, initial }: { onDone: () => void; initial?: Partial<ProjectCreate> }) {
   const ids = { mode: useId(), aspect: useId(), runtime: useId(), quality: useId() }
   const navigate = useNavigate()
   const create = useCreateProject()
   const qc = useQueryClient()
 
-  const [mode, setMode] = useState<AuthoringMode>('ai_director')
-  const [title, setTitle] = useState('')
-  const [brief, setBrief] = useState('')
-  const [runtime, setRuntime] = useState(120)
-  const [aspect, setAspect] = useState('16:9')
+  const [mode, setMode] = useState<AuthoringMode>(initial?.authoring_mode === 'scene_by_scene' ? 'scene_by_scene' : 'ai_director')
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [brief, setBrief] = useState(initial?.logline ?? '')
+  const [runtime, setRuntime] = useState(initial?.target_runtime_s ? nearestRuntime(initial.target_runtime_s) : 120)
+  const [aspect, setAspect] = useState(initial?.aspect_ratio ?? '16:9')
   const [quality, setQuality] = useState<Quality>('draft')
   const [takes, setTakes] = useState(3)
   const [overnight, setOvernight] = useState(false)

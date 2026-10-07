@@ -142,7 +142,7 @@ describe('Quick progress screen', () => {
     expect(screen.getByLabelText('Lighthouse Fox, Original · v1')).toHaveAttribute('src', '/media/r1.mp4')
     expect(screen.getByRole('link', { name: 'Download Lighthouse Fox' })).toHaveAttribute('href', '/api/generations/r1/download')
     expect(screen.getByRole('link', { name: /Open in Studio/ })).toHaveAttribute('href', '/projects/q1/script')
-    expect(screen.getByRole('link', { name: /Make another/ })).toHaveAttribute('href', '/create')
+    expect(screen.getByRole('link', { name: /Make another/ })).toHaveAttribute('href', '/video/quick')
 
     await user.click(screen.getByRole('button', { name: 'Upscale' }))
     expect(await screen.findByRole('dialog', { name: /Upscale/ })).toBeInTheDocument()

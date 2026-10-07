@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "video-product-ad-30s",
+      "title": "30 s product ad",
+      "description": "Hook, hero shots and a clear call to action for one product.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "A 30-second product ad for [product], aimed at [audience]. Open on a three-second hook: [problem the product solves] shown in a real everyday moment. Reveal the product in a slow hero shot on [surface or setting] with soft studio light and crisp reflections. Show two quick close-ups of [key feature 1] and [key feature 2] in use. End on the product centred in frame with the line \"[tagline]\".",
+        "duration_s": 30,
+        "aspect_ratio": "16:9",
+        "style": "commercial",
+        "dialogue": false
+      }
+    },
+    {
+      "id": "video-brand-story-60s",
+      "title": "60 s brand story",
+      "description": "Where the brand came from, who it is for and why it matters, in one minute.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "A 60-second brand story for [brand], told by [founder or narrator]. Begin with the moment the idea started: [origin moment] in [place]. Follow the people who make it, hands at work on [craft or process], in warm natural light. Show [customer] using it in their own life and what changes for them. Close on the brand mark over [closing image] with the line \"[brand promise]\".",
+        "duration_s": 60,
+        "aspect_ratio": "16:9",
+        "style": "cinematic",
+        "dialogue": true
+      }
+    },
+    {
+      "id": "video-documentary-2min",
+      "title": "2 min documentary",
+      "description": "A short observational documentary with narration and a clear arc.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "A two-minute documentary about [subject] in [location]. Establish the place at [time of day] with wide, patient shots. Introduce [main person] and what they do every day. Build toward the central tension: [challenge or change they face]. Include one quiet moment of [detail that reveals character]. End with where things stand now and a lingering wide shot of [closing image]. Calm, factual narration.",
+        "duration_s": 120,
+        "aspect_ratio": "16:9",
+        "style": "documentary",
+        "dialogue": true
+      }
+    },
+    {
+      "id": "video-music-montage-1min",
+      "title": "Music-video montage (1 min)",
+      "description": "A rhythm-led montage of moods and places, no dialogue.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "A one-minute music-video montage for a [genre] track about [theme]. Cut between [performer or character] in [main location] and short evocative moments: [image 1], [image 2], [image 3]. Colour palette of [colours], camera movement that follows the beat, energy rising toward a final chorus shot of [climax image].",
+        "duration_s": 60,
+        "aspect_ratio": "16:9",
+        "style": "cinematic",
+        "dialogue": false
+      }
+    },
+    {
+      "id": "video-short-film-5min",
+      "title": "Short film (5 min)",
+      "description": "Opens a full studio project: script, cast, storyboard and render, scene by scene.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "A five-minute short film. [Main character], who wants [goal], is stopped by [obstacle] in [setting]. Over one [day or night] they must [choice], and the ending turns on [twist or revelation]. Tone: [tone].",
+        "logline_hint": "When [inciting event], a [character] must [goal] before [stakes].",
+        "authoring_mode": "ai_director",
+        "target_runtime_s": 300,
+        "aspect_ratio": "16:9"
+      }
+    },
+    {
+      "id": "video-vertical-teaser-15s",
+      "title": "Social vertical teaser (15 s)",
+      "description": "A punchy 9:16 teaser for Reels, Shorts and TikTok.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "A 15-second vertical teaser for [thing being announced]. First second: a bold close-up of [striking image] to stop the scroll. Three fast beats showing [beat 1], [beat 2] and [beat 3]. End on [final frame] with the text \"[date or call to action]\".",
+        "duration_s": 15,
+        "aspect_ratio": "9:16",
+        "style": "commercial",
+        "dialogue": false
+      }
+    }
+  ]
+}

@@ -15,9 +15,9 @@ export function ProjectCard({ project, to }: { project: Project; to?: string }) 
       to={to ?? `/projects/${project.id}/script`}
       className="group flex flex-col overflow-hidden rounded-[6px] border border-studio-border-strong bg-studio-panel shadow-card transition-colors duration-150 hover:border-studio-border-hover hover:bg-studio-panel-hover"
     >
-      <div className="darkroom relative aspect-video border-x-0 border-t-0">
+      <div className="darkroom relative aspect-video overflow-hidden border-x-0 border-t-0">
         {project.thumbnail_url ? (
-          <img src={project.thumbnail_url} alt={`Still from ${project.title}`} className="size-full object-cover" loading="lazy" />
+          <img src={project.thumbnail_url} alt={`Still from ${project.title}`} className="absolute inset-0 size-full object-cover" loading="lazy" />
         ) : (
           <div className="flex size-full items-center justify-center text-studio-on-dark-muted">
             <Film aria-hidden className="size-7" />

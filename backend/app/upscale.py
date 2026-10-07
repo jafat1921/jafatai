@@ -470,11 +470,17 @@ def active_job(db: Session, source_id: str, engine: str, target: str, variant: s
     return None
 
 
+def is_media_video(g: Generation) -> bool:
+    """An uploaded (or already upscaled) standalone video from the Library."""
+    return g.target_type == "media" and (g.media_type or "").startswith("video/")
+
+
 def queue_upscale(db: Session, source: Generation, engine: str | None, target: str, variant: str | None = None,
                   user_id: str | None = None, flow: str = "upscale") -> Job:
     """Create the upscaled render version + its job. Raises UpscaleError for anything the caller should show."""
-    if source.kind != "render":
-        raise UpscaleError("Only stitched videos can be upscaled")
+    standalone = is_media_video(source)
+    if source.kind != "render" and not standalone:
+        raise UpscaleError("Only stitched or uploaded videos can be upscaled")
     if source.status not in ("ready", "approved") or not source.file_path:
         raise UpscaleError("This video isn't finished yet")
     path = generation_file(source)
@@ -492,12 +498,23 @@ def queue_upscale(db: Session, source: Generation, engine: str | None, target: s
         return running
 
     sp_ = source.params or {}
-    title = f"{sp_.get('title') or rl.FULL_FILM} · {target}"
-    project = db.get(Project, source.project_id) if source.project_id else None
+    if standalone:
+        from app.models import MediaItem
+
+        item = db.get(MediaItem, source.target_id)
+        base_title = (item.title if item else "") or "Video"
+        # an upscale of an upscale shouldn't read "clip · 1080p · 4k"
+        title, prompt = f"{base_title} · {target}", base_title
+        kind = "video"
+    else:
+        title = f"{sp_.get('title') or rl.FULL_FILM} · {target}"
+        project = db.get(Project, source.project_id) if source.project_id else None
+        prompt = f"{project.title if project else ''} · {title}".strip(" ·")
+        kind = "render"
     g = Generation(
-        id=new_id(), workspace_id=source.workspace_id, project_id=source.project_id, target_type="project",
-        target_id=source.target_id, kind="render", version=next_version(db, "project", source.target_id, "render"),
-        status="queued", prompt=f"{project.title if project else ''} · {title}".strip(" ·"), seed=new_seed(),
+        id=new_id(), workspace_id=source.workspace_id, project_id=source.project_id, target_type=source.target_type,
+        target_id=source.target_id, kind=kind, version=next_version(db, source.target_type, source.target_id, kind),
+        status="queued", prompt=prompt, seed=new_seed(),
         parent_id=source.id,
         params={
             "title": title, "title_auto": False, "scene_ids": list(sp_.get("scene_ids") or []),
@@ -524,6 +541,27 @@ def queue_upscale(db: Session, source: Generation, engine: str | None, target: s
 
 
 # ---------------------------------------------------------------- the job
+
+def needs_normalise(g: Generation) -> bool:
+    # our renders are CFR H.264/AAC mp4 already; uploads can be anything ffmpeg reads. The final
+    # mux copies audio into mp4, which Vorbis (webm) can't go into, and VFR phone footage would make
+    # the frame-indexed segment maths drift.
+    # TODO: flag variable-frame-rate mp4s at upload time (params.vfr); today only the container decides
+    p = g.params or {}
+    return g.media_type != "video/mp4" or bool(p.get("vfr"))
+
+
+def normalise_upload(src: Path, dest: Path, tick=None) -> Path:
+    if dest.is_file() and dest.stat().st_size > 0:
+        return dest  # resumed job: done on an earlier attempt
+    fps = probe_source(src).fps_str
+    tmp = dest.with_name(dest.stem + ".tmp.mp4")
+    ff(["-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-vf", f"fps={fps}", "-c:v", "libx264", "-preset", "fast",
+        "-crf", "12", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)],
+       tick=tick)
+    tmp.replace(dest)
+    return dest
+
 
 def seg_dir(gen: Generation) -> tuple[Path, str]:
     rel = Path("workspaces") / gen.workspace_id / "projects" / (gen.project_id or "_unassigned") / "upscales" / gen.id
@@ -556,13 +594,15 @@ def handle_upscale(ctx) -> dict:
     gen.status = "generating"
     db.commit()
 
+    folder, rel_folder = seg_dir(gen)
+    folder.mkdir(parents=True, exist_ok=True)
     ctx.progress(0.01, "Reading the source video")
+    if source.kind == "upload" and needs_normalise(source):
+        src_path = normalise_upload(src_path, folder / "source.mp4", lambda: ctx.progress(0.01))
     src = probe_source(src_path)
     segments = [dict(s) for s in params.get("segments") or []]
     if not segments or sum(s["frames"] for s in segments) - overlap_frames(segments) * (len(segments) - 1) != src.frames:
         segments = plan_segments(src.frames, src.fps)
-    folder, rel_folder = seg_dir(gen)
-    folder.mkdir(parents=True, exist_ok=True)
     _publish(db, gen, segments=segments)
 
     n = len(segments)
@@ -628,8 +668,11 @@ def handle_upscale(ctx) -> dict:
         _publish(db, gen, segments=segments)
 
     ctx.progress(0.9, f"Joining {n} segment{'s' if n > 1 else ''}")
-    final_rel = (Path("workspaces") / gen.workspace_id / "projects" / (gen.project_id or "_unassigned")
-                 / "generations" / f"{gen.id}.mp4")
+    if gen.target_type == "media":
+        final_rel = Path("workspaces") / gen.workspace_id / "media" / f"{gen.id}.mp4"
+    else:
+        final_rel = (Path("workspaces") / gen.workspace_id / "projects" / (gen.project_id or "_unassigned")
+                     / "generations" / f"{gen.id}.mp4")
     final = get_settings().data_dir / final_rel
     final.parent.mkdir(parents=True, exist_ok=True)
     files = [get_settings().data_dir / s["file"] for s in segments]

@@ -17,14 +17,16 @@ export function useUpscaleOptions(enabled = true) {
   })
 }
 
-export function useUpscale(projectId: string) {
+export function useUpscale(projectId?: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: UpscaleRequest }) => api.generations.upscale(id, body),
     onSuccess: (job) => {
       upsertJob(qc, job)
       // the new render row exists as soon as the job is queued
-      qc.invalidateQueries({ queryKey: qk.renders(projectId) })
+      if (projectId) qc.invalidateQueries({ queryKey: qk.renders(projectId) })
+      // standalone videos get the result as a new version of the library item
+      else qc.invalidateQueries({ queryKey: ['media'] })
     },
   })
 }
@@ -46,6 +48,7 @@ export function useImageUpscale(source: Pick<Generation, 'target_type' | 'target
       upsertJob(qc, job)
       // the new version is queued already; pull it into Versions without waiting for SSE
       qc.invalidateQueries({ queryKey: qk.generationsFor(source.target_type, source.target_id, source.kind) })
+      if (source.target_type === 'media') qc.invalidateQueries({ queryKey: ['media'] })
     },
   })
 }

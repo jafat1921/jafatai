@@ -320,3 +320,30 @@ class Suggestion(Base):
     job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("job.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MediaItem(Base):
+    """A standalone image or video (Image studio result, upload, standalone upscale). Contract v5.
+
+    Its versions are generations with target_type="media", target_id=this id; generation_id is the
+    current one. Project results show up in the Library as computed rows, never as MediaItems."""
+
+    __tablename__ = "media_item"
+    __table_args__ = (Index("ix_media_item_ws_created", "workspace_id", "created_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    kind: Mapped[str] = mapped_column(String(10))  # image | video
+    origin: Mapped[str] = mapped_column(String(20))  # generated | upload
+    title: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    tags: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("project.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # not an FK, same reason as generation.job_id
+    generation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)

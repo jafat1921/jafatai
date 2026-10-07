@@ -10,7 +10,9 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('**/projects')
+  // login lands on Home; the projects grid lives under Video now (/projects still works)
+  await page.waitForURL((u) => u.pathname === '/')
+  await page.goto('/video/projects')
 }
 
 test('locations, shots, seams and render gating', async ({ page }) => {

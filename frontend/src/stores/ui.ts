@@ -12,6 +12,9 @@ interface UiState {
   announce: (text: string) => void
   sse: SseState
   setSse: (s: SseState) => void
+  // the top bar's right-hand slot; pages portal their actions into it
+  actionsSlot: HTMLElement | null
+  setActionsSlot: (el: HTMLElement | null) => void
 }
 
 export const useUi = create<UiState>((set) => ({
@@ -23,6 +26,8 @@ export const useUi = create<UiState>((set) => ({
   announce: (text) => set((s) => ({ announcement: { text, n: s.announcement.n + 1 } })),
   sse: 'connecting',
   setSse: (sse) => set({ sse }),
+  actionsSlot: null,
+  setActionsSlot: (actionsSlot) => set({ actionsSlot }),
 }))
 
 export const announce = (text: string) => useUi.getState().announce(text)

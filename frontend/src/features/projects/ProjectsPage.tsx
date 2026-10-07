@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import { ArrowDownUp, Clapperboard, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,10 +14,10 @@ import {
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { useJobs } from '@/hooks/useJobs'
 import { useProjects } from '@/hooks/useProjects'
-import { QuickCreateForm } from '@/features/quick/QuickCreateForm'
-import { RecentQuick } from '@/features/quick/RecentQuick'
+import { TopBarActions } from '@/components/shell/TopBarActions'
 import { quickJobFor } from '@/lib/quick'
 import { isActiveJob } from '@/lib/status'
+import { studioFrom, type TemplatePrefill } from '@/lib/templates'
 import type { Project } from '@/lib/types'
 import { ProjectCard, ProjectCardSkeleton } from './ProjectCard'
 import { NewProjectDialog } from './NewProjectDialog'
@@ -33,7 +34,11 @@ export function ProjectsPage() {
   const jobs = useJobs()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('updated')
-  const [creating, setCreating] = useState(false)
+  const location = useLocation()
+  // a studio template lands here with its prefill; the dialog opens, nothing is created yet
+  const tpl = (location.state as { template?: TemplatePrefill } | null)?.template
+  const [creating, setCreating] = useState(!!tpl)
+  const navigate = useNavigate()
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -53,8 +58,6 @@ export function ProjectsPage() {
   return (
     <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="projects-title">
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
-        <QuickCreateForm className="mb-3" />
-        <RecentQuick className="mb-6" />
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 id="projects-title" className="text-title font-display font-semibold">
@@ -94,10 +97,6 @@ export function ProjectsPage() {
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus aria-hidden />
-              New project
-            </Button>
           </div>
         </div>
 
@@ -147,7 +146,22 @@ export function ProjectsPage() {
           </ul>
         )}
       </div>
-      <NewProjectDialog open={creating} onOpenChange={setCreating} />
+      <TopBarActions>
+        <Button size="sm" variant="primary" onClick={() => setCreating(true)}>
+          <Plus aria-hidden />
+          New project
+        </Button>
+      </TopBarActions>
+      <NewProjectDialog
+        key={location.key}
+        open={creating}
+        onOpenChange={(o) => {
+          setCreating(o)
+          // drop the template from history so a reload doesn't reopen it
+          if (!o && tpl) navigate('.', { replace: true, state: null })
+        }}
+        initial={tpl ? studioFrom(tpl.prefill, tpl.templateTitle) : undefined}
+      />
     </main>
   )
 }

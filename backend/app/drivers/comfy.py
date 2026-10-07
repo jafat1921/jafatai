@@ -140,7 +140,7 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
     loras = _loras(params)
 
     if params.get("upscale") and kind in ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end",
-                                          "keyframe_mid"):
+                                          "keyframe_mid", "image"):
         return image_upscale_plan(params["upscale"], negative, seed, lookup)
 
     def edit_plan(ids: list[str], text: str, size: tuple[int, int]) -> Plan:
@@ -157,6 +157,12 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         if params.get("steps"):
             inputs["steps"] = params["steps"]
         return Plan("zimage_t2i", inputs, {}, loras, "image")
+
+    if kind == "image":
+        # Image studio (contract v5): sources make it an edit, otherwise plain text to image.
+        # The API already picked a ~1 MP size for the aspect.
+        size = (params.get("width") or 1024, params.get("height") or 1024)
+        return edit_plan(ref_ids, prompt, size) if ref_ids else t2i_plan(size)
 
     if kind == "portrait":
         return edit_plan(ref_ids, prompt, PORTRAIT_SIZE) if ref_ids else t2i_plan(PORTRAIT_SIZE)

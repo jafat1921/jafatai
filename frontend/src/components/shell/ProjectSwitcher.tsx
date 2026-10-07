@@ -39,7 +39,7 @@ export function ProjectSwitcher({ projectId }: { projectId: string }) {
         </DropdownMenuRadioGroup>
         {projects.isPending && <p className="px-2 py-1.5 text-small text-studio-muted">Loading projects…</p>}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => navigate('/projects')}>
+        <DropdownMenuItem onSelect={() => navigate('/video/projects')}>
           <LayoutGrid aria-hidden />
           All projects
         </DropdownMenuItem>

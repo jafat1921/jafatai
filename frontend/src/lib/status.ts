@@ -96,6 +96,9 @@ const KIND_LABELS: Record<GenerationKind, string> = {
   render: 'Film render',
   mezzanine: 'Scene mezzanine',
   scene_text: 'Scene draft',
+  image: 'Image',
+  video: 'Video',
+  upload: 'Upload',
 }
 
 export const kindLabel = (kind: GenerationKind) => KIND_LABELS[kind] ?? humanize(kind)
@@ -131,6 +134,8 @@ const JOB_LABELS: Record<string, string> = {
   quick: 'Quick video',
   quick_autopilot: 'Quick video',
   upscale: 'Upscale',
+  image_generate: 'Create image',
+  image_edit: 'Edit image',
 }
 
 export const jobLabel = (type: string) => JOB_LABELS[type] ?? humanize(type)

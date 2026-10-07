@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { API_BASE } from '@/lib/api'
-import type { Generation, Job, Reel, Shot } from '@/lib/types'
+import type { Generation, Job, MediaDetail, MediaItem, Reel, Shot } from '@/lib/types'
 import { jobLabel } from '@/lib/status'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
@@ -10,6 +10,7 @@ import { syncAiJob } from './useAi'
 import { upsertShot } from './useShots'
 import { setReel, syncReelJob } from './useReel'
 import { syncQuickJob } from './useQuick'
+import { upsertMedia } from './useMedia'
 import { announce, useUi } from '@/stores/ui'
 
 function parse<T>(e: MessageEvent): T | null {
@@ -73,6 +74,17 @@ export function useEventStream(enabled: boolean) {
       if (!gen) return
       upsertGeneration(qc, gen)
       qc.setQueryData(qk.generation(gen.id), gen)
+      if (gen.target_type === 'media') {
+        qc.setQueryData<MediaDetail>(qk.mediaItem(gen.target_id), (old) =>
+          old ? { ...old, versions: [gen, ...(old.versions ?? []).filter((v) => v.id !== gen.id)].sort((a, b) => b.version - a.version) } : old,
+        )
+      }
+    })
+
+    // contract-v5: a library item was created, updated, got a new version or finished
+    es.addEventListener('media', (e) => {
+      const item = parse<MediaItem>(e as MessageEvent)
+      if (item?.id) upsertMedia(qc, item)
     })
 
     es.addEventListener('shot', (e) => {

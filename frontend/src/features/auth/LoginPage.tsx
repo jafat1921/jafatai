@@ -33,7 +33,7 @@ export function LoginPage() {
   }, [])
 
   const from = (location.state as { from?: string } | null)?.from
-  const target = from && from !== '/login' ? from : '/projects'
+  const target = from && from !== '/login' ? from : '/'
 
   if (me.data) return <Navigate to={target} replace />
 

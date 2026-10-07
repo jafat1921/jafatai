@@ -77,7 +77,7 @@ export function QuickDone({ project, job }: { project: Project; job: Job }) {
           </Link>
         </Button>
         <Button asChild variant="primary" className="sm:ml-auto">
-          <Link to="/create">
+          <Link to="/video/quick">
             <Wand2 aria-hidden />
             Make another
           </Link>

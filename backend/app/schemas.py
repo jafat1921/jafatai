@@ -533,3 +533,92 @@ class UpscaleIn(BaseModel):
     denoise: float | None = Field(None, ge=0.15, le=0.5)
     # image "redraw" only: overrides the source's own prompt
     prompt: str | None = Field(None, max_length=4000)
+
+
+# Media library, Image studio, Templates, Dashboard (contract v5)
+ImageAspect = Literal["1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2"]
+
+
+class MediaItemOut(BaseModel):
+    id: str
+    workspace_id: str
+    kind: str
+    origin: str
+    title: str
+    tags: list[str] = []
+    project_id: str | None = None
+    project_title: str | None = None
+    generation_id: str | None = None
+    # the current version's status: queued/generating while a fresh item is still being made
+    status: str | None = None
+    media_type: str | None = None
+    width: int | None = None
+    height: int | None = None
+    duration_s: float | None = None
+    media_url: str | None = None
+    thumb_url: str | None = None
+    created_at: Utc
+    updated_at: Utc
+    versions_count: int = 1
+
+
+class MediaDetailOut(MediaItemOut):
+    versions: list[GenerationOut] = []
+
+
+class MediaPage(BaseModel):
+    items: list[MediaItemOut]
+    next_cursor: str | None = None
+
+
+class MediaPatch(BaseModel):
+    title: str | None = Field(None, max_length=300)
+    tags: list[str] | None = Field(None, max_length=30)
+
+
+class ImageGenerateIn(BaseModel):
+    prompt: str = Field(min_length=1, max_length=4000)
+    negative: str | None = Field(None, max_length=2000)
+    aspect: ImageAspect = "1:1"
+    count: int = Field(1, ge=1, le=4)
+    style: str | None = None
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    steps: int | None = Field(None, ge=1, le=60)
+    template_id: str | None = None
+    title: str | None = Field(None, max_length=300)
+
+
+class ImageEditIn(BaseModel):
+    source_ids: list[str] = Field(min_length=1, max_length=3)
+    instruction: str = Field(min_length=1, max_length=4000)
+    aspect: ImageAspect | None = None
+    count: int = Field(1, ge=1, le=4)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    title: str | None = Field(None, max_length=300)
+
+
+class ImageBatchOut(BaseModel):
+    items: list[MediaItemOut]
+    jobs: list[JobOut]
+
+
+class TemplateOut(BaseModel):
+    id: str
+    type: Literal["video", "image"]
+    title: str
+    description: str
+    thumb: str | None = None
+    defaults: dict[str, Any]
+
+
+class TemplateStartOut(BaseModel):
+    target: Literal["quick", "studio", "image"]
+    prefill: dict[str, Any]
+
+
+class DashboardOut(BaseModel):
+    recent_projects: list[ProjectOut]
+    recent_videos: list[MediaItemOut]
+    recent_images: list[MediaItemOut]
+    running_jobs: list[JobOut]
+    quick_recent: list[dict[str, Any]]

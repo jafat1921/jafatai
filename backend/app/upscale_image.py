@@ -16,16 +16,17 @@ from app.models import Generation, Job
 from app.services import enqueue_generation, generation_file
 from app.upscale import UpscaleError, seedvr2_variant
 
-IMAGE_KINDS = ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end", "keyframe_mid")
+IMAGE_KINDS = ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end", "keyframe_mid", "image")
 TARGETS = {"2x": 2.0, "4x": 4.0, "2k": 2048, "4k": 3840}
 TARGET_LABELS = {"2x": "2×", "4x": "4×", "2k": "2K", "4k": "4K"}
 ALIASES = {"zimage": "redraw", "z-image": "redraw", "esrgan": "quick", "realesrgan": "quick",
            "seedvr2": "best", "seedvr": "best", "faithful": "best"}
+GENERIC_REDRAW_PROMPT = "a sharp, detailed, high quality image with clean natural texture"
 DENOISE = (0.15, 0.5, 0.33)  # min, max, default: the product owner's workflow runs at 0.33
 DEFAULT_ENGINE = "redraw"
 # keys of the source's params that describe how *it* was made, not what the upscale should carry
 DROP_KEYS = ("comfy", "upscale", "size", "approved_by", "auto_check", "auto_check_reason", "auto_issues",
-             "autopilot", "compile_first", "created_by")
+             "autopilot", "compile_first", "created_by", "original_name", "bytes")
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,8 @@ def engine_id(value: str | None) -> str:
 
 
 def is_image(g: Generation) -> bool:
-    return g.kind in IMAGE_KINDS
+    # uploads (contract v5) can be either; the sniffed media type decides
+    return g.kind in IMAGE_KINDS or (g.kind == "upload" and (g.media_type or "").startswith("image/"))
 
 
 # ---------------------------------------------------------------- sizes
@@ -215,16 +217,19 @@ def queue_image_upscale(db: Session, source: Generation, engine: str | None, tar
               source_id=source.id, source_file=source.file_path, source_version=source.version,
               source_size=[w, h])
     if eid == "redraw":
-        up["prompt"] = (prompt or "").strip() or source_prompt(source)
+        # an upload has no prompt of its own; Z-Image still needs something to steer the redraw
+        up["prompt"] = (prompt or "").strip() or source_prompt(source) or GENERIC_REDRAW_PROMPT
         # ESRGAN x4 then down to x1.4 is wasted work; lanczos alone is fine for small steps
         up["pre_enlarge"] = sz.scale >= 1.5
     if eid == "best":
         up["model"] = load(e.template).manifest["variants"][var]
     params = {k: v for k, v in (source.params or {}).items() if k not in DROP_KEYS}
     params.update(upscale=up, size=[sz.width, sz.height], created_by={"user_id": user_id, "flow": "upscale"})
+    # an upscaled upload is a made image, so it joins the item's line as kind "image"
+    kind = "image" if source.kind == "upload" else source.kind
     g = enqueue_generation(
         db, workspace_id=source.workspace_id, project_id=source.project_id, target_type=source.target_type,
-        target_id=source.target_id, kind=source.kind, prompt=source.prompt, params=params, parent_id=source.id,
+        target_id=source.target_id, kind=kind, prompt=source.prompt, params=params, parent_id=source.id,
     )
     job = db.get(Job, g.job_id)
     job.message = f"Waiting for a worker · {e.label.split(' · ')[0]} {TARGET_LABELS[target]}"

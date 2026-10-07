@@ -87,7 +87,7 @@ export type ScenePatch = Partial<
   >
 >
 
-export type TargetType = 'character' | 'scene' | 'shot' | 'location' | 'project'
+export type TargetType = 'character' | 'scene' | 'shot' | 'location' | 'project' | 'media'
 export type GenerationKind =
   | 'portrait'
   | 'sheet_view'
@@ -100,6 +100,10 @@ export type GenerationKind =
   | 'render'
   | 'mezzanine'
   | 'scene_text'
+  // contract-v5: standalone media (Image studio results, uploads)
+  | 'image'
+  | 'video'
+  | 'upload'
 export type GenerationStatus = 'queued' | 'generating' | 'ready' | 'approved' | 'rejected' | 'failed'
 
 export interface Generation {
@@ -488,4 +492,129 @@ export interface QuickRecent {
   project: Project
   job: Job
   final_render?: Generation | null
+}
+
+// contract-v5-nav-image.md
+export type MediaKind = 'image' | 'video'
+export type MediaOrigin = 'generated' | 'upload' | 'project'
+
+export interface MediaItem {
+  id: string
+  workspace_id: string
+  kind: MediaKind
+  origin: MediaOrigin
+  title: string
+  tags: string[]
+  project_id?: string | null
+  generation_id: string
+  width?: number | null
+  height?: number | null
+  duration_s?: number | null
+  media_url?: string | null
+  thumb_url?: string | null
+  created_at: string
+  updated_at: string
+  versions_count: number
+  // not in the contract; read when the server sends it, otherwise derived from the generation
+  status?: GenerationStatus
+  prompt?: string
+  seed?: number | null
+}
+
+export interface MediaDetail extends MediaItem {
+  versions: Generation[]
+}
+
+export interface MediaPage {
+  items: MediaItem[]
+  next_cursor?: string | null
+}
+
+export interface MediaQuery {
+  kind?: MediaKind
+  origin?: MediaOrigin
+  q?: string
+  tag?: string
+  project_id?: string
+  include?: 'project'
+  limit?: number
+  cursor?: string
+}
+
+export type ImageAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '2:3' | '3:2'
+
+export interface ImageGenerateRequest {
+  prompt: string
+  negative?: string
+  aspect: ImageAspect
+  count: number
+  style?: string
+  seed?: number
+  steps?: number
+  template_id?: string
+}
+
+export interface ImageEditRequest {
+  source_ids: string[]
+  instruction: string
+  aspect?: ImageAspect
+  count?: number
+  seed?: number
+}
+
+export interface MediaBatch {
+  items: MediaItem[]
+  jobs: Job[]
+}
+
+export interface Template {
+  id: string
+  type: 'video' | 'image'
+  title: string
+  description: string
+  thumb?: string | null
+  defaults: Record<string, unknown>
+}
+
+export interface TemplateStart {
+  target: 'quick' | 'studio' | 'image'
+  prefill: Record<string, unknown>
+}
+
+export interface Dashboard {
+  recent_projects: Project[]
+  recent_videos: MediaItem[]
+  recent_images: MediaItem[]
+  running_jobs: Job[]
+  quick_recent: QuickRecent[]
+}
+
+export interface TemplateCheck {
+  ok: boolean
+  missing_nodes: string[]
+  missing_models: string[]
+  invalid: string[]
+  warnings: string[]
+}
+
+export interface ComfyCheck {
+  ok: boolean
+  url: string
+  error?: string
+  templates: Record<string, TemplateCheck>
+}
+
+export interface LlmRole {
+  model: string | null
+  present: boolean
+  latency_ms?: number
+  error?: string
+}
+
+export interface LlmCheck {
+  ok: boolean
+  url: string
+  reasoning_format?: string
+  roles: Partial<Record<'reasoning' | 'creative' | 'vision', LlmRole>>
+  error?: string
 }

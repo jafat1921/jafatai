@@ -26,9 +26,10 @@ interface Props {
   subject: string
   onOpenChange: (open: boolean) => void
   onQueued?: (job: Job) => void
+  initialEngine?: ImageUpscaleEngineId
 }
 
-export function ImageUpscaleDialog({ source, subject, onOpenChange, onQueued }: Props) {
+export function ImageUpscaleDialog({ source, subject, onOpenChange, onQueued, initialEngine }: Props) {
   return (
     <Dialog open={!!source} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -36,6 +37,7 @@ export function ImageUpscaleDialog({ source, subject, onOpenChange, onQueued }: 
           <UpscaleForm
             source={source}
             subject={subject}
+            initialEngine={initialEngine}
             onDone={(job) => {
               if (job) onQueued?.(job)
               onOpenChange(false)
@@ -47,13 +49,23 @@ export function ImageUpscaleDialog({ source, subject, onOpenChange, onQueued }: 
   )
 }
 
-function UpscaleForm({ source, subject, onDone }: { source: Generation; subject: string; onDone: (job?: Job) => void }) {
+function UpscaleForm({
+  source,
+  subject,
+  initialEngine,
+  onDone,
+}: {
+  source: Generation
+  subject: string
+  initialEngine?: ImageUpscaleEngineId
+  onDone: (job?: Job) => void
+}) {
   const ids = { engine: useId(), target: useId(), variant: useId() }
   const options = useImageUpscaleOptions(source.id)
   const upscale = useImageUpscale(source)
   const engines = options.data?.engines ?? []
 
-  const [engineId, setEngineId] = useState<ImageUpscaleEngineId>()
+  const [engineId, setEngineId] = useState<ImageUpscaleEngineId | undefined>(initialEngine)
   const [target, setTarget] = useState<ImageUpscaleTarget>()
   const [variant, setVariant] = useState<'3b' | '7b'>()
   const [denoise, setDenoise] = useState<number>()

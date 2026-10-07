@@ -11,7 +11,8 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app import storyboard as sb
-from app.models import Generation, Job, Shot, utcnow
+from app.library import items_out
+from app.models import Generation, Job, MediaItem, Shot, utcnow
 from app.reel import reel_events
 from app.security import COOKIE_NAME, load_current, read_session_token
 from app.services import gen_out, job_out
@@ -47,6 +48,7 @@ def collect_changes(workspace_id: str, since: datetime) -> list[tuple[str, str, 
         out += [("generation", g.id, g.updated_at, gen_out(g).model_dump(mode="json")) for g in gens]
         out += _shot_changes(db, workspace_id, since, gens)
         out += reel_events(db, workspace_id, since, jobs)
+        out += _media_changes(db, workspace_id, since)
     finally:
         db.close()
     out.sort(key=lambda r: r[2])
@@ -76,6 +78,13 @@ def _shot_changes(db, workspace_id: str, since: datetime, gens) -> list[tuple[st
     if not shots:
         return []
     return [("shot", o.id, stamps[o.id], o.model_dump(mode="json")) for o in sb.shots_out(db, list(shots.values()))]
+
+
+def _media_changes(db, workspace_id: str, since: datetime) -> list[tuple[str, str, datetime, dict]]:
+    # create, rename/tag, new version queued and finish all bump updated_at (app.library.touch)
+    items = db.scalars(select(MediaItem).where(MediaItem.workspace_id == workspace_id, MediaItem.updated_at > since)
+                       .order_by(MediaItem.updated_at)).all()
+    return [("media", o.id, i.updated_at, o.model_dump(mode="json")) for i, o in zip(items, items_out(db, items))]
 
 
 def _parse_last_id(value: str | None) -> datetime | None:

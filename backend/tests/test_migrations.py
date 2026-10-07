@@ -99,7 +99,7 @@ def test_0004_upgrades_a_populated_0003_database(tmp_path):
     con.commit()
     con.close()
 
-    _alembic(db, "upgrade", "head")
+    _alembic(db, "upgrade", "0004")
 
     con = sqlite3.connect(db)
     assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0004"
@@ -121,5 +121,51 @@ def test_0004_upgrades_a_populated_0003_database(tmp_path):
     _alembic(db, "downgrade", "0003")
     con = sqlite3.connect(db)
     assert con.execute("SELECT id, description FROM shot").fetchall() == [("sh1", "Dive")]
+    con.close()
+    _alembic(db, "upgrade", "0004")
+
+
+def test_0005_adds_media_item_and_keeps_data(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0004")
+
+    con = sqlite3.connect(db)
+    now = "2026-10-07 10:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    con.execute(
+        "INSERT INTO project (id, workspace_id, title, logline, brief, authoring_mode, aspect_ratio, target_runtime_s,"
+        " quality, takes_per_shot, overnight, status, style_bible, created_at, updated_at)"
+        " VALUES ('p1', 'w1', 'Reef', '', '', 'quick', '16:9', 30, 'draft', 1, 0, 'done', '', ?, ?)",
+        (now, now),
+    )
+    con.execute(
+        "INSERT INTO generation (id, workspace_id, project_id, target_type, target_id, kind, version, status, prompt,"
+        " params, seed, file_path, created_at, updated_at) VALUES ('g1', 'w1', 'p1', 'project', 'p1', 'render', 1,"
+        " 'ready', '', '{\"title\": \"Full film\"}', 1, 'workspaces/w1/x.mp4', ?, ?)",
+        (now, now),
+    )
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "head")
+
+    con = sqlite3.connect(db)
+    con.execute("PRAGMA foreign_keys=ON")
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0005"
+    assert con.execute("SELECT id, status, file_path FROM generation").fetchall() == [
+        ("g1", "ready", "workspaces/w1/x.mp4")]
+    assert con.execute("SELECT title FROM project").fetchall() == [("Reef",)]
+    con.execute("INSERT INTO media_item (id, workspace_id, kind, origin, project_id, created_at, updated_at)"
+                " VALUES ('m1', 'w1', 'image', 'upload', 'p1', ?, ?)", (now, now))
+    assert con.execute("SELECT title, tags FROM media_item").fetchone() == ("", "[]")
+    # deleting a project keeps the standalone item, it just loses the link
+    con.execute("DELETE FROM project WHERE id = 'p1'")
+    assert con.execute("SELECT id, project_id FROM media_item").fetchall() == [("m1", None)]
+    con.commit()
+    con.close()
+
+    _alembic(db, "downgrade", "0004")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT count(*) FROM sqlite_master WHERE name = 'media_item'").fetchone()[0] == 0
     con.close()
     _alembic(db, "upgrade", "head")

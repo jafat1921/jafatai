@@ -48,11 +48,11 @@ function RecentCard({ item }: { item: Item }) {
       className="group flex flex-col overflow-hidden rounded-[6px] border border-studio-border-strong bg-studio-panel shadow-card hover:bg-studio-panel-hover"
     >
       {/* one tile shape for every aspect so the strip lines up; covers crop the edges */}
-      <div className="darkroom relative aspect-video w-full border-x-0 border-t-0">
+      <div className="darkroom relative aspect-video w-full overflow-hidden border-x-0 border-t-0">
         {thumb ? (
-          <img src={thumb} alt="" className="size-full object-cover" loading="lazy" />
+          <img src={thumb} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
         ) : done ? (
-          <video src={render!.media_url!} preload="metadata" muted playsInline tabIndex={-1} aria-hidden className="size-full object-cover" />
+          <video src={render!.media_url!} preload="metadata" muted playsInline tabIndex={-1} aria-hidden className="absolute inset-0 size-full object-cover" />
         ) : (
           <span className="flex size-full items-center justify-center text-studio-on-dark-muted">
             <Film aria-hidden className="size-5" />

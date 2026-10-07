@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "image-portrait",
+      "title": "Portrait",
+      "description": "A head-and-shoulders portrait with controlled studio or window light.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "Head-and-shoulders portrait of [person: age, look, expression], wearing [clothing], against [background]. Soft key light from [direction], gentle fill, 85 mm lens, eyes in sharp focus.",
+        "aspect": "3:4",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "distorted hands, extra fingers, blurry eyes, heavy retouching"
+      }
+    },
+    {
+      "id": "image-product-shot",
+      "title": "Product shot",
+      "description": "A clean hero image of one product for a shop or an ad.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "Hero shot of [product] in [colour or material], standing on [surface] in front of a [background colour] seamless backdrop. Three-quarter angle, softbox lighting with a clean rim light, a subtle reflection underneath, [prop or accent] beside it.",
+        "aspect": "1:1",
+        "count": 4,
+        "style": "product",
+        "negative": "text, watermark, clutter, warped label"
+      }
+    },
+    {
+      "id": "image-character-sheet",
+      "title": "Character sheet",
+      "description": "One character shown front, side and back on a plain background.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "Character reference sheet of [character: age, build, hair, face], wearing [outfit]. Three full-body views side by side: front, side profile and back, same pose and scale. Plain light grey background, even lighting, consistent colours.",
+        "aspect": "3:2",
+        "count": 2,
+        "style": "illustration",
+        "negative": "different outfits between views, cropped feet, busy background"
+      }
+    },
+    {
+      "id": "image-poster",
+      "title": "Poster",
+      "description": "Key art for a film or an event, with room for the title.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "Key art poster for [film or event]: [central figure or object] in [setting], dramatic [lighting] lighting, a strong silhouette, [colour palette]. Leave clean space at the [top or bottom] for the title.",
+        "aspect": "2:3",
+        "count": 4,
+        "style": "cinematic",
+        "negative": "garbled text, watermark, cluttered composition"
+      }
+    },
+    {
+      "id": "image-landscape",
+      "title": "Landscape",
+      "description": "A wide scenic view for backgrounds, establishing shots or prints.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "Wide landscape of [place] at [time of day], [weather]. A foreground of [foreground detail], with [midground feature] leading the eye toward [background feature]. Atmospheric depth, natural colour.",
+        "aspect": "16:9",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "people, text, oversaturated sky"
+      }
+    },
+    {
+      "id": "image-food",
+      "title": "Food photography",
+      "description": "An appetising dish styled for a menu, a blog or an ad.",
+      "thumb": null,
+      "defaults": {
+        "prompt_scaffold": "Overhead food photograph of [dish], served on [plate or board] on a [table surface]. Garnish of [garnish], [side items] at the edges, soft daylight from the side, a little steam, shallow depth of field.",
+        "aspect": "4:3",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "plastic-looking food, messy plate, harsh flash"
+      }
+    }
+  ]
+}

@@ -11,7 +11,7 @@ export function NotFound() {
         title="Nothing at this address"
         action={
           <Button asChild variant="primary">
-            <Link to="/projects">Go to projects</Link>
+            <Link to="/">Go to Home</Link>
           </Button>
         }
       >

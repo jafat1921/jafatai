@@ -28,7 +28,7 @@ STALE_AFTER = timedelta(seconds=90)
 HEARTBEAT_EVERY = 5.0
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
-IMAGE_KINDS = {"portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyframe_mid", "establishing"}
+IMAGE_KINDS = {"portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyframe_mid", "establishing", "image"}
 VIDEO_KINDS = {"take", "tile", "render"}
 TEXT_KINDS = {"scene_text"}
 EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt"}
@@ -164,6 +164,9 @@ class JobContext:
 
 
 def _out_path(gen: Generation, media_ext: str) -> tuple[Path, str]:
+    if gen.target_type == "media":
+        rel = Path("workspaces") / gen.workspace_id / "media" / f"{gen.id}{media_ext}"
+        return get_settings().data_dir / rel, rel.as_posix()
     project = gen.project_id or "_unassigned"
     rel = Path("workspaces") / gen.workspace_id / "projects" / project / "generations" / f"{gen.id}{media_ext}"
     return get_settings().data_dir / rel, rel.as_posix()
@@ -246,6 +249,9 @@ from app.autopilot import JOB_TYPE as AUTOPILOT_JOB, handle_autopilot, wake_pare
 
 HANDLERS[AUTOPILOT_JOB] = handle_autopilot
 FINISHED_HOOKS.append(wake_parent)
+from app.library import on_job_finished as media_finished  # noqa: E402
+
+FINISHED_HOOKS.append(media_finished)
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.
 CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot"}

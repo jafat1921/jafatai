@@ -33,6 +33,18 @@ import type {
   UpscaleOptions,
   UpscaleRequest,
   User,
+  ComfyCheck,
+  Dashboard,
+  ImageEditRequest,
+  ImageGenerateRequest,
+  LlmCheck,
+  MediaBatch,
+  MediaDetail,
+  MediaItem,
+  MediaPage,
+  MediaQuery,
+  Template,
+  TemplateStart,
 } from './types'
 
 export const API_BASE = '/api'
@@ -148,6 +160,9 @@ export const api = {
   system: {
     status: () => get<SystemStatus>('/system/status'),
     upscaleOptions: () => get<UpscaleOptions>('/system/upscale-options'),
+    comfyCheck: () => get<ComfyCheck>('/system/comfy-check'),
+    // ping=true loads each role model in turn, so only on request
+    llmCheck: (ping = false) => get<LlmCheck>('/system/llm-check', { ping }),
     imageUpscaleOptions: (generationId: string) =>
       get<ImageUpscaleOptions>(`/system/upscale-options?generation_id=${encodeURIComponent(generationId)}`),
   },
@@ -263,6 +278,25 @@ export const api = {
     create: (body: QuickRequest) => post<{ project: Project; job: Job }>('/quick', body),
     recent: () => get<QuickRecent[]>('/quick/recent'),
   },
+  // contract-v5: the Library behind the Image and Video sections
+  media: {
+    list: (q: MediaQuery = {}) => get<MediaPage>('/media', { ...q }),
+    get: (id: string) => get<MediaDetail>(`/media/${id}`),
+    update: (id: string, body: { title?: string; tags?: string[] }) => patch<MediaItem>(`/media/${id}`, body),
+    remove: (id: string) => del(`/media/${id}`),
+    regenerate: (id: string, body: { mode: RegenerateMode; note?: string; prompt?: string }) =>
+      post<Job>(`/media/${id}/regenerate`, body),
+    // upload goes through lib/upload.ts (XHR, for progress)
+  },
+  images: {
+    generate: (body: ImageGenerateRequest) => post<MediaBatch>('/images/generate', body),
+    edit: (body: ImageEditRequest) => post<MediaBatch>('/images/edit', body),
+  },
+  templates: {
+    list: (type: 'video' | 'image') => get<Template[]>('/templates', { type }),
+    start: (id: string) => post<TemplateStart>(`/templates/${id}/start`),
+  },
+  dashboard: () => get<Dashboard>('/dashboard'),
   jobs: {
     list: (q?: { status?: JobStatus; project_id?: string }) => get<Job[]>('/jobs', q),
     cancel: (id: string) => post<Job>(`/jobs/${id}/cancel`),

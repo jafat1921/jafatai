@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronDown, Clapperboard, MessageSquareText, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { AspectTiles } from '@/components/studio/aspect-tile'
 import { ChipGroup } from '@/components/studio/chip'
 import { DurationFields } from '@/components/studio/duration-picker'
+import { PlaceholderHint } from '@/components/studio/placeholder-hint'
 import { ErrorState } from '@/components/studio/states'
 import { useCreateQuick } from '@/hooks/useQuick'
 import { useUpscaleOptions } from '@/hooks/useUpscale'
@@ -26,6 +27,7 @@ import {
   type QuickForm,
 } from '@/lib/quick'
 import type { QuickAspect, QuickStyle } from '@/lib/types'
+import { placeholdersIn } from '@/lib/images'
 import { pickEngine } from '@/lib/upscale'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
@@ -34,12 +36,24 @@ import { announce } from '@/stores/ui'
  * One prompt → finished video. On the Projects page the options start folded into a summary
  * line so the prompt box stays the obvious first step; /create shows everything.
  */
-export function QuickCreateForm({ expanded = false, className }: { expanded?: boolean; className?: string }) {
+export function QuickCreateForm({
+  expanded = false,
+  className,
+  initial,
+  note,
+}: {
+  expanded?: boolean
+  className?: string
+  // from a template; still waits for the user to press Create
+  initial?: Partial<QuickForm>
+  note?: React.ReactNode
+}) {
   const uid = useId()
+  const field = useRef<HTMLTextAreaElement>(null)
   const navigate = useNavigate()
   const create = useCreateQuick()
   const options = useUpscaleOptions()
-  const [form, setForm] = useState<QuickForm>(DEFAULT_QUICK_FORM)
+  const [form, setForm] = useState<QuickForm>({ ...DEFAULT_QUICK_FORM, ...initial })
   const [open, setOpen] = useState(expanded)
   const set = <K extends keyof QuickForm>(k: K, v: QuickForm[K]) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -51,7 +65,8 @@ export function QuickCreateForm({ expanded = false, className }: { expanded?: bo
     : options.data && !engine
       ? 'No upscale engine is installed on the server.'
       : `Adds a ${engine?.label ?? 'default engine'} pass at the end.`
-  const canSubmit = form.prompt.trim().length >= 3 && !create.isPending
+  const slots = placeholdersIn(form.prompt)
+  const canSubmit = form.prompt.trim().length >= 3 && !slots.length && !create.isPending
   const styleLabel = QUICK_STYLES.find((s) => s.value === form.style)?.label
 
   const submit = () => {
@@ -86,11 +101,13 @@ export function QuickCreateForm({ expanded = false, className }: { expanded?: bo
         </h2>
         <p className="text-small text-studio-muted max-sm:hidden">One prompt, a finished video. Open it in the studio later to refine.</p>
       </div>
+      {note}
 
       <Label htmlFor={`${uid}-prompt`} className="sr-only">
         Describe your video
       </Label>
       <Textarea
+        ref={field}
         id={`${uid}-prompt`}
         rows={3}
         value={form.prompt}
@@ -99,6 +116,7 @@ export function QuickCreateForm({ expanded = false, className }: { expanded?: bo
         placeholder="Describe your video… e.g. A lighthouse keeper rescues a stray fox during a winter storm"
         className="min-h-24 text-[15px] leading-6"
       />
+      <PlaceholderHint text={form.prompt} field={field} />
 
       {!expanded && (
         <button
@@ -169,7 +187,9 @@ export function QuickCreateForm({ expanded = false, className }: { expanded?: bo
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         <p className="mr-auto text-small text-studio-muted" aria-live="polite">
-          {quickEstimateText(form.durationS, form.upscale ? engine : undefined)}. You can close the page while it works.
+          {slots.length
+            ? `Replace ${slots.join(', ')} first.`
+            : `${quickEstimateText(form.durationS, form.upscale ? engine : undefined)}. You can close the page while it works.`}
         </p>
         <Button type="submit" size="lg" variant="primary" disabled={!canSubmit} loading={create.isPending} aria-keyshortcuts="Control+Enter" className="max-sm:w-full">
           <Wand2 aria-hidden />

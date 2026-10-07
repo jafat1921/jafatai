@@ -1,4 +1,4 @@
-import type { GenerationKind, TargetType } from '@/lib/types'
+import type { GenerationKind, MediaQuery, TargetType } from '@/lib/types'
 
 export const qk = {
   me: ['me'] as const,
@@ -24,4 +24,12 @@ export const qk = {
   upscaleOptions: ['upscale-options'] as const,
   quickRecent: ['quick-recent'] as const,
   quickJob: (projectId: string) => ['quick-job', projectId] as const,
+  // contract-v5
+  mediaLists: ['media', 'list'] as const,
+  mediaList: (q: Omit<MediaQuery, 'cursor'>) => ['media', 'list', q] as const,
+  mediaItem: (id: string) => ['media', 'item', id] as const,
+  templates: (type: 'video' | 'image') => ['templates', type] as const,
+  dashboard: ['dashboard'] as const,
+  comfyCheck: ['comfy-check'] as const,
+  llmCheck: (ping: boolean) => ['llm-check', ping] as const,
 }

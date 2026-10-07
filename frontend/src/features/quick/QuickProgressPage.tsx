@@ -33,7 +33,7 @@ export function QuickProgressPage() {
     <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="quick-title">
       <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
         <header className="flex flex-col gap-1">
-          <Link to="/projects" className="self-start text-small text-studio-muted hover:text-studio-text">
+          <Link to="/video/projects" className="self-start text-small text-studio-muted hover:text-studio-text">
             ← All projects
           </Link>
           <h1 id="quick-title" ref={headingRef} tabIndex={-1} className="font-display text-title font-semibold focus-visible:outline-none">

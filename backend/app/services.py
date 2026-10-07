@@ -92,14 +92,13 @@ def new_seed() -> int:
 
 
 def next_version(db: Session, target_type: str, target_id: str, kind: str) -> int:
-    cur = db.scalar(
-        select(func.max(Generation.version)).where(
-            Generation.target_type == target_type,
-            Generation.target_id == target_id,
-            Generation.kind == kind,
-        )
+    q = select(func.max(Generation.version)).where(
+        Generation.target_type == target_type, Generation.target_id == target_id,
     )
-    return (cur or 0) + 1
+    # a media item's versions mix kinds (upload -> upscaled image), but it's still one v1, v2, v3 line
+    if target_type != "media":
+        q = q.where(Generation.kind == kind)
+    return (db.scalar(q) or 0) + 1
 
 
 def enqueue_generation(

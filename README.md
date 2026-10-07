@@ -55,5 +55,5 @@ Never commit `.env`.
 
 | | GitHub |
 |---|---|
-| Muhammad Haris Ali | [@mharisali-hash](https://github.com/mharisali-hash) |
+| Muhammad Haris | [@mharisali-hash](https://github.com/mharisali-hash) |
 | Partner | [@jafat1921](https://github.com/jafat1921) |

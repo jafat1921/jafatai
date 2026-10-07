@@ -50,3 +50,10 @@ Never commit `.env`.
 **Models:** `z_image_turbo_bf16`, `qwen_3_4b`, `ae`, `qwen_image_edit_2511_fp8mixed` + Lightning 4-step LoRA, `qwen_2.5_vl_7b_fp8_scaled`, `qwen_image_vae`, `ltx-2.3-22b-distilled-fp8`, `gemma_3_12B_it_fp4_mixed`. Full list with folders: [INSTALL.md](INSTALL.md#2-server-requirements).
 
 `GET /api/system/comfy-check` reports anything missing.
+
+## Contributors
+
+| | GitHub |
+|---|---|
+| Muhammad Haris Ali | [@mharisali-hash](https://github.com/mharisali-hash) |
+| Partner | [@jafat1921](https://github.com/jafat1921) |

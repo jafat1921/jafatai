@@ -19,6 +19,14 @@ OnProgress = Callable[[float, str], None]
 
 POLL_EVERY = 2.0
 TICK_EVERY = 3.0
+# A prompt that is neither in /history nor in /queue this many checks in a row is gone:
+# ComfyUI restarted (crash, OOM kill) and forgot it. Without this we'd wait out the full timeout.
+LOST_AFTER_CHECKS = 3
+# How long ComfyUI may be unreachable mid-job (e.g. restarting) before we give up on it.
+DOWN_GRACE_S = 90.0
+
+LOST_MSG = ("ComfyUI no longer has this job: it most likely restarted or crashed "
+            "(often out of GPU memory). Check the ComfyUI log, then retry the job.")
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".gif"}
 
 
@@ -292,17 +300,42 @@ class ComfyClient:
             await asyncio.sleep(0.5)
         raise ComfyError(f"prompt {prompt_id} finished but has no history entry")
 
+    async def _still_queued(self, prompt_id: str) -> bool:
+        q = await self.queue_state() or {}
+        ids = {item[1] for key in ("queue_running", "queue_pending") for item in q.get(key, []) if len(item) > 1}
+        return prompt_id in ids
+
     async def _wait_poll(self, prompt_id: str, report: OnProgress, deadline: float) -> dict:
+        missing = 0
+        down_since: float | None = None
         while True:
-            entry = await self.history(prompt_id)
+            if time.monotonic() > deadline:
+                raise ComfyTimeout(f"prompt {prompt_id} timed out")
+            try:
+                entry = await self.history(prompt_id)
+                if not entry and not await self._still_queued(prompt_id):
+                    # history is written just after the prompt leaves the queue, so look once more
+                    entry = await self.history(prompt_id)
+                    missing = 0 if entry else missing + 1
+                else:
+                    missing = 0
+                down_since = None
+            except httpx.HTTPError as e:
+                down_since = down_since or time.monotonic()
+                if time.monotonic() - down_since > DOWN_GRACE_S:
+                    raise ComfyError(f"ComfyUI stopped responding while running this job ({e.__class__.__name__}). "
+                                     "Check that ComfyUI is up, then retry.") from e
+                report(0.5, "ComfyUI not responding, waiting…")
+                await asyncio.sleep(POLL_EVERY)
+                continue
             if entry:
                 err = history_error(entry)
                 if err:
                     raise ComfyError(err)
                 if entry.get("status", {}).get("completed"):
                     return entry
-            if time.monotonic() > deadline:
-                raise ComfyTimeout(f"prompt {prompt_id} timed out")
+            elif missing >= LOST_AFTER_CHECKS:
+                raise ComfyError(LOST_MSG)
             report(0.5, "Generating (no live progress)")
             await asyncio.sleep(POLL_EVERY)
 
@@ -327,6 +360,9 @@ class ComfyClient:
                     entry = await self.history(prompt_id)
                     if entry and (entry.get("status", {}).get("completed") or history_error(entry)):
                         return await self._finish(prompt_id)
+                    if not entry and not await self._still_queued(prompt_id):
+                        # quiet socket and the job is nowhere: let the poller confirm and report it
+                        return await self._wait_poll(prompt_id, report, deadline)
                 continue
             except Exception as e:
                 log.warning("websocket dropped (%s); falling back to polling", e)

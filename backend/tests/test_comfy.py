@@ -339,3 +339,72 @@ def test_comfy_check_reports_unreachable_server(client):
     # conftest leaves COMFY_URLS empty
     body = client.get("/api/system/comfy-check").json()
     assert body["ok"] is False and "COMFY_URLS" in body["error"]
+
+
+def _client(handler):
+    return ComfyClient("http://comfy.test", transport=httpx.MockTransport(handler), websocket=False)
+
+
+def _prompt_ok(request):
+    return httpx.Response(200, json={"prompt_id": "p1", "number": 1, "node_errors": {}})
+
+
+def test_client_fails_fast_when_comfy_forgets_the_job(fast_poll):
+    # ComfyUI restarted (OOM, crash): empty history, empty queue -> clear error, not an hour-long wait
+    def handler(request):
+        p = request.url.path
+        if p == "/prompt":
+            return _prompt_ok(request)
+        if p.startswith("/history"):
+            return httpx.Response(200, json={})
+        if p == "/queue" and request.method == "GET":
+            return httpx.Response(200, json={"queue_running": [], "queue_pending": []})
+        return httpx.Response(200)
+
+    async def go():
+        async with _client(handler) as c:
+            await c.run({"1": {"class_type": "X", "inputs": {}}}, timeout=600)
+
+    with pytest.raises(ComfyError, match="no longer has this job"):
+        asyncio.run(go())
+
+
+def test_client_gives_up_when_comfy_stays_down(fast_poll, monkeypatch):
+    monkeypatch.setattr(comfy_client, "DOWN_GRACE_S", 0.0)
+
+    def handler(request):
+        if request.url.path == "/prompt":
+            return _prompt_ok(request)
+        raise httpx.ConnectError("connection refused", request=request)
+
+    async def go():
+        async with _client(handler) as c:
+            await c.run({"1": {"class_type": "X", "inputs": {}}}, timeout=600)
+
+    with pytest.raises(ComfyError, match="stopped responding"):
+        asyncio.run(go())
+
+
+def test_client_rides_out_a_short_comfy_restart(fast_poll):
+    state = {"calls": 0}
+
+    def handler(request):
+        p = request.url.path
+        if p == "/prompt":
+            return _prompt_ok(request)
+        if p.startswith("/history"):
+            state["calls"] += 1
+            if state["calls"] <= 2:
+                raise httpx.ConnectError("restarting", request=request)
+            return httpx.Response(200, json={"p1": {"status": {"completed": True, "status_str": "success"},
+                                                    "outputs": {"9": {"images": [{"filename": "a.png", "subfolder": "", "type": "output"}]}}}})
+        if p == "/queue" and request.method == "GET":
+            return httpx.Response(200, json={"queue_running": [[0, "p1", {}, {}, []]], "queue_pending": []})
+        return httpx.Response(200)
+
+    async def go():
+        async with _client(handler) as c:
+            return await c.run({"1": {"class_type": "X", "inputs": {}}}, timeout=600)
+
+    pid, entry = asyncio.run(go())
+    assert pid == "p1" and entry["outputs"]

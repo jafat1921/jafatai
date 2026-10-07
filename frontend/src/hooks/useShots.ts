@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { Generation, Shot, ShotPatch, ShotType } from '@/lib/types'
+import type { Generation, Shot, ShotPatch, ShotType, TakesRequest } from '@/lib/types'
 import { qk } from './keys'
 
 export function useProjectShots(projectId: string) {
@@ -113,8 +113,7 @@ export function useClearStale() {
 export function useRenderTakes() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ shotId, count, durationS }: { shotId: string; count?: number; durationS?: number }) =>
-      api.shots.renderTakes(shotId, count, durationS),
+    mutationFn: ({ shotId, ...body }: { shotId: string } & TakesRequest) => api.shots.renderTakes(shotId, body),
     onSuccess: (_jobs, { shotId }) => {
       qc.invalidateQueries({ queryKey: qk.jobs })
       qc.invalidateQueries({ queryKey: qk.generationsFor('shot', shotId, 'take') })

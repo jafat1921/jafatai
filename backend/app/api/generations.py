@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.ai_jobs import rewrite_prompt_from_note
-from app import reel, storyboard, upscale, upscale_image
+from app import models_catalog, reel, storyboard, upscale, upscale_image
 from app.api.media import resolve_media_path
 from app.config import get_settings
 from app.models import Generation, Job, Location, Project, Shot, utcnow
@@ -64,6 +64,9 @@ def create_generation(body: GenerationCreate, db: Session = Depends(get_db), cur
             db, db.get(Location, body.target_id), body.kind, prompt, params)
     elif not prompt.strip():
         raise HTTPException(422, "A prompt is required")
+    if body.target_type == "character" and body.kind == "portrait":
+        project = db.get(Project, project_id) if project_id else None
+        models_catalog.apply_image_choice(params, project.settings if project else None)
     g = enqueue_generation(
         db,
         workspace_id=cur.workspace_id,

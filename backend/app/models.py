@@ -80,6 +80,8 @@ class Project(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     # look suffix every frame/motion prompt carries verbatim (world reconstruction)
     style_bible: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # free-form per-project defaults (migration 0006): brand_kit_id, image_model, ...
+    settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 
@@ -173,7 +175,9 @@ class Shot(Base):
     handoff_text: Mapped[str] = mapped_column(Text, default="")
     # long-take beat list (migration 0004); owned by the long-take engine
     beats: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
-    stale: Mapped[bool] = mapped_column(Boolean, default=False)
+    # [{asset_id, asset_type: logo|product, surface, prominence: hero|background}] (migration 0006)
+    brand_placements: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    stale:Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[str] = mapped_column(String(20), default="user")
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -345,5 +349,27 @@ class MediaItem(Base):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
+
+
+class BrandKit(Base):
+    """Logo, products, palette, fonts and tone for a brand (contract v7). Asset fields hold MediaItem ids."""
+
+    __tablename__ = "brand_kit"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    name: Mapped[str] = mapped_column(String(200))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    palette: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    style_text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    voice_text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    tagline: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    # {"primary": {media_id, description}, "light": ..., "dark": ...}
+    logos: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    products: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    font_files: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    reference_media_ids: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)

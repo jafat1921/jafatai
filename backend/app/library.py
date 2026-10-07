@@ -242,6 +242,9 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
         stmt = select(MediaItem).where(MediaItem.workspace_id == workspace_id)
         if kind:
             stmt = stmt.where(MediaItem.kind == kind)
+        else:
+            # brand fonts are MediaItems too (contract v7) but don't belong in the picture grid
+            stmt = stmt.where(MediaItem.kind.in_(("image", "video")))
         if origin:
             stmt = stmt.where(MediaItem.origin == origin)
         if project_id:
@@ -365,4 +368,11 @@ def on_job_finished(db: Session, job: Job) -> None:
                 item.duration_s = dur
         except Exception:
             log.exception("couldn't read the size of %s", g.id)
+        if item.kind == "video" and g.kind == "video":
+            # Create Video clips get a poster like uploads do; the grid has nothing else to show
+            from app.uploads import video_thumb
+
+            src = get_settings().data_dir / g.file_path
+            if video_thumb(src, src.with_suffix(".thumb.jpg"), item.duration_s):
+                item.thumb_path = str(Path(g.file_path).with_suffix(".thumb.jpg").as_posix())
     touch(item)

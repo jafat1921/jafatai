@@ -147,7 +147,7 @@ def test_0005_adds_media_item_and_keeps_data(tmp_path):
     con.commit()
     con.close()
 
-    _alembic(db, "upgrade", "head")
+    _alembic(db, "upgrade", "0005")
 
     con = sqlite3.connect(db)
     con.execute("PRAGMA foreign_keys=ON")
@@ -167,5 +167,59 @@ def test_0005_adds_media_item_and_keeps_data(tmp_path):
     _alembic(db, "downgrade", "0004")
     con = sqlite3.connect(db)
     assert con.execute("SELECT count(*) FROM sqlite_master WHERE name = 'media_item'").fetchone()[0] == 0
+    con.close()
+    _alembic(db, "upgrade", "head")
+
+
+def test_0006_adds_brand_kit_and_keeps_data(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0005")
+
+    con = sqlite3.connect(db)
+    now = "2026-10-07 18:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    con.execute(
+        "INSERT INTO project (id, workspace_id, title, logline, brief, authoring_mode, aspect_ratio, target_runtime_s,"
+        " quality, takes_per_shot, overnight, status, style_bible, created_at, updated_at)"
+        " VALUES ('p1', 'w1', 'Ad', '', '', 'quick', '16:9', 30, 'draft', 1, 0, 'done', 'warm', ?, ?)",
+        (now, now),
+    )
+    con.execute(
+        "INSERT INTO scene (id, workspace_id, project_id, sort_order, heading, logline, script_text, summary, mood,"
+        " lighting, source, locked, version, stale, created_at, updated_at)"
+        " VALUES ('s1', 'w1', 'p1', 1, 'INT. CAFE', '', '', '', '', '', 'user', 0, 1, 0, ?, ?)",
+        (now, now),
+    )
+    con.execute(
+        "INSERT INTO shot (id, workspace_id, project_id, scene_id, sort_order, shot_type, duration_s, description,"
+        " camera, prompt, prompt_mode, start_prompt, end_prompt, motion_prompt, character_ids, seam_in, handoff_text,"
+        " beats, stale, source, locked, created_at, updated_at) VALUES ('sh1', 'w1', 'p1', 's1', 1, 'wide', 4.0,"
+        " 'Cup', '', '', 'auto', '', '', '', '[]', 'cut', '', '[]', 0, 'user', 0, ?, ?)",
+        (now, now),
+    )
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "head")
+
+    con = sqlite3.connect(db)
+    con.execute("PRAGMA foreign_keys=ON")
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0006"
+    assert con.execute("SELECT title, style_bible, settings FROM project").fetchall() == [("Ad", "warm", "{}")]
+    assert con.execute("SELECT description, brand_placements FROM shot").fetchall() == [("Cup", "[]")]
+    con.execute("INSERT INTO brand_kit (id, workspace_id, name, created_at, updated_at) VALUES ('k1', 'w1', 'Leaf', ?, ?)",
+                (now, now))
+    row = con.execute("SELECT is_default, palette, logos, products, settings, tagline FROM brand_kit").fetchone()
+    assert row == (0, "[]", "{}", "[]", "{}", "")
+    con.execute("DELETE FROM workspace WHERE id = 'w1'")
+    assert con.execute("SELECT count(*) FROM brand_kit").fetchone()[0] == 0
+    con.commit()
+    con.close()
+
+    _alembic(db, "downgrade", "0005")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT count(*) FROM sqlite_master WHERE name = 'brand_kit'").fetchone()[0] == 0
+    cols = [r[1] for r in con.execute("PRAGMA table_info(shot)")]
+    assert "brand_placements" not in cols and "beats" in cols
     con.close()
     _alembic(db, "upgrade", "head")

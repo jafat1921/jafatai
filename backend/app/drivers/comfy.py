@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 from app.config import Settings, get_settings
 from app.drivers.base import DriverResult, ProgressCallback
 from app.drivers.comfy_client import ComfyClient, ComfyError, ComfyOutput, parse_outputs, pick_client
+from app import models_catalog as mc
 from app.workflows import build, frames_for, load, snap_multiple
 
 log = logging.getLogger("mixai.comfy")
@@ -18,6 +19,9 @@ log = logging.getLogger("mixai.comfy")
 IMAGE_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (1024, 1024), "4:3": (1152, 864), "2.39:1": (1536, 640)}
 # LTX draft sizes, multiples of 32. Final-res passes go through the x2 upscaler later.
 VIDEO_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (640, 640), "4:3": (736, 544), "2.39:1": (960, 416)}
+# High quality LTX: final size (multiples of 64, so stage 1 at half size stays on the 32 grid)
+HQ_SIZES = {"16:9": (1280, 704), "9:16": (704, 1280), "1:1": (960, 960), "4:3": (1088, 832), "2.39:1": (1536, 640)}
+WAN_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (624, 624), "4:3": (704, 544), "2.39:1": (960, 400)}
 PORTRAIT_SIZE = (768, 1024)
 MAX_FRAMES = 257  # ~10.7 s at 24 fps; longer shots belong to the long-take templates
 
@@ -32,7 +36,11 @@ ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
 
 TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23_extend": 3600.0,
             "upscale_seedvr2": 3600.0, "upscale_flashvsr": 3600.0, "upscale_esrgan": 1800.0,
-            "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0}
+            "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0,
+            "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
+            "ltx23_two_stage": 3600.0, "wan22_t2v": 2400.0}
+# templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
+LORA_FAMILIES = {"zimage_t2i", "qwen_edit", "ltx23_i2v", "ltx23_extend"}
 IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
 UPSCALE_TEMPLATES = {"upscale_seedvr2", "upscale_flashvsr", "upscale_esrgan"}
 
@@ -143,26 +151,43 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
                                           "keyframe_mid", "image"):
         return image_upscale_plan(params["upscale"], negative, seed, lookup)
 
-    def edit_plan(ids: list[str], text: str, size: tuple[int, int]) -> Plan:
+    def edit_plan(ids: list[str], text: str, size: tuple[int, int], model: str | None = None) -> Plan:
+        m = mc.MODELS.get(model or edit_model_id(params)) or mc.default_for("edit")
+        ids = ids[: m.max_refs or 3]
         files = [lookup.generation_file(i) for i in ids]
         w, h = _size(params, size, 16)
         inputs = {"prompt": text, "negative": negative, "width": w, "height": h, "seed": seed}
         if params.get("steps"):
             inputs["steps"] = params["steps"]
-        return Plan("qwen_edit", inputs, {"images": files}, loras, "image", {"reference_ids": ids})
+        return Plan(m.template, inputs, {"images": files}, _family(m.template, loras), "image",
+                    {"reference_ids": ids, "model": m.id})
 
     def t2i_plan(size: tuple[int, int]) -> Plan:
+        m = mc.MODELS.get(params.get("model") or "")
+        if m is None or m.type != "image":
+            m = mc.default_for("image")
         w, h = _size(params, size, 16)
         inputs = {"prompt": prompt, "negative": negative, "width": w, "height": h, "seed": seed}
+        sources = {"model": m.id}
+        sp = next((x for x in m.speeds if x.id == params.get("speed")), None) or \
+            next((x for x in m.speeds if x.id == m.default_speed), None)
+        if sp:
+            inputs.update(steps=sp.steps, cfg=sp.cfg, speed_lora=sp.lora)
+            if sp.shift is not None:
+                inputs["shift"] = sp.shift
+            sources["speed"] = sp.id
         if params.get("steps"):
             inputs["steps"] = params["steps"]
-        return Plan("zimage_t2i", inputs, {}, loras, "image")
+        return Plan(m.template, inputs, {}, _family(m.template, loras), "image", sources)
 
     if kind == "image":
         # Image studio (contract v5): sources make it an edit, otherwise plain text to image.
         # The API already picked a ~1 MP size for the aspect.
         size = (params.get("width") or 1024, params.get("height") or 1024)
         return edit_plan(ref_ids, prompt, size) if ref_ids else t2i_plan(size)
+
+    if kind == "video":
+        return clip_plan(prompt, params, seed, lookup, negative, loras)
 
     if kind == "portrait":
         return edit_plan(ref_ids, prompt, PORTRAIT_SIZE) if ref_ids else t2i_plan(PORTRAIT_SIZE)
@@ -184,7 +209,7 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         )
         if prompt.strip():
             text += f" {prompt.strip()}"
-        plan = edit_plan(ids, text, PORTRAIT_SIZE)
+        plan = edit_plan(ids, text, PORTRAIT_SIZE, model="qwen_image_edit_2511")  # the angles LoRA is Qwen-only
         if params.get("angles_lora"):
             strength = params["angles_lora"] if isinstance(params["angles_lora"], (int, float)) else 1.0
             plan.loras = [(ANGLES_LORA, float(strength))] + plan.loras
@@ -196,7 +221,10 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         size = IMAGE_SIZES.get(aspect, IMAGE_SIZES["16:9"])
         if not ref_ids:
             return t2i_plan(size)
-        return edit_plan(ref_ids, _ref_preamble(params.get("reference_labels"), len(ref_ids)) + prompt, size)
+        # the preamble talks Qwen's "Picture N" language; FLUX.2 just gets the prompt
+        qwen = edit_model_id(params) == "qwen_image_edit_2511"
+        pre = _ref_preamble(params.get("reference_labels"), len(ref_ids)) if qwen else ""
+        return edit_plan(ref_ids, pre + prompt, size)
 
     if kind == "take":
         first = params.get("first_frame_id")
@@ -214,8 +242,13 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         inputs = {"prompt": prompt, "width": w, "height": h, "num_frames": frames, "fps": fps, "seed": seed}
         if negative:
             inputs["negative"] = negative
-        return Plan("ltx23_i2v", inputs, images, loras, "video",
-                    {"first_frame_id": first, "last_frame_id": last})
+        sources = {"first_frame_id": first, "last_frame_id": last}
+        if params.get("quality") == "hq":
+            return hq_plan(inputs, images, aspect, params, loras, sources)
+        if params.get("smooth_motion"):
+            inputs["smooth_fps"] = fps * 2
+            sources["smooth_motion"] = True
+        return Plan("ltx23_i2v", inputs, images, loras, "video", sources)
 
     if kind == "take_chunk":
         return chunk_plan(prompt, params, seed, lookup, negative, loras)
@@ -224,6 +257,60 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         return upscale_plan(params, seed)
 
     raise ComfyError(f"The ComfyUI driver doesn't handle '{kind}' generations")
+
+
+def edit_model_id(params: dict) -> str:
+    m = mc.MODELS.get(params.get("edit_model") or "") or mc.MODELS.get(params.get("model") or "")
+    return m.id if m is not None and m.type == "edit" else mc.default_for("edit").id
+
+
+def _family(template: str, loras):
+    # a Z-Image or LTX LoRA would break a Qwen-Image / FLUX.2 / Wan graph
+    return list(loras) if template in LORA_FAMILIES else []
+
+
+def hq_plan(inputs: dict, images: dict, aspect: str, params: dict, loras, sources: dict) -> Plan:
+    """LTX two-stage: same inputs as a standard take, at HQ size (stage 1 runs at half of it)."""
+    w, h = HQ_SIZES.get(aspect, HQ_SIZES["16:9"])
+    inputs = {**inputs, "width": w, "height": h, "half_width": w // 2, "half_height": h // 2}
+    sources = {**sources, "quality": "hq"}
+    if params.get("smooth_motion"):
+        inputs["smooth_fps"] = float(inputs["fps"]) * 2
+        sources["smooth_motion"] = True
+    return Plan("ltx23_two_stage", inputs, images, _family("ltx23_i2v", loras), "video", sources)
+
+
+def clip_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:
+    """Create Video (contract v6): one prompt, optional start image, any video model."""
+    m = mc.MODELS.get(params.get("model") or "") or mc.default_for("video")
+    aspect = params.get("aspect_ratio") or "16:9"
+    first = params.get("first_frame_id")
+    images: dict[str, Path | list[Path]] = {}
+    if first:
+        if "i2v" not in m.capabilities:
+            raise ComfyError(f"{m.label} can't start from an image")
+        images["first_image"] = lookup.generation_file(first)
+    duration = float(params.get("duration_s") or 5)
+    sources = {"model": m.id, "first_frame_id": first}
+    if m.id == "wan22_t2v":
+        w, h = WAN_SIZES.get(aspect, WAN_SIZES["16:9"])
+        inputs = {"prompt": prompt, "width": w, "height": h, "num_frames": mc.wan_frames(duration),
+                  "fps": mc.WAN_FPS, "seed": seed}
+        if negative:
+            inputs["negative"] = negative
+        return Plan(m.template, inputs, images, [], "video", sources)
+    fps = 24.0
+    frames = min(frames_for(duration, fps), MAX_FRAMES)
+    w, h = VIDEO_SIZES.get(aspect, VIDEO_SIZES["16:9"])
+    inputs = {"prompt": prompt, "width": w, "height": h, "num_frames": frames, "fps": fps, "seed": seed}
+    if negative:
+        inputs["negative"] = negative
+    if m.id == "ltx23_hq":
+        return hq_plan(inputs, images, aspect, params, loras, sources)
+    if params.get("smooth_motion"):
+        inputs["smooth_fps"] = fps * 2
+        sources["smooth_motion"] = True
+    return Plan("ltx23_i2v", inputs, images, loras, "video", sources)
 
 
 def chunk_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:
@@ -253,8 +340,9 @@ def chunk_plan(prompt: str, params: dict, seed: int, lookup, negative: str, lora
     elif params.get("first_frame_id"):
         images["first_image"] = lookup.generation_file(params["first_frame_id"])
         sources["first_frame_id"] = params["first_frame_id"]
-    else:
+    elif not params.get("text_start"):
         raise ComfyError("A take chunk needs the START frame, a context clip or a first image")
+    # text_start: chunk 0 of a long Create Video clip without a start image is plain text to video
     return Plan("ltx23_i2v", inputs, images, loras, "video", sources)
 
 

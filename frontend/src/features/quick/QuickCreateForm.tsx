@@ -4,12 +4,13 @@ import { ChevronDown, Clapperboard, MessageSquareText, Wand2 } from 'lucide-reac
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { AspectTiles } from '@/components/studio/aspect-tile'
 import { ChipGroup } from '@/components/studio/chip'
 import { DurationFields } from '@/components/studio/duration-picker'
 import { PlaceholderHint } from '@/components/studio/placeholder-hint'
+import { SwitchRow } from '@/components/studio/switch-row'
+import { QuickAdvanced } from './QuickAdvanced'
 import { ErrorState } from '@/components/studio/states'
 import { useCreateQuick } from '@/hooks/useQuick'
 import { useUpscaleOptions } from '@/hooks/useUpscale'
@@ -132,6 +133,7 @@ export function QuickCreateForm({
             {formatDuration(form.durationS)} · {form.aspect} · {styleLabel}
             {form.dialogue ? ' · narration' : ''}
             {form.upscale ? ' · 1080p' : ''}
+            {form.videoQuality === 'hq' ? ' · high quality' : ''}
           </span>
         </button>
       )}
@@ -162,7 +164,7 @@ export function QuickCreateForm({
             onChange={(v) => v && set('style', v as QuickStyle)}
           />
           <div className="flex flex-col gap-2">
-            <Toggle
+            <SwitchRow
               id={`${uid}-dialogue`}
               checked={form.dialogue}
               onChange={(v) => set('dialogue', v)}
@@ -170,7 +172,7 @@ export function QuickCreateForm({
               title="Dialogue / narration"
               hint="Characters speak, or a narrator tells it. Off: music and ambience only."
             />
-            <Toggle
+            <SwitchRow
               id={`${uid}-upscale`}
               checked={form.upscale && !!engine}
               disabled={!engine}
@@ -180,6 +182,7 @@ export function QuickCreateForm({
               hint={upscaleHint}
             />
           </div>
+          <QuickAdvanced form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
         </div>
       )}
 
@@ -198,42 +201,5 @@ export function QuickCreateForm({
         </Button>
       </div>
     </form>
-  )
-}
-
-function Toggle(props: {
-  id: string
-  checked: boolean
-  disabled?: boolean
-  onChange: (v: boolean) => void
-  icon: React.ReactNode
-  title: string
-  hint: string
-}) {
-  return (
-    <label
-      htmlFor={props.id}
-      className={cn(
-        'flex items-start gap-2.5 rounded-[6px] border border-studio-border-strong bg-studio-raised p-2.5',
-        props.disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer',
-      )}
-    >
-      <Switch
-        id={props.id}
-        checked={props.checked}
-        disabled={props.disabled}
-        onCheckedChange={props.onChange}
-        aria-describedby={`${props.id}-hint`}
-        className="mt-0.5"
-      />
-      <span>
-        <span className="flex items-center gap-1 text-body font-medium">
-          {props.icon} {props.title}
-        </span>
-        <span id={`${props.id}-hint`} className="block text-small text-studio-muted">
-          {props.hint}
-        </span>
-      </span>
-    </label>
   )
 }

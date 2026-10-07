@@ -43,6 +43,18 @@ export interface Project {
   updated_at: string
   thumbnail_url?: string | null
   counts: { scenes: number; shots: number; characters: number }
+  // contract-v6; older servers don't send it
+  settings?: ProjectSettings
+}
+
+// PATCH merges these into project.settings; null removes a key
+export interface ProjectSettings {
+  image_model?: string | null
+  image_speed?: string | null
+  edit_model?: string | null
+  video_quality?: 'standard' | 'hq' | null
+  smooth_motion?: boolean | null
+  [key: string]: unknown
 }
 
 export interface ProjectCreate {
@@ -467,6 +479,9 @@ export interface QuickRequest {
   style: QuickStyle
   dialogue: boolean
   upscale: UpscaleRequest | null
+  // contract-v6, omitted for the server default
+  image_model?: string
+  video_quality?: 'standard' | 'hq'
 }
 
 export type QuickStageKey = 'outline' | 'cast' | 'storyboard' | 'render' | 'stitch' | 'upscale'
@@ -552,6 +567,8 @@ export interface ImageGenerateRequest {
   seed?: number
   steps?: number
   template_id?: string
+  model?: string
+  speed?: string
 }
 
 export interface ImageEditRequest {
@@ -560,6 +577,7 @@ export interface ImageEditRequest {
   aspect?: ImageAspect
   count?: number
   seed?: number
+  model?: string
 }
 
 export interface MediaBatch {
@@ -617,4 +635,55 @@ export interface LlmCheck {
   reasoning_format?: string
   roles: Partial<Record<'reasoning' | 'creative' | 'vision', LlmRole>>
   error?: string
+}
+
+// contract-v6-models.md
+export type ModelType = 'image' | 'edit' | 'video' | 'upscale'
+export type ModelBadgeId = 'FAST' | 'BEST' | 'TEXT' | 'NEW' | 'HQ' | 'QUICK' | 'UPSCALE'
+export type ModelCapability = 't2i' | 'edit' | 'refs' | 't2v' | 'i2v' | 'flf' | 'audio' | 'longtake' | 'text_render' | 'multi_angle'
+
+export interface ModelSpeed {
+  id: string
+  label: string
+  steps: number
+  note?: string | null
+  available?: boolean
+  reason?: string | null
+}
+
+export interface ModelInfo {
+  id: string
+  type: ModelType
+  label: string
+  badge: ModelBadgeId | null
+  description: string
+  capabilities: ModelCapability[]
+  speeds?: ModelSpeed[]
+  default_speed?: string
+  max_refs?: number
+  max_duration_s?: number
+  est_seconds?: number
+  available: boolean
+  reason?: string | null
+  default: boolean
+  // LTX only: the temporal x2 upscaler, single-pass clips only
+  smooth_motion?: { available: boolean; reason?: string | null }
+}
+
+export type VideoAspect = '16:9' | '9:16' | '1:1'
+
+export interface VideoGenerateRequest {
+  prompt: string
+  model: string
+  duration_s: number
+  aspect: VideoAspect
+  image_id?: string
+  seed?: number
+  smooth_motion?: boolean
+}
+
+// quality and smooth motion come from project.settings; the server drops them for long takes
+export interface TakesRequest {
+  count?: number
+  duration_s?: number
 }

@@ -471,8 +471,16 @@ def assemble(files: list[Path], frames: list[int], overlap: int, out: Path, tick
 
 # ---------------------------------------------------------------- the take job
 
+def _owner_dir(gen: Generation) -> Path:
+    # Create Video clips (target "media") live with the rest of the library, not under a project
+    # TODO: library.delete_item only removes the final file; a long clip's chunk folder stays behind
+    if gen.target_type == "media":
+        return Path("workspaces") / gen.workspace_id / "media"
+    return Path("workspaces") / gen.workspace_id / "projects" / (gen.project_id or "_unassigned")
+
+
 def take_dir(gen: Generation) -> tuple[Path, str]:
-    rel = Path("workspaces") / gen.workspace_id / "projects" / (gen.project_id or "_unassigned") / "takes" / gen.id
+    rel = _owner_dir(gen) / "takes" / gen.id
     return get_settings().data_dir / rel, rel.as_posix()
 
 
@@ -557,7 +565,10 @@ def run_take(ctx, gen: Generation, driver) -> dict:
         if k == n - 1 and params.get("last_frame_id"):
             cparams["last_frame_id"] = params["last_frame_id"]
         if k == 0:
-            cparams["first_frame_id"] = params["first_frame_id"]
+            if params.get("first_frame_id"):
+                cparams["first_frame_id"] = params["first_frame_id"]
+            else:
+                cparams["text_start"] = True
         else:
             prev = chunks[k - 1]
             prev_file = get_settings().data_dir / prev["file"]
@@ -630,7 +641,8 @@ def run_take(ctx, gen: Generation, driver) -> dict:
 
 
 def _final_path(gen: Generation) -> tuple[Path, str]:
-    rel = Path("workspaces") / gen.workspace_id / "projects" / (gen.project_id or "_unassigned") / "generations" / f"{gen.id}.mp4"
+    sub = "" if gen.target_type == "media" else "generations"
+    rel = _owner_dir(gen) / sub / f"{gen.id}.mp4"
     return get_settings().data_dir / rel, rel.as_posix()
 
 

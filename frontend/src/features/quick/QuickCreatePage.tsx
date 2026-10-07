@@ -1,5 +1,4 @@
 import { useLocation, useSearchParams } from 'react-router'
-import { ModelLine } from '@/features/image/controls'
 import { quickFormFrom, type TemplatePrefill } from '@/lib/templates'
 import { QuickCreateForm } from './QuickCreateForm'
 import { RecentQuick } from './RecentQuick'
@@ -19,14 +18,11 @@ export function QuickCreatePage() {
           expanded
           initial={initial}
           note={
-            <div className="flex flex-col gap-2">
-              {tpl && (
-                <p className="self-start rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">
-                  Template: {tpl.templateTitle}
-                </p>
-              )}
-              <ModelLine name="LTX-2.3" badge="NEW" note="Text and image to video, long takes" highlighted={params.get('model') === 'ltx-2.3'} />
-            </div>
+            tpl && (
+              <p className="self-start rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">
+                Template: {tpl.templateTitle}
+              </p>
+            )
           }
         />
         <RecentQuick />

@@ -116,7 +116,13 @@ export function mockApi(shots: Shot[]) {
 
 export function renderStage(
   ui: React.ReactElement,
-  { scenes, shots, takes = {}, stage = 'storyboard' }: { scenes: Scene[]; shots: Shot[]; takes?: Record<string, Generation[]>; stage?: string },
+  {
+    scenes,
+    shots,
+    takes = {},
+    stage = 'storyboard',
+    seed,
+  }: { scenes: Scene[]; shots: Shot[]; takes?: Record<string, Generation[]>; stage?: string; seed?: (qc: QueryClient) => void },
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   qc.setQueryData(qk.project(PID), project)
@@ -128,6 +134,7 @@ export function renderStage(
   for (const [shotId, list] of Object.entries(takes)) {
     qc.setQueryData(qk.generations('shot', shotId, 'take', false), list)
   }
+  seed?.(qc)
   const result = render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>

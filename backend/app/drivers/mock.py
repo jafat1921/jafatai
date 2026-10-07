@@ -84,7 +84,10 @@ class MockDriver:
         self._tick(progress_cb, "Sampling")
         render_placeholder(prompt, params, seed, out_path)
         progress_cb(1.0, "Done")
-        return DriverResult(out_path, "image/png", {"width": _size(params)[0], "height": _size(params)[1]})
+        meta = {"width": _size(params)[0], "height": _size(params)[1]}
+        if params.get("model"):
+            meta["model"] = params["model"]  # whatever the catalog picked; the placeholder looks the same
+        return DriverResult(out_path, "image/png", meta)
 
     def generate_video(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         if params.get("kind") == "upscale_segment":
@@ -111,7 +114,10 @@ class MockDriver:
         finally:
             frame.unlink(missing_ok=True)
         progress_cb(1.0, "Done")
-        return DriverResult(out_path, "video/mp4", {"duration_s": seconds})
+        meta = {"duration_s": seconds}
+        if params.get("kind") == "video":
+            meta.update(model=params.get("model"), width=_size(params)[0], height=_size(params)[1])
+        return DriverResult(out_path, "video/mp4", meta)
 
     def _upscale(self, params, out_path: Path, progress_cb) -> DriverResult:
         # plain lanczos, video only, same frames: what the real engines return minus the detail

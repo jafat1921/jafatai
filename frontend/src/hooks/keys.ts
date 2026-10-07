@@ -1,4 +1,4 @@
-import type { GenerationKind, MediaQuery, TargetType } from '@/lib/types'
+import type { GenerationKind, MediaQuery, ModelType, TargetType } from '@/lib/types'
 
 export const qk = {
   me: ['me'] as const,
@@ -32,4 +32,5 @@ export const qk = {
   dashboard: ['dashboard'] as const,
   comfyCheck: ['comfy-check'] as const,
   llmCheck: (ping: boolean) => ['llm-check', ping] as const,
+  models: (type: ModelType) => ['models', type] as const,
 }

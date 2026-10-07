@@ -182,8 +182,10 @@ def _take_count(body: TakesIn | None, project: Project, long: bool) -> int:
     return 1 if long else project.takes_per_shot
 
 
-def _queue_takes(db: Session, shot: Shot, count: int, duration_s: float | None = None) -> list[Job]:
+def _queue_takes(db: Session, shot: Shot, count: int, duration_s: float | None = None,
+                 render: dict | None = None) -> list[Job]:
     params = {"duration_s": duration_s} if duration_s else {}
+    params.update({k: v for k, v in (render or {}).items() if v is not None})
     prompt, params = sb.prepare_shot_generation(db, shot, "take", "", params)
     jobs = []
     for _ in range(count):
@@ -200,9 +202,13 @@ def queue_takes(shot_id: str, body: TakesIn | None = None, db: Session = Depends
     shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
     duration = (body.duration_s if body else None) or shot.duration_s
     count = _take_count(body, db.get(Project, shot.project_id), longtake.is_long(duration))
-    jobs = _queue_takes(db, shot, count, duration)
+    jobs = _queue_takes(db, shot, count, duration, _render_choice(body))
     db.commit()
     return [job_out(j) for j in jobs]
+
+
+def _render_choice(body: TakesIn | None) -> dict:
+    return {"quality": body.quality, "smooth_motion": body.smooth_motion} if body else {}
 
 
 @router.post("/scenes/{scene_id}/render", response_model=list[JobOut], status_code=202)
@@ -218,7 +224,11 @@ def render_scene(scene_id: str, body: TakesIn | None = None, db: Session = Depen
             # the scene-wide count is meant for normal shots; a long take stays at one
             # (re-roll it from the shot if needed) so one click can't queue hours of GPU
             count = 1 if long else _take_count(body, project, long)
-            jobs += _queue_takes(db, shot, count)
+            render = _render_choice(body)
+            if long:
+                # a scene-wide HQ request shouldn't 422 because one shot is a long take
+                render = {}
+            jobs += _queue_takes(db, shot, count, render=render)
     if not jobs:
         raise HTTPException(409, "No shot in this scene has an approved START frame yet")
     db.commit()

@@ -50,7 +50,9 @@ describe('Create Image page', () => {
     const user = userEvent.setup()
 
     expect(await screen.findByRole('img', { name: 'Older image' })).toBeInTheDocument()
-    await user.type(screen.getByRole('textbox', { name: 'Describe the image' }), 'A lighthouse keeper at dusk')
+    // paste rather than type: the form re-renders its pickers per keystroke, which is slow under jsdom
+    await user.click(screen.getByRole('textbox', { name: 'Describe the image' }))
+    await user.paste('A lighthouse keeper at dusk')
     await user.click(screen.getByRole('radio', { name: /16:9 Wide/ }))
     await user.click(screen.getByRole('radio', { name: '4 images' }))
     await user.click(screen.getByRole('button', { name: 'Cinematic' }))

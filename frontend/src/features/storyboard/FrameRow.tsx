@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { StatusPill } from '@/components/studio/status-pill'
 import { ErrorState } from '@/components/studio/states'
 import { useGenerationActions } from '@/hooks/useGenerations'
+import { useStudioImageModel } from '@/hooks/useStudioImageModel'
 import { useClearStale, useCreateShot, useDeleteShot, useReorderShots } from '@/hooks/useShots'
 import { formatDuration } from '@/lib/duration'
 import { shotLabel, startFrameOf, type FrameUnit } from '@/lib/shots'
@@ -31,6 +32,7 @@ interface Props {
 export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectClass, onSelectFrame, onOpenShots }: Props) {
   const { startShot, endShot, prevShot } = unit
   const { create } = useGenerationActions()
+  const imageModel = useStudioImageModel(startShot.project_id)
   const clearStale = useClearStale()
   const rewrite = useRewritePrompts(startShot)
   const reorder = useReorderShots(startShot.project_id)
@@ -44,7 +46,7 @@ export function FrameRow({ unit, view, sceneShots, labelFor, selection, aspectCl
 
   const generate = (shot: Shot, kind: GenerationKind) =>
     create.mutate(
-      { target: { targetType: 'shot', targetId: shot.id, kind } },
+      { target: { targetType: 'shot', targetId: shot.id, kind }, params: imageModel.params },
       { onSuccess: (g) => announce(`${kind === 'keyframe_start' ? 'START' : 'END'} frame for ${label} queued (v${g.version}).`) },
     )
 

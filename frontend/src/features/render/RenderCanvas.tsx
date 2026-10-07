@@ -18,6 +18,8 @@ import { plural } from '@/lib/utils'
 import { announce, useUi } from '@/stores/ui'
 import { useWorkspace } from '@/stores/workspace'
 import { useStoryboard } from '@/features/storyboard/useStoryboard'
+import { RenderQualityBar } from './RenderQuality'
+import { useRenderOptions } from './renderOptions'
 import { RenderShotRow } from './RenderShotRow'
 import { takesInOrder, takeVideo } from './takes'
 
@@ -39,6 +41,7 @@ export function RenderCanvas() {
   const [muted, setMuted] = useState(true)
   const [confirm, setConfirm] = useState(false)
   const renderScene = useRenderScene()
+  const renderOpts = useRenderOptions(projectId)
 
   const group = groups.find((g) => g.scene.id === scene?.id)
   const shots = group?.shots ?? []
@@ -128,6 +131,7 @@ export function RenderCanvas() {
           </Button>
         </div>
       </header>
+      <RenderQualityBar projectId={projectId} />
       {renderScene.isError && <ErrorState compact className="mx-5 mb-3" title="Couldn't queue the scene" error={renderScene.error} />}
 
       <ScrollArea className="min-h-0 flex-1">
@@ -176,6 +180,7 @@ export function RenderCanvas() {
             seams render after the frame they share. Estimated GPU time ≈ {estimate} once the video model is warm, plus 1–2 min
             if it has to load first.
             {eligible.length < shots.length && ` ${plural(shots.length - eligible.length, 'shot')} without an approved START will be skipped.`}
+            {renderOpts.quality === 'hq' && ' High quality applies to single-chunk shots; long takes render in Standard.'}
           </>
         }
         confirmLabel={`Render ${plural(totalTakes, 'take')}`}

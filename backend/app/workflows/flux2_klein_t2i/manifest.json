@@ -1,0 +1,21 @@
+{
+  "name": "flux2_klein_t2i",
+  "family": "flux.2-klein-4b",
+  "description": "FLUX.2 [klein] 4B distilled text-to-image: 4 steps, cfg 1, zeroed negative (per the Comfy-Org template).",
+  "inputs": {
+    "prompt": {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "width":  {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"], ["Scheduler", "width"]]},
+    "height": {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"], ["Scheduler", "height"]]},
+    "seed":   {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "steps":  {"type": "int", "default": 4, "targets": [["Scheduler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/flux2klein", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["flux-2-klein-4b-fp8.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["flux2-vae.safetensors"]
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 4, "UNet": 2, "TextEncoder": 2}
+}

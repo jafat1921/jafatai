@@ -17,6 +17,7 @@ import { shotStatus } from '@/lib/status'
 import type { Generation, Shot } from '@/lib/types'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { HQ_LONG_TAKE_REASON, SMOOTH_LONG_TAKE_REASON, useRenderOptions } from './renderOptions'
 import { TakeThumb } from './TakeThumb'
 import { takesInOrder } from './takes'
 
@@ -51,6 +52,7 @@ export function RenderShotRow(p: Props) {
   const { shot, label } = p
   const takes = useGenerations({ targetType: 'shot', targetId: shot.id, kind: 'take' }, false)
   const render = useRenderTakes()
+  const opts = useRenderOptions(shot.project_id)
   // per-request override; the shot keeps its own length unless changed in the Storyboard
   const [durationOverride, setDuration] = useState<number | null>(null)
   const duration = durationOverride ?? shot.duration_s
@@ -66,7 +68,7 @@ export function RenderShotRow(p: Props) {
 
   const submit = () =>
     render.mutate(
-      { shotId: shot.id, count, durationS: duration !== shot.duration_s ? duration : undefined },
+      { shotId: shot.id, count, duration_s: duration !== shot.duration_s ? duration : undefined },
       { onSuccess: (jobs) => announce(`${plural(jobs.length, 'take')} queued for shot ${label}.`) },
     )
 
@@ -140,6 +142,11 @@ export function RenderShotRow(p: Props) {
               <Clapperboard aria-hidden />
               Render takes
             </Button>
+            {long && (opts.quality === 'hq' || opts.smoothOn) && (
+              <span role="note" className="text-small text-studio-muted">
+                {opts.quality === 'hq' ? HQ_LONG_TAKE_REASON : SMOOTH_LONG_TAKE_REASON}
+              </span>
+            )}
             {long && count > 1 && (
               <span role="note" className="text-small text-studio-warning">
                 {count} long takes = {count}× the GPU time.
@@ -192,6 +199,8 @@ export function RenderShotRow(p: Props) {
         description={
           <>
             {formatDuration(duration)} each
+            {opts.quality === 'hq' && !long ? ', high quality' : ''}
+            {opts.smoothOn && !long ? ', smooth motion' : ''}
             {duration !== shot.duration_s && ` (the shot is set to ${formatDuration(shot.duration_s)})`}.{' '}
             {estimate && `${estimateText(estimate, count)}.`}
             {long && count > 1 && (

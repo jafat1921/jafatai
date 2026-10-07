@@ -4,6 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { StatusPill } from '@/components/studio/status-pill'
 import { GenerationViewer } from '@/components/review/GenerationViewer'
+import { StudioImageModelField } from '@/components/models/StudioImageModel'
+import { useStudioImageModel } from '@/hooks/useStudioImageModel'
 import { useGenerationActions, useGenerations } from '@/hooks/useGenerations'
 import { useClearStale } from '@/hooks/useShots'
 import { useProjectAspectClass } from '@/lib/aspect'
@@ -22,6 +24,7 @@ function GenerateFirst({ shot, side, label }: { shot: Shot; side: FrameSide; lab
   const target = { targetType: 'shot' as const, targetId: shot.id, kind } as const
   const list = useGenerations(target, false)
   const { create } = useGenerationActions()
+  const imageModel = useStudioImageModel(shot.project_id)
   if (list.isPending || (list.data?.length ?? 0) > 0) return null
   return (
     <>
@@ -30,7 +33,7 @@ function GenerateFirst({ shot, side, label }: { shot: Shot; side: FrameSide; lab
         className="w-full"
         loading={create.isPending}
         onClick={() =>
-          create.mutate({ target }, { onSuccess: () => announce(`${side.toUpperCase()} frame for ${label} queued.`) })
+          create.mutate({ target, params: imageModel.params }, { onSuccess: () => announce(`${side.toUpperCase()} frame for ${label} queued.`) })
         }
       >
         <Wand2 aria-hidden />
@@ -132,6 +135,7 @@ export function StoryboardInspector() {
             </>
           )}
           <RefsStrip shot={shot} sceneLocationId={group?.scene.location_id} />
+          <StudioImageModelField projectId={shot.project_id} withRefsNote />
         </TabsContent>
         <TabsContent value="prompts">
           <ShotPrompts key={shot.id} shot={shot} />

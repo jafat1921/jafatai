@@ -4,12 +4,13 @@ import { Clapperboard } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useConnections } from '@/hooks/useConnections'
 import { useRunningCount } from '@/hooks/useStudio'
-import { activeRail, RAIL_ITEMS, SETTINGS_ITEM, type RailId, type RailItem } from '@/lib/nav'
+import { activeRail, RAIL_ITEMS, SETTINGS_ITEM, type MenuId, type RailId, type RailItem } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 import { StatusDot } from './ConnectionStatus'
 import { MegaMenu } from './MegaMenu'
 import { UserMenu } from './UserMenu'
 import { useMegaMenu } from './useMegaMenu'
+import { useMenus } from './useMenus'
 
 const ITEM =
   'relative flex w-14 flex-col items-center gap-1 rounded-[6px] py-1.5 text-studio-muted transition-colors duration-150 hover:bg-studio-panel-hover hover:text-studio-text'
@@ -49,6 +50,7 @@ export function Rail() {
   const menu = useMegaMenu<RailId>(root)
   const { running } = useRunningCount()
   const conn = useConnections()
+  const menus = useMenus()
   // set on pointerdown so the click handler knows mouse vs touch vs keyboard
   const [pointer, setPointer] = useState<string | null>(null)
 
@@ -138,7 +140,7 @@ export function Rail() {
                   // remount per open so keyboard focus lands on the first item again
                   key={`${item.id}-${menu.open!.keyboard}`}
                   id={panelId}
-                  section={item.menu}
+                  section={menus[item.id as MenuId] ?? item.menu}
                   anchorId={`rail-${item.id}`}
                   keyboard={menu.open!.keyboard}
                   onPick={() => menu.close()}

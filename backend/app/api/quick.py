@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import autopilot
+from app import autopilot, brand, models_catalog
 from app.config import get_settings
 from app.db import get_db
 from app.models import Generation, Job, Project
@@ -34,6 +34,12 @@ class QuickIn(BaseModel):
     style: Literal["cinematic", "documentary", "animated", "commercial"] = "cinematic"
     dialogue: bool = True
     upscale: UpscaleIn | None = None
+    # contract v6 advanced options; stored on the project so every stage of the autopilot uses them
+    image_model: str | None = None
+    image_speed: str | None = None
+    video_quality: Literal["standard", "hq"] | None = None
+    smooth_motion: bool | None = None
+    brand_kit_id: str | None = None  # contract v7: saved as project.settings.brand_kit_id
 
 
 class QuickOut(BaseModel):
@@ -59,15 +65,21 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
     if not MIN_S <= body.duration_s <= longest:
         raise HTTPException(422, f"duration_s must be between {MIN_S} and {longest:g} seconds")
     prompt = body.prompt.strip()
+    choice = {k: getattr(body, k) for k in ("image_model", "image_speed", "video_quality", "smooth_motion")
+              if getattr(body, k) is not None}
+    settings = models_catalog.clean_project_settings({}, choice)
     p = Project(workspace_id=cur.workspace_id, title=placeholder_title(prompt), authoring_mode="quick", brief=prompt,
                 aspect_ratio=body.aspect_ratio, target_runtime_s=max(1, round(body.duration_s)), takes_per_shot=1,
-                status="in_progress", style_bible=autopilot.STYLE_PRESETS[body.style][0])
+                status="in_progress", style_bible=autopilot.STYLE_PRESETS[body.style][0], settings=settings)
+    if body.brand_kit_id:
+        brand.project_kit_id(db, p, body.brand_kit_id)
     db.add(p)
     db.flush()
     job = Job(workspace_id=cur.workspace_id, type=autopilot.JOB_TYPE, project_id=p.id, message="Waiting for a worker",
               payload={"project_id": p.id, "prompt": prompt, "duration_s": body.duration_s,
                        "aspect_ratio": body.aspect_ratio, "style": body.style, "dialogue": body.dialogue,
-                       "upscale": body.upscale.model_dump() if body.upscale else None, "title_auto": True},
+                       "upscale": body.upscale.model_dump() if body.upscale else None, "title_auto": True,
+                       "models": settings},
               result=autopilot.initial_result(body.upscale is not None))
     db.add(job)
     db.commit()

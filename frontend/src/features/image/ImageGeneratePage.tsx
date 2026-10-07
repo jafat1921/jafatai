@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/studio/states'
 import { MediaGrid } from '@/components/media/MediaGrid'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { DEFAULT_IMAGE_FORM } from '@/lib/images'
+import { normalizeModelId } from '@/lib/models'
 import { imageFormFrom, type TemplatePrefill } from '@/lib/templates'
 import { ImageGenerateForm } from './ImageGenerateForm'
 
@@ -12,7 +13,8 @@ export function ImageGeneratePage() {
   const [params] = useSearchParams()
   const tpl = (location.state as { template?: TemplatePrefill } | null)?.template
   const prompt = params.get('prompt') ?? ''
-  const initial = tpl ? imageFormFrom(tpl.prefill, tpl.templateId) : { ...DEFAULT_IMAGE_FORM, prompt }
+  const model = normalizeModelId(params.get('model')) ?? undefined
+  const initial = { ...(tpl ? imageFormFrom(tpl.prefill, tpl.templateId) : { ...DEFAULT_IMAGE_FORM, prompt }), model }
   const results = useMediaList({ kind: 'image', origin: 'generated' })
 
   return (
@@ -23,7 +25,7 @@ export function ImageGeneratePage() {
           key={location.key}
           initial={initial}
           templateTitle={tpl?.templateTitle}
-          modelPicked={params.get('model') === 'z-image-turbo'}
+          modelPicked={!!model}
         />
         <div>
           <h2 className="section-label mb-3">Your images</h2>

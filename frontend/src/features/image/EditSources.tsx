@@ -16,21 +16,23 @@ interface Props {
   onAdd: (items: MediaItem[]) => void
   onRemove: (id: string) => void
   notice?: string | null
+  // from the chosen model's max_refs
+  max?: number
 }
 
-/** The 1–3 reference images an edit works from: library picks, uploads, or ids from the URL. */
-export function EditSources({ ids, onAdd, onRemove, notice }: Props) {
+/** The reference images (up to the model's max_refs) an edit works from: library picks, uploads, or ids from the URL. */
+export function EditSources({ ids, onAdd, onRemove, notice, max = MAX_EDIT_SOURCES }: Props) {
   const [picking, setPicking] = useState(false)
   const items = useQueries({
     queries: ids.map((id) => ({ queryKey: qk.mediaItem(id), queryFn: () => api.media.get(id) })),
   })
-  const full = ids.length >= MAX_EDIT_SOURCES
+  const full = ids.length >= max
 
   return (
     <div className="flex flex-col gap-2" role="group" aria-labelledby="edit-sources-label">
       <div className="flex items-center justify-between gap-2">
         <span id="edit-sources-label" className="section-label">
-          Source images ({ids.length}/{MAX_EDIT_SOURCES})
+          Source images ({ids.length}/{max})
         </span>
         <Button type="button" size="sm" variant="secondary" disabled={full} onClick={() => setPicking(true)}>
           <ImagePlus aria-hidden />
@@ -83,7 +85,7 @@ export function EditSources({ ids, onAdd, onRemove, notice }: Props) {
         open={picking}
         onOpenChange={setPicking}
         kind="image"
-        max={MAX_EDIT_SOURCES}
+        max={max}
         taken={ids}
         title="Pick source images"
         description="Faces, products or styles to work from."

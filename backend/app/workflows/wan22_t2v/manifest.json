@@ -1,0 +1,24 @@
+{
+  "name": "wan22_t2v",
+  "family": "wan-2.2-14b",
+  "description": "Wan 2.2 14B text-to-video, two experts (high noise steps 0-2, low noise 2-4) with the lightx2v 4-step LoRAs, cfg 1, shift 5 (Comfy-Org 'Wan 2.2 14B Text to Video', Lightning branch). No audio, no image input. 81 frames at 16 fps is the trained length.",
+  "inputs": {
+    "prompt":     {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":   {"type": "str", "default": "oversaturated, overexposed, static, blurry details, subtitles, watermark, still image, grey cast, worst quality, low quality, jpeg artifacts, ugly, deformed, extra fingers, bad hands, bad face, malformed limbs, fused fingers, cluttered background, three legs, crowded background, walking backwards",
+                   "targets": [["Negative", "text"]]},
+    "width":      {"type": "int", "default": 832, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":     {"type": "int", "default": 480, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "num_frames": {"type": "int", "default": 81, "targets": [["Latent", "length"]]},
+    "fps":        {"type": "float", "default": 16.0, "targets": [["Save", "frame_rate"]]},
+    "seed":       {"type": "int", "default": 0, "targets": [["HighSampler", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/wan", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {
+    "diffusion_models": ["wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors", "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"],
+    "text_encoders": ["umt5_xxl_fp8_e4m3fn_scaled.safetensors"],
+    "vae": ["wan_2.1_vae.safetensors"],
+    "loras": ["wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors", "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"]
+  },
+  "progress_weights": {"HighSampler": 6, "LowSampler": 6, "HighUNet": 3, "LowUNet": 3, "TextEncoder": 2, "Decode": 2}
+}

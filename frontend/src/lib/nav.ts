@@ -15,14 +15,18 @@ import {
   Settings,
   UserRound,
   Users,
+  Video,
   Wand2,
   Layers,
   type LucideIcon,
 } from 'lucide-react'
 
+import { FALLBACK_MODELS } from './models'
+import type { ModelBadgeId, ModelInfo, ModelType } from './types'
+
 // docs/design/navigation.md, revision 2. Only models wired into the backend are listed.
 
-export type Badge = 'FAST' | 'BEST' | 'UPSCALE' | 'QUICK' | 'NEW'
+export type Badge = ModelBadgeId
 
 export interface Feature {
   id: string
@@ -36,10 +40,12 @@ export interface Feature {
 export interface Model {
   id: string
   name: string
-  badge: Badge
+  badge?: Badge | null
   description: string
   to: string
   mark: string
+  // upscale engines: the catalog entry that decides whether it's listed
+  catalogId?: string
 }
 
 export interface MenuSection {
@@ -70,16 +76,15 @@ const IMAGE_MENU: MenuSection = {
     { id: 'library', title: 'Library', description: 'All your images', to: '/image/library', icon: Images },
   ],
   models: [
-    { id: 'z-image-turbo', name: 'Z-Image Turbo', badge: 'FAST', description: 'Photoreal text to image, ~7 s per image', to: '/image/generate?model=z-image-turbo', mark: 'Z' },
-    { id: 'qwen-image-edit', name: 'Qwen-Image-Edit 2511', badge: 'BEST', description: 'Edit and combine up to 3 references', to: '/image/edit?model=qwen-image-edit', mark: 'Q' },
-    { id: 'seedvr2', name: 'SeedVR2 3B / 7B', badge: 'UPSCALE', description: 'Faithful restoration', to: '/image/upscale?engine=best', mark: 'S' },
-    { id: 'realesrgan', name: 'Real-ESRGAN ×4', badge: 'QUICK', description: 'Fast enlargement', to: '/image/upscale?engine=quick', mark: 'R' },
+    { id: 'seedvr2', catalogId: 'seedvr2', name: 'SeedVR2 3B / 7B', badge: 'UPSCALE', description: 'Faithful restoration', to: '/image/upscale?engine=best', mark: 'S' },
+    { id: 'realesrgan', catalogId: 'esrgan', name: 'Real-ESRGAN ×4', badge: 'QUICK', description: 'Fast enlargement', to: '/image/upscale?engine=quick', mark: 'R' },
   ],
 }
 
 const VIDEO_MENU: MenuSection = {
   title: 'Video Tools',
   features: [
+    { id: 'create', title: 'Create Video', description: 'One prompt, one clip', to: '/video/create', icon: Video },
     { id: 'quick', title: 'Quick Video', description: 'One prompt, a finished video', to: '/video/quick', icon: Wand2 },
     { id: 'projects', title: 'Studio Projects', description: 'Script, cast, storyboard, render', to: '/video/projects', icon: Clapperboard },
     { id: 'templates', title: 'Templates', description: 'Product ad, documentary, teaser…', to: '/video/templates', icon: LayoutTemplate },
@@ -87,9 +92,8 @@ const VIDEO_MENU: MenuSection = {
     { id: 'library', title: 'Library', description: 'Every finished video', to: '/video/library', icon: Film },
   ],
   models: [
-    { id: 'ltx-2.3', name: 'LTX-2.3', badge: 'NEW', description: 'Text and image to video, long takes', to: '/video/quick?model=ltx-2.3', mark: 'L' },
-    { id: 'seedvr2', name: 'SeedVR2', badge: 'BEST', description: 'Best upscale, steady detail', to: '/video/upscale?engine=best', mark: 'S' },
-    { id: 'flashvsr', name: 'FlashVSR 1.1', badge: 'FAST', description: 'Fast upscale', to: '/video/upscale?engine=fast', mark: 'F' },
+    { id: 'seedvr2', catalogId: 'seedvr2', name: 'SeedVR2', badge: 'BEST', description: 'Best upscale, steady detail', to: '/video/upscale?engine=best', mark: 'S' },
+    { id: 'flashvsr', catalogId: 'flashvsr', name: 'FlashVSR 1.1', badge: 'FAST', description: 'Fast upscale', to: '/video/upscale?engine=fast', mark: 'F' },
   ],
 }
 
@@ -100,10 +104,10 @@ const UPSCALE_MENU: MenuSection = {
     { id: 'video', title: 'Upscale Video', description: 'Upload or pick from your library', to: '/video/upscale', icon: Maximize2 },
   ],
   models: [
-    { id: 'seedvr2-video', name: 'SeedVR2 · video', badge: 'BEST', description: 'Sharpest motion detail, the slowest', to: '/video/upscale?engine=best', mark: 'S' },
-    { id: 'flashvsr', name: 'FlashVSR 1.1 · video', badge: 'FAST', description: 'Good detail in a fraction of the time', to: '/video/upscale?engine=fast', mark: 'F' },
-    { id: 'zimage-redraw', name: 'Z-Image redraw · image', badge: 'UPSCALE', description: 'Repaints fine texture, adds detail', to: '/image/upscale?engine=redraw', mark: 'Z' },
-    { id: 'seedvr2-image', name: 'SeedVR2 · image', badge: 'BEST', description: 'Restores detail, true to the original', to: '/image/upscale?engine=best', mark: 'S' },
+    { id: 'seedvr2-video', catalogId: 'seedvr2', name: 'SeedVR2 · video', badge: 'BEST', description: 'Sharpest motion detail, the slowest', to: '/video/upscale?engine=best', mark: 'S' },
+    { id: 'flashvsr', catalogId: 'flashvsr', name: 'FlashVSR 1.1 · video', badge: 'FAST', description: 'Good detail in a fraction of the time', to: '/video/upscale?engine=fast', mark: 'F' },
+    { id: 'zimage-redraw', catalogId: 'zimage_redraw', name: 'Z-Image redraw · image', badge: 'UPSCALE', description: 'Repaints fine texture, adds detail', to: '/image/upscale?engine=redraw', mark: 'Z' },
+    { id: 'seedvr2-image', catalogId: 'seedvr2', name: 'SeedVR2 · image', badge: 'BEST', description: 'Restores detail, true to the original', to: '/image/upscale?engine=best', mark: 'S' },
     { id: 'realesrgan', name: 'Real-ESRGAN ×4', badge: 'QUICK', description: 'Seconds per image, clean edges', to: '/image/upscale?engine=quick', mark: 'R' },
   ],
 }
@@ -131,7 +135,39 @@ export const RAIL_ITEMS: RailItem[] = [
 
 export const SETTINGS_ITEM: RailItem = { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' }
 
-export const MENUS = { image: IMAGE_MENU, video: VIDEO_MENU, upscale: UPSCALE_MENU, assets: ASSETS_MENU }
+const TOOL_ROUTE: Partial<Record<ModelType, string>> = { image: '/image/generate', edit: '/image/edit', video: '/video/create' }
+
+const navModel = (m: ModelInfo): Model => ({
+  id: m.id,
+  name: m.label,
+  badge: m.badge,
+  description: m.description,
+  to: `${TOOL_ROUTE[m.type]}?model=${encodeURIComponent(m.id)}`,
+  mark: m.label.charAt(0).toUpperCase(),
+})
+
+// an engine the catalog doesn't mention stays listed (older server); one it marks unavailable goes
+const engineListed = (m: Model, upscale: ModelInfo[]) => {
+  const entry = upscale.find((u) => u.id === m.catalogId)
+  return !entry || entry.available
+}
+
+export type Catalog = Record<ModelType, ModelInfo[]>
+export type MenuId = 'image' | 'video' | 'upscale' | 'assets'
+
+/** The Models columns, from the catalog: generation models first, then the upscale engines. Available only. */
+export function menusFrom(catalog: Catalog): Record<MenuId, MenuSection> {
+  const gen = (...types: ModelType[]) => types.flatMap((t) => catalog[t] ?? []).filter((m) => m.available).map(navModel)
+  const engines = (section: MenuSection) => section.models.filter((m) => engineListed(m, catalog.upscale ?? []))
+  return {
+    image: { ...IMAGE_MENU, models: [...gen('image', 'edit'), ...engines(IMAGE_MENU)] },
+    video: { ...VIDEO_MENU, models: [...gen('video'), ...engines(VIDEO_MENU)] },
+    upscale: { ...UPSCALE_MENU, models: engines(UPSCALE_MENU) },
+    assets: ASSETS_MENU,
+  }
+}
+
+export const MENUS = menusFrom(FALLBACK_MODELS)
 
 /** Which rail item lights up for a path. Upscale pages belong to Upscale, not Image/Video. */
 export function activeRail(pathname: string): RailId | null {
@@ -151,6 +187,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/(video\/quick|create)$/, 'Quick video'],
   [/^\/quick\//, 'Quick video'],
   [/^\/(video\/)?projects$/, 'Studio projects'],
+  [/^\/video\/create/, 'Create video'],
   [/^\/video\/templates/, 'Video templates'],
   [/^\/video\/upscale/, 'Video upscale'],
   [/^\/video\/library/, 'Video library'],

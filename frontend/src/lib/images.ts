@@ -32,6 +32,9 @@ export interface ImageForm {
   seed: string
   steps: string
   templateId?: string
+  // contract-v6; left out of the body when unset so the server picks its default
+  model?: string
+  speed?: string
 }
 
 export const DEFAULT_IMAGE_FORM: ImageForm = {
@@ -59,26 +62,35 @@ export function imagePayload(f: ImageForm): ImageGenerateRequest {
   const steps = optInt(f.steps)
   if (steps) body.steps = Math.min(50, steps)
   if (f.templateId) body.template_id = f.templateId
+  if (f.model) body.model = f.model
+  if (f.model && f.speed) body.speed = f.speed
   return body
 }
 
-export function editPayload(sourceIds: string[], instruction: string, count: number, aspect: ImageAspect | null): ImageEditRequest {
+export function editPayload(
+  sourceIds: string[],
+  instruction: string,
+  count: number,
+  aspect: ImageAspect | null,
+  model?: { id: string; max_refs?: number },
+): ImageEditRequest {
   const body: ImageEditRequest = {
-    source_ids: [...new Set(sourceIds)].slice(0, MAX_EDIT_SOURCES),
+    source_ids: [...new Set(sourceIds)].slice(0, model?.max_refs ?? MAX_EDIT_SOURCES),
     instruction: instruction.trim(),
     count: clampCount(count),
   }
   if (aspect) body.aspect = aspect
+  if (model) body.model = model.id
   return body
 }
 
 /** Adds ids up to the limit; returns the new list and whether anything was dropped. */
-export function addSources(current: string[], incoming: string[]): { ids: string[]; dropped: number } {
+export function addSources(current: string[], incoming: string[], max = MAX_EDIT_SOURCES): { ids: string[]; dropped: number } {
   const ids = [...current]
   let dropped = 0
   for (const id of incoming) {
     if (ids.includes(id)) continue
-    if (ids.length >= MAX_EDIT_SOURCES) dropped++
+    if (ids.length >= max) dropped++
     else ids.push(id)
   }
   return { ids, dropped }

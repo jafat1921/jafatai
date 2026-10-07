@@ -1,12 +1,14 @@
 {
   "name": "ltx23_i2v",
   "family": "ltx-2.3",
-  "description": "LTX-2.3 distilled first-frame (+ optional last-frame) image-to-video with native LTX-AV audio. Single segment, no looping/extend.",
+  "description": "LTX-2.3 distilled first-frame (+ optional last-frame) image-to-video, or text-to-video without a first frame, with native LTX-AV audio. Single segment, no looping/extend.",
   "inputs": {
     "prompt":      {"type": "str", "required": true, "targets": [["Positive", "text"]]},
     "negative":    {"type": "str", "default": "blurry, low quality, still frame, frozen, watermark, overlay, titles, subtitles",
                     "targets": [["Negative", "text"]]},
-    "first_image": {"type": "image", "required": true, "targets": [["FirstImage", "image"]]},
+    "first_image": {"type": "image", "targets": [["FirstImage", "image"]],
+                    "if_missing": {"drop": ["FirstImage", "FirstScale", "FirstPre"],
+                                   "bypass": {"FirstFrame": {"0": "latent"}}}},
     "last_image":  {"type": "image", "required": false, "targets": [["LastImage", "image"]],
                     "if_missing": {"drop": ["LastImage", "LastScale", "LastPre"],
                                    "bypass": {"LastGuide": {"0": "positive", "1": "negative", "2": "latent"}}}},
@@ -18,9 +20,12 @@
                     "targets": [["VideoLatent", "length"], ["AudioLatent", "frames_number"]]},
     "fps":         {"type": "float", "default": 24.0,
                     "targets": [["Conditioning", "frame_rate"], ["AudioLatent", "frame_rate"], ["Save", "frame_rate"]]},
+    "smooth_fps":  {"type": "float", "targets": [["Save", "frame_rate"]],
+                    "if_missing": {"drop": ["TemporalLoader"], "bypass": {"TemporalUp": {"0": "samples"}}}},
     "seed":        {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
     "filename_prefix": {"type": "str", "default": "mixai/ltx", "targets": [["Save", "filename_prefix"]]}
   },
+  "features": {"smooth_motion": ["TemporalLoader", "TemporalUp"]},
   "outputs": {"video": {"node": "Save", "kind": "video"}},
   "models": {
     "checkpoints": ["ltx-2.3-22b-distilled-fp8.safetensors"],

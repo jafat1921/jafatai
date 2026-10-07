@@ -189,8 +189,11 @@ def build(name: str, inputs: dict, loras: list[tuple[str, float]] | None = None)
                 raise TemplateError(f"{name}: '{key}' takes at most {len(slots)} images")
             for (title, field), img in zip(slots, images):
                 graph[find_node(graph, title)]["inputs"][field] = img
+            # chained slots (ReferenceLatent -> ReferenceLatent) need rewiring, not just dropping
+            rewire = spec.get("bypass_unused", {})
             for group in spec.get("drop_unused", [])[max(0, len(images) - 1):]:
                 drop.extend(group)
+                bypass.update({t: rewire[t] for t in group if t in rewire})
             resolved[key] = images
             continue
 
@@ -247,6 +250,9 @@ def check_template(name: str, object_info: dict) -> dict:
     """Compare a template against a server's /object_info. Runtime-filled inputs
     (prompt, uploaded image names, sizes) are skipped; everything literal is checked."""
     tpl = _load_raw(name)
+    # nodes that only serve an optional feature (e.g. smooth motion) don't decide the template's ok
+    feature_of = {t: f for f, titles in tpl.manifest.get("features", {}).items() for t in titles}
+    feature_problems: dict[str, list[str]] = {f: [] for f in tpl.manifest.get("features", {})}
     runtime = {
         (t, f)
         for spec in tpl.manifest["inputs"].values()
@@ -260,6 +266,9 @@ def check_template(name: str, object_info: dict) -> dict:
         cls = node["class_type"]
         title = node.get("_meta", {}).get("title", nid)
         info = object_info.get(cls)
+        if title in feature_of:
+            feature_problems[feature_of[title]] += _node_problems(title, node, info, runtime)
+            continue
         if info is None:
             missing_nodes.add(cls)
             continue
@@ -290,10 +299,28 @@ def check_template(name: str, object_info: dict) -> dict:
         if f not in lora_opts:
             warnings.append(f"optional LoRA missing: {f}")
 
-    return {
+    out = {
         "ok": not (missing_nodes or missing_models or invalid),
         "missing_nodes": sorted(missing_nodes),
         "missing_models": sorted(missing_models),
         "invalid": invalid,
         "warnings": warnings,
     }
+    if feature_problems:
+        out["features"] = {f: {"ok": not probs, "problems": probs} for f, probs in feature_problems.items()}
+    return out
+
+
+def _node_problems(title: str, node: dict, info: dict | None, runtime: set) -> list[str]:
+    if info is None:
+        return [f"missing node {node['class_type']}"]
+    req = info.get("input", {}).get("required", {}) or {}
+    opt = info.get("input", {}).get("optional", {}) or {}
+    probs = [f"{title}.{k}: required input not set" for k in req if k not in node["inputs"]]
+    for key, val in node["inputs"].items():
+        if _is_link(val) or (title, key) in runtime:
+            continue
+        options = _enum_options(req.get(key) or opt.get(key) or [])
+        if options is not None and val not in options:
+            probs.append(f"missing model {val}" if key in MODEL_FIELDS else f"{title}.{key}: {val!r} not allowed")
+    return probs

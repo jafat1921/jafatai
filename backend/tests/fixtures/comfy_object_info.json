@@ -4,7 +4,10 @@
    "required": {
     "ckpt_name": [
      [
-      "ltx-2.3-22b-distilled-fp8.safetensors"
+      "ltx-2.3-22b-distilled-fp8.safetensors",
+      "ltx-2.3-22b-dev-fp8.safetensors",
+      "ltx-2.3-22b-dev.safetensors",
+      "qx_asset.pth"
      ],
      {
       "tooltip": "The name of the checkpoint (model) to load."
@@ -25,7 +28,12 @@
      "COMBO",
      {
       "options": [
-       "gemma_3_12B_it_fp4_mixed.safetensors"
+       "gemma_3_12B_it_fp4_mixed.safetensors",
+       "comfy_gemma_3_12B_it.safetensors",
+       "ltx-2.3_text_projection_bf16.safetensors",
+       "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+       "qwen_3_4b.safetensors",
+       "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
       ]
      }
     ],
@@ -33,7 +41,10 @@
      "COMBO",
      {
       "options": [
-       "ltx-2.3-22b-distilled-fp8.safetensors"
+       "ltx-2.3-22b-distilled-fp8.safetensors",
+       "ltx-2.3-22b-dev-fp8.safetensors",
+       "ltx-2.3-22b-dev.safetensors",
+       "qx_asset.pth"
       ]
      }
     ],
@@ -58,7 +69,10 @@
      "COMBO",
      {
       "options": [
-       "ltx-2.3-22b-distilled-fp8.safetensors"
+       "ltx-2.3-22b-distilled-fp8.safetensors",
+       "ltx-2.3-22b-dev-fp8.safetensors",
+       "ltx-2.3-22b-dev.safetensors",
+       "qx_asset.pth"
       ]
      }
     ]
@@ -939,7 +953,19 @@
     "lora_name": [
      [
       "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
-      "qwen-image-edit-2511-multiple-angles-lora.safetensors"
+      "qwen-image-edit-2511-multiple-angles-lora.safetensors",
+      "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors",
+      "Qwen-Image-Lightning-4steps-V1.0.safetensors",
+      "Wuli-Qwen-Image-2512-Turbo-LoRA-2steps-V1.0-bf16.safetensors",
+      "gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors",
+      "ltx-2.3-22b-distilled-lora-384-1.1.safetensors",
+      "ltx-2.3-22b-distilled-lora-384.safetensors",
+      "ltx23/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors",
+      "ltx23/ltx-2.3-22b-distilled-lora-384.safetensors",
+      "ltx23/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
+      "ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
+      "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+      "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
      ]
     ],
     "strength_model": [
@@ -1004,13 +1030,44 @@
     "clip_name": [
      [
       "qwen_2.5_vl_7b_fp8_scaled.safetensors",
-      "qwen_3_4b.safetensors"
+      "qwen_3_4b.safetensors",
+      "comfy_gemma_3_12B_it.safetensors",
+      "gemma_3_12B_it_fp4_mixed.safetensors",
+      "ltx-2.3_text_projection_bf16.safetensors",
+      "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
      ]
     ],
     "type": [
      [
       "lumina2",
-      "qwen_image"
+      "qwen_image",
+      "stable_diffusion",
+      "stable_cascade",
+      "sd3",
+      "stable_audio",
+      "mochi",
+      "ltxv",
+      "pixart",
+      "cosmos",
+      "wan",
+      "hidream",
+      "chroma",
+      "ace",
+      "omnigen2",
+      "hunyuan_image",
+      "flux2",
+      "ovis",
+      "longcat_image",
+      "cogvideox",
+      "lens",
+      "pixeldit",
+      "ideogram4",
+      "boogu",
+      "krea2",
+      "joyimage",
+      "mage",
+      "minimax",
+      "yue2"
      ]
     ]
    },
@@ -1598,7 +1655,7 @@
    "video_info"
   ],
   "name": "VHS_LoadVideo",
-  "category": "Video Helper Suite 🎥🅥🅗🅢"
+  "category": "Video Helper Suite \u00f0\u0178\u017d\u00a5\u00f0\u0178\u2026\u00a5\u00f0\u0178\u2026\u2014\u00f0\u0178\u2026\u00a2"
  },
  "AILab_FlashVSR_Advanced": {
   "input": {
@@ -2139,5 +2196,383 @@
   ],
   "essentials_category": null,
   "has_intermediate_output": false
+ },
+ "ConditioningZeroOut": {
+  "input": {
+   "required": {
+    "conditioning": [
+     "CONDITIONING"
+    ]
+   }
+  },
+  "output": [
+   "CONDITIONING"
+  ],
+  "name": "ConditioningZeroOut"
+ },
+ "EmptyFlux2LatentImage": {
+  "input": {
+   "required": {
+    "width": [
+     "INT",
+     {
+      "default": 1024,
+      "min": 16,
+      "max": 16384,
+      "step": 16
+     }
+    ],
+    "height": [
+     "INT",
+     {
+      "default": 1024,
+      "min": 16,
+      "max": 16384,
+      "step": 16
+     }
+    ],
+    "batch_size": [
+     "INT",
+     {
+      "default": 1,
+      "min": 1,
+      "max": 4096
+     }
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ],
+  "name": "EmptyFlux2LatentImage"
+ },
+ "EmptyHunyuanLatentVideo": {
+  "input": {
+   "required": {
+    "width": [
+     "INT",
+     {
+      "default": 848,
+      "min": 16,
+      "max": 16384,
+      "step": 16
+     }
+    ],
+    "height": [
+     "INT",
+     {
+      "default": 480,
+      "min": 16,
+      "max": 16384,
+      "step": 16
+     }
+    ],
+    "length": [
+     "INT",
+     {
+      "default": 25,
+      "min": 1,
+      "max": 16384,
+      "step": 4
+     }
+    ],
+    "batch_size": [
+     "INT",
+     {
+      "default": 1,
+      "min": 1,
+      "max": 4096
+     }
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ],
+  "name": "EmptyHunyuanLatentVideo"
+ },
+ "Flux2Scheduler": {
+  "input": {
+   "required": {
+    "steps": [
+     "INT",
+     {
+      "default": 20,
+      "min": 1,
+      "max": 4096
+     }
+    ],
+    "width": [
+     "INT",
+     {
+      "default": 1024,
+      "min": 16,
+      "max": 16384,
+      "step": 1
+     }
+    ],
+    "height": [
+     "INT",
+     {
+      "default": 1024,
+      "min": 16,
+      "max": 16384,
+      "step": 1
+     }
+    ]
+   }
+  },
+  "output": [
+   "SIGMAS"
+  ],
+  "name": "Flux2Scheduler"
+ },
+ "KSamplerAdvanced": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "add_noise": [
+     [
+      "enable",
+      "disable"
+     ],
+     {
+      "advanced": true
+     }
+    ],
+    "noise_seed": [
+     "INT",
+     {
+      "default": 0,
+      "min": 0,
+      "max": 18446744073709551615,
+      "control_after_generate": true
+     }
+    ],
+    "steps": [
+     "INT",
+     {
+      "default": 20,
+      "min": 1,
+      "max": 10000
+     }
+    ],
+    "cfg": [
+     "FLOAT",
+     {
+      "default": 8.0,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.1,
+      "round": 0.01
+     }
+    ],
+    "sampler_name": [
+     [
+      "euler",
+      "euler_cfg_pp",
+      "euler_ancestral",
+      "euler_ancestral_cfg_pp",
+      "heun",
+      "heunpp2",
+      "exp_heun_2_x0",
+      "exp_heun_2_x0_sde",
+      "dpm_2",
+      "dpm_2_ancestral",
+      "lms",
+      "dpm_fast",
+      "dpm_adaptive",
+      "dpmpp_2s_ancestral",
+      "dpmpp_2s_ancestral_cfg_pp",
+      "dpmpp_sde",
+      "dpmpp_sde_gpu",
+      "dpmpp_2m",
+      "dpmpp_2m_cfg_pp",
+      "dpmpp_2m_sde",
+      "dpmpp_2m_sde_gpu",
+      "dpmpp_2m_sde_heun",
+      "dpmpp_2m_sde_heun_gpu",
+      "dpmpp_3m_sde",
+      "dpmpp_3m_sde_gpu",
+      "ddpm",
+      "lcm",
+      "ipndm",
+      "ipndm_v",
+      "deis",
+      "cfgpp_ud10_ab",
+      "res_multistep",
+      "res_multistep_cfg_pp",
+      "res_multistep_ancestral",
+      "res_multistep_ancestral_cfg_pp",
+      "gradient_estimation",
+      "gradient_estimation_cfg_pp",
+      "er_sde",
+      "seeds_2",
+      "seeds_3",
+      "sa_solver",
+      "sa_solver_pece",
+      "ddim",
+      "uni_pc",
+      "uni_pc_bh2"
+     ]
+    ],
+    "scheduler": [
+     [
+      "simple",
+      "sgm_uniform",
+      "karras",
+      "exponential",
+      "ddim_uniform",
+      "beta",
+      "normal",
+      "linear_quadratic",
+      "kl_optimal"
+     ]
+    ],
+    "positive": [
+     "CONDITIONING"
+    ],
+    "negative": [
+     "CONDITIONING"
+    ],
+    "latent_image": [
+     "LATENT"
+    ],
+    "start_at_step": [
+     "INT",
+     {
+      "default": 0,
+      "min": 0,
+      "max": 10000,
+      "advanced": true
+     }
+    ],
+    "end_at_step": [
+     "INT",
+     {
+      "default": 10000,
+      "min": 0,
+      "max": 10000,
+      "advanced": true
+     }
+    ],
+    "return_with_leftover_noise": [
+     [
+      "disable",
+      "enable"
+     ],
+     {
+      "advanced": true
+     }
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ],
+  "name": "KSamplerAdvanced"
+ },
+ "LTXVLatentUpsampler": {
+  "input": {
+   "required": {
+    "samples": [
+     "LATENT",
+     {}
+    ],
+    "upscale_model": [
+     "LATENT_UPSCALE_MODEL",
+     {}
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ],
+  "name": "LTXVLatentUpsampler"
+ },
+ "LatentUpscaleModelLoader": {
+  "input": {
+   "required": {
+    "model_name": [
+     "COMBO",
+     {
+      "multiselect": false,
+      "options": [
+       "ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
+       "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+       "ltx-2.3-temporal-upscaler-x2-1.0.safetensors"
+      ]
+     }
+    ]
+   }
+  },
+  "output": [
+   "LATENT_UPSCALE_MODEL"
+  ],
+  "name": "LatentUpscaleModelLoader"
+ },
+ "ModelSamplingSD3": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "shift": [
+     "FLOAT",
+     {
+      "default": 3.0,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.01
+     }
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ],
+  "name": "ModelSamplingSD3"
+ },
+ "ReferenceLatent": {
+  "input": {
+   "required": {
+    "conditioning": [
+     "CONDITIONING",
+     {}
+    ]
+   },
+   "optional": {
+    "latent": [
+     "LATENT",
+     {}
+    ]
+   }
+  },
+  "output": [
+   "CONDITIONING"
+  ],
+  "name": "ReferenceLatent"
+ },
+ "VAEEncode": {
+  "input": {
+   "required": {
+    "pixels": [
+     "IMAGE"
+    ],
+    "vae": [
+     "VAE"
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ],
+  "name": "VAEEncode"
  }
 }

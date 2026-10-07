@@ -10,6 +10,7 @@ import subprocess
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from fastapi import HTTPException, Request
 from PIL import Image
@@ -24,11 +25,12 @@ MAX_PIXELS = 100_000_000  # a 40 MB JPEG can still decode to something silly
 SNIFF_BYTES = 64
 
 EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
-       "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm"}
+       "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
+       "font/ttf": ".ttf", "font/otf": ".otf", "image/svg+xml": ".svg"}
 # what a file name may say for each sniffed type; mp4 and mov are the same container family
 NAME_OK = {"image/png": {".png"}, "image/jpeg": {".jpg", ".jpeg", ".jfif"}, "image/webp": {".webp"},
            "video/mp4": {".mp4", ".m4v", ".mov"}, "video/quicktime": {".mov", ".mp4", ".m4v"},
-           "video/webm": {".webm"}}
+           "video/webm": {".webm"}, "font/ttf": {".ttf"}, "font/otf": {".otf"}, "image/svg+xml": {".svg"}}
 # ISO-BMFF brands that are stills or audio, not video
 NOT_VIDEO_BRANDS = (b"avif", b"avis", b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1", b"M4A ", b"M4B ", b"M4P ")
 ALLOWED = "PNG, JPEG or WebP images up to 40 MB, or MP4, MOV or WebM videos up to 2 GB"
@@ -61,6 +63,19 @@ def _too_big(media_type: str | None) -> HTTPException:
     return HTTPException(413, "Videos can be at most 2 GB")
 
 
+@dataclass(frozen=True)
+class Profile:
+    """What one upload endpoint accepts: sniffer, per-type size limit, and the words for errors."""
+    sniff: Callable[[bytes], str | None]
+    limit: Callable[[str], int]
+    too_big: Callable[[str | None], HTTPException]
+    allowed: str
+    max_bytes: int
+
+
+MEDIA = Profile(sniff, limit_for, _too_big, ALLOWED, VIDEO_MAX)
+
+
 @dataclass
 class Received:
     path: Path
@@ -80,8 +95,9 @@ class _Part:
 class _Sink:
     """Callbacks for python-multipart. Raises HTTPException from inside parser.write()."""
 
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, profile: Profile = MEDIA):
         self.folder = folder
+        self.profile = profile
         self.part = _Part()
         self._hname = b""
         self._hvalue = b""
@@ -138,8 +154,9 @@ class _Sink:
                 self.head += chunk[:SNIFF_BYTES - len(self.head)]
                 if len(self.head) >= SNIFF_BYTES:
                     self._sniff()
-            if self.size > (limit_for(self.media_type) if self.media_type else VIDEO_MAX):
-                raise _too_big(self.media_type)
+            pr = self.profile
+            if self.size > (pr.limit(self.media_type) if self.media_type else pr.max_bytes):
+                raise pr.too_big(self.media_type)
             self.file.write(chunk)
         elif self._field:
             buf = self.fields[self._field]
@@ -155,15 +172,16 @@ class _Sink:
         self._field = None
 
     def _sniff(self):
-        self.media_type = sniff(self.head)
+        pr = self.profile
+        self.media_type = pr.sniff(self.head)
         if self.media_type is None:
-            raise HTTPException(415, f"Unsupported file type. Upload {ALLOWED}.")
+            raise HTTPException(415, f"Unsupported file type. Upload {pr.allowed}.")
         ext = Path(self.filename).suffix.lower()
         if ext and ext not in NAME_OK[self.media_type]:
             kind = EXT[self.media_type].lstrip(".").upper()
-            raise HTTPException(415, f"This file is a {kind} but its name ends in {ext}. Upload {ALLOWED}.")
-        if self.size > limit_for(self.media_type):
-            raise _too_big(self.media_type)
+            raise HTTPException(415, f"This file is a {kind} but its name ends in {ext}. Upload {pr.allowed}.")
+        if self.size > pr.limit(self.media_type):
+            raise pr.too_big(self.media_type)
 
     def close(self):
         if self.file is not None and not self.file.closed:
@@ -175,14 +193,14 @@ class _Sink:
             self.tmp.unlink(missing_ok=True)
 
 
-async def receive(request: Request, folder: Path) -> Received:
+async def receive(request: Request, folder: Path, profile: Profile = MEDIA) -> Received:
     ctype, opts = parse_options_header(request.headers.get("content-type", ""))
     if ctype != b"multipart/form-data" or not opts.get(b"boundary"):
         raise HTTPException(415, "Send the file as multipart/form-data in a field named 'file'")
     length = request.headers.get("content-length")
-    if length and length.isdigit() and int(length) > VIDEO_MAX + MB:
-        raise HTTPException(413, "Videos can be at most 2 GB")
-    sink = _Sink(folder)
+    if length and length.isdigit() and int(length) > profile.max_bytes + MB:
+        raise profile.too_big(None)
+    sink = _Sink(folder, profile)
     parser = MultipartParser(opts[b"boundary"], callbacks=sink.callbacks())
     try:
         async for chunk in request.stream():

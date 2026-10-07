@@ -15,14 +15,18 @@ import { Textarea } from '@/components/ui/textarea'
 import { ChipGroup } from '@/components/studio/chip'
 import { PlaceholderHint } from '@/components/studio/placeholder-hint'
 import { ErrorState } from '@/components/studio/states'
+import { ModelPicker } from '@/components/models/ModelPicker'
+import { SpeedPicker } from '@/components/models/SpeedPicker'
 import { useImageGenerate } from '@/hooks/useMedia'
+import { useModels } from '@/hooks/useModels'
 import { useTemplates } from '@/hooks/useStudio'
 import { IMAGE_STYLES, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
 import { modKey } from '@/lib/keyboard'
+import { defaultSpeed, estimateSeconds, has, pickModel, secondsText } from '@/lib/models'
 import { imageFormFrom } from '@/lib/templates'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
-import { CountPicker, ImageAspectTiles, ModelLine } from './controls'
+import { CountPicker, ImageAspectTiles } from './controls'
 
 interface Props {
   initial: ImageForm
@@ -38,14 +42,18 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
   const [fromTemplate, setFromTemplate] = useState(templateTitle)
   const generate = useImageGenerate()
   const templates = useTemplates('image')
+  const { models } = useModels('image')
   const set = <K extends keyof ImageForm>(k: K, v: ImageForm[K]) => setForm((f) => ({ ...f, [k]: v }))
+  const model = pickModel(models, form.model)
+  const speed = model?.speeds?.find((s) => s.id === form.speed && s.available !== false) ?? defaultSpeed(model)
+  const perImage = estimateSeconds(model, speed?.id)
 
   const slots = placeholdersIn(form.prompt)
   const canSubmit = form.prompt.trim().length >= 3 && !slots.length && !generate.isPending
 
   const submit = () => {
     if (!canSubmit) return
-    generate.mutate(imagePayload(form), {
+    generate.mutate(imagePayload({ ...form, model: model?.id, speed: speed?.id }), {
       onSuccess: ({ items }) => announce(`Creating ${plural(items?.length ?? form.count, 'image')}. They appear below as they finish.`),
     })
   }
@@ -89,7 +97,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
               <DropdownMenuItem
                 key={t.id}
                 onSelect={() => {
-                  setForm(imageFormFrom(t.defaults ?? {}, t.id))
+                  setForm({ ...imageFormFrom(t.defaults ?? {}, t.id), model: form.model, speed: form.speed })
                   setFromTemplate(t.title)
                   announce(`Filled in from the ${t.title} template. Replace the highlighted words, then create.`)
                 }}
@@ -104,7 +112,8 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
         </DropdownMenu>
       </div>
 
-      <ModelLine name="Z-Image Turbo" badge="FAST" note="Photoreal, about 7 s per image" highlighted={modelPicked} />
+      <ModelPicker label="Model" models={models} value={model?.id} onChange={(id) => setForm((f) => ({ ...f, model: id, speed: undefined }))} highlighted={modelPicked} />
+      {model?.speeds?.length ? <SpeedPicker model={model} value={speed?.id} onChange={(id) => set('speed', id)} /> : null}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${uid}-prompt`}>Describe the image</Label>
@@ -116,8 +125,16 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
           value={form.prompt}
           onChange={(e) => set('prompt', e.target.value)}
           placeholder="e.g. A weathered lighthouse keeper in a wool coat, golden hour, 85mm portrait"
+          // Urdu or Arabic prompts read right to left
+          dir="auto"
+          aria-describedby={has(model, 'text_render') ? `${uid}-texthint` : undefined}
           className="min-h-24 text-[15px] leading-6"
         />
+        {has(model, 'text_render') && (
+          <p id={`${uid}-texthint`} className="text-small text-studio-muted">
+            Put text in quotes, e.g. a poster that says <bdi>{'"عید مبارک"'}</bdi>
+          </p>
+        )}
         <PlaceholderHint text={form.prompt} field={field} />
       </div>
 
@@ -167,7 +184,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked }: Props
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         <p className="mr-auto text-small text-studio-muted" aria-live="polite">
-          {slots.length ? `Replace ${slots.join(', ')} first.` : `${plural(form.count, 'image')} · about ${form.count * 7} s on the GPU`}
+          {slots.length ? `Replace ${slots.join(', ')} first.` : `${plural(form.count, 'image')}${perImage ? ` · about ${secondsText(form.count * perImage)} on the GPU` : ''}`}
         </p>
         <Button type="submit" size="lg" variant="primary" disabled={!canSubmit} loading={generate.isPending} aria-keyshortcuts="Control+Enter">
           <Wand2 aria-hidden />

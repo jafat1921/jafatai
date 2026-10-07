@@ -64,15 +64,15 @@ describe('app shell', () => {
 
   it('inside a project it switches to the project switcher, stage tabs and queue drawer button', async () => {
     renderApp('/projects/p1/script')
-    // the workspace route is lazy, so the shell appears once it has loaded
-    const banner = (await screen.findAllByRole('banner', {}, { timeout: 5000 }))[0]
+    // the workspace route is lazy, so the shell appears once it has loaded (a cold import is slow on a busy run)
+    const banner = (await screen.findAllByRole('banner', {}, { timeout: 12000 }))[0]
     expect(await within(banner).findByRole('button', { name: /Switch project/ })).toHaveTextContent('The Bleaching Reef')
     expect(within(banner).getByRole('tablist', { name: 'Production stages' })).toBeInTheDocument()
     expect(within(banner).getByRole('button', { name: /^Queue:/ })).toBeInTheDocument()
     expect(within(banner).queryByTestId('page-title')).not.toBeInTheDocument()
     // the rail stays, with Video lit for studio work
     expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Video' })).toHaveAttribute('aria-current', 'true')
-  })
+  }, 15000)
 
   it('keeps the old /projects and /create addresses working', async () => {
     const { router } = renderApp('/projects')

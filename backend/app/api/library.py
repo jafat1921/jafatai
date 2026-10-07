@@ -15,7 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app import brand
 from app import library as lib
+from app import models_catalog as mc
 from app import uploads
 from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db
@@ -203,6 +205,8 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
         raise HTTPException(422, f"Unknown style '{body.style}' (expected {', '.join(lib.STYLES)})")
     if not body.prompt.strip():
         raise HTTPException(422, "A prompt is required")
+    model = mc.get(body.model, "image")
+    speed = mc.speed_of(model, body.speed)
     w, h = lib.size_for_aspect(body.aspect)
     prompt = lib.styled_prompt(body.prompt, body.style)
     title = (body.title or "").strip() or lib.short_title(body.prompt)
@@ -216,8 +220,12 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
             params["steps"] = body.steps
         if body.template_id:
             params["template_id"] = body.template_id
+        params["model"] = model.id
+        if speed:
+            params["speed"] = speed.id
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
-        item, job = _new_image_item(db, cur, title, prompt, params, seed)
+        item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
+            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed)
         items.append(item)
         jobs.append(job)
     db.commit()
@@ -245,6 +253,8 @@ def _edit_source(db: Session, workspace_id: str, sid: str) -> tuple[str | None, 
 def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     if not body.instruction.strip():
         raise HTTPException(422, "Say what to change")
+    model = mc.get(body.model, "edit")
+    mc.check_refs(model, len(body.source_ids))
     sources = [_edit_source(db, cur.workspace_id, sid) for sid in body.source_ids]
     if body.aspect:
         w, h = lib.size_for_aspect(body.aspect)
@@ -258,10 +268,11 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
     items, jobs = [], []
     for i in range(body.count):
         params = {"width": w, "height": h, "aspect": body.aspect, "instruction": instruction, "edit_of": edit_of,
-                  "reference_ids": [g.id for _, g in sources],
+                  "reference_ids": [g.id for _, g in sources], "model": model.id,
                   "created_by": {"user_id": cur.id, "flow": "image_edit"}}
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
-        item, job = _new_image_item(db, cur, title, instruction, params, seed)
+        item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
+            db, cur.workspace_id, body.brand_kit_id, instruction, params, edit=True, max_refs=model.max_refs or 3), seed)
         items.append(item)
         jobs.append(job)
     db.commit()

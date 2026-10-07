@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import models_catalog
 from app.config import get_settings
 from app.db import get_db
 from app.models import Project
@@ -26,6 +27,7 @@ def list_projects(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_
 def create_project(body: ProjectCreate, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     data = body.model_dump()
     data["brief"] = data["brief"] or ""
+    data["settings"] = models_catalog.clean_project_settings({}, data.get("settings") or {})
     p = Project(workspace_id=cur.workspace_id, **data)
     db.add(p)
     db.commit()
@@ -43,6 +45,11 @@ def patch_project(
 ):
     p = get_owned(db, Project, project_id, cur.workspace_id, "Project")
     for k, v in body.model_dump(exclude_unset=True).items():
+        if k == "settings":
+            if v is not None:
+                # a fresh dict so the JSON column registers the change
+                p.settings = models_catalog.clean_project_settings(dict(p.settings or {}), v)
+            continue
         if v is None and k != "brief":
             continue
         setattr(p, k, v if v is not None else "")

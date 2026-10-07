@@ -19,6 +19,10 @@ export const shellRoutes: RouteObject[] = [
     const { QuickCreatePage } = await import('@/features/quick/QuickCreatePage')
     return <QuickCreatePage />
   }),
+  page('video/create', async () => {
+    const { VideoCreatePage } = await import('@/features/video/VideoCreatePage')
+    return <VideoCreatePage />
+  }),
   { path: 'video/projects', element: <ProjectsPage /> },
   page('video/templates', async () => {
     const { TemplatesPage } = await import('@/features/templates/TemplatesPage')

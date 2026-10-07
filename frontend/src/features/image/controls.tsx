@@ -1,11 +1,8 @@
 import { useId } from 'react'
 import { RadioGroup } from 'radix-ui'
-import { ModelBadge } from '@/components/shell/MegaMenu'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { IMAGE_ASPECTS, MAX_COUNT } from '@/lib/images'
-import type { Badge } from '@/lib/nav'
 import type { ImageAspect } from '@/lib/types'
-import { cn } from '@/lib/utils'
 
 export function ImageAspectTiles({
   value,
@@ -71,21 +68,5 @@ export function CountPicker({ value, onChange }: { value: number; onChange: (n: 
         ))}
       </ToggleGroup>
     </div>
-  )
-}
-
-export function ModelLine({ name, badge, note, highlighted }: { name: string; badge: Badge; note: string; highlighted?: boolean }) {
-  return (
-    <p
-      className={cn(
-        'flex flex-wrap items-center gap-2 rounded-[6px] border px-2.5 py-1.5 text-small text-studio-muted',
-        highlighted ? 'border-studio-gold bg-studio-gold/10' : 'border-studio-border bg-studio-raised',
-      )}
-    >
-      <span className="section-label">Model</span>
-      <span className="font-medium text-studio-text">{name}</span>
-      <ModelBadge badge={badge} />
-      <span>{note}</span>
-    </p>
   )
 }

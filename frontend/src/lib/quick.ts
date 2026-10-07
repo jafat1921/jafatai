@@ -41,6 +41,9 @@ export interface QuickForm {
   style: QuickStyle
   dialogue: boolean
   upscale: boolean
+  // advanced; unset means the server's default
+  imageModel?: string
+  videoQuality?: 'standard' | 'hq'
 }
 
 export const DEFAULT_QUICK_FORM: QuickForm = {
@@ -53,7 +56,11 @@ export const DEFAULT_QUICK_FORM: QuickForm = {
 }
 
 export function quickPayload(f: QuickForm, engine: UpscaleEngineId | undefined): QuickRequest {
+  const extra: Pick<QuickRequest, 'image_model' | 'video_quality'> = {}
+  if (f.imageModel) extra.image_model = f.imageModel
+  if (f.videoQuality) extra.video_quality = f.videoQuality
   return {
+    ...extra,
     prompt: f.prompt.trim(),
     duration_s: Math.round(Math.min(QUICK_MAX_S, Math.max(QUICK_MIN_S, f.durationS))),
     aspect_ratio: f.aspect,

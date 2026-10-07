@@ -1,0 +1,41 @@
+{
+  "name": "ltx23_two_stage",
+  "family": "ltx-2.3",
+  "description": "LTX-2.3 high quality: dev fp8 + distilled LoRA 1.1 (dynamic, 0.5), stage 1 at half size with the 8-step distilled sigmas, spatial x2 latent upscale, stage 2 refine (3 sigmas) at full size. Native audio. First and last frame both optional (t2v, i2v, flf). Follows the Comfy-Org LTX-2.3 Text/Image to Video graph.",
+  "inputs": {
+    "prompt":      {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":    {"type": "str", "default": "blurry, low quality, still frame, frozen, watermark, overlay, titles, subtitles, pc game, video game, cartoon",
+                    "targets": [["Negative", "text"]]},
+    "first_image": {"type": "image", "targets": [["FirstImage", "image"]],
+                    "if_missing": {"drop": ["FirstImage", "FirstScale", "FirstPre"],
+                                   "bypass": {"FirstFrame": {"0": "latent"}, "FirstFrame2": {"0": "latent"}}}},
+    "last_image":  {"type": "image", "targets": [["LastImage", "image"]],
+                    "if_missing": {"drop": ["LastImage", "LastScale", "LastPre"],
+                                   "bypass": {"LastGuide": {"0": "positive", "1": "negative", "2": "latent"},
+                                              "LastGuide2": {"0": "positive", "1": "negative", "2": "latent"}}}},
+    "width":       {"type": "int", "default": 1280, "multiple_of": 64,
+                    "targets": [["FirstScale", "width"], ["LastScale", "width"]]},
+    "height":      {"type": "int", "default": 704, "multiple_of": 64,
+                    "targets": [["FirstScale", "height"], ["LastScale", "height"]]},
+    "half_width":  {"type": "int", "default": 640, "multiple_of": 32, "targets": [["VideoLatent", "width"]]},
+    "half_height": {"type": "int", "default": 352, "multiple_of": 32, "targets": [["VideoLatent", "height"]]},
+    "num_frames":  {"type": "int", "default": 121, "frames_8n1": true,
+                    "targets": [["VideoLatent", "length"], ["AudioLatent", "frames_number"]]},
+    "fps":         {"type": "float", "default": 24.0,
+                    "targets": [["Conditioning", "frame_rate"], ["AudioLatent", "frame_rate"], ["Save", "frame_rate"]]},
+    "smooth_fps":  {"type": "float", "targets": [["Save", "frame_rate"]],
+                    "if_missing": {"drop": ["TemporalLoader"], "bypass": {"TemporalUp": {"0": "samples"}}}},
+    "seed":        {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"], ["Noise2", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/ltxhq", "targets": [["Save", "filename_prefix"]]}
+  },
+  "features": {"smooth_motion": ["TemporalLoader", "TemporalUp"]},
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {
+    "checkpoints": ["ltx-2.3-22b-dev-fp8.safetensors"],
+    "text_encoders": ["gemma_3_12B_it_fp4_mixed.safetensors"],
+    "loras": ["ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors"],
+    "latent_upscale_models": ["ltx-2.3-spatial-upscaler-x2-1.1.safetensors", "ltx-2.3-temporal-upscaler-x2-1.0.safetensors"]
+  },
+  "lora": {"after": "DistillLoRA", "output": 0},
+  "progress_weights": {"Sampler": 8, "Sampler2": 8, "Checkpoint": 4, "TextEncoder": 3, "Upsample": 1, "Decode": 4, "Save": 1}
+}

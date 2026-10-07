@@ -9,6 +9,8 @@ const BADGE_TONE: Record<Badge, string> = {
   UPSCALE: 'border-studio-border-strong text-studio-muted',
   QUICK: 'border-studio-warning/50 text-studio-warning',
   NEW: 'border-studio-gold bg-studio-gold/15 text-studio-accent-hover',
+  TEXT: 'border-studio-border-strong bg-studio-raised text-studio-text',
+  HQ: 'border-studio-accent/60 bg-studio-accent-soft text-studio-accent-hover',
 }
 
 export function ModelBadge({ badge }: { badge: Badge }) {
@@ -49,14 +51,14 @@ export function FeatureLink({ f, onPick, col }: { f: Feature; onPick: () => void
 
 export function ModelLink({ m, onPick, col }: { m: Model; onPick: () => void; col?: number }) {
   return (
-    <Link to={m.to} onClick={onPick} data-mm-col={col} className={ITEM} aria-label={`${m.name}, ${m.badge}: ${m.description}`}>
+    <Link to={m.to} onClick={onPick} data-mm-col={col} className={ITEM} aria-label={`${m.name}${m.badge ? `, ${m.badge}` : ''}: ${m.description}`}>
       <span aria-hidden className="darkroom flex size-9 shrink-0 items-center justify-center rounded-[6px] font-display text-panel font-bold">
         {m.mark}
       </span>
       <span className="min-w-0 flex-1" aria-hidden>
         <span className="flex items-center justify-between gap-2">
           <span className="truncate text-body font-medium text-studio-text">{m.name}</span>
-          <ModelBadge badge={m.badge} />
+          {m.badge && <ModelBadge badge={m.badge} />}
         </span>
         <span className="block text-small text-studio-muted">{m.description}</span>
       </span>

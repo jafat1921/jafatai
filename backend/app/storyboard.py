@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app import models_catalog
 from app.config import get_settings
 from app.models import Character, Generation, Location, Project, Scene, Shot, utcnow
 from app.schemas import LocationOut, ShotOut
@@ -312,6 +313,7 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
             if ids:
                 params["reference_ids"], params["reference_labels"] = ids, labels
         prompt = prompt.strip() or frame_prompt(db, shot, kind)
+        models_catalog.apply_image_choice(params, project.settings)
     else:
         start, end = take_frames(db, shot)
         if start is None:
@@ -338,6 +340,7 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
         else:
             for k in ("longtake", "chunks", "assembly", "continuity", "context_frames", "longtake_stats"):
                 params.pop(k, None)
+        models_catalog.apply_take_quality(params, project.settings, long_take=longtake.is_long(duration))
         prompt = prompt.strip() or frame_prompt(db, shot, "take")
 
     if not prompt:
@@ -354,6 +357,7 @@ def prepare_location_generation(db: Session, loc: Location, kind: str, prompt: s
     project = _project(db, loc.project_id)
     params = dict(params or {})
     params.setdefault("aspect_ratio", project.aspect_ratio)
+    models_catalog.apply_image_choice(params, project.settings)
     prompt = prompt.strip() or (
         f"Establishing shot of {loc.name}. {loc.description}".strip() + " No people, wide angle, cinematic."
     )

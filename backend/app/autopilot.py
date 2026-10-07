@@ -25,7 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import ai_jobs, longtake, storyboard as sb, vision
+from app import ai_jobs, longtake, models_catalog, storyboard as sb, vision
 from app import reel as rl
 from app.config import get_settings
 from app.llm import LLMError, chat_sync
@@ -616,7 +616,8 @@ class Autopilot:
                 return enqueue_generation(db, workspace_id=ch.workspace_id, project_id=project.id,
                                           target_type="character", target_id=ch.id, kind="portrait",
                                           prompt=sb.with_style(project, prompts[ch.id]),
-                                          params={"aspect_ratio": project.aspect_ratio})
+                                          params=models_catalog.apply_image_choice(
+                                              {"aspect_ratio": project.aspect_ratio}, project.settings))
 
             waits += self.image_slot("character", ch.id, "portrait", make, f"{ch.name}: {ch.description}", None,
                                      f"{ch.name}'s portrait")

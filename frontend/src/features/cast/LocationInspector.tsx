@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { SourceBadge } from '@/components/studio/source-badge'
 import { ErrorState } from '@/components/studio/states'
 import { GenerationViewer } from '@/components/review/GenerationViewer'
+import { StudioImageModelField } from '@/components/models/StudioImageModel'
+import { useStudioImageModel } from '@/hooks/useStudioImageModel'
 import { useGenerationActions, type GenerationTarget } from '@/hooks/useGenerations'
 import { useDeleteLocation } from '@/hooks/useLocations'
 import { useScenes } from '@/hooks/useScenes'
@@ -23,6 +25,7 @@ function EstablishingSection({ location }: { location: Location }) {
   const target: GenerationTarget = { targetType: 'location', targetId: location.id, kind: 'establishing' }
   const { create } = useGenerationActions()
   const aspect = useProjectAspectClass()
+  const imageModel = useStudioImageModel(location.project_id)
   const [prompt, setPrompt] = useState(
     `Establishing shot of ${location.name}${location.description ? `, ${location.description}` : ''}, no people, cinematic`,
   )
@@ -30,7 +33,7 @@ function EstablishingSection({ location }: { location: Location }) {
   const generate = () => {
     if (!prompt.trim() || create.isPending) return
     create.mutate(
-      { target, prompt: prompt.trim() },
+      { target, prompt: prompt.trim(), params: imageModel.params },
       { onSuccess: (g) => announce(`Establishing frame version ${g.version} queued.`) },
     )
   }
@@ -55,6 +58,7 @@ function EstablishingSection({ location }: { location: Location }) {
           }}
         />
       </div>
+      <StudioImageModelField projectId={location.project_id} />
       <Button variant="primary" size="lg" className="w-full" onClick={generate} loading={create.isPending} disabled={!prompt.trim()}>
         <Wand2 aria-hidden />
         Generate establishing frame

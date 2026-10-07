@@ -45,6 +45,10 @@ import type {
   MediaQuery,
   Template,
   TemplateStart,
+  ModelInfo,
+  ModelType,
+  TakesRequest,
+  VideoGenerateRequest,
 } from './types'
 
 export const API_BASE = '/api'
@@ -211,10 +215,10 @@ export const api = {
     reorder: (sceneId: string, shotIds: string[]) => post<Shot[]>(`/scenes/${sceneId}/shots/reorder`, { shot_ids: shotIds }),
     remove: (id: string) => del(`/shots/${id}`),
     clearStale: (id: string) => post<Shot>(`/shots/${id}/clear-stale`),
-    renderTakes: (id: string, count?: number, durationS?: number) =>
+    renderTakes: (id: string, { count, duration_s }: TakesRequest = {}) =>
       post<Job[]>(`/shots/${id}/takes`, {
         ...(count ? { count } : {}),
-        ...(durationS ? { duration_s: durationS } : {}),
+        ...(duration_s ? { duration_s } : {}),
       }),
     estimate: (id: string, durationS?: number) => get<ShotEstimate>(`/shots/${id}/estimate`, { duration_s: durationS }),
     renderScene: (sceneId: string, count?: number) => post<Job[]>(`/scenes/${sceneId}/render`, count ? { count } : {}),
@@ -291,6 +295,14 @@ export const api = {
   images: {
     generate: (body: ImageGenerateRequest) => post<MediaBatch>('/images/generate', body),
     edit: (body: ImageEditRequest) => post<MediaBatch>('/images/edit', body),
+  },
+  // contract-v6
+  models: {
+    list: (type: ModelType) => get<ModelInfo[]>('/models', { type }),
+  },
+  videos: {
+    // a MediaItem plus its job; tolerate a batch too
+    generate: (body: VideoGenerateRequest) => post<(MediaItem & { job?: Job | null }) | MediaBatch>('/videos/generate', body),
   },
   templates: {
     list: (type: 'video' | 'image') => get<Template[]>('/templates', { type }),

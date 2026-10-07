@@ -29,7 +29,7 @@ HEARTBEAT_EVERY = 5.0
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
 IMAGE_KINDS = {"portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyframe_mid", "establishing", "image"}
-VIDEO_KINDS = {"take", "tile", "render"}
+VIDEO_KINDS = {"take", "tile", "render", "video"}
 TEXT_KINDS = {"scene_text"}
 EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt"}
 # same string as app.reel.ASSEMBLE_JOB (that module is imported at the bottom)
@@ -199,7 +199,7 @@ def handle_generate(ctx: JobContext) -> dict:
     gen.status = "generating"
     db.commit()
 
-    if gen.kind == "take" and (gen.params or {}).get("longtake"):
+    if gen.kind in ("take", "video") and (gen.params or {}).get("longtake"):
         from app.longtake import run_take
 
         return run_take(ctx, gen, driver)
@@ -252,9 +252,15 @@ FINISHED_HOOKS.append(wake_parent)
 from app.library import on_job_finished as media_finished  # noqa: E402
 
 FINISHED_HOOKS.append(media_finished)
+from app import brand  # noqa: E402
+
+HANDLERS[brand.BRAND_JOB] = brand.handle_brand_apply
+HANDLERS[brand.REVEAL_JOB] = brand.handle_logo_reveal
+FINISHED_HOOKS.append(brand.on_job_finished)
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.
-CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot"}
+CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot", brand.BRAND_JOB: "brand",
+                  brand.REVEAL_JOB: "brand"}
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

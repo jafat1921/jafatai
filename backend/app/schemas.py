@@ -80,6 +80,7 @@ class ProjectOut(Out):
     overnight: bool
     status: str
     style_bible: str = ""
+    settings: dict[str, Any] = {}
     created_at: Utc
     updated_at: Utc
     thumbnail_url: str | None = None
@@ -97,6 +98,7 @@ class ProjectCreate(BaseModel):
     overnight: bool = False
     brief: str | None = None
     style_bible: str = ""
+    settings: dict[str, Any] | None = None
 
 
 class ProjectPatch(BaseModel):
@@ -111,6 +113,8 @@ class ProjectPatch(BaseModel):
     status: ProjectStatus | None = None
     brief: str | None = None
     style_bible: str | None = None
+    # merged into project.settings; a key set to null is removed
+    settings: dict[str, Any] | None = None
 
 
 # scenes
@@ -342,6 +346,7 @@ class ShotOut(Out):
     approved_take: GenerationOut | None = None
     takes_count: int = 0
     beats: list[dict[str, Any]] = []
+    brand_placements: list[dict[str, Any]] = []
     created_at: Utc
     updated_at: Utc
 
@@ -382,6 +387,18 @@ class ShotPatch(BaseModel):
     handoff_text: str | None = None
     locked: bool | None = None
     stale: bool | None = None
+    # contract v7: where the brand kit's logo/products appear in this shot
+    brand_placements: list["BrandPlacement"] | None = Field(None, max_length=12)
+
+
+class BrandPlacement(BaseModel):
+    asset_id: str
+    asset_type: Literal["logo", "product"]
+    surface: str = Field("", max_length=200)
+    prominence: Literal["hero", "background"] = "background"
+
+
+ShotPatch.model_rebuild()
 
 
 class ShotReorderIn(BaseModel):
@@ -391,6 +408,9 @@ class ShotReorderIn(BaseModel):
 class TakesIn(BaseModel):
     count: int | None = Field(None, ge=1, le=16)
     duration_s: TakeSeconds | None = None
+    # contract v6; unset = the project's settings (Standard, no smoothing)
+    quality: Literal["standard", "hq"] | None = None
+    smooth_motion: bool | None = None
 
 
 class ChunkRegenerateIn(BaseModel):
@@ -586,15 +606,41 @@ class ImageGenerateIn(BaseModel):
     steps: int | None = Field(None, ge=1, le=60)
     template_id: str | None = None
     title: str | None = Field(None, max_length=300)
+    model: str | None = Field(None, max_length=60)  # catalog id (contract v6); default Z-Image Turbo
+    speed: str | None = Field(None, max_length=30)
+    brand_kit_id: str | None = None  # contract v7: palette/look in the prompt, brand pass on the result
 
 
 class ImageEditIn(BaseModel):
-    source_ids: list[str] = Field(min_length=1, max_length=3)
+    # the catalog's max_refs is checked in the route, so the message names the model
+    source_ids: list[str] = Field(min_length=1, max_length=8)
     instruction: str = Field(min_length=1, max_length=4000)
     aspect: ImageAspect | None = None
     count: int = Field(1, ge=1, le=4)
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     title: str | None = Field(None, max_length=300)
+    model: str | None = Field(None, max_length=60)
+    brand_kit_id: str | None = None  # contract v7: also adds product refs while there's room
+
+
+VideoAspect = Literal["16:9", "9:16", "1:1", "4:3", "2.39:1"]
+
+
+class VideoGenerateIn(BaseModel):
+    prompt: str = Field(min_length=1, max_length=4000)
+    model: str | None = Field(None, max_length=60)
+    duration_s: float = Field(5.0, ge=1)
+    aspect: VideoAspect = "16:9"
+    image_id: str | None = None
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    smooth_motion: bool = False
+    negative: str | None = Field(None, max_length=2000)
+    title: str | None = Field(None, max_length=300)
+    brand_kit_id: str | None = None  # contract v7
+
+
+class VideoGenerateOut(MediaItemOut):
+    job: JobOut | None = None
 
 
 class ImageBatchOut(BaseModel):

@@ -6,11 +6,12 @@ import { Switch } from '@/components/ui/switch'
 import { useLogout, useMe } from '@/hooks/useAuth'
 import { useConnections } from '@/hooks/useConnections'
 import { useRunningCount } from '@/hooks/useStudio'
-import { activeRail, MENUS, type MenuSection } from '@/lib/nav'
+import { activeRail, type MenuSection } from '@/lib/nav'
 import { useQuillCursor } from '@/lib/quill'
 import { cn } from '@/lib/utils'
 import { StatusDot } from './ConnectionStatus'
 import { FeatureLink, ModelLink } from './MegaMenu'
+import { useMenus } from './useMenus'
 
 type Sheet = 'image' | 'video' | 'more' | null
 
@@ -47,10 +48,11 @@ function MoreSheet({ onPick }: { onPick: () => void }) {
   const navigate = useNavigate()
   const [quill, setQuill] = useQuillCursor()
   const conn = useConnections()
+  const menus = useMenus()
   return (
     <>
-      <SectionList section={MENUS.assets} onPick={onPick} />
-      <SectionList section={MENUS.upscale} onPick={onPick} />
+      <SectionList section={menus.assets} onPick={onPick} />
+      <SectionList section={menus.upscale} onPick={onPick} />
       <h3 className="section-label px-2 pt-3">System &amp; account</h3>
       <Link to="/settings" onClick={onPick} className="flex items-center gap-3 rounded-[6px] p-2 hover:bg-studio-panel-hover">
         <Settings aria-hidden className="size-4 text-studio-accent" />
@@ -80,6 +82,7 @@ const TAB = 'relative flex min-h-12 flex-1 flex-col items-center justify-center 
 export function BottomBar() {
   const { pathname } = useLocation()
   const active = activeRail(pathname)
+  const menus = useMenus()
   const [sheet, setSheet] = useState<Sheet>(null)
   const { running } = useRunningCount()
   const close = () => setSheet(null)
@@ -138,8 +141,8 @@ export function BottomBar() {
                 <X className="size-4" />
               </DialogPrimitive.Close>
             </div>
-            {sheet === 'image' && <SectionList section={MENUS.image} onPick={close} />}
-            {sheet === 'video' && <SectionList section={MENUS.video} onPick={close} />}
+            {sheet === 'image' && <SectionList section={menus.image} onPick={close} />}
+            {sheet === 'video' && <SectionList section={menus.video} onPick={close} />}
             {sheet === 'more' && <MoreSheet onPick={close} />}
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { qk } from '@/hooks/keys'
 import { activeRail, pageTitle } from '@/lib/nav'
 import { job, mockApi, renderAt, systemOk } from '@/test/media-fixtures'
+import { seedCatalog } from '@/test/model-fixtures'
 import { Rail } from './Rail'
 import { CLOSE_DELAY, OPEN_DELAY } from './useMegaMenu'
 
@@ -12,12 +13,20 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function renderRail(path = '/', jobs = [job('a')]) {
+function renderRail(path = '/', jobs = [job('a')], catalog = false) {
   mockApi((_m, p) => {
     if (p === '/system/status') return systemOk
     if (p === '/auth/me') return { id: 'u', email: 'ada@studio.test', display_name: 'Ada', workspace_id: 'w1', role: 'owner' }
   })
-  return renderAt(path, [{ path: '/elsewhere', element: <p>away</p> }], (qc) => qc.setQueryData(qk.jobs, jobs), <Rail />)
+  return renderAt(
+    path,
+    [{ path: '/elsewhere', element: <p>away</p> }],
+    (qc) => {
+      qc.setQueryData(qk.jobs, jobs)
+      if (catalog) seedCatalog(qc)
+    },
+    <Rail />,
+  )
 }
 
 const rail = () => screen.getByRole('navigation', { name: 'Main' })
@@ -141,18 +150,34 @@ describe('rail', () => {
     expect(trigger('Upscale')).toHaveAttribute('aria-current', 'true')
   })
 
-  it('lists only integrated models and keeps LoRAs as a later, disabled feature', async () => {
+  it('falls back to the integrated models on an older server, and keeps LoRAs as a later, disabled feature', async () => {
     renderRail()
     const user = userEvent.setup()
     await user.click(trigger('Video'))
     const video = screen.getByRole('group', { name: 'Video Tools' })
     expect(within(video).queryByText(/Wan 2\.2/)).not.toBeInTheDocument()
-    expect(within(video).getByRole('link', { name: /LTX-2\.3/ })).toHaveAttribute('href', '/video/quick?model=ltx-2.3')
+    expect(within(video).getByRole('link', { name: /LTX-2\.3/ })).toHaveAttribute('href', '/video/create?model=ltx23_distilled')
 
     await user.click(trigger('Assets'))
     const assets = screen.getByRole('group', { name: 'Assets' })
     expect(within(assets).getByText('LoRAs').closest('[aria-disabled]')).toHaveAttribute('aria-disabled', 'true')
     expect(screen.queryByRole('group', { name: 'Video Tools' })).not.toBeInTheDocument()
+  })
+
+  it('fills the Models column from the catalog, skips unavailable models, and preselects on click', async () => {
+    renderRail('/elsewhere', [], true)
+    const user = userEvent.setup()
+    await user.click(trigger('Image'))
+    const image = screen.getByRole('group', { name: 'Image Tools' })
+    expect(within(image).getByRole('link', { name: /^Qwen-Image 2512, TEXT: Text & posters/ })).toHaveAttribute('href', '/image/generate?model=qwen_image_2512')
+    expect(within(image).queryByText('FLUX.2 klein 4B')).not.toBeInTheDocument()
+
+    await user.click(trigger('Video'))
+    const video = screen.getByRole('group', { name: 'Video Tools' })
+    expect(within(video).getByRole('link', { name: /Create Video/ })).toHaveAttribute('href', '/video/create')
+    expect(within(video).getByRole('link', { name: /^LTX-2\.3 High quality, HQ/ })).toBeInTheDocument()
+    await user.click(within(video).getByRole('link', { name: /^Wan 2\.2 14B/ }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/video/create?model=wan22_t2v')
   })
 
   it('puts connection state on the Settings item', async () => {

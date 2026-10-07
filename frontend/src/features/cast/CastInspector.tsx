@@ -8,6 +8,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { SourceBadge } from '@/components/studio/source-badge'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { GenerationViewer } from '@/components/review/GenerationViewer'
+import { StudioImageModelField } from '@/components/models/StudioImageModel'
+import { useStudioImageModel } from '@/hooks/useStudioImageModel'
 import { useGenerationActions, type GenerationTarget } from '@/hooks/useGenerations'
 import { useAiJob } from '@/hooks/useAi'
 import { api } from '@/lib/api'
@@ -20,6 +22,7 @@ import { announce } from '@/stores/ui'
 function PortraitSection({ character }: { character: Character }) {
   const target: GenerationTarget = { targetType: 'character', targetId: character.id, kind: 'portrait' }
   const { create } = useGenerationActions()
+  const imageModel = useStudioImageModel(character.project_id)
   const [prompt, setPrompt] = useState(
     character.description ? `Portrait of ${character.name}, ${character.description}` : `Portrait of ${character.name}`,
   )
@@ -39,7 +42,7 @@ function PortraitSection({ character }: { character: Character }) {
   const generate = () => {
     if (!prompt.trim() || create.isPending) return
     create.mutate(
-      { target, prompt: prompt.trim() },
+      { target, prompt: prompt.trim(), params: imageModel.params },
       { onSuccess: (g) => announce(`Portrait version ${g.version} queued.`) },
     )
   }
@@ -80,6 +83,7 @@ function PortraitSection({ character }: { character: Character }) {
           placeholder="Describe the face, age, hair, wardrobe and lighting…"
         />
       </div>
+      <StudioImageModelField projectId={character.project_id} />
       <Button
         variant="primary"
         size="lg"

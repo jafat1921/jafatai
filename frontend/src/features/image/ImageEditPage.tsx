@@ -7,13 +7,16 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { MediaGrid } from '@/components/media/MediaGrid'
+import { ModelPicker } from '@/components/models/ModelPicker'
 import { flatItems, useImageEdit, useMediaList } from '@/hooks/useMedia'
+import { useModels } from '@/hooks/useModels'
 import { addSources, editPayload, MAX_EDIT_SOURCES } from '@/lib/images'
+import { normalizeModelId, pickModel } from '@/lib/models'
 import { modKey } from '@/lib/keyboard'
 import type { ImageAspect, MediaItem } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
-import { CountPicker, ImageAspectTiles, ModelLine } from './controls'
+import { CountPicker, ImageAspectTiles } from './controls'
 import { EditSources } from './EditSources'
 
 const idsFrom = (raw: string | null) => (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -31,17 +34,23 @@ export function ImageEditPage() {
   const [aspect, setAspect] = useState<ImageAspect | null>(null)
   const edit = useImageEdit()
   const results = useMediaList({ kind: 'image', origin: 'generated' })
+  const { models } = useModels('edit')
+  const wanted = normalizeModelId(params.get('model'))
+  const [modelId, setModelId] = useState<string | undefined>(wanted ?? undefined)
+  const model = pickModel(models, modelId)
+  const max = model?.max_refs ?? MAX_EDIT_SOURCES
+  const over = Math.max(0, ids.length - max)
 
   const add = (items: MediaItem[]) => {
-    const next = addSources(ids, items.map((m) => m.id))
+    const next = addSources(ids, items.map((m) => m.id), max)
     setIds(next.ids)
-    setNotice(next.dropped ? `Only ${MAX_EDIT_SOURCES} images can be used at once, so ${next.dropped === 1 ? "1 image wasn't" : `${next.dropped} images weren't`} added.` : null)
+    setNotice(next.dropped ? `${model?.label ?? 'This model'} takes ${max === 1 ? '1 image' : `up to ${max} images`}, so ${next.dropped === 1 ? "1 image wasn't" : `${next.dropped} images weren't`} added.` : null)
   }
-  const canSubmit = ids.length > 0 && instruction.trim().length >= 3 && !edit.isPending
+  const canSubmit = ids.length > 0 && !over && instruction.trim().length >= 3 && !edit.isPending
 
   const submit = () => {
     if (!canSubmit) return
-    edit.mutate(editPayload(ids, instruction, count, aspect), {
+    edit.mutate(editPayload(ids, instruction, count, aspect, model), {
       onSuccess: ({ items }) => announce(`Editing. ${plural(items?.length ?? count, 'result')} on the way.`),
     })
   }
@@ -69,15 +78,15 @@ export function ImageEditPage() {
               Edit Image
             </h1>
           </div>
-          <ModelLine
-            name="Qwen-Image-Edit 2511"
-            badge="BEST"
-            note="Edit and combine up to 3 references"
-            highlighted={params.get('model') === 'qwen-image-edit'}
-          />
+          <ModelPicker label="Model" models={models} value={model?.id} onChange={setModelId} highlighted={!!wanted} />
           <EditSources
             ids={ids}
-            notice={notice}
+            max={max}
+            notice={
+              over
+                ? `${model?.label ?? 'This model'} takes ${max === 1 ? '1 image' : `up to ${max} images`}. Remove ${over === 1 ? '1 image' : `${over} images`} or pick another model.`
+                : notice
+            }
             onAdd={add}
             onRemove={(id) => {
               setIds((cur) => cur.filter((x) => x !== id))
@@ -102,7 +111,11 @@ export function ImageEditPage() {
           {edit.isError && <ErrorState compact title="Couldn't start the edit" error={edit.error} />}
           <div className="flex flex-wrap items-center justify-end gap-3">
             <p className="mr-auto text-small text-studio-muted">
-              {ids.length ? 'The result is a new image; your sources stay as they are.' : 'Add at least one source image.'}
+              {over
+                ? `Too many source images for ${model?.label ?? 'this model'}.`
+                : ids.length
+                  ? 'The result is a new image; your sources stay as they are.'
+                  : 'Add at least one source image.'}
             </p>
             <Button type="submit" size="lg" variant="primary" disabled={!canSubmit} loading={edit.isPending} aria-keyshortcuts="Control+Enter">
               <Brush aria-hidden />

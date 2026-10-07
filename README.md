@@ -29,10 +29,12 @@ Other tasks: `api`, `worker`, `web`, `build`, `test`, `serve`.
 
 ## Server install
 
+> **Repository:** replace `<REPO_URL>` with the copy you use, e.g. `https://github.com/mharisali-hash/mixaicinemastudio.git` or `https://github.com/jafat1921/jafatai.git`. Both are kept identical. Cloning into the folder `mixaicinemastudio` keeps the paths in this guide valid.
+
 **[INSTALL.md](INSTALL.md)** is the full guide. The short version:
 
 ```bash
-git clone https://github.com/mharisali-hash/mixaicinemastudio.git && cd mixaicinemastudio
+git clone <REPO_URL> mixaicinemastudio && cd mixaicinemastudio
 ./scripts/install-server.sh --admin-email you@example.com --public-url https://YOUR_HOST:8443 --systemd
 ```
 

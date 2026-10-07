@@ -71,10 +71,12 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-ge
 
 ## 3. Quick install (recommended)
 
+> **Repository:** replace `<REPO_URL>` with the copy you use, e.g. `https://github.com/mharisali-hash/mixaicinemastudio.git` or `https://github.com/jafat1921/jafatai.git`. Both are kept identical. Cloning into the folder `mixaicinemastudio` keeps the paths in this guide valid.
+
 ```bash
 sudo mkdir -p /data/apps /data/outputs/mixai && sudo chown -R "$USER": /data/apps /data/outputs/mixai
 cd /data/apps
-git clone https://github.com/mharisali-hash/mixaicinemastudio.git
+git clone <REPO_URL> mixaicinemastudio
 cd mixaicinemastudio
 chmod +x scripts/install-server.sh
 ./scripts/install-server.sh --admin-email you@example.com --public-url https://YOUR_HOST:8443 --systemd
@@ -140,7 +142,7 @@ caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
 Use this instead of section 3 if you want to control each step.
 
 ```bash
-cd /data/apps && git clone https://github.com/mharisali-hash/mixaicinemastudio.git && cd mixaicinemastudio
+cd /data/apps && git clone <REPO_URL> mixaicinemastudio && cd mixaicinemastudio
 curl -LsSf https://astral.sh/uv/install.sh | sh          # if uv is missing
 (cd backend && uv sync --frozen)
 (cd frontend && npm ci && npm run build)
@@ -244,7 +246,7 @@ journalctl -u mixai-worker -f
 Needs Python 3.12 via [uv](https://docs.astral.sh/uv/), Node 20+, and git.
 
 ```bash
-git clone https://github.com/mharisali-hash/mixaicinemastudio.git && cd mixaicinemastudio
+git clone <REPO_URL> mixaicinemastudio && cd mixaicinemastudio
 python scripts/tasks.py setup      # .env from template + deps
 python scripts/tasks.py migrate
 python scripts/tasks.py dev        # API :8000 + worker + web :5173

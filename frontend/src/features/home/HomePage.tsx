@@ -13,6 +13,7 @@ import { useDashboard } from '@/hooks/useStudio'
 import { isActiveJob } from '@/lib/status'
 import type { MediaItem } from '@/lib/types'
 import { HomeCreateBar } from './HomeCreateBar'
+import { Recipes } from './Recipes'
 
 function Section({ title, to, linkText, children }: { title: string; to?: string; linkText?: string; children: React.ReactNode }) {
   const id = `home-${title.toLowerCase().replace(/\W+/g, '-')}`
@@ -65,6 +66,7 @@ export function HomePage() {
           Home
         </h1>
         <HomeCreateBar />
+        <Recipes />
         <RecentQuick />
 
         {running.length > 0 && (

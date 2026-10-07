@@ -76,14 +76,15 @@ describe('tile actions', () => {
     expect(within(dock).getByText('Describe the motion first.')).toBeInTheDocument()
   })
 
-  it('Use as reference opens Edit with it; the heart is remembered in this browser', async () => {
-    api()
+  it('Use as reference opens Edit with it; the heart is saved on the server', async () => {
+    const calls = api()
     renderAt('/image/generate', routes, seedCatalog)
     const user = userEvent.setup()
     const heart = await screen.findByRole('button', { name: 'Favourite Owl' })
     await user.click(heart)
     expect(heart).toHaveAttribute('aria-pressed', 'true')
-    expect(JSON.parse(localStorage.getItem('mixai.favourites')!)).toEqual(['o1'])
+    expect(calls).toContainEqual(expect.objectContaining({ method: 'POST', path: '/favourites/toggle', body: { ref: 'o1', on: true } }))
+    expect(localStorage.getItem('mixai.favourites')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Use as reference: Owl' }))
     expect(screen.getByTestId('location')).toHaveTextContent('/image/edit?sources=o1')
   })

@@ -37,4 +37,7 @@ export const qk = {
   brandKits: ['brand-kits'] as const,
   brandKit: (id: string) => ['brand-kits', 'kit', id] as const,
   brandPreview: (id: string, kind: string, settings: string) => ['brand-preview', id, kind, settings] as const,
+  // contract-v8 P4
+  folders: ['folders'] as const,
+  savedFilters: ['saved-filters'] as const,
 }

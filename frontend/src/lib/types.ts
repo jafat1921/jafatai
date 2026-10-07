@@ -598,6 +598,9 @@ export interface MediaItem {
   // newer servers echo the generation params (model, model_resolved, brand_kit_id…) on the item
   params?: Record<string, unknown> | null
   model?: string | null
+  // contract v8 P4; older servers leave them out
+  folder_id?: string | null
+  favourite?: boolean
 }
 
 export interface MediaDetail extends MediaItem {
@@ -616,8 +619,41 @@ export interface MediaQuery {
   tag?: string
   project_id?: string
   include?: 'project'
+  folder_id?: string
+  favourite?: 1
   limit?: number
   cursor?: string
+}
+
+// contract v8 P4: library organisation
+export type FolderKind = 'any' | 'image' | 'video'
+
+export interface Folder {
+  id: string
+  name: string
+  parent_id: string | null
+  kind: FolderKind
+  sort: number
+  item_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedFilter {
+  id: string
+  name: string
+  query: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type BatchAction = 'delete' | 'download' | 'upscale' | 'move' | 'tag'
+
+export interface BatchResult {
+  action: BatchAction
+  done: string[]
+  skipped: { ref: string; reason: string }[]
+  jobs: Job[]
 }
 
 export type ImageAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '2:3' | '3:2'
@@ -666,6 +702,8 @@ export interface EstimateResult {
 }
 
 export interface ImageGenerateRequest extends MagicFields {
+  // P4 "Generate into…"
+  folder_id?: string
   prompt: string
   negative?: string
   aspect: ImageAspect
@@ -680,6 +718,8 @@ export interface ImageGenerateRequest extends MagicFields {
 }
 
 export interface ImageEditRequest extends MagicFields {
+  // P4 "Generate into…"
+  folder_id?: string
   source_ids: string[]
   instruction: string
   aspect?: ImageAspect
@@ -692,6 +732,8 @@ export interface ImageEditRequest extends MagicFields {
 export type Img2ImgAspect = 'source' | ImageAspect
 
 export interface Img2ImgRequest extends MagicFields {
+  // P4 "Generate into…"
+  folder_id?: string
   source_id: string
   prompt: string
   strength: number
@@ -797,6 +839,8 @@ export interface ModelInfo {
 export type VideoAspect = '16:9' | '9:16' | '1:1'
 
 export interface VideoGenerateRequest extends MagicFields {
+  // P4 "Generate into…"
+  folder_id?: string
   prompt: string
   model: string
   duration_s: number

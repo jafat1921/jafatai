@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { Brush, ChevronLeft, ChevronRight, Clapperboard, Copy, Download, ExternalLink, Heart, ImageUpscale, Layers, PanelRightOpen, RotateCcw, X } from 'lucide-react'
+import { Brush, ChevronLeft, ChevronRight, Clapperboard, Columns2, Copy, Download, ExternalLink, Heart, ImageUpscale, Layers, PanelRightOpen, RotateCcw, X } from 'lucide-react'
+import { BeforeAfter } from '@/components/media/BeforeAfter'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { useBrandKits } from '@/hooks/useBrandKits'
@@ -26,6 +27,8 @@ export interface LightboxEntry {
   projectId?: string | null
   generationId: string
   favourite?: boolean
+  // P4: the version this one was upscaled from, for the before/after compare (C)
+  compare?: { src: string; label: string; afterLabel?: string } | null
 }
 
 export interface LightboxActions {
@@ -73,6 +76,11 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
   // which entry the "Copied" belongs to, so browsing on resets it
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const copied = copiedKey === entry.key
+  // keyed by entry, so browsing to the next picture leaves compare mode
+  const [comparingKey, setComparingKey] = useState<string | null>(null)
+  const canCompare = !!(entry.compare && entry.src)
+  const comparing = canCompare && comparingKey === entry.key
+  const toggleCompare = () => setComparingKey(comparing ? null : entry.key)
 
   const go = (d: number) => {
     if (entries.length < 2) return
@@ -92,6 +100,7 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
       u: run(actions.upscale),
       e: image ? run(actions.edit) : undefined,
       a: image ? run(actions.animate) : undefined,
+      c: canCompare ? toggleCompare : undefined,
     }
     const fn = map[k]
     if (fn) {
@@ -120,7 +129,19 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
           className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-studio-darkroom focus-visible:outline-none md:inset-4 md:flex-row md:overflow-hidden md:rounded-[8px] md:border md:border-studio-gold/60 md:shadow-modal"
         >
           <div className="relative flex min-h-[50vh] flex-1 items-center justify-center p-3 md:min-h-0 md:p-6">
-            {entry.src ? (
+            {comparing && entry.compare && entry.src ? (
+              <BeforeAfter
+                key={entry.key}
+                kind={entry.kind}
+                before={entry.compare.src}
+                after={entry.src}
+                alt={entry.title}
+                beforeLabel={entry.compare.label}
+                afterLabel={entry.compare.afterLabel ?? 'Upscaled'}
+                globalLoupeKey
+                className="size-full [&>figcaption]:text-studio-on-dark-muted"
+              />
+            ) : entry.src ? (
               image ? (
                 <img key={entry.key} src={entry.src} alt={entry.title} className="max-h-full max-w-full object-contain motion-safe:animate-fade-in" />
               ) : (
@@ -221,6 +242,12 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                 <Button type="button" size="sm" variant="ghost" onClick={run(actions.animate)}>
                   <Clapperboard aria-hidden />
                   Animate <Kbd>A</Kbd>
+                </Button>
+              )}
+              {canCompare && (
+                <Button type="button" size="sm" variant="ghost" aria-pressed={comparing} onClick={toggleCompare}>
+                  <Columns2 aria-hidden />
+                  Before / after <Kbd>C</Kbd>
                 </Button>
               )}
               {entry.src && (

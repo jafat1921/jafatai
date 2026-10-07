@@ -89,6 +89,7 @@ export function Img2VidPage() {
       ]}
     >
       <PromptDock
+        into="video"
         title="Image to Video"
         icon={<Clapperboard aria-hidden className="size-4 text-studio-accent-hover" />}
         headerExtra={<p className="text-small text-studio-muted max-lg:hidden">Add an end picture to say where it lands.</p>}

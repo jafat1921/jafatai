@@ -20,13 +20,15 @@ afterEach(async () => {
   } catch {
     /* jsdom without storage */
   }
-  const [{ useSessions }, { useToasts, useMyJobs }, { useFavourites }] = await Promise.all([
+  const [{ useSessions }, { useToasts, useMyJobs }, { useFavourites }, { useGenerateInto }] = await Promise.all([
     import('@/stores/sessions'),
     import('@/stores/toasts'),
     import('@/stores/favourites'),
+    import('@/stores/generateInto'),
   ])
   useSessions.setState({ requests: [] })
   useToasts.setState({ toasts: [] })
   useMyJobs.setState({ jobs: {}, done: [] })
-  useFavourites.setState({ ids: [] })
+  useFavourites.setState({ ids: [], mode: 'pending' })
+  useGenerateInto.setState({ into: { image: null, video: null } })
 })

@@ -46,6 +46,11 @@ import type {
   MediaItem,
   MediaPage,
   MediaQuery,
+  BatchAction,
+  BatchResult,
+  Folder,
+  FolderKind,
+  SavedFilter,
   Template,
   TemplateStart,
   ModelInfo,
@@ -342,6 +347,8 @@ export const api = {
     get: (id: string) => get<MediaDetail>(`/media/${id}`),
     update: (id: string, body: { title?: string; tags?: string[] }) => patch<MediaItem>(`/media/${id}`, body),
     remove: (id: string) => del(`/media/${id}`),
+    move: (refs: string[], folderId: string | null) => post<BatchResult>('/media/move', { refs, folder_id: folderId }),
+    batch: (action: BatchAction, refs: string[], options: Record<string, unknown> = {}) => post<BatchResult>('/media/batch', { action, refs, options }),
     regenerate: (id: string, body: { mode: RegenerateMode; note?: string; prompt?: string }) =>
       post<Job>(`/media/${id}/regenerate`, body),
     // upload goes through lib/upload.ts (XHR, for progress)
@@ -383,6 +390,24 @@ export const api = {
     start: (id: string) => post<TemplateStart>(`/templates/${id}/start`),
   },
   dashboard: () => get<Dashboard>('/dashboard'),
+  // contract-v8 P4: library organisation
+  folders: {
+    list: (kind?: 'image' | 'video') => get<Folder[]>('/folders', kind ? { kind } : undefined),
+    create: (body: { name: string; parent_id?: string | null; kind?: FolderKind }) => post<Folder>('/folders', body),
+    update: (id: string, body: { name?: string; parent_id?: string; sort?: number }) => patch<Folder>(`/folders/${id}`, body),
+    remove: (id: string) => del(`/folders/${id}`),
+  },
+  favourites: {
+    list: () => get<{ refs: string[] }>('/favourites'),
+    toggle: (ref: string, on?: boolean) => post<{ ref: string; favourite: boolean }>('/favourites/toggle', on == null ? { ref } : { ref, on }),
+    import: (refs: string[]) => post<{ refs: string[]; imported: number; skipped: number }>('/favourites/import', { refs }),
+  },
+  savedFilters: {
+    list: () => get<SavedFilter[]>('/saved-filters'),
+    create: (body: { name: string; query: Record<string, unknown> }) => post<SavedFilter>('/saved-filters', body),
+    remove: (id: string) => del(`/saved-filters/${id}`),
+  },
+  exportUrl: (jobId: string) => `${API_BASE}/exports/${jobId}/download`,
   // P1 polish; both answer 404 on servers that predate them
   prompts: {
     enhance: (body: PromptEnhanceRequest) => post<PromptEnhanceResult>('/prompts/enhance', body),

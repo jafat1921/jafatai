@@ -1,6 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { FALLBACK_MODELS } from '@/lib/models'
+import { withInto } from '@/stores/generateInto'
 import type { Job, MediaBatch, MediaItem, ModelInfo, ModelType, Project, ProjectSettings, VideoGenerateRequest } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
@@ -56,7 +57,7 @@ export function useUpdateProjectSettings(projectId: string) {
 export function useVideoGenerate() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: VideoGenerateRequest) => api.videos.generate(body),
+    mutationFn: (body: VideoGenerateRequest) => api.videos.generate(withInto('video', body)),
     onSuccess: (res) => {
       const batch = res as Partial<MediaBatch>
       const single = res as MediaItem & { job?: Job | null }

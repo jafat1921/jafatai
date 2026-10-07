@@ -19,6 +19,7 @@ from app import brand
 from app import library as lib
 from app import mentions as mn
 from app import models_catalog as mc
+from app import organise as org
 from app import prompt_enhance, uploads
 from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db
@@ -56,14 +57,27 @@ def list_media(
     tag: str | None = Query(None, max_length=40),
     project_id: str | None = None,
     include: str | None = None,
+    folder_id: str | None = None,
+    favourite: bool = False,
     limit: int = Query(40, ge=1, le=lib.MAX_LIMIT),
     cursor: str | None = None,
     db: Session = Depends(get_db),
     cur: CurrentUser = Depends(get_current_user),
 ):
+    if folder_id:
+        _folder(db, cur.workspace_id, folder_id)
+    sc = org.scope(db, cur.workspace_id, cur.id, folder_id, favourite)
     items, nxt = lib.list_media(db, cur.workspace_id, kind=kind, origin=origin, q=q, tag=tag, project_id=project_id,
-                                include_project="project" in (include or "").split(","), limit=limit, cursor=cursor)
-    return MediaPage(items=items, next_cursor=nxt)
+                                include_project="project" in (include or "").split(","), limit=limit, cursor=cursor,
+                                scope=sc)
+    return MediaPage(items=org.annotate(db, cur.workspace_id, cur.id, items), next_cursor=nxt)
+
+
+def _folder(db: Session, workspace_id: str, folder_id: str | None):
+    try:
+        return org.owned_folder(db, workspace_id, folder_id)
+    except org.OrganiseError as e:
+        raise HTTPException(404, str(e)) from None
 
 
 def _store_upload(db: Session, cur: CurrentUser, got: uploads.Received, folder: Path, rel_folder: str) -> MediaItem:
@@ -114,7 +128,7 @@ def get_media_item(media_id: str, db: Session = Depends(get_db), cur: CurrentUse
     out = lib.detail(db, cur.workspace_id, media_id) if _UUID.match(media_id) else None
     if out is None:
         raise HTTPException(404, "Media not found")
-    return out
+    return org.annotate(db, cur.workspace_id, cur.id, [out])[0]
 
 
 @router.patch("/media/{media_id}", response_model=MediaItemOut)
@@ -136,6 +150,7 @@ def patch_media(media_id: str, body: MediaPatch, db: Session = Depends(get_db),
 def delete_media(media_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     item = _owned_item(db, media_id, cur.workspace_id)
     lib.delete_item(db, item)
+    org.forget(db, cur.workspace_id, [media_id])
     db.commit()
     return Response(status_code=204)
 
@@ -182,9 +197,10 @@ def regenerate_media(media_id: str, body: RegenerateIn, db: Session = Depends(ge
 
 # ---------------------------------------------------------------- image studio
 
-def _new_image_item(db: Session, cur: CurrentUser, title: str, prompt: str, params: dict, seed: int | None):
+def _new_image_item(db: Session, cur: CurrentUser, title: str, prompt: str, params: dict, seed: int | None,
+                    folder_id: str | None = None):
     item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="image", origin="generated", title=title,
-                     tags=[], width=params.get("width"), height=params.get("height"))
+                     tags=[], width=params.get("width"), height=params.get("height"), folder_id=folder_id)
     db.add(item)
     db.flush()
     g = enqueue_generation(db, workspace_id=cur.workspace_id, project_id=None, target_type="media",
@@ -207,6 +223,7 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
         raise HTTPException(422, f"Unknown style '{body.style}' (expected {', '.join(lib.STYLES)})")
     if not body.prompt.strip():
         raise HTTPException(422, "A prompt is required")
+    into = generate_into(db, cur.workspace_id, body.folder_id, "image")
     model, chosen = mc.choose(body.model, "image", mn.plain(body.prompt), count=body.count)
     speed = _speed(model, body)
     magic = prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "image",
@@ -239,12 +256,19 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
             params["speed"] = speed.id
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
-            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed)
+            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed, into)
         items.append(item)
         jobs.append(job)
     db.commit()
     return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs],
                          model_resolved=model.id, magic_prompt=magic)
+
+
+def generate_into(db: Session, workspace_id: str, folder_id: str | None, kind: str) -> str | None:
+    f = _folder(db, workspace_id, folder_id)
+    if f is not None and f.kind not in ("any", kind):
+        raise HTTPException(422, f"“{f.name}” only holds {f.kind}s")
+    return f.id if f else None
 
 
 def _speed(model: mc.Model, body) -> mc.Speed | None:
@@ -275,6 +299,7 @@ def _edit_source(db: Session, workspace_id: str, sid: str) -> tuple[str | None, 
 def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     if not body.instruction.strip():
         raise HTTPException(422, "Say what to change")
+    into = generate_into(db, cur.workspace_id, body.folder_id, "image")
     model, chosen = mc.choose(body.model, "edit", mn.plain(body.instruction), refs=len(body.source_ids))
     mc.check_refs(model, len(body.source_ids))
     sources = [_edit_source(db, cur.workspace_id, sid) for sid in body.source_ids]
@@ -298,7 +323,8 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
             params["mentions"] = mentioned.mentions
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
-            db, cur.workspace_id, body.brand_kit_id, instruction, params, edit=True, max_refs=model.max_refs or 3), seed)
+            db, cur.workspace_id, body.brand_kit_id, instruction, params, edit=True, max_refs=model.max_refs or 3), seed,
+            into)
         items.append(item)
         jobs.append(job)
     db.commit()
@@ -309,6 +335,7 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
 def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     if not body.prompt.strip():
         raise HTTPException(422, "Describe the picture you want")
+    into = generate_into(db, cur.workspace_id, body.folder_id, "image")
     model, chosen = mc.choose(body.model, "image", body.prompt, count=body.count)
     reason = mc.capability_unavailable(model, "i2i")
     if reason:
@@ -339,7 +366,7 @@ def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = D
             params["mentions"] = mentioned.mentions
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
-            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed)
+            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed, into)
         items.append(item)
         jobs.append(job)
     db.commit()
@@ -407,6 +434,7 @@ def dashboard(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_curr
                           .order_by(Project.updated_at.desc()).limit(6)).all()
     videos, _ = lib.list_media(db, ws, kind="video", include_project=True, limit=6)
     images, _ = lib.list_media(db, ws, kind="image", limit=8)
+    org.annotate(db, ws, cur.id, videos + images)
     running = db.scalars(select(Job).where(Job.workspace_id == ws, Job.status.in_(("queued", "running")))
                          .order_by(Job.created_at.desc()).limit(20)).all()
     quick = [r.model_dump(mode="json") for r in recent(db, cur)[:4]]

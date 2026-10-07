@@ -8,6 +8,7 @@ import { UpscaleDialog } from '@/features/upscale/UpscaleDialog'
 import { useDeleteMedia, useMediaItem, useMediaRegenerate } from '@/hooks/useMedia'
 import { mediaAlt, mediaGeneration } from '@/lib/media'
 import { modelUsedId } from '@/lib/models'
+import { upscaleInfo } from '@/lib/upscale'
 import type { MediaDetail, MediaItem, RegenerateMode } from '@/lib/types'
 import { useFavourites } from '@/stores/favourites'
 import { trackJobs } from '@/stores/toasts'
@@ -20,6 +21,9 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
   const p = { ...(item.params ?? {}), ...(gen?.params ?? {}) }
   const w = (p.width as number | undefined) ?? item.width
   const h = (p.height as number | undefined) ?? item.height
+  // an upscaled version compares against the one it was made from
+  const up = gen ? upscaleInfo(gen) : null
+  const source = up?.sourceId ? detail?.versions?.find((v) => v.id === up.sourceId && v.media_url) : undefined
   return {
     key: item.id,
     kind: item.kind,
@@ -35,6 +39,7 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
     projectId: item.project_id,
     generationId: item.generation_id,
     favourite: fav,
+    compare: source?.media_url ? { src: source.media_url, label: `Original · v${source.version}`, afterLabel: `Upscaled · v${gen?.version ?? ''}`.trim() } : null,
   }
 }
 

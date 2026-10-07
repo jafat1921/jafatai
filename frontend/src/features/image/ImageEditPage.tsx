@@ -113,6 +113,7 @@ export function ImageEditPage() {
       ]}
     >
       <PromptDock
+        into="image"
         title="Edit Image"
         icon={<Brush aria-hidden className="size-4 text-studio-accent-hover" />}
         refs={

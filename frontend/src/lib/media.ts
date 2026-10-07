@@ -32,3 +32,14 @@ export function mediaGeneration(item: MediaItem, version?: Generation): Generati
 export const downloadUrl = (generationId: string) => `/api/generations/${generationId}/download`
 
 export const mediaAlt = (item: Pick<MediaItem, 'title' | 'prompt' | 'kind'>) => item.title || item.prompt || (item.kind === 'video' ? 'Video' : 'Image')
+
+/** The server's name for a Library row: project results are "gen:<generation id>" (contract v8 P4). */
+export const mediaRef = (item: Pick<MediaItem, 'id' | 'origin'>) => (item.origin === 'project' ? `gen:${item.id}` : item.id)
+
+/** Where an object-contain picture of natural size nw×nh actually sits inside a w×h box. */
+export function containedRect(w: number, h: number, nw: number, nh: number) {
+  const s = Math.min(w / nw, h / nh)
+  const dw = nw * s
+  const dh = nh * s
+  return { x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh }
+}

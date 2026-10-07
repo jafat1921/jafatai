@@ -152,3 +152,62 @@ The autopilot job's `result` gains:
 
 "Leave — we'll notify you" on the progress page needs no API: the jobs tray tracks the autopilot job and toasts when it ends.
 
+
+## P4: organisation (folders, favourites, saved filters, batch, before/after, Blueprints)
+
+Migration **0008** (additive): tables `folder`, `folder_link`, `favourite`, `saved_filter`, and a nullable `media_item.folder_id` (indexed, not an FK; cleared in code when a folder goes). Existing items read back unfiled.
+
+### Refs
+
+A **ref** names one Library row. A standalone item is its MediaItem id. A project result (a finished render or an approved still, which are never copied into `media_item`) is `gen:<generation id>`. Bare generation ids are accepted and normalised, so favourites from the old browser-only store still resolve. Responses always use the canonical form.
+
+`MediaItem` gains `folder_id: string | null` (project rows: from their link) and `favourite: bool` (the caller's own heart).
+
+### Folders
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/folders?kind=image\|video` | | `Folder[]` `{id, name, parent_id, kind: any\|image\|video, sort, item_count, created_at, updated_at}`. `kind` keeps `any` folders too |
+| POST | `/folders` | `{name, parent_id?, kind?="any"}` | `201 Folder`. A sub-folder of a typed folder takes the parent's kind. `422` deeper than 6 levels |
+| PATCH | `/folders/{id}` | `{name?, parent_id?, sort?}` | `Folder`. `parent_id: ""` moves it to the top. `422` for a cycle |
+| DELETE | `/folders/{id}` | | `204`. Sub-folders, items and links move up to the parent (links are dropped at the top level). Nothing in the library is deleted |
+| POST | `/media/move` | `{refs: [1..500], folder_id: string \| null}` | `{action:"move", done: refs[], skipped: [{ref, reason}], jobs: []}`. `null` takes them out of every folder. Standalone items set `folder_id`; project rows get a `folder_link`, never a copy. Typed folders skip the other kind |
+
+`GET /media` takes `folder_id` (that folder only, not its sub-folders; `404` for a stranger's folder) and `favourite=1`; both combine with every other filter. Project rows appear in a folder when linked (still subject to `origin` / `include`).
+
+### Favourites and saved filters
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/favourites` | | `{refs}` for the current user |
+| POST | `/favourites/toggle` | `{ref, on?}` (`on` omitted flips it) | `{ref, favourite}`; `404` unknown ref |
+| POST | `/favourites/import` | `{refs: [..2000]}` | `{refs, imported, skipped}`. One-off hand-over from localStorage; unknown ids are dropped |
+| GET | `/saved-filters` | | `SavedFilter[]` `{id, name, query, created_at, updated_at}` (per user) |
+| POST | `/saved-filters` | `{name, query}` | `201 SavedFilter`; `422` past 4 kB of query |
+| PATCH / DELETE | `/saved-filters/{id}` | `{name?, query?}` | `SavedFilter` / `204` |
+
+`query` is opaque to the server. The Library stores `{kind, origin?, q?, tag?, favourite?, folder_id?}`. Deleting media (single or batch) drops its hearts and folder links.
+
+The frontend syncs hearts on app start: if `mixai.favourites` exists in localStorage it is sent to `/favourites/import` once and removed; otherwise `GET /favourites`. A `404` (older server) keeps the browser-only behaviour.
+
+### Batch
+
+`POST /media/batch` `{action, refs: [1..500], options}` → `{action, done, skipped: [{ref, reason}], jobs}`. Unknown refs are skipped with `"Not found"`; one bad item never fails the batch.
+
+| action | options | Behaviour |
+|---|---|---|
+| `delete` | | Standalone items only (with all versions and files). Project rows are skipped: "Project results are changed inside their project" |
+| `tag` | `{add?: [], remove?: []}` | Standalone only; `422` when both are empty |
+| `move` | `{folder_id}` | Same as `/media/move` |
+| `upscale` | `{image?: {engine, target}, video?: {engine, target}}` | One upscale job per item on its current version (same rules as `POST /generations/{id}/upscale`). An item the engine can't take is skipped with the reason |
+| `download` | | One `media_zip` job (CPU, priority 50, ledger kind `export`). `422` when nothing has a finished file; unfinished items are skipped |
+
+The `media_zip` job writes `DATA_DIR/workspaces/{ws}/exports/{job_id}.zip` (stored, not deflated; names from titles, de-duplicated) and sets `result: {file, bytes, count, missing, download_url}`. `GET /exports/{job_id}/download` streams it (`409` until done, `410` if the file is gone, `404` for another workspace's job).
+
+### Generate into…
+
+`POST /images/generate`, `/images/edit`, `/images/img2img` and `/videos/generate` take `folder_id`: new items land in that folder. `404` unknown folder, `422` when the folder holds only the other kind. The dock shows an "Into folder" chip once any folder exists.
+
+### Before / after, Blueprints
+
+No API. The before/after slider and loupe read the existing versions (`params.upscale.source_id`). Home Blueprints use `POST /templates/{id}/start` and plain routes; "Instant brand" cards show when `GET /brand-kits` returns a kit.

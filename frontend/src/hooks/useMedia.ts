@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { tileState } from '@/lib/images'
+import { withInto } from '@/stores/generateInto'
 import type { Generation, ImageEditRequest, ImageGenerateRequest, Img2ImgRequest, MediaDetail, MediaItem, MediaKind, MediaOrigin, MediaPage, MediaQuery, RegenerateMode } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob, useJobs } from './useJobs'
@@ -17,12 +18,20 @@ export const LIBRARY_ORIGINS: { value: OriginFilter; label: string }[] = [
 ]
 
 /** Pure: the list query for the chosen filters. "All" includes approved project results. */
-export function libraryFilter(kind: MediaKind, origin: OriginFilter, q: string, tag: string | null): MediaFilter {
+export function libraryFilter(
+  kind: MediaKind,
+  origin: OriginFilter,
+  q: string,
+  tag: string | null,
+  scope: { folderId?: string | null; favourite?: boolean } = {},
+): MediaFilter {
   const f: MediaFilter = { kind }
   if (origin === 'all') f.include = 'project'
   else f.origin = origin
   if (q.trim()) f.q = q.trim()
   if (tag) f.tag = tag
+  if (scope.folderId) f.folder_id = scope.folderId
+  if (scope.favourite) f.favourite = 1
   return f
 }
 
@@ -45,7 +54,8 @@ export function useMediaItem(id: string | null | undefined) {
 
 // would the server have put this item in that list? (text and tag searches are left to the server)
 function belongs(filter: MediaFilter, item: MediaItem) {
-  if (filter.q || filter.tag) return false
+  if (filter.q || filter.tag || filter.favourite) return false
+  if (filter.folder_id && filter.folder_id !== item.folder_id) return false
   if (filter.kind && filter.kind !== item.kind) return false
   if (filter.origin && filter.origin !== item.origin) return false
   if (filter.project_id && filter.project_id !== item.project_id) return false
@@ -94,9 +104,9 @@ function useBatch<B>(fn: (body: B) => ReturnType<typeof api.images.generate>) {
   })
 }
 
-export const useImageGenerate = () => useBatch((body: ImageGenerateRequest) => api.images.generate(body))
-export const useImageEdit = () => useBatch((body: ImageEditRequest) => api.images.edit(body))
-export const useImg2Img = () => useBatch((body: Img2ImgRequest) => api.images.img2img(body))
+export const useImageGenerate = () => useBatch((body: ImageGenerateRequest) => api.images.generate(withInto('image', body)))
+export const useImageEdit = () => useBatch((body: ImageEditRequest) => api.images.edit(withInto('image', body)))
+export const useImg2Img = () => useBatch((body: Img2ImgRequest) => api.images.img2img(withInto('image', body)))
 
 export function useMediaRegenerate() {
   const qc = useQueryClient()

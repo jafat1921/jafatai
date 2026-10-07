@@ -3,6 +3,7 @@ import { ArrowRight, Inbox } from 'lucide-react'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { useJobs } from '@/hooks/useJobs'
+import { api } from '@/lib/api'
 import { etaText, jobOpenPath } from '@/lib/jobs'
 import type { RailItem } from '@/lib/nav'
 import { isActiveJob, jobLabel } from '@/lib/status'
@@ -18,12 +19,20 @@ function TrayRow({ job, to }: { job: Job; to: string }) {
     <li className="flex flex-col gap-1.5 rounded-[6px] border border-studio-border bg-studio-raised p-2">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-body font-medium">{jobLabel(job.type)}</span>
-        <PopoverClose asChild>
-          <Link to={to} className="inline-flex items-center gap-0.5 rounded-[4px] px-1 text-small text-studio-accent-hover underline-offset-2 hover:underline">
-            Open
-            <span className="sr-only"> {jobLabel(job.type)}</span>
-          </Link>
-        </PopoverClose>
+        {job.type === 'media_zip' && job.status === 'done' ? (
+          // the finished zip is a file to save, not a page to open
+          <a href={api.exportUrl(job.id)} download className="inline-flex items-center gap-0.5 rounded-[4px] px-1 text-small text-studio-accent-hover underline-offset-2 hover:underline">
+            Download
+            <span className="sr-only"> the zip</span>
+          </a>
+        ) : (
+          <PopoverClose asChild>
+            <Link to={to} className="inline-flex items-center gap-0.5 rounded-[4px] px-1 text-small text-studio-accent-hover underline-offset-2 hover:underline">
+              Open
+              <span className="sr-only"> {jobLabel(job.type)}</span>
+            </Link>
+          </PopoverClose>
+        )}
       </div>
       {isActiveJob(job.status) ? (
         <>

@@ -358,8 +358,57 @@ class MediaItem(Base):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # migration 0008; not an FK (ADD COLUMN on SQLite), cleared in code when a folder goes
+    folder_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
+
+
+class Folder(Base):
+    """A Library folder (polish P4). Nested through parent_id; deleting one hands its contents to the parent."""
+
+    __tablename__ = "folder"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    name: Mapped[str] = mapped_column(String(120))
+    parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(10), default="any", server_default="any")  # any | image | video
+    sort: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class FolderLink(Base):
+    """Files a project result (read-through row, ref "gen:<generation id>") into a folder without copying it."""
+
+    __tablename__ = "folder_link"
+    __table_args__ = (UniqueConstraint("workspace_id", "media_ref", name="uq_folder_link_ref"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    folder_id: Mapped[str] = mapped_column(String(36), ForeignKey("folder.id", ondelete="CASCADE"), index=True)
+    media_ref: Mapped[str] = mapped_column(String(60))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Favourite(Base):
+    __tablename__ = "favourite"
+    __table_args__ = (UniqueConstraint("user_id", "media_ref", name="uq_favourite_ref"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    media_ref: Mapped[str] = mapped_column(String(60))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class SavedFilter(Base):
+    __tablename__ = "saved_filter"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    query: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class BrandKit(Base):

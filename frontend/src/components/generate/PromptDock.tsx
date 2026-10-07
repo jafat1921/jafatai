@@ -5,7 +5,9 @@ import { MentionTextarea, type MentionOptions } from '@/components/mentions/Ment
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { readDockMode, writeDockMode, type DockMode } from '@/lib/dockPrefs'
+import type { MediaKind } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { IntoChip } from './DockChips'
 import { MagicPromptBar } from './MagicPromptBar'
 import type { MagicPrompt } from './useMagicPrompt'
 
@@ -27,6 +29,8 @@ interface Props {
   // source images, start/end frames: the "refs" area
   refs?: React.ReactNode
   chips: React.ReactNode
+  // P4 "Generate into…": shows the folder chip for this kind of result
+  into?: MediaKind
   // negative, seed, steps…; shown in Advanced mode
   advanced?: React.ReactNode
   magic?: MagicPrompt
@@ -57,6 +61,7 @@ export function PromptDock({
   belowPrompt,
   refs,
   chips,
+  into,
   advanced,
   magic,
   mentions = {},
@@ -194,6 +199,7 @@ export function PromptDock({
         <div id={`${uid}-opts`} className="flex flex-col gap-3">
           <div role="group" aria-label="Settings" className="flex flex-wrap items-center gap-1.5">
             {chips}
+            {into && <IntoChip kind={into} />}
           </div>
           {advanced && mode === 'advanced' && (
             <div role="group" aria-label="Advanced settings" className="rounded-[6px] border border-studio-border bg-studio-raised/60 p-3">

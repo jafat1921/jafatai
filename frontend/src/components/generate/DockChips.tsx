@@ -1,10 +1,12 @@
-import { Boxes, Hash, Palette, RectangleHorizontal, Stamp } from 'lucide-react'
+import { Boxes, FolderInput, Hash, Palette, RectangleHorizontal, Stamp } from 'lucide-react'
 import { BrandChip } from '@/components/brand/BrandChip'
 import { ChipGroup } from '@/components/studio/chip'
 import { ModelPicker } from '@/components/models/ModelPicker'
 import { SpeedPicker } from '@/components/models/SpeedPicker'
 import type { BrandChoice } from '@/hooks/useBrandKits'
-import type { ModelInfo } from '@/lib/types'
+import { useFolders } from '@/hooks/useLibraryOrg'
+import { useGenerateInto } from '@/stores/generateInto'
+import type { MediaKind, ModelInfo } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { DockChip } from './DockChip'
 
@@ -84,6 +86,25 @@ export function StyleChip<T extends string>({
   return (
     <DockChip name="Style" value={label} icon={<Palette aria-hidden />} active={!!value && allowEmpty}>
       <ChipGroup label="Style" options={options} value={value} onChange={onChange} allowEmpty={allowEmpty} />
+    </DockChip>
+  )
+}
+
+/**
+ * "Generate into…" (P4): which Library folder new results land in. Hidden until there is a folder,
+ * so the dock stays as it was for people who never file anything.
+ */
+export function IntoChip({ kind }: { kind: MediaKind }) {
+  const { folders } = useFolders(kind)
+  const into = useGenerateInto((s) => s.into[kind])
+  const setInto = useGenerateInto((s) => s.set)
+  const picked = folders.find((f) => f.id === into)
+  if (!folders.length) return null
+  const options = folders.map((f) => ({ value: f.id, label: f.name }))
+  return (
+    <DockChip name="Into folder" showName value={picked?.name ?? 'Library'} icon={<FolderInput aria-hidden />} active={!!picked}>
+      <ChipGroup label="Folder" options={options} value={picked?.id ?? null} onChange={(v) => setInto(kind, v)} />
+      <p className="text-small text-studio-muted">Generate into… New {kind}s are filed here as they're made. Pick the folder again to stop.</p>
     </DockChip>
   )
 }

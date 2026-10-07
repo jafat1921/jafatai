@@ -247,10 +247,51 @@ def test_0007_adds_shot_camera_rack(tmp_path):
     con.commit()
     con.close()
 
-    _alembic(db, "upgrade", "head")
+    _alembic(db, "upgrade", "0007")
     con = sqlite3.connect(db)
     assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0007"
     assert con.execute("SELECT camera, camera_rack, brand_placements FROM shot").fetchall() == [("slow dolly", "{}", "[]")]
     con.close()
     _alembic(db, "downgrade", "0006")
+    _alembic(db, "upgrade", "head")
+
+
+def test_0008_adds_library_folders_and_keeps_media(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0007")
+    con = sqlite3.connect(db)
+    now = "2026-10-07 20:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    con.execute("INSERT INTO user (id, email, display_name, password_hash, is_active, created_at)"
+                " VALUES ('u1', 'a@b.c', 'A', 'x', 1, ?)", (now,))
+    con.execute("INSERT INTO media_item (id, workspace_id, kind, origin, title, tags, created_at, updated_at)"
+                " VALUES ('m1', 'w1', 'image', 'upload', 'Beach', '[\"sea\"]', ?, ?)", (now, now))
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "head")
+    con = sqlite3.connect(db)
+    con.execute("PRAGMA foreign_keys=ON")
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0008"
+    assert con.execute("SELECT id, title, tags, folder_id FROM media_item").fetchall() == [("m1", "Beach", '["sea"]', None)]
+    # raw inserts from older code paths pick up the server defaults
+    con.execute("INSERT INTO folder (id, workspace_id, name, created_at, updated_at) VALUES ('f1', 'w1', 'Ads', ?, ?)",
+                (now, now))
+    assert con.execute("SELECT kind, sort, parent_id FROM folder").fetchone() == ("any", 0, None)
+    con.execute("INSERT INTO folder_link (id, workspace_id, folder_id, media_ref, created_at)"
+                " VALUES ('l1', 'w1', 'f1', 'gen:g1', ?)", (now,))
+    con.execute("INSERT INTO favourite (id, workspace_id, user_id, media_ref, created_at) VALUES ('v1', 'w1', 'u1', 'm1', ?)",
+                (now,))
+    con.execute("INSERT INTO saved_filter (id, workspace_id, user_id, name, created_at, updated_at)"
+                " VALUES ('s1', 'w1', 'u1', 'Sea', ?, ?)", (now, now))
+    assert con.execute("SELECT query FROM saved_filter").fetchone() == ("{}",)
+    con.execute("DELETE FROM folder WHERE id = 'f1'")
+    assert con.execute("SELECT count(*) FROM folder_link").fetchone()[0] == 0  # links go with their folder
+    con.commit()
+    con.close()
+
+    _alembic(db, "downgrade", "0007")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT id, title FROM media_item").fetchall() == [("m1", "Beach")]
+    con.close()
     _alembic(db, "upgrade", "head")

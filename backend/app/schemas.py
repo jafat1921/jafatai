@@ -651,6 +651,9 @@ class MediaItemOut(BaseModel):
     created_at: Utc
     updated_at: Utc
     versions_count: int = 1
+    # polish P4
+    folder_id: str | None = None
+    favourite: bool = False
 
 
 class MediaDetailOut(MediaItemOut):
@@ -685,6 +688,7 @@ class ImageGenerateIn(BaseModel):
     brand_kit_id: str | None = None  # contract v7: palette/look in the prompt, brand pass on the result
     magic_prompt: MagicMode | None = None  # None: settings.magic_prompt_default
     prompt_enhanced: bool = False  # the dock already ran /prompts/enhance; don't do it again
+    folder_id: str | None = None  # polish P4 "Generate into…": the new items land in this folder
 
 
 class ImageEditIn(BaseModel):
@@ -697,6 +701,7 @@ class ImageEditIn(BaseModel):
     title: str | None = Field(None, max_length=300)
     model: str | None = Field(None, max_length=60)
     brand_kit_id: str | None = None  # contract v7: also adds product refs while there's room
+    folder_id: str | None = None  # polish P4 "Generate into…": the new items land in this folder
 
 
 VideoAspect = Literal["16:9", "9:16", "1:1", "4:3", "2.39:1"]
@@ -718,6 +723,7 @@ class VideoGenerateIn(BaseModel):
     prompt_enhanced: bool = False
     quality: Literal["standard", "hq"] | None = None  # only read with model "auto"
     camera: Camera | None = None  # polish P2: written into the motion prompt
+    folder_id: str | None = None  # polish P4 "Generate into…": the new items land in this folder
 
 
 class Img2ImgIn(BaseModel):
@@ -734,6 +740,7 @@ class Img2ImgIn(BaseModel):
     brand_kit_id: str | None = None
     magic_prompt: MagicMode | None = None
     prompt_enhanced: bool = False
+    folder_id: str | None = None
 
 
 class VideoGenerateOut(MediaItemOut):
@@ -770,3 +777,91 @@ class DashboardOut(BaseModel):
     recent_images: list[MediaItemOut]
     running_jobs: list[JobOut]
     quick_recent: list[dict[str, Any]]
+
+
+# polish P4: library organisation
+FolderKind = Literal["any", "image", "video"]
+
+
+class FolderIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    parent_id: str | None = None
+    kind: FolderKind = "any"
+
+
+class FolderPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    # "" moves it to the top level; leave it out to keep the parent
+    parent_id: str | None = None
+    sort: int | None = None
+
+
+class FolderOut(Out):
+    id: str
+    name: str
+    parent_id: str | None = None
+    kind: str
+    sort: int = 0
+    item_count: int = 0
+    created_at: Utc
+    updated_at: Utc
+
+
+class MoveIn(BaseModel):
+    refs: list[str] = Field(min_length=1, max_length=500)
+    folder_id: str | None = None  # None: out of every folder
+
+
+class BatchOut(BaseModel):
+    action: str
+    done: list[str] = []
+    skipped: list[dict[str, str]] = []  # [{ref, reason}]
+    jobs: list[JobOut] = []
+
+
+class FavouriteIn(BaseModel):
+    ref: str = Field(min_length=1, max_length=60)
+    on: bool | None = None  # None flips it
+
+
+class FavouriteOut(BaseModel):
+    ref: str
+    favourite: bool
+
+
+class FavouritesImportIn(BaseModel):
+    refs: list[str] = Field(max_length=2000)
+
+
+class FavouritesOut(BaseModel):
+    refs: list[str]
+    imported: int = 0
+    skipped: int = 0
+
+
+class SavedFilterIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    query: dict[str, Any] = {}
+
+
+class SavedFilterPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=80)
+    query: dict[str, Any] | None = None
+
+
+class SavedFilterOut(Out):
+    id: str
+    name: str
+    query: dict[str, Any]
+    created_at: Utc
+    updated_at: Utc
+
+
+BatchAction = Literal["delete", "download", "upscale", "move", "tag"]
+
+
+class BatchIn(BaseModel):
+    action: BatchAction
+    refs: list[str] = Field(min_length=1, max_length=500)
+    # move: {folder_id}; tag: {add: [], remove: []}; upscale: {image: {engine, target}, video: {engine, target}}
+    options: dict[str, Any] = {}

@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router'
 import { Tabs } from '@/components/ui/tabs'
 import { useEventStream } from '@/hooks/useEventStream'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useF6Cycle } from '@/hooks/useF6Cycle'
 import { isStage } from '@/lib/stages'
+import { useFavourites } from '@/stores/favourites'
 import { useUi } from '@/stores/ui'
 import { TopBar } from './TopBar'
 import { QueueDrawer } from './QueueDrawer'
@@ -27,6 +29,10 @@ export function AppShell() {
   const mobile = useBreakpoint() === 'mobile'
   useEventStream(true)
   useF6Cycle()
+  // hearts live on the server since P4; the first visit also hands over the old browser-only ones
+  useEffect(() => {
+    void useFavourites.getState().sync()
+  }, [])
 
   // The rail takes 72 px beside everything; phones get a bottom bar instead.
   // The Tabs root spans the top bar (tab list) and the workspace (tab panels) so

@@ -96,6 +96,7 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
 
   return (
     <PromptDock
+      into="video"
       title="Create Video"
       icon={<Film aria-hidden className="size-4 text-studio-accent-hover" />}
       headerExtra={<p className="text-small text-studio-muted max-lg:hidden">One prompt, one clip. For a whole film, use Quick Video.</p>}

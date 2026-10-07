@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { Columns2, SplitSquareHorizontal } from 'lucide-react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { BeforeAfter } from '@/components/media/BeforeAfter'
 import { imageResolutionBadge } from '@/lib/imageUpscale'
 import type { Generation } from '@/lib/types'
 import { ZoomView, type CompareMode, type ZoomImage } from './ZoomView'
@@ -27,6 +28,20 @@ export function ImageStage({
     url: partner.media_url!,
     alt: `${subject}, version ${partner.version}`,
     label: tagFor(partner),
+  }
+  // the wipe is the shared before/after slider (P4): draggable divider, keys, and the 1:1 loupe
+  if (partner && other && mode === 'swipe') {
+    return (
+      <BeforeAfter
+        key={`${partner.id}-${current.id}`}
+        before={other.url}
+        after={image.url}
+        alt={subject}
+        beforeLabel={other.label ?? `Version ${partner.version}`}
+        afterLabel={image.label ?? `Version ${current.version}`}
+        className="size-full [&>figcaption]:px-2 [&>figcaption]:pb-1 [&>figcaption]:text-studio-on-dark-muted"
+      />
+    )
   }
   return <ZoomView key={current.id} image={image} other={other} mode={partner ? mode : 'off'} />
 }

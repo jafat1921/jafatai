@@ -57,6 +57,9 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     prompt = body.prompt.strip()
     if not mn.plain(prompt).strip():
         raise HTTPException(422, "A prompt is required")
+    from app.api.library import generate_into
+
+    into = generate_into(db, cur.workspace_id, body.folder_id, "video")
     # the video models take no reference pictures: mentions become names plus a short description
     mentioned = mn.resolve(db, cur.workspace_id, prompt, budget=0)
     prompt = mentioned.prompt
@@ -110,7 +113,7 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     prompt, params = brand.apply_to_request(db, cur.workspace_id, body.brand_kit_id, prompt, params)
     title = (body.title or "").strip() or lib.short_title(mn.plain(body.prompt))
     item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="video", origin="generated", title=title,
-                     tags=[], width=w, height=h, duration_s=params["duration_s"])
+                     tags=[], width=w, height=h, duration_s=params["duration_s"], folder_id=into)
     db.add(item)
     db.flush()
     g = enqueue_generation(db, workspace_id=cur.workspace_id, project_id=None, target_type="media",

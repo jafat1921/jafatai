@@ -31,7 +31,7 @@ describe('library filters', () => {
     const user = userEvent.setup()
 
     expect(await screen.findByRole('img', { name: 'Reef at dawn' })).toBeInTheDocument()
-    expect(calls[0]).toMatchObject({ path: '/media', query: { kind: 'image', include: 'project', limit: '40' } })
+    expect(calls.find((c) => c.path === '/media')).toMatchObject({ query: { kind: 'image', include: 'project', limit: '40' } })
     // project rows can't be deleted (the server answers 409)
     expect(within(screen.getByRole('group', { name: 'Actions for Approved frame' })).queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument()
 

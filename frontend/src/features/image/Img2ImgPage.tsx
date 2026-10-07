@@ -23,7 +23,7 @@ import { defaultSpeed, normalizeModelId } from '@/lib/models'
 import type { Img2ImgRequest } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
-import { BeforeAfter } from './BeforeAfter'
+import { BeforeAfter } from '@/components/media/BeforeAfter'
 import { CountPicker, ImageAspectTiles } from './controls'
 import { StrengthSlider } from './StrengthSlider'
 
@@ -99,6 +99,7 @@ export function Img2ImgPage() {
       ]}
     >
       <PromptDock
+        into="image"
         title="Image to Image"
         icon={<Shuffle aria-hidden className="size-4 text-studio-accent-hover" />}
         headerExtra={<p className="text-small text-studio-muted max-lg:hidden">The layout stays, the look changes.</p>}
@@ -164,7 +165,7 @@ export function Img2ImgPage() {
       {latest?.media_url && sourceUrl && (
         <section aria-label="Before and after" className="max-w-3xl">
           <h2 className="section-label mb-3">Before and after</h2>
-          <BeforeAfter before={sourceUrl} after={latest.media_url} alt={latest.title || form.prompt} />
+          <BeforeAfter before={sourceUrl} after={latest.media_url} alt={latest.title || form.prompt} aspectClass="aspect-[4/3]" />
         </section>
       )}
 

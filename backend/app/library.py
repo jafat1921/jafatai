@@ -7,6 +7,7 @@ MediaItem shape on the fly, keyed by their generation id, so nothing is copied o
 import base64
 import logging
 import math
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,14 @@ PROJECT_IMAGE_KINDS = ("portrait", "establishing", "keyframe_start", "keyframe_m
 KIND_LABELS = {"portrait": "Portrait", "establishing": "Establishing", "keyframe_start": "Start frame",
                "keyframe_mid": "Mid frame", "keyframe_end": "End frame"}
 MAX_LIMIT = 100
+
+
+@dataclass
+class Scope:
+    """Narrows a listing to a folder and/or favourites (P4). None on a field means no restriction."""
+    folder_id: str | None = None
+    media_ids: set[str] | None = None
+    gen_ids: set[str] | None = None
 
 
 def media_dir(workspace_id: str) -> tuple[Path, str]:
@@ -129,6 +138,7 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
             # TODO: small webp thumbs for big uploads; the grid loads full 40 MB images for now
             thumb_url=media_url(i.thumb_path) if i.thumb_path else (url if i.kind == "image" else None),
             created_at=i.created_at, updated_at=i.updated_at, versions_count=counts.get(i.id, 1),
+            folder_id=i.folder_id,
         ))
     return out
 
@@ -231,8 +241,8 @@ def _project_rows(db: Session, workspace_id: str, *, kind: str | None, project_i
 
 def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origin: str | None = None,
                q: str | None = None, tag: str | None = None, project_id: str | None = None,
-               include_project: bool = False, limit: int = 40, cursor: str | None = None
-               ) -> tuple[list[MediaItemOut], str | None]:
+               include_project: bool = False, limit: int = 40, cursor: str | None = None,
+               scope: Scope | None = None) -> tuple[list[MediaItemOut], str | None]:
     limit = max(1, min(MAX_LIMIT, limit))
     after = parse_cursor(cursor)
     needle = (q or "").strip().lower()
@@ -249,6 +259,10 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
             stmt = stmt.where(MediaItem.origin == origin)
         if project_id:
             stmt = stmt.where(MediaItem.project_id == project_id)
+        if scope is not None and scope.folder_id:
+            stmt = stmt.where(MediaItem.folder_id == scope.folder_id)
+        if scope is not None and scope.media_ids is not None:
+            stmt = stmt.where(MediaItem.id.in_(scope.media_ids or {""}))
         if needle:
             like = f"%{needle}%"
             stmt = stmt.where(or_(func.lower(MediaItem.title).like(like),
@@ -263,8 +277,9 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
         stmt = stmt.order_by(MediaItem.created_at.desc(), MediaItem.id.desc()).limit(limit + 1)
         merged += [(i.created_at, i.id, i) for i in db.scalars(stmt)]
 
-    if (origin == "project" or (origin is None and include_project)) and not tag:
-        for g, row in _project_rows(db, workspace_id, kind=kind, project_id=project_id):
+    only = sorted(scope.gen_ids) if scope is not None and scope.gen_ids is not None else None
+    if (origin == "project" or (origin is None and include_project)) and not tag and only != []:
+        for g, row in _project_rows(db, workspace_id, kind=kind, project_id=project_id, only_ids=only):
             if needle and needle not in f"{row.title} {row.project_title or ''}".lower():
                 continue
             if after and (row.created_at, row.id) >= after:

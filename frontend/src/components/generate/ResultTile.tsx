@@ -1,4 +1,4 @@
-import { AlertTriangle, Film, Heart, ImageIcon, Play } from 'lucide-react'
+import { AlertTriangle, Check, Film, Heart, ImageIcon, Play } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { useJobs } from '@/hooks/useJobs'
 import { useTileState } from '@/hooks/useMedia'
@@ -6,6 +6,7 @@ import { formatDuration } from '@/lib/duration'
 import { tileRatio } from '@/lib/images'
 import { mediaAlt } from '@/lib/media'
 import { modelUsedId } from '@/lib/models'
+import { DRAG_MIME, type Mods } from '@/lib/selection'
 import type { Job, MediaItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useIsFavourite } from '@/stores/favourites'
@@ -22,6 +23,16 @@ function useQueuePosition(job: Job | undefined) {
   return i === -1 ? null : i + 1
 }
 
+/** Multi-select on a Library grid (P4). */
+export interface TileSelect {
+  selected: boolean
+  // something is already picked: a plain click on the picture selects instead of opening
+  active: boolean
+  onSelect: (mods: Mods) => void
+  // what a drag onto a folder carries (the whole selection when this tile is part of it)
+  dragRefs?: () => string[]
+}
+
 interface Props {
   item: MediaItem
   handlers: TileHandlers
@@ -30,10 +41,11 @@ interface Props {
   // force a cell shape (the Library keeps uniform cells)
   ratio?: string
   showTitle?: boolean
+  select?: TileSelect
   className?: string
 }
 
-export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, className }: Props) {
+export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, select, className }: Props) {
   const { state, gen, progress, job } = useTileState(item)
   const position = useQueuePosition(job)
   const fav = useIsFavourite(item.id)
@@ -43,8 +55,23 @@ export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, class
   const used = label(modelUsedId(gen?.params, item.params, { model: item.model }))
 
   return (
-    <div className={cn('group/tile flex min-w-0 flex-col gap-1', className)}>
-      <div className="darkroom relative w-full overflow-hidden rounded-[6px]" style={{ aspectRatio: ratio ?? tileRatio(item, aspectHint) }}>
+    <div
+      className={cn('group/tile flex min-w-0 flex-col gap-1', className)}
+      data-select-id={select ? item.id : undefined}
+      draggable={!!select?.dragRefs}
+      onDragStart={
+        select?.dragRefs
+          ? (e) => {
+              e.dataTransfer.setData(DRAG_MIME, JSON.stringify(select.dragRefs!()))
+              e.dataTransfer.effectAllowed = 'move'
+            }
+          : undefined
+      }
+    >
+      <div
+        className={cn('darkroom relative w-full overflow-hidden rounded-[6px]', select?.selected && 'ring-2 ring-studio-accent ring-offset-2 ring-offset-studio-bg')}
+        style={{ aspectRatio: ratio ?? tileRatio(item, aspectHint) }}
+      >
         {state === 'pending' ? (
           <div className="shimmer-dark flex size-full flex-col items-center justify-center gap-1.5 p-3 text-center text-studio-on-dark" role="status">
             <span className="font-mono text-heading">{progress != null ? `${Math.round(progress * 100)}%` : position ? `#${position}` : '…'}</span>
@@ -60,7 +87,15 @@ export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, class
             {(job?.error || gen?.note) && <span className="line-clamp-2 text-small text-studio-on-dark-muted">{job?.error ?? gen?.note}</span>}
           </div>
         ) : (
-          <button type="button" onClick={() => handlers.open(item)} className="block size-full" aria-label={`View ${alt}`}>
+          <button
+            type="button"
+            onClick={(e) => {
+              if (select && (select.active || e.shiftKey || e.ctrlKey || e.metaKey)) select.onSelect(e)
+              else handlers.open(item)
+            }}
+            className="block size-full"
+            aria-label={`View ${alt}`}
+          >
             {url && (item.kind === 'image' || item.thumb_url) ? (
               <img src={url} alt={alt} loading="lazy" className="size-full object-cover motion-safe:animate-fade-in" />
             ) : url ? (
@@ -78,8 +113,24 @@ export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, class
             <Progress value={progress} label={`${alt} progress`} />
           </div>
         )}
+        {select && (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={select.selected}
+            aria-label={`Select ${alt}`}
+            onClick={(e) => select.onSelect({ shiftKey: e.shiftKey, ctrlKey: true })}
+            className={cn(
+              'absolute left-1.5 top-1.5 z-10 flex size-6 items-center justify-center rounded-full border-2 border-studio-on-dark transition-opacity duration-150',
+              select.selected ? 'bg-studio-accent text-studio-accent-fg' : 'bg-studio-darkroom/60 text-transparent',
+              select.selected || select.active ? 'opacity-100' : 'opacity-0 group-hover/tile:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+            )}
+          >
+            <Check aria-hidden className="size-3.5" />
+          </button>
+        )}
         {fav && state !== 'pending' && (
-          <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-full bg-studio-darkroom/70 p-1 text-studio-on-dark">
+          <span className={cn('pointer-events-none absolute top-1.5 rounded-full bg-studio-darkroom/70 p-1 text-studio-on-dark', select ? 'left-9' : 'left-1.5')}>
             <Heart aria-hidden className="size-3 fill-current" />
             <span className="sr-only">Favourite</span>
           </span>

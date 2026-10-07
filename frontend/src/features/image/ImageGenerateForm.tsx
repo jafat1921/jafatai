@@ -114,6 +114,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
 
   return (
     <PromptDock
+      into="image"
       title="Create Image"
       icon={<Wand2 aria-hidden className="size-4 text-studio-accent-hover" />}
       headerExtra={

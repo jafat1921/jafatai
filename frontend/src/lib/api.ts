@@ -302,6 +302,7 @@ export const api = {
     regenerateChunk: (id: string, idx: number, body: { prompt?: string; seed?: number } = {}) =>
       post<Job>(`/generations/${id}/chunks/${idx}/regenerate`, body),
     upscale: (id: string, body: UpscaleRequest | ImageUpscaleRequest) => post<Job>(`/generations/${id}/upscale`, body),
+    get: (id: string) => get<Generation>(`/generations/${id}`),
   },
   reel: {
     get: (projectId: string) => get<Reel>(`/projects/${projectId}/reel`),

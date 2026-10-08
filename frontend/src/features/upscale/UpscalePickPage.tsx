@@ -8,8 +8,10 @@ import { MediaTile } from '@/components/media/MediaTile'
 import { UploadZone } from '@/components/media/UploadZone'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { mediaGeneration } from '@/lib/media'
-import type { ImageUpscaleEngineId, MediaItem, MediaKind, UpscaleEngineId } from '@/lib/types'
+import type { ImageUpscaleEngineId, Job, MediaItem, MediaKind, UpscaleEngineId } from '@/lib/types'
 import { ImageUpscaleDialog } from './ImageUpscaleDialog'
+import { UpscaleResults } from './UpscaleResults'
+import { forgetUpscale, loadUpscales, rememberUpscale } from '@/lib/upscaleHistory'
 import { UpscaleDialog } from './UpscaleDialog'
 
 const COPY: Record<MediaKind, { title: string; blurb: string; engines: string[] }> = {
@@ -29,6 +31,23 @@ const COPY: Record<MediaKind, { title: string; blurb: string; engines: string[] 
 export function UpscalePickPage({ kind }: { kind: MediaKind }) {
   const [params] = useSearchParams()
   const [source, setSource] = useState<MediaItem | null>(null)
+  const [recent, setRecent] = useState(() => loadUpscales(kind))
+  const queued = (job: Job) => {
+    if (!source || !job.generation_id) return
+    const original = mediaGeneration(source)
+    if (!original) return
+    setRecent(
+      rememberUpscale({
+        jobId: job.id,
+        sourceId: original.id,
+        resultId: job.generation_id,
+        kind,
+        label: source.title || (kind === 'image' ? 'Image' : 'Video'),
+        at: Date.now(),
+      }),
+    )
+    requestAnimationFrame(() => document.getElementById('upscale-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
   const list = useMediaList({ kind, include: 'project' })
   const items = flatItems(list.data).filter((m) => m.media_url || m.thumb_url)
   const copy = COPY[kind]
@@ -53,6 +72,8 @@ export function UpscalePickPage({ kind }: { kind: MediaKind }) {
             </Link>
           </p>
         </header>
+
+        <UpscaleResults entries={recent} onRemove={(id) => setRecent(forgetUpscale(id, kind))} />
 
         <UploadZone kinds={[kind]} multiple={false} onUploaded={setSource} />
 
@@ -93,12 +114,14 @@ export function UpscalePickPage({ kind }: { kind: MediaKind }) {
           subject="Image"
           initialEngine={preset as ImageUpscaleEngineId | undefined}
           onOpenChange={(o) => !o && setSource(null)}
+          onQueued={queued}
         />
       ) : (
         <UpscaleDialog
           render={source ? mediaGeneration(source) : null}
           initialEngine={preset as UpscaleEngineId | undefined}
           onOpenChange={(o) => !o && setSource(null)}
+          onQueued={queued}
         />
       )}
     </main>

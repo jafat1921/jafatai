@@ -2,7 +2,11 @@
 export function readJSON<T>(key: string, fallback: T): T {
   try {
     const raw = window.localStorage.getItem(key)
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw)
+    // lists are stored whole; merging them into an object would turn them into {0: …, 1: …}
+    if (Array.isArray(fallback)) return (Array.isArray(parsed) ? parsed : fallback) as T
+    return { ...fallback, ...parsed }
   } catch {
     return fallback
   }

@@ -10,7 +10,7 @@ import { ErrorState } from '@/components/studio/states'
 import { useUpscale, useUpscaleOptions, useVideoSize } from '@/hooks/useUpscale'
 import { modKey } from '@/lib/keyboard'
 import { renderInfo } from '@/lib/stitch'
-import type { Generation, UpscaleEngine, UpscaleEngineId, UpscaleTarget } from '@/lib/types'
+import type { Generation, Job, UpscaleEngine, UpscaleEngineId, UpscaleTarget } from '@/lib/types'
 import {
   TARGETS,
   aspectSize,
@@ -39,9 +39,10 @@ interface Props {
   aspectRatio?: string
   initialEngine?: UpscaleEngineId
   onOpenChange: (open: boolean) => void
+  onQueued?: (job: Job) => void
 }
 
-export function UpscaleDialog({ render, projectId, aspectRatio, initialEngine, onOpenChange }: Props) {
+export function UpscaleDialog({ render, projectId, aspectRatio, initialEngine, onOpenChange, onQueued }: Props) {
   return (
     <Dialog open={!!render} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -51,7 +52,10 @@ export function UpscaleDialog({ render, projectId, aspectRatio, initialEngine, o
             projectId={projectId}
             aspectRatio={aspectRatio}
             initialEngine={initialEngine}
-            onDone={() => onOpenChange(false)}
+            onDone={(job) => {
+              if (job) onQueued?.(job)
+              onOpenChange(false)
+            }}
           />
         )}
       </DialogContent>
@@ -65,7 +69,7 @@ function UpscaleForm({
   aspectRatio,
   initialEngine,
   onDone,
-}: Omit<Props, 'onOpenChange' | 'render'> & { render: Generation; onDone: () => void }) {
+}: Omit<Props, 'onOpenChange' | 'render' | 'onQueued'> & { render: Generation; onDone: (job?: Job) => void }) {
   const ids = { engine: useId(), target: useId() }
   const options = useUpscaleOptions()
   const upscale = useUpscale(projectId)
@@ -94,7 +98,7 @@ function UpscaleForm({
         onSuccess: (job) => {
           trackJobs([job], `${info.title} at ${chosen.label}`)
           announce(`Upscaling ${info.title} to ${chosen.label}.`)
-          onDone()
+          onDone(job)
         },
       },
     )
@@ -188,7 +192,7 @@ function UpscaleForm({
       {upscale.isError && <ErrorState compact title="Couldn't start the upscale" error={upscale.error} />}
 
       <DialogFooter className="mt-0">
-        <Button type="button" variant="ghost" onClick={onDone}>
+        <Button type="button" variant="ghost" onClick={() => onDone()}>
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={!canSubmit} loading={upscale.isPending} aria-keyshortcuts="Control+Enter">

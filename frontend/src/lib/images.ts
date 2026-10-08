@@ -32,6 +32,8 @@ export interface ImageForm {
   seed: string
   steps: string
   templateId?: string
+  // sample values for the template's [slots], shown as hints; never sent
+  examples?: Record<string, string>
   // contract-v6; left out of the body when unset so the server picks its default
   model?: string
   speed?: string

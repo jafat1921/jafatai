@@ -2,7 +2,7 @@ import type { BrandKit } from './brand'
 
 /**
  * Home "Blueprints" (P4): each card opens the right tool already filled in. Template recipes go
- * through POST /templates/{id}/start like the Templates page; the rest are plain routes.
+ * through POST /prompt-templates/{id}/start like the Prompt templates page; the rest are plain routes.
  */
 export interface Recipe {
   id: string

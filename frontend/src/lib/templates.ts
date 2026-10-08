@@ -8,12 +8,20 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const promptOf = (p: Prefill) => str(p.prompt) ?? str(p.prompt_scaffold) ?? ''
 
-/** What the router passes to a form opened from a template. Nothing is generated until the user confirms. */
+export function examplesOf(v: unknown): Record<string, string> | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const out = Object.fromEntries(Object.entries(v).filter(([, x]) => typeof x === 'string')) as Record<string, string>
+  return Object.keys(out).length ? out : undefined
+}
+
+/** What the router passes to a form opened from a prompt template. Nothing is generated until the user confirms. */
 export interface TemplatePrefill {
   templateId: string
   templateTitle: string
   prefill: Prefill
 }
+
+export const PROMPT_TEMPLATES_ROUTE = { image: '/image/prompt-templates', video: '/video/prompt-templates' } as const
 
 export const TARGET_ROUTE: Record<TemplateStart['target'], string> = {
   quick: '/video/quick',
@@ -39,6 +47,9 @@ export function imageFormFrom(p: Prefill, templateId?: string): ImageForm {
     count: count ? Math.min(4, Math.max(1, Math.round(count))) : DEFAULT_IMAGE_FORM.count,
     style: str(p.style) ?? null,
     templateId: templateId ?? str(p.template_id),
+    examples: examplesOf(p.examples),
+    // text-first templates ask for Qwen; the user can still switch
+    ...(str(p.model) ? { model: str(p.model) } : {}),
   }
 }
 
@@ -53,6 +64,8 @@ export function quickFormFrom(p: Prefill): Partial<QuickForm> {
   const style = str(p.style)
   if (QUICK_STYLES.some((s) => s.value === style)) out.style = style as QuickStyle
   if (typeof p.dialogue === 'boolean') out.dialogue = p.dialogue
+  const examples = examplesOf(p.examples)
+  if (examples) out.examples = examples
   return out
 }
 

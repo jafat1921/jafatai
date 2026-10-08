@@ -44,7 +44,7 @@ describe('Create Image page', () => {
     const created = [media('n1', { media_url: null, title: 'Lighthouse 1' }), media('n2', { media_url: null, title: 'Lighthouse 2' })]
     const calls = mockApi((method, path) => {
       if (path === '/media') return { items: [media('old', { title: 'Older image' })] }
-      if (path === '/templates') return []
+      if (path === '/prompt-templates') return []
       if (method === 'POST' && path === '/images/generate') return { items: created, jobs: [job('j1', { generation_id: 'g-n1' }), job('j2', { generation_id: 'g-n2' })] }
     })
     renderAt('/image/generate?model=z-image-turbo', [{ path: '/image/generate', element: <ImageGeneratePage /> }])
@@ -84,7 +84,7 @@ describe('Create Image page', () => {
   it('offers review actions on a finished image', async () => {
     const calls = mockApi((method, path) => {
       if (path === '/media') return { items: [media('m1', { title: 'Fox' })] }
-      if (path === '/templates') return []
+      if (path === '/prompt-templates') return []
       if (method === 'POST' && path === '/media/m1/regenerate') return job('r1')
     })
     renderAt('/image/generate', [{ path: '/image/generate', element: <ImageGeneratePage /> }])

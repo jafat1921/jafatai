@@ -17,7 +17,7 @@ function api(over: (method: string, path: string, body: unknown) => unknown = ()
     const hit = over(method, path, body)
     if (hit !== undefined) return hit
     if (path === '/media') return { items: [] }
-    if (path === '/templates') return []
+    if (path === '/prompt-templates') return []
     if (path === '/estimate' || path === '/prompts/enhance') return notFound()
     const id = path.match(/^\/media\/(\w+)$/)?.[1]
     if (id) return { ...media(id), versions: [] }

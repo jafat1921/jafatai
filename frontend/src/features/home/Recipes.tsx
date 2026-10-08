@@ -1,9 +1,9 @@
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { ArrowUpRight, Clapperboard, Film, ImageUpscale, LayoutGrid, Megaphone, Smartphone, Sparkles, Stamp, Type, Users } from 'lucide-react'
 import { useBrandKits } from '@/hooks/useBrandKits'
 import { useStartTemplate } from '@/hooks/useStudio'
 import { BRAND_RECIPES, defaultKit, RECIPES, recipeRoute, type Recipe } from '@/lib/recipes'
-import { TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
+import { PROMPT_TEMPLATES_ROUTE, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
 import { cn } from '@/lib/utils'
 
 const ICONS = {
@@ -78,6 +78,14 @@ export function Recipes() {
           Blueprints
         </h2>
         <span className="text-small text-studio-muted">Start from a recipe; you review everything before it runs.</span>
+        <span className="ml-auto flex gap-3 text-small">
+          <Link to={PROMPT_TEMPLATES_ROUTE.image} className="text-studio-accent-hover underline-offset-2 hover:underline">
+            Image prompt templates
+          </Link>
+          <Link to={PROMPT_TEMPLATES_ROUTE.video} className="text-studio-accent-hover underline-offset-2 hover:underline">
+            Video prompt templates
+          </Link>
+        </span>
       </div>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-3">
         {RECIPES.map((r) => (

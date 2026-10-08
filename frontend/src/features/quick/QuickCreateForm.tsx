@@ -94,7 +94,7 @@ export function QuickCreateForm({
       onPrompt={(v) => set('prompt', v)}
       placeholder="Describe your video… e.g. A lighthouse keeper rescues a stray fox during a winter storm"
       promptRef={field}
-      belowPrompt={<PlaceholderHint text={form.prompt} field={field} />}
+      belowPrompt={<PlaceholderHint text={form.prompt} field={field} examples={form.examples} />}
       chips={
         <>
           <DockChip name="Length" value={formatDuration(form.durationS)} icon={<Timer aria-hidden />}>

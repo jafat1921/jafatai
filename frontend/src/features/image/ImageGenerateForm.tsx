@@ -28,6 +28,7 @@ import { IMAGE_ASPECTS, IMAGE_STYLES, imagePayload, placeholdersIn, type ImageFo
 import { defaultSpeed, has } from '@/lib/models'
 import { MENTION_REFS } from '@/lib/mentions'
 import { imageFormFrom } from '@/lib/templates'
+import { TemplatePreview } from '@/features/templates/TemplatePreview'
 import type { ImageGenerateRequest } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
@@ -85,26 +86,29 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
       <DropdownMenuTrigger asChild>
         <Button type="button" size="sm" variant="ghost">
           <LayoutTemplate aria-hidden />
-          <span className="max-sm:sr-only">Start from a template</span>
+          <span className="max-sm:sr-only">Start from a prompt template</span>
           <ChevronDown aria-hidden />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel>Image templates</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="max-h-[70vh] w-80 overflow-y-auto">
+        <DropdownMenuLabel>Image prompt templates</DropdownMenuLabel>
         {templates.isPending && <p className="px-2 py-1.5 text-small text-studio-muted">Loading…</p>}
-        {templates.isError && <p className="px-2 py-1.5 text-small text-studio-muted">Templates aren't available right now.</p>}
+        {templates.isError && <p className="px-2 py-1.5 text-small text-studio-muted">Prompt templates aren't available right now.</p>}
         {templates.data?.map((t) => (
           <DropdownMenuItem
             key={t.id}
             onSelect={() => {
-              setForm({ ...imageFormFrom(t.defaults ?? {}, t.id), model: form.model, speed: form.speed })
+              const next = imageFormFrom({ ...(t.defaults ?? {}), examples: t.examples }, t.id)
+              // a text template brings Qwen along; otherwise keep the model the user picked
+              setForm({ ...next, model: next.model ?? form.model, speed: next.model ? undefined : form.speed })
               setFromTemplate(t.title)
-              announce(`Filled in from the ${t.title} template. Replace the highlighted words, then create.`)
+              announce(`Filled in from the ${t.title} prompt template. Replace the highlighted words, then create.`)
             }}
           >
-            <span className="flex flex-col">
+            <TemplatePreview t={t} decorative className="size-12 shrink-0 rounded-[4px]" iconClassName="size-4" />
+            <span className="flex min-w-0 flex-col">
               <span>{t.title}</span>
-              <span className="text-small text-studio-muted">{t.description}</span>
+              <span className="line-clamp-2 text-small text-studio-muted">{t.description}</span>
             </span>
           </DropdownMenuItem>
         ))}
@@ -119,7 +123,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
       icon={<Wand2 aria-hidden className="size-4 text-studio-accent-hover" />}
       headerExtra={
         <>
-          {fromTemplate && <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Template: {fromTemplate}</span>}
+          {fromTemplate && <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Prompt template: {fromTemplate}</span>}
           {templateMenu}
         </>
       }
@@ -136,7 +140,7 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
           </>
         ) : undefined
       }
-      belowPrompt={<PlaceholderHint text={form.prompt} field={field} />}
+      belowPrompt={<PlaceholderHint text={form.prompt} field={field} examples={form.examples} />}
       chips={
         <>
           <ModelChip

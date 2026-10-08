@@ -393,8 +393,8 @@ export const api = {
     logoReveal: (id: string, body: LogoRevealRequest) => post<{ item: MediaItem; job: Job }>(`/brand-kits/${id}/logo-reveal`, body),
   },
   templates: {
-    list: (type: 'video' | 'image') => get<Template[]>('/templates', { type }),
-    start: (id: string) => post<TemplateStart>(`/templates/${id}/start`),
+    list: (type: 'video' | 'image') => get<Template[]>('/prompt-templates', { type }),
+    start: (id: string) => post<TemplateStart>(`/prompt-templates/${id}/start`),
   },
   dashboard: () => get<Dashboard>('/dashboard'),
   // contract-v8 P4: library organisation

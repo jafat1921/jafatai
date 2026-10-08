@@ -25,7 +25,7 @@ export function QuickCreatePage() {
         key={location.key}
         expanded
         initial={initial}
-        note={tpl && <p className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Template: {tpl.templateTitle}</p>}
+        note={tpl && <p className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Prompt template: {tpl.templateTitle}</p>}
       />
       <RecentQuick />
     </GeneratorPage>

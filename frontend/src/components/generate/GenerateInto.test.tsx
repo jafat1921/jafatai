@@ -20,7 +20,7 @@ describe('Generate into…', () => {
     const calls = mockApi((method, path) => {
       if (path === '/folders') return folders
       if (path === '/media') return { items: [] }
-      if (path === '/templates') return []
+      if (path === '/prompt-templates') return []
       if (path === '/estimate' || path === '/prompts/enhance') return notFound()
       if (method === 'POST' && path === '/images/generate') return { items: [media('n1', { media_url: null, folder_id: 'f1' })], jobs: [job('j1')] }
     })

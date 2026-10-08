@@ -1,82 +1,536 @@
 {
-  "version": 1,
+  "version": 2,
+  "categories": [
+    "Portraits",
+    "Product & ads",
+    "Food",
+    "Fashion",
+    "Architecture & interiors",
+    "Landscapes & travel",
+    "Posters & text",
+    "Social media",
+    "Illustration & art",
+    "Characters & concept"
+  ],
   "templates": [
     {
       "id": "image-portrait",
-      "title": "Portrait",
-      "description": "A head-and-shoulders portrait with controlled studio or window light.",
+      "category": "Portraits",
+      "title": "Studio portrait",
+      "description": "Head-and-shoulders portrait with soft, controlled studio light.",
       "thumb": null,
+      "tags": ["portrait", "headshot", "studio"],
+      "examples": {
+        "person": "a woman in her sixties with silver braids and laugh lines, warm half-smile",
+        "clothing": "a rust-coloured hand-knitted cardigan",
+        "background": "a deep teal painted wall"
+      },
       "defaults": {
-        "prompt_scaffold": "Head-and-shoulders portrait of [person: age, look, expression], wearing [clothing], against [background]. Soft key light from [direction], gentle fill, 85 mm lens, eyes in sharp focus.",
+        "prompt_scaffold": "Head-and-shoulders portrait of [person], wearing [clothing], against [background]. Soft key light from camera left through a large diffuser, gentle fill from the right, a faint hair light, 85 mm lens at f/2, eyes in sharp focus, natural skin texture.",
         "aspect": "3:4",
         "count": 4,
         "style": "photoreal",
-        "negative": "distorted hands, extra fingers, blurry eyes, heavy retouching"
+        "negative": "distorted hands, extra fingers, blurry eyes, heavy retouching, plastic skin"
+      }
+    },
+    {
+      "id": "image-environmental-portrait",
+      "category": "Portraits",
+      "title": "Portrait at work",
+      "description": "Someone in their own workplace, tools in hand, documentary light.",
+      "thumb": null,
+      "tags": ["portrait", "documentary", "workplace", "craft"],
+      "examples": {
+        "person": "a Pakistani truck-art painter in his fifties with a grey beard and paint-flecked kurta",
+        "workplace": "a Karachi yard beside a truck covered in bright floral truck art",
+        "tool": "a fine brush loaded with bright yellow paint"
+      },
+      "defaults": {
+        "prompt_scaffold": "Environmental portrait of [person] in [workplace], holding [tool] and looking into the lens. Daylight from a side doorway, 35 mm lens at chest height, medium shot, the workplace softly visible behind, honest documentary feel.",
+        "aspect": "4:3",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "posed stock-photo smile, extra fingers, cluttered foreground, oversaturated"
+      }
+    },
+    {
+      "id": "image-golden-hour-portrait",
+      "category": "Portraits",
+      "title": "Golden-hour portrait",
+      "description": "Outdoor portrait backlit by a low sun, warm rim light and soft bokeh.",
+      "thumb": null,
+      "tags": ["portrait", "outdoor", "golden hour", "backlight"],
+      "examples": {
+        "person": "a young Moroccan man in a loose white linen shirt",
+        "location": "a rooftop terrace overlooking the old medina of Fes"
+      },
+      "defaults": {
+        "prompt_scaffold": "Outdoor portrait of [person] on [location] at golden hour. The low sun sits behind them and draws a warm rim light along the hair and shoulders, soft bounce fill on the face, 85 mm lens, creamy background bokeh, relaxed natural pose.",
+        "aspect": "2:3",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "lens flare covering the face, blown-out sky, distorted hands"
       }
     },
     {
       "id": "image-product-shot",
-      "title": "Product shot",
-      "description": "A clean hero image of one product for a shop or an ad.",
+      "category": "Product & ads",
+      "title": "Product hero shot",
+      "description": "A clean studio hero image of one product for a shop or an ad.",
       "thumb": null,
+      "tags": ["product", "ecommerce", "studio", "advert"],
+      "examples": {
+        "product": "a matte black stainless-steel water bottle",
+        "surface": "a slab of polished travertine",
+        "backdrop colour": "warm sand"
+      },
       "defaults": {
-        "prompt_scaffold": "Hero shot of [product] in [colour or material], standing on [surface] in front of a [background colour] seamless backdrop. Three-quarter angle, softbox lighting with a clean rim light, a subtle reflection underneath, [prop or accent] beside it.",
+        "prompt_scaffold": "Hero shot of [product] standing on [surface] in front of a [backdrop colour] seamless backdrop. Three-quarter angle, soft diffused key light from above left, a crisp rim light tracing the edges, a subtle reflection underneath, generous empty space on one side for copy.",
         "aspect": "1:1",
         "count": 4,
         "style": "product",
-        "negative": "text, watermark, clutter, warped label"
+        "negative": "text, watermark, clutter, warped label, duplicate product",
+        "brand": true
       }
     },
     {
-      "id": "image-character-sheet",
-      "title": "Character sheet",
-      "description": "One character shown front, side and back on a plain background.",
+      "id": "image-product-lifestyle",
+      "category": "Product & ads",
+      "title": "Product in use",
+      "description": "Lifestyle advert photo: the product in a real home, a person in soft focus.",
       "thumb": null,
+      "tags": ["product", "lifestyle", "advert", "home"],
+      "examples": {
+        "product": "a white ceramic pour-over coffee set",
+        "setting": "a sunlit Istanbul apartment kitchen with patterned blue tiles",
+        "action": "a woman's hands pouring hot water from a gooseneck kettle"
+      },
       "defaults": {
-        "prompt_scaffold": "Character reference sheet of [character: age, build, hair, face], wearing [outfit]. Three full-body views side by side: front, side profile and back, same pose and scale. Plain light grey background, even lighting, consistent colours.",
-        "aspect": "3:2",
-        "count": 2,
-        "style": "illustration",
-        "negative": "different outfits between views, cropped feet, busy background"
-      }
-    },
-    {
-      "id": "image-poster",
-      "title": "Poster",
-      "description": "Key art for a film or an event, with room for the title.",
-      "thumb": null,
-      "defaults": {
-        "prompt_scaffold": "Key art poster for [film or event]: [central figure or object] in [setting], dramatic [lighting] lighting, a strong silhouette, [colour palette]. Leave clean space at the [top or bottom] for the title.",
-        "aspect": "2:3",
-        "count": 4,
-        "style": "cinematic",
-        "negative": "garbled text, watermark, cluttered composition"
-      }
-    },
-    {
-      "id": "image-landscape",
-      "title": "Landscape",
-      "description": "A wide scenic view for backgrounds, establishing shots or prints.",
-      "thumb": null,
-      "defaults": {
-        "prompt_scaffold": "Wide landscape of [place] at [time of day], [weather]. A foreground of [foreground detail], with [midground feature] leading the eye toward [background feature]. Atmospheric depth, natural colour.",
-        "aspect": "16:9",
+        "prompt_scaffold": "Lifestyle advert photo of [product] in [setting], [action], the product sharp in the foreground and everything else gently out of focus. Late-morning window light, 50 mm lens, warm natural tones, uncluttered styling.",
+        "aspect": "4:3",
         "count": 4,
         "style": "photoreal",
-        "negative": "people, text, oversaturated sky"
+        "negative": "text, logo distortion, messy background, extra fingers",
+        "brand": true
+      }
+    },
+    {
+      "id": "image-flatlay",
+      "category": "Product & ads",
+      "title": "Flat-lay ad",
+      "description": "Top-down styled arrangement of a product and props, editorial look.",
+      "thumb": null,
+      "tags": ["product", "flat lay", "top down", "skincare"],
+      "examples": {
+        "product": "a skincare serum in an amber glass dropper bottle",
+        "props": "sprigs of rosemary, lemon slices and smooth river stones",
+        "background": "pale sage linen"
+      },
+      "defaults": {
+        "prompt_scaffold": "Top-down flat lay of [product] surrounded by [props], arranged loosely on [background]. Even soft daylight, gentle shadows falling to the lower right, clean margins, editorial advertising style.",
+        "aspect": "1:1",
+        "count": 4,
+        "style": "product",
+        "negative": "text, watermark, cluttered, tilted perspective",
+        "brand": true
       }
     },
     {
       "id": "image-food",
-      "title": "Food photography",
-      "description": "An appetising dish styled for a menu, a blog or an ad.",
+      "category": "Food",
+      "title": "Overhead feast",
+      "description": "An appetising dish shot from above for a menu, a blog or an ad.",
       "thumb": null,
+      "tags": ["food", "overhead", "menu", "restaurant"],
+      "examples": {
+        "dish": "chicken biryani with saffron rice, crisp fried onions and halved boiled eggs",
+        "tableware": "a large hammered copper platter",
+        "table surface": "dark weathered wood"
+      },
       "defaults": {
-        "prompt_scaffold": "Overhead food photograph of [dish], served on [plate or board] on a [table surface]. Garnish of [garnish], [side items] at the edges, soft daylight from the side, a little steam, shallow depth of field.",
+        "prompt_scaffold": "Overhead food photograph of [dish] served on [tableware] on a [table surface] table. Garnish scattered naturally, small side bowls at the edges of the frame, soft daylight from one side, a wisp of steam, shallow depth of field.",
         "aspect": "4:3",
         "count": 4,
         "style": "photoreal",
-        "negative": "plastic-looking food, messy plate, harsh flash"
+        "negative": "plastic-looking food, messy plate, harsh flash, cutlery in the centre"
+      }
+    },
+    {
+      "id": "image-food-closeup",
+      "category": "Food",
+      "title": "Moody food close-up",
+      "description": "Dramatic dark-background close-up that makes textures glisten.",
+      "thumb": null,
+      "tags": ["food", "macro", "dessert", "dark"],
+      "examples": {
+        "dish": "a stack of pistachio baklava",
+        "plate": "a matte charcoal ceramic plate",
+        "detail": "golden syrup dripping slowly from the top piece"
+      },
+      "defaults": {
+        "prompt_scaffold": "Close-up food photograph of [dish] on [plate], shot at 45 degrees against a near-black background, [detail]. One hard side light that makes every texture glisten, 100 mm macro lens, very shallow depth of field.",
+        "aspect": "1:1",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "flat lighting, cluttered background, artificial colours"
+      }
+    },
+    {
+      "id": "image-fashion-editorial",
+      "category": "Fashion",
+      "title": "Fashion editorial",
+      "description": "A bold full-length magazine shot on location in hard sunlight.",
+      "thumb": null,
+      "tags": ["fashion", "editorial", "location", "magazine"],
+      "examples": {
+        "outfit": "an oversized cream linen suit with wide trousers and a silk scarf",
+        "location": "the pink sandstone steps of a stepwell in Jaipur"
+      },
+      "defaults": {
+        "prompt_scaffold": "Full-length fashion editorial photograph of a model wearing [outfit], posed on [location]. Hard midday sun with crisp graphic shadows, 35 mm lens from a low angle, bold geometric composition, confident pose, magazine styling.",
+        "aspect": "2:3",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "distorted hands, cropped feet, extra limbs, blurry fabric"
+      }
+    },
+    {
+      "id": "image-lookbook",
+      "category": "Fashion",
+      "title": "Studio lookbook",
+      "description": "Clean full-body catalogue shot against a paper backdrop.",
+      "thumb": null,
+      "tags": ["fashion", "lookbook", "catalogue", "studio"],
+      "examples": {
+        "model": "a tall woman with short natural hair",
+        "outfit": "an emerald green shalwar kameez with gold thread embroidery and a sheer dupatta",
+        "backdrop": "warm grey"
+      },
+      "defaults": {
+        "prompt_scaffold": "Studio lookbook photograph of [model] wearing [outfit], standing against a [backdrop] paper backdrop. Soft diffused key light, gentle even fill, full body with feet visible, clean catalogue framing, true-to-life fabric colour.",
+        "aspect": "3:4",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "cropped feet, wrinkled backdrop, extra fingers, warped pattern"
+      }
+    },
+    {
+      "id": "image-interior",
+      "category": "Architecture & interiors",
+      "title": "Interior design shot",
+      "description": "A calm, magazine-ready room with straight verticals and daylight.",
+      "thumb": null,
+      "tags": ["interior", "architecture", "real estate", "home"],
+      "examples": {
+        "room": "living room",
+        "style": "Japandi",
+        "key feature": "a low oak bench and a paper lantern beside a wide linen sofa"
+      },
+      "defaults": {
+        "prompt_scaffold": "Interior design photograph of a [room] in [style] style, with [key feature]. Soft daylight through tall windows, one-point perspective from chest height, 24 mm lens with straight verticals, calm and uncluttered, natural materials.",
+        "aspect": "3:2",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "converging verticals, clutter, people, fisheye distortion"
+      }
+    },
+    {
+      "id": "image-architecture-exterior",
+      "category": "Architecture & interiors",
+      "title": "Building at blue hour",
+      "description": "Architectural exterior with tilt-shift geometry and glowing windows.",
+      "thumb": null,
+      "tags": ["architecture", "exterior", "blue hour", "building"],
+      "examples": {
+        "building": "a modern mosque with a white concrete dome and a slender minaret",
+        "setting": "a quiet plaza lined with olive trees"
+      },
+      "defaults": {
+        "prompt_scaffold": "Architectural photograph of [building] in [setting] at blue hour, interior lights glowing warm against a deep blue sky. Low corner angle, 24 mm tilt-shift lens with perfectly straight verticals, a few small figures for scale, clean reflections on wet stone.",
+        "aspect": "3:2",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "converging verticals, crowds, lens distortion, oversaturated"
+      }
+    },
+    {
+      "id": "image-landscape",
+      "category": "Landscapes & travel",
+      "title": "Grand landscape",
+      "description": "A wide scenic view for backgrounds, establishing shots or prints.",
+      "thumb": null,
+      "tags": ["landscape", "mountains", "nature", "wallpaper"],
+      "examples": {
+        "place": "the Hunza Valley with snow-capped Rakaposhi in the distance",
+        "time of day": "sunrise",
+        "foreground": "apricot trees in white blossom"
+      },
+      "defaults": {
+        "prompt_scaffold": "Wide landscape of [place] at [time of day]. A foreground of [foreground] leading the eye into the scene, layered ridges fading into atmospheric haze, natural colour, 24 mm lens, deep focus.",
+        "aspect": "16:9",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "people, text, oversaturated sky, HDR halos"
+      }
+    },
+    {
+      "id": "image-travel-street",
+      "category": "Landscapes & travel",
+      "title": "Travel street scene",
+      "description": "A lively street at dusk, candid and warm, for travel stories.",
+      "thumb": null,
+      "tags": ["travel", "street", "city", "dusk"],
+      "examples": {
+        "city": "Lisbon's Alfama district",
+        "street life": "a yellow tram climbing the hill past people on café terraces"
+      },
+      "defaults": {
+        "prompt_scaffold": "Travel photograph of a street in [city] at dusk, [street life]. Warm shop lights against a fading violet sky, 35 mm lens at eye level, leading lines running up the street, candid and lively.",
+        "aspect": "3:2",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "distorted faces, garbled signs, tilted horizon"
+      }
+    },
+    {
+      "id": "image-aerial",
+      "category": "Landscapes & travel",
+      "title": "Aerial view",
+      "description": "Drone-height view where the land makes its own patterns.",
+      "thumb": null,
+      "tags": ["aerial", "drone", "desert", "travel"],
+      "examples": {
+        "place": "the rolling dunes of the Wahiba Sands in Oman",
+        "detail": "a lone camel caravan casting long thin shadows"
+      },
+      "defaults": {
+        "prompt_scaffold": "Aerial drone photograph looking straight down at [place], with [detail]. Low late-afternoon sun raking across the surface, bold abstract patterns of light and shadow, crisp detail, minimal colour palette.",
+        "aspect": "16:9",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "horizon, haze, text, oversaturated"
+      }
+    },
+    {
+      "id": "image-poster",
+      "category": "Posters & text",
+      "title": "Film poster with title",
+      "description": "Key art with a legible title and tagline. Uses Qwen-Image for the lettering.",
+      "thumb": null,
+      "tags": ["poster", "film", "key art", "text"],
+      "examples": {
+        "TITLE": "THE LAST MONSOON",
+        "tagline": "Some storms never leave",
+        "central image": "A lone woman with a black umbrella on a flooded Lahore street at night",
+        "palette": "deep blue and amber"
+      },
+      "defaults": {
+        "prompt_scaffold": "Cinematic film poster with the title \"[TITLE]\" in large bold serif letters across the top and the line \"[tagline]\" in small type at the bottom. [central image], dramatic rim lighting, a strong silhouette, [palette] colour palette.",
+        "aspect": "2:3",
+        "count": 2,
+        "style": "cinematic",
+        "negative": "garbled text, misspelled words, watermark, cluttered composition",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-urdu-eid-poster",
+      "category": "Posters & text",
+      "title": "Urdu greeting poster",
+      "description": "A festive greeting card with Urdu lettering for Eid or a wedding. Urdu spelling is hit-and-miss: make a few and pick.",
+      "thumb": null,
+      "tags": ["urdu", "eid", "calligraphy", "greeting", "text"],
+      "examples": {
+        "Urdu greeting": "عید مبارک",
+        "motif": "a crescent moon and three hanging brass lanterns",
+        "background": "a deep emerald green background with a subtle gold geometric pattern"
+      },
+      "defaults": {
+        "prompt_scaffold": "Festive greeting poster with the Urdu text \"[Urdu greeting]\" written once, in large clear gold Arabic-script lettering centred in the upper half, every letter exact. Below it [motif], on [background]. Symmetric layout, soft warm glow, print-ready.",
+        "aspect": "3:4",
+        "count": 4,
+        "style": "illustration",
+        "negative": "garbled letters, Latin text, broken calligraphy, watermark",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-urdu-event-poster",
+      "category": "Posters & text",
+      "title": "Urdu event poster",
+      "description": "Poetry night or book launch poster with an Urdu heading. Keep the Urdu short and make a few to pick from.",
+      "thumb": null,
+      "tags": ["urdu", "event", "poetry", "mushaira", "text"],
+      "examples": {
+        "Urdu title": "مشاعرہ",
+        "details": "FRIDAY 14 NOVEMBER · LAHORE",
+        "visual": "an antique brass oil lamp beside a reed pen on aged paper"
+      },
+      "defaults": {
+        "prompt_scaffold": "Event poster with the Urdu heading \"[Urdu title]\" written once, in large clear cream Arabic-script lettering at the top, every letter exact, and the English line \"[details]\" in small clean capitals at the bottom. In the centre, [visual], lit by warm candlelight against a dark maroon background. Elegant, balanced, print-ready.",
+        "aspect": "2:3",
+        "count": 4,
+        "style": "illustration",
+        "negative": "garbled letters, misspelled words, cluttered layout, watermark",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-event-flyer",
+      "category": "Posters & text",
+      "title": "Gig flyer",
+      "description": "A loud two-colour risograph-style flyer with a big headline.",
+      "thumb": null,
+      "tags": ["flyer", "concert", "risograph", "text"],
+      "examples": {
+        "headline": "NIGHT JAZZ",
+        "details": "SAT 22 NOV · DOORS 8PM",
+        "visual": "A saxophonist silhouetted in a spotlight",
+        "colours": "electric blue and hot orange"
+      },
+      "defaults": {
+        "prompt_scaffold": "Bold concert flyer with the headline \"[headline]\" in huge condensed letters and \"[details]\" underneath in small caps. [visual], halftone texture, two-colour risograph print look in [colours], slight misregistration, strong graphic layout.",
+        "aspect": "3:4",
+        "count": 2,
+        "style": "illustration",
+        "negative": "garbled text, extra words, photographic, muddy colours",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-youtube-thumbnail",
+      "category": "Social media",
+      "title": "Video thumbnail",
+      "description": "High-contrast thumbnail with a reaction face and a few huge words.",
+      "thumb": null,
+      "tags": ["youtube", "thumbnail", "creator", "text"],
+      "examples": {
+        "person": "a young South Asian food vlogger with wide eyes, pointing",
+        "subject": "a giant plate of street-style papdi chaat",
+        "thumbnail text": "CHEAP VS LUXURY"
+      },
+      "defaults": {
+        "prompt_scaffold": "Video thumbnail: [person] on the right of the frame, [subject] on the left, and the text \"[thumbnail text]\" in huge white letters with a thick black outline in a clear band above everyone's heads. Bright saturated colours, high contrast, clean simple background, punchy and readable at small size.",
+        "aspect": "16:9",
+        "count": 2,
+        "style": "photoreal",
+        "negative": "garbled text, extra words, cluttered background, distorted face",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-social-post",
+      "category": "Social media",
+      "title": "Minimal social post",
+      "description": "A square, scroll-stopping still life with soft pastel colour.",
+      "thumb": null,
+      "tags": ["instagram", "social", "minimal", "pastel"],
+      "examples": {
+        "subject": "a single scoop of mango sorbet in a glass coupe with a mint leaf",
+        "palette": "peach and mint"
+      },
+      "defaults": {
+        "prompt_scaffold": "Square social media photo of [subject], centred with plenty of clean space around it, [palette] pastel palette, soft diffused light, a gentle shadow, minimalist aesthetic.",
+        "aspect": "1:1",
+        "count": 4,
+        "style": "product",
+        "negative": "text, clutter, harsh shadows, busy background"
+      }
+    },
+    {
+      "id": "image-watercolour",
+      "category": "Illustration & art",
+      "title": "Watercolour illustration",
+      "description": "Loose storybook watercolour with ink lines and paper texture.",
+      "thumb": null,
+      "tags": ["watercolour", "illustration", "storybook", "children"],
+      "examples": {
+        "scene": "a cat asleep on a sunny windowsill of a blue-and-white house in Sidi Bou Said",
+        "palette": "cobalt blue and warm ochre"
+      },
+      "defaults": {
+        "prompt_scaffold": "Loose watercolour illustration of [scene], soft wet-in-wet washes, fine ink linework, [palette] palette, white paper texture showing at the edges, gentle storybook feel.",
+        "aspect": "4:3",
+        "count": 4,
+        "style": "illustration",
+        "negative": "photorealistic, 3D render, text, muddy colours"
+      }
+    },
+    {
+      "id": "image-miniature-painting",
+      "category": "Illustration & art",
+      "title": "Miniature painting",
+      "description": "A modern scene told in the manner of a classical South Asian miniature.",
+      "thumb": null,
+      "tags": ["miniature", "painting", "mughal", "traditional"],
+      "examples": {
+        "scene": "a young woman cycling through a palace garden of fountains and cypress trees",
+        "palette": "lapis blue, saffron and leaf green"
+      },
+      "defaults": {
+        "prompt_scaffold": "Painting in the manner of a classical Mughal miniature: [scene]. Flat tilted perspective, delicate outlines, an ornate floral border, fine gold detailing, [palette] palette, opaque gouache on aged paper.",
+        "aspect": "3:4",
+        "count": 4,
+        "style": "painterly",
+        "negative": "photorealistic, 3D render, text, modern typography"
+      }
+    },
+    {
+      "id": "image-isometric-diorama",
+      "category": "Illustration & art",
+      "title": "Isometric diorama",
+      "description": "A tiny, toy-like 3D scene on a floating tile.",
+      "thumb": null,
+      "tags": ["isometric", "3d", "diorama", "cute"],
+      "examples": {
+        "subject": "a corner tea stall in Old Delhi",
+        "details": "steaming kettles, stacked glass cups, a bicycle and a sleeping dog"
+      },
+      "defaults": {
+        "prompt_scaffold": "Isometric 3D illustration of [subject] as a tiny diorama on a floating square tile, with [details]. Soft clay-like materials, gentle studio lighting with soft shadows, pastel background, charming and tidy.",
+        "aspect": "1:1",
+        "count": 4,
+        "style": "illustration",
+        "negative": "text, photorealistic, cluttered, harsh shadows"
+      }
+    },
+    {
+      "id": "image-character-sheet",
+      "category": "Characters & concept",
+      "title": "Character sheet",
+      "description": "One character shown front, side and back on a plain background.",
+      "thumb": null,
+      "tags": ["character", "turnaround", "reference", "animation"],
+      "examples": {
+        "character": "a teenage girl courier with a short black bob and freckles",
+        "outfit": "a patched orange windbreaker, cargo shorts, high-top sneakers and a messenger bag"
+      },
+      "defaults": {
+        "prompt_scaffold": "Character reference sheet of [character], wearing [outfit]. Three full-body views side by side: front, side profile and back, same scale and neutral pose. Plain light grey background, flat even lighting, consistent colours and details in every view.",
+        "aspect": "3:2",
+        "count": 2,
+        "style": "illustration",
+        "negative": "different outfits between views, cropped feet, busy background, text"
+      }
+    },
+    {
+      "id": "image-concept-environment",
+      "category": "Characters & concept",
+      "title": "Concept environment",
+      "description": "A painterly establishing view of an imagined world.",
+      "thumb": null,
+      "tags": ["concept art", "environment", "fantasy", "matte painting"],
+      "examples": {
+        "environment": "a floating desert city of sandstone towers and wind-catchers",
+        "focal point": "a caravan of patched airships docking at a high terrace",
+        "mood": "hazy golden dusk"
+      },
+      "defaults": {
+        "prompt_scaffold": "Concept art of [environment], with [focal point] in the middle distance, [mood]. Volumetric light, layered atmospheric depth, painterly matte-painting finish, wide establishing view.",
+        "aspect": "16:9",
+        "count": 4,
+        "style": "cinematic",
+        "negative": "text, watermark, flat lighting, cluttered foreground"
       }
     }
   ]

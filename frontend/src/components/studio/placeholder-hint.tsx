@@ -2,10 +2,19 @@ import { PenLine } from 'lucide-react'
 import { placeholdersIn } from '@/lib/images'
 
 /**
- * Template prompts carry [slots] like [product]. Lists the ones still in the text; clicking one
+ * Prompt templates carry [slots] like [product]. Lists the ones still in the text; clicking one
  * selects it in the field so typing replaces it.
  */
-export function PlaceholderHint({ text, field }: { text: string; field: React.RefObject<HTMLTextAreaElement | null> }) {
+export function PlaceholderHint({
+  text,
+  field,
+  examples,
+}: {
+  text: string
+  field: React.RefObject<HTMLTextAreaElement | null>
+  // from a prompt template: what each slot could say
+  examples?: Record<string, string>
+}) {
   const slots = placeholdersIn(text)
   if (!slots.length) return null
 
@@ -29,6 +38,7 @@ export function PlaceholderHint({ text, field }: { text: string; field: React.Re
           onClick={() => select(s)}
           className="rounded-[4px] border border-studio-gold bg-studio-gold/20 px-1.5 font-mono text-small text-studio-text hover:bg-studio-gold/35"
           aria-label={`Select ${s} in the prompt`}
+          title={examples?.[s.slice(1, -1)] ? `e.g. ${examples[s.slice(1, -1)]}` : undefined}
         >
           {s}
         </button>

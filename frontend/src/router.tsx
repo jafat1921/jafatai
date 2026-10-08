@@ -28,10 +28,12 @@ export const shellRoutes: RouteObject[] = [
     return <Img2VidPage />
   }),
   { path: 'video/projects', element: <ProjectsPage /> },
-  page('video/templates', async () => {
+  page('video/prompt-templates', async () => {
     const { TemplatesPage } = await import('@/features/templates/TemplatesPage')
     return <TemplatesPage type="video" />
   }),
+  // the old name; bookmarks keep working
+  { path: 'video/templates', element: <Navigate to="/video/prompt-templates" replace /> },
   page('video/upscale', async () => {
     const { UpscalePickPage } = await import('@/features/upscale/UpscalePickPage')
     return <UpscalePickPage kind="video" />
@@ -58,10 +60,12 @@ export const shellRoutes: RouteObject[] = [
     const { ImageReferencesPage } = await import('@/features/image/ImageReferencesPage')
     return <ImageReferencesPage />
   }),
-  page('image/templates', async () => {
+  page('image/prompt-templates', async () => {
     const { TemplatesPage } = await import('@/features/templates/TemplatesPage')
     return <TemplatesPage type="image" />
   }),
+  // the old name; bookmarks keep working
+  { path: 'image/templates', element: <Navigate to="/image/prompt-templates" replace /> },
   page('image/upscale', async () => {
     const { UpscalePickPage } = await import('@/features/upscale/UpscalePickPage')
     return <UpscalePickPage kind="image" />

@@ -1,43 +1,127 @@
 {
-  "version": 1,
+  "version": 2,
+  "categories": [
+    "Ads & brand",
+    "Social shorts (9:16)",
+    "Documentary",
+    "Cinematic scenes",
+    "Music & mood",
+    "Product demo",
+    "Explainer",
+    "Travel"
+  ],
   "templates": [
     {
       "id": "video-product-ad-30s",
+      "category": "Ads & brand",
       "title": "30 s product ad",
       "description": "Hook, hero shots and a clear call to action for one product.",
       "thumb": null,
       "requires_brand": true,
+      "tags": ["advert", "product", "commercial", "brand"],
       "planner": "A 30-second product advert: a three-second hook, then the product in use. Put the product and logo on real things in the scenes (packaging, a counter, signage, a screen), with at least one hero moment where the product fills the frame and the camera moves slowly. The film closes on a packshot or logo reveal.",
+      "examples": {
+        "product": "a solar-powered camping lantern",
+        "audience": "weekend campers",
+        "problem": "a tent going dark as a phone torch dies",
+        "tagline": "Light that lasts the night"
+      },
+      "preview_prompt": "Commercial hero shot of [product] glowing warmly on a flat rock beside a tent at dusk, soft studio-style key light, crisp reflections, shallow depth of field, cool blue hour sky behind.",
       "defaults": {
-        "prompt_scaffold": "A 30-second product ad for [product], aimed at [audience]. Open on a three-second hook: [problem the product solves] shown in a real everyday moment. Reveal the product in a slow hero shot on [surface or setting] with soft studio light and crisp reflections. Show two quick close-ups of [key feature 1] and [key feature 2] in use. End on the product centred in frame with the line \"[tagline]\".",
+        "prompt_scaffold": "A 30-second product ad for [product], aimed at [audience]. Open on a three-second hook: [problem], handheld close-up with natural sound. Reveal the product in a slow push-in hero shot under soft studio light with crisp reflections as a low synth swell builds. Two quick macro close-ups of it in use, cut on the beat. End on a centred packshot with the line \"[tagline]\" and a soft whoosh.",
         "duration_s": 30,
         "aspect_ratio": "16:9",
         "style": "commercial",
-        "dialogue": false
+        "dialogue": false,
+        "brand": true
       }
     },
     {
       "id": "video-brand-story-60s",
+      "category": "Ads & brand",
       "title": "60 s brand story",
       "description": "Where the brand came from, who it is for and why it matters, in one minute.",
       "thumb": null,
       "requires_brand": true,
+      "tags": ["brand", "story", "founder", "craft"],
       "planner": "A 60-second brand story. Let the brand live in the world of the film: the logo on a shop front, apparel, a van or a mug, products in the hands of the people who make and use them. Keep the brand moments natural, one hero moment late in the film, and close on the logo.",
+      "examples": {
+        "brand": "Nilgiri Looms, a handwoven textile label",
+        "origin moment": "a grandmother teaching weaving on a wooden loom in a Kerala village",
+        "craft": "spinning cotton and weaving bright striped cloth"
+      },
+      "preview_prompt": "Warm cinematic close-up of weathered hands [craft] on a wooden loom in a sunlit village workshop, dust in the light beams, rich textile colours, shallow depth of field.",
       "defaults": {
-        "prompt_scaffold": "A 60-second brand story for [brand], told by [founder or narrator]. Begin with the moment the idea started: [origin moment] in [place]. Follow the people who make it, hands at work on [craft or process], in warm natural light. Show [customer] using it in their own life and what changes for them. Close on the brand mark over [closing image] with the line \"[brand promise]\".",
+        "prompt_scaffold": "A 60-second brand story for [brand], told by its founder in a calm voice-over. Open on [origin moment] in slow handheld wide shots, warm natural light and quiet room sound. Follow hands at work on [craft] in macro close-ups with a gentle rack focus. Show a customer using it at home as soft piano comes in. Close on the logo over a final wide shot at golden hour.",
         "duration_s": 60,
         "aspect_ratio": "16:9",
         "style": "cinematic",
-        "dialogue": true
+        "dialogue": true,
+        "brand": true
+      }
+    },
+    {
+      "id": "video-vertical-teaser-15s",
+      "category": "Social shorts (9:16)",
+      "title": "Vertical teaser (15 s)",
+      "description": "A punchy 9:16 teaser for Reels, Shorts and TikTok.",
+      "thumb": null,
+      "requires_brand": true,
+      "tags": ["reels", "shorts", "tiktok", "launch", "teaser"],
+      "planner": "A 15-second vertical teaser, framed for a phone. Few, bold beats; the product or logo appears large and centred in at least one beat (packaging, a screen, a sign). Keep it to one or two scenes and end on the brand.",
+      "examples": {
+        "launch": "a new canned cold-brew coffee",
+        "striking image": "ice cubes cracking as dark coffee pours over them",
+        "beats": "a barista sealing a can, a cyclist taking a sip, friends clinking cans on a rooftop",
+        "call to action": "Drops Friday"
+      },
+      "preview_prompt": "Vertical extreme close-up of [striking image] in a tall glass, high-speed macro, dramatic backlight, dark moody background, droplets frozen in the air.",
+      "defaults": {
+        "prompt_scaffold": "A 15-second vertical teaser for [launch]. First second: a bold extreme close-up of [striking image] with a sharp bass hit to stop the scroll. Three fast beats joined by whip-pans, each landing on a drum hit: [beats]. End on a centred title card with the text \"[call to action]\".",
+        "duration_s": 15,
+        "aspect_ratio": "9:16",
+        "style": "commercial",
+        "dialogue": false,
+        "brand": true
+      }
+    },
+    {
+      "id": "video-day-in-life-9x16",
+      "category": "Social shorts (9:16)",
+      "title": "Day in the life (30 s)",
+      "description": "A vertical vlog-style day, quick cuts from morning to night.",
+      "thumb": null,
+      "tags": ["vlog", "reels", "lifestyle", "creator"],
+      "examples": {
+        "person": "a young architect",
+        "city": "Dubai",
+        "morning moment": "karak chai on a balcony overlooking the marina"
+      },
+      "preview_prompt": "Vertical candid phone-style photo of [person] enjoying [morning moment] in [city], soft early-morning light, relaxed smile, shallow depth of field.",
+      "defaults": {
+        "prompt_scaffold": "A 30-second vertical day in the life of [person] in [city]. Handheld at phone height with a quick cut every two seconds: the morning starts with [morning moment], then midday at work, then an evening wind-down. Natural ambient sound under a light lo-fi beat, warm colour grade, and one direct-to-camera smile at the end.",
+        "duration_s": 30,
+        "aspect_ratio": "9:16",
+        "style": "documentary",
+        "dialogue": false
       }
     },
     {
       "id": "video-documentary-2min",
+      "category": "Documentary",
       "title": "2 min documentary",
       "description": "A short observational documentary with narration and a clear arc.",
       "thumb": null,
+      "tags": ["documentary", "observational", "people", "place"],
+      "examples": {
+        "subject": "the salt harvesters of the Little Rann",
+        "location": "the white salt flats of Kutch, Gujarat",
+        "main person": "Ramesh, a third-generation salt farmer",
+        "challenge": "an early monsoon threatening the season's harvest"
+      },
+      "preview_prompt": "Wide documentary photograph at dawn of [location], [main person] raking glittering salt pans, pastel sky, long shadows, quiet and vast.",
       "defaults": {
-        "prompt_scaffold": "A two-minute documentary about [subject] in [location]. Establish the place at [time of day] with wide, patient shots. Introduce [main person] and what they do every day. Build toward the central tension: [challenge or change they face]. Include one quiet moment of [detail that reveals character]. End with where things stand now and a lingering wide shot of [closing image]. Calm, factual narration.",
+        "prompt_scaffold": "A two-minute observational documentary about [subject] in [location]. Establish the place at dawn with slow locked-off wide shots and natural ambient sound. Follow [main person] through the working day in handheld medium shots. Build toward [challenge], hold on one quiet close-up of their hands, and end on a lingering wide shot as the light fades. Calm, factual voice-over.",
         "duration_s": 120,
         "aspect_ratio": "16:9",
         "style": "documentary",
@@ -45,12 +129,87 @@
       }
     },
     {
+      "id": "video-craft-portrait-90s",
+      "category": "Documentary",
+      "title": "Maker portrait (90 s)",
+      "description": "An intimate film about one artisan and the sound of their work.",
+      "thumb": null,
+      "tags": ["documentary", "artisan", "craft", "portrait"],
+      "examples": {
+        "maker": "Selin, a coppersmith in her forties",
+        "place": "a narrow bazaar lane in Gaziantep, Turkey"
+      },
+      "preview_prompt": "Intimate documentary portrait of [maker] tapping a half-finished copper bowl with a small hammer at her workbench in [place], warm window light glinting on the copper, shallow depth of field.",
+      "defaults": {
+        "prompt_scaffold": "A 90-second documentary portrait of [maker] in [place]. Intimate macro shots of tools and materials, slow dolly moves through the workshop, and the rhythmic sound of the work as the soundtrack. The maker explains in their own words why they keep going. End on the finished piece held up to the window light.",
+        "duration_s": 90,
+        "aspect_ratio": "16:9",
+        "style": "documentary",
+        "dialogue": true
+      }
+    },
+    {
+      "id": "video-short-film-5min",
+      "category": "Cinematic scenes",
+      "title": "Short film (5 min)",
+      "description": "Opens a full studio project: script, cast, storyboard and render, scene by scene.",
+      "thumb": null,
+      "tags": ["short film", "drama", "story", "studio"],
+      "examples": {
+        "main character": "Amira, a night-shift taxi driver in Cairo",
+        "goal": "enough money to send her brother to university",
+        "obstacle": "a passenger who leaves a bag full of cash on the back seat",
+        "tone": "tense, warm and quietly hopeful",
+        "inciting event": "a passenger leaves a bag of cash in her taxi",
+        "character": "night-shift taxi driver",
+        "stakes": "dawn, when its owner comes looking"
+      },
+      "preview_prompt": "Cinematic night film still of [main character] behind the wheel, city neon reflected on the wet windscreen, a mysterious bag on the back seat, teal and amber grade, anamorphic look.",
+      "defaults": {
+        "prompt_scaffold": "A five-minute short film. [main character], who wants [goal], is stopped by [obstacle]. Over one night she must choose, and the ending turns on a quiet revelation. Tone: [tone].",
+        "logline_hint": "When [inciting event], a [character] must find [goal] before [stakes].",
+        "authoring_mode": "ai_director",
+        "target_runtime_s": 300,
+        "aspect_ratio": "16:9"
+      }
+    },
+    {
+      "id": "video-rain-chase-20s",
+      "category": "Cinematic scenes",
+      "title": "Night chase in the rain (20 s)",
+      "description": "A tense, neon-lit pursuit scene with pounding sound design.",
+      "thumb": null,
+      "tags": ["thriller", "chase", "night", "rain", "neon"],
+      "examples": {
+        "character": "a young courier clutching a sealed envelope",
+        "location": "the narrow market streets of Mong Kok, Hong Kong",
+        "pursuer": "two figures in dark coats"
+      },
+      "preview_prompt": "Cinematic night film still of [character] running through [location] in heavy rain, neon signs reflected in puddles, hard backlight through the rain, motion and tension, anamorphic look.",
+      "defaults": {
+        "prompt_scaffold": "A 20-second cinematic scene: [character] is chased through [location] at night in heavy rain. A low tracking shot follows running feet through puddles, then a whip-pan reveals [pursuer]. Neon reflections and hard backlight through the rain; thunder, pounding footsteps and a tense string ostinato. End on a held close-up of the character catching their breath in a doorway.",
+        "duration_s": 20,
+        "aspect_ratio": "16:9",
+        "style": "cinematic",
+        "dialogue": false
+      }
+    },
+    {
       "id": "video-music-montage-1min",
+      "category": "Music & mood",
       "title": "Music-video montage (1 min)",
       "description": "A rhythm-led montage of moods and places, no dialogue.",
       "thumb": null,
+      "tags": ["music video", "montage", "performance", "beat"],
+      "examples": {
+        "genre": "Punjabi electronic",
+        "performer": "a singer in a mirror-work jacket",
+        "main location": "an empty railway platform at night",
+        "colours": "magenta, teal and sodium orange"
+      },
+      "preview_prompt": "Music video film still of [performer] singing on [main location], [colours] lighting, haze in the air, dramatic low angle, cinematic.",
       "defaults": {
-        "prompt_scaffold": "A one-minute music-video montage for a [genre] track about [theme]. Cut between [performer or character] in [main location] and short evocative moments: [image 1], [image 2], [image 3]. Colour palette of [colours], camera movement that follows the beat, energy rising toward a final chorus shot of [climax image].",
+        "prompt_scaffold": "A one-minute music-video montage for a [genre] track. Cut on the beat between [performer] on [main location] and short evocative inserts: hands, light flares, passing streets. Slow motion on the chorus, a gliding gimbal shot circling the performer, colour palette of [colours]. No dialogue; the track carries the sound.",
         "duration_s": 60,
         "aspect_ratio": "16:9",
         "style": "cinematic",
@@ -58,30 +217,144 @@
       }
     },
     {
-      "id": "video-short-film-5min",
-      "title": "Short film (5 min)",
-      "description": "Opens a full studio project: script, cast, storyboard and render, scene by scene.",
+      "id": "video-mood-loop-30s",
+      "category": "Music & mood",
+      "title": "Cosy mood loop (30 s)",
+      "description": "A calm, nearly still scene for lo-fi streams and backgrounds.",
       "thumb": null,
+      "tags": ["lofi", "loop", "ambient", "background"],
+      "examples": {
+        "scene": "a cosy study desk by a rain-streaked attic window in Paris at night",
+        "small motion": "steam rising from a cup of tea and a sleeping cat's tail swaying"
+      },
+      "preview_prompt": "[scene], warm desk lamp glow, a cup of tea and a sleeping cat, rain on the glass, city lights blurred outside, cosy and calm.",
       "defaults": {
-        "prompt_scaffold": "A five-minute short film. [Main character], who wants [goal], is stopped by [obstacle] in [setting]. Over one [day or night] they must [choice], and the ending turns on [twist or revelation]. Tone: [tone].",
-        "logline_hint": "When [inciting event], a [character] must [goal] before [stakes].",
-        "authoring_mode": "ai_director",
-        "target_runtime_s": 300,
-        "aspect_ratio": "16:9"
+        "prompt_scaffold": "A 30-second calm mood loop: [scene], with [small motion] as the only movement. Locked-off camera, soft practical light, slow drifting rain on the glass, a gentle lo-fi hip-hop beat with vinyl crackle. Seamless loop, no cuts.",
+        "duration_s": 30,
+        "aspect_ratio": "16:9",
+        "style": "animated",
+        "dialogue": false
       }
     },
     {
-      "id": "video-vertical-teaser-15s",
-      "title": "Social vertical teaser (15 s)",
-      "description": "A punchy 9:16 teaser for Reels, Shorts and TikTok.",
+      "id": "video-unboxing-30s",
+      "category": "Product demo",
+      "title": "Unboxing (30 s)",
+      "description": "Top-down hands-only unboxing with crisp ASMR sound.",
       "thumb": null,
-      "requires_brand": true,
-      "planner": "A 15-second vertical teaser, framed for a phone. Few, bold beats; the product or logo appears large and centred in at least one beat (packaging, a screen, a sign). Keep it to one or two scenes and end on the brand.",
+      "tags": ["unboxing", "product", "asmr", "tech"],
+      "examples": {
+        "product": "a pair of matte sage-green wireless earbuds in a round pebble-shaped case",
+        "detail": "the brushed aluminium hinge and soft-touch finish"
+      },
+      "preview_prompt": "Top-down photo of hands lifting the lid of a minimalist box revealing [product] on a clean white desk, bright soft daylight, crisp detail.",
       "defaults": {
-        "prompt_scaffold": "A 15-second vertical teaser for [thing being announced]. First second: a bold close-up of [striking image] to stop the scroll. Three fast beats showing [beat 1], [beat 2] and [beat 3]. End on [final frame] with the text \"[date or call to action]\".",
-        "duration_s": 15,
+        "prompt_scaffold": "A 30-second unboxing of [product]. Top-down camera over a clean desk; hands lift the lid in one smooth motion with crisp ASMR sounds of paper and card. Cut to slow macro passes over [detail], then a three-quarter hero shot as it powers on. Bright soft daylight, minimal music.",
+        "duration_s": 30,
+        "aspect_ratio": "1:1",
+        "style": "commercial",
+        "dialogue": false
+      }
+    },
+    {
+      "id": "video-feature-demo-45s",
+      "category": "Product demo",
+      "title": "Feature demo (45 s)",
+      "description": "Problem, feature in action, payoff, with a friendly voice-over.",
+      "thumb": null,
+      "tags": ["demo", "product", "feature", "how it works"],
+      "examples": {
+        "product": "a smart self-watering planter",
+        "feature": "the hidden water reservoir refilling the soil",
+        "setting": "a sunny apartment window ledge in Singapore"
+      },
+      "preview_prompt": "Bright commercial photo of [product] with lush herbs on [setting], clean modern styling, soft daylight, crisp detail.",
+      "defaults": {
+        "prompt_scaffold": "A 45-second product demo of [product] showing [feature]. Start with the everyday problem in [setting], then film the feature in action on a slow slider with simple on-screen labels. Clean bright commercial lighting, upbeat minimal music and a friendly voice-over for each step, ending on the product beside its name.",
+        "duration_s": 45,
+        "aspect_ratio": "16:9",
+        "style": "commercial",
+        "dialogue": true
+      }
+    },
+    {
+      "id": "video-explainer-60s",
+      "category": "Explainer",
+      "title": "Animated explainer (60 s)",
+      "description": "One idea per shot in clean stylised 3D, with a friendly narrator.",
+      "thumb": null,
+      "tags": ["explainer", "animation", "education", "3d"],
+      "examples": {
+        "topic": "solar panels turn sunlight into electricity",
+        "audience": "curious ten-year-olds",
+        "summary image": "a small house with glowing rooftop solar panels powering a fan and a lamp"
+      },
+      "preview_prompt": "Stylised 3D animated illustration of [summary image], clean shapes, soft global illumination, bright friendly colours, simple sky background.",
+      "defaults": {
+        "prompt_scaffold": "A 60-second animated explainer on how [topic], made for [audience]. Clean stylised 3D scenes, one idea per shot, the camera gliding smoothly between them. A friendly narrator, a soft pop sound for each new element and gentle background music. End on a single summary image: [summary image].",
+        "duration_s": 60,
+        "aspect_ratio": "16:9",
+        "style": "animated",
+        "dialogue": true
+      }
+    },
+    {
+      "id": "video-recipe-tutorial-45s",
+      "category": "Explainer",
+      "title": "Recipe tutorial (45 s)",
+      "description": "Overhead hands-only cooking steps, made for phones.",
+      "thumb": null,
+      "tags": ["recipe", "cooking", "tutorial", "food"],
+      "examples": {
+        "dish": "shakshuka with feta and fresh coriander",
+        "pan": "a black cast-iron pan"
+      },
+      "preview_prompt": "Overhead vertical photo of [dish] bubbling in [pan] on a wooden counter, hands sprinkling herbs, warm daylight, steam rising.",
+      "defaults": {
+        "prompt_scaffold": "A 45-second recipe tutorial for [dish] cooked in [pan]. Overhead camera on a wooden counter, hands only, each step in one clean shot: chopping, sizzling, plating. Close-up sounds of the knife and the pan under a warm upbeat track, simple on-screen step numbers. End on a 45-degree hero shot of the finished dish with steam rising.",
+        "duration_s": 45,
         "aspect_ratio": "9:16",
         "style": "commercial",
+        "dialogue": false
+      }
+    },
+    {
+      "id": "video-city-in-a-day-45s",
+      "category": "Travel",
+      "title": "City in a day (45 s)",
+      "description": "Sunrise to skyline: a fast, joyful travel film of one city.",
+      "thumb": null,
+      "tags": ["travel", "city", "timelapse", "tourism"],
+      "examples": {
+        "city": "Istanbul",
+        "landmark": "the Bosphorus and the domes of the Süleymaniye Mosque"
+      },
+      "preview_prompt": "Travel photograph of sunrise over [landmark] in [city], seagulls over the water, golden mist, wide and glowing.",
+      "defaults": {
+        "prompt_scaffold": "A 45-second travel film: one day in [city]. A sunrise timelapse over [landmark], then gimbal walks through the morning markets, a ferry ride at midday, street food at dusk and the skyline lit at night. City sounds layered under an upbeat acoustic track, with quick match cuts between moments.",
+        "duration_s": 45,
+        "aspect_ratio": "16:9",
+        "style": "documentary",
+        "dialogue": false
+      }
+    },
+    {
+      "id": "video-nature-escape-30s",
+      "category": "Travel",
+      "title": "Nature escape (30 s)",
+      "description": "A slow, quiet drone-and-ground film of wild landscape.",
+      "thumb": null,
+      "tags": ["nature", "drone", "landscape", "calm"],
+      "examples": {
+        "place": "the Scottish Highlands near Glencoe",
+        "feature": "a single-track road winding through misty glens"
+      },
+      "preview_prompt": "Aerial photograph rising over [feature] in [place], low cloud on the peaks, soft golden-hour light, moody and vast.",
+      "defaults": {
+        "prompt_scaffold": "A 30-second nature escape to [place]. A slow drone reveal rising over [feature], then quiet ground-level shots: wind in the grass, water over stones, a hiker pausing to look out. Natural soundscape of wind and birds with a soft ambient pad, no voice-over. End on a wide golden-hour shot.",
+        "duration_s": 30,
+        "aspect_ratio": "16:9",
+        "style": "cinematic",
         "dialogue": false
       }
     }

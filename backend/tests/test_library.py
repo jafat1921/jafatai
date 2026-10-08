@@ -390,8 +390,8 @@ def test_upscale_uploaded_webm_is_normalised(client, tmp_path, small_segments):
 def test_templates(client):
     vids = client.get("/api/templates", params={"type": "video"}).json()
     imgs = client.get("/api/templates", params={"type": "image"}).json()
-    assert len(vids) == 6 and len(imgs) == 6
-    assert len(client.get("/api/templates").json()) == 12
+    assert len(vids) >= 16 and len(imgs) >= 24
+    assert len(client.get("/api/templates").json()) == len(vids) + len(imgs)
 
     r = client.post("/api/templates/video-product-ad-30s/start").json()
     assert r["target"] == "quick" and r["prefill"]["duration_s"] == 30 and "[product]" in r["prefill"]["prompt"]

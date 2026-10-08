@@ -793,6 +793,10 @@ class TemplateOut(BaseModel):
     thumb: str | None = None
     defaults: dict[str, Any]
     requires_brand: bool = False  # advert templates: the UI asks for a brand kit
+    category: str | None = None
+    tags: list[str] = []
+    examples: dict[str, str] = {}  # placeholder -> sample value (hint text, and what the preview shows)
+    preview_url: str | None = None
 
 
 class TemplateStartOut(BaseModel):

@@ -19,7 +19,7 @@ function api(kits = KITS) {
   return mockApi((method, path) => {
     if (path === '/brand-kits') return kits
     if (path === '/media') return { items: [] }
-    if (path === '/templates') return []
+    if (path === '/prompt-templates') return []
     const id = path.match(/^\/media\/(\w+)$/)?.[1]
     if (id) return { ...media(id), versions: [] }
     if (method === 'POST') return { items: [], jobs: [], project: { id: 'p9', title: 'x' }, job: null }

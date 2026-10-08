@@ -21,7 +21,9 @@ export function ImageGeneratePage() {
   const [params] = useSearchParams()
   const tpl = (location.state as { template?: TemplatePrefill } | null)?.template
   const model = normalizeModelId(params.get('model')) ?? undefined
-  const first = { ...(tpl ? imageFormFrom(tpl.prefill, tpl.templateId) : { ...DEFAULT_IMAGE_FORM, prompt: params.get('prompt') ?? '' }), model }
+  const base = tpl ? imageFormFrom(tpl.prefill, tpl.templateId) : { ...DEFAULT_IMAGE_FORM, prompt: params.get('prompt') ?? '' }
+  // ?model= wins; otherwise a text template's Qwen hint
+  const first = { ...base, model: model ?? base.model }
   // Reuse settings remounts the dock with the saved form
   const [prefill, setPrefill] = useState<{ n: number; form: ImageForm }>({ n: 0, form: first })
   const results = useMediaList({ kind: 'image', origin: 'generated' })

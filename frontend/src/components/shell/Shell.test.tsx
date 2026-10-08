@@ -35,6 +35,7 @@ function renderApp(path: string) {
     if (p === '/auth/me') return { id: 'u', email: 'ada@studio.test', display_name: 'Ada', workspace_id: 'w1', role: 'owner' }
     if (p === '/media') return { items: [] }
     if (p === '/quick/recent') return []
+    if (p === '/prompt-templates') return []
   })
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   qc.setQueryData(qk.jobs, [])
@@ -51,6 +52,16 @@ function renderApp(path: string) {
 }
 
 describe('app shell', () => {
+  it.each([
+    ['/image/templates', '/image/prompt-templates', 'Image prompt templates'],
+    ['/video/templates', '/video/prompt-templates', 'Video prompt templates'],
+  ])('the old %s address lands on %s', async (from, to, title) => {
+    const { router } = renderApp(from)
+    expect(await screen.findByRole('heading', { name: title }, { timeout: 5000 })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe(to)
+    expect(screen.getAllByTestId('page-title')[0]).toHaveTextContent(title)
+  })
+
   it('outside a project the top bar shows the page title and the page’s own actions', async () => {
     renderApp('/video/projects')
     const banner = (await screen.findAllByRole('banner', {}, { timeout: 5000 }))[0]

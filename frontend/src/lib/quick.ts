@@ -44,6 +44,8 @@ export interface QuickForm {
   // advanced; unset means the server's default
   imageModel?: string
   videoQuality?: 'standard' | 'hq'
+  // a prompt template's sample values for its [slots]; hint text only
+  examples?: Record<string, string>
 }
 
 export const DEFAULT_QUICK_FORM: QuickForm = {

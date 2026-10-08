@@ -21,8 +21,8 @@ const routes = [
 function api(kits: unknown[] = []) {
   return mockApi((method, path) => {
     if (path === '/brand-kits') return kits
-    if (method === 'POST' && path === '/templates/image-poster/start') return { target: 'image', prefill: { prompt: 'A poster that says "[TEXT]"', aspect: '2:3' } }
-    if (method === 'POST' && path === '/templates/video-product-ad-30s/start') return { target: 'quick', prefill: { prompt: 'An ad for [product]', duration_s: 30 } }
+    if (method === 'POST' && path === '/prompt-templates/image-poster/start') return { target: 'image', prefill: { prompt: 'A poster that says "[TEXT]"', aspect: '2:3' } }
+    if (method === 'POST' && path === '/prompt-templates/video-product-ad-30s/start') return { target: 'quick', prefill: { prompt: 'An ad for [product]', duration_s: 30 } }
   })
 }
 
@@ -33,7 +33,7 @@ describe('blueprints', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /Poster with text/ }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/image/generate?model=qwen_image_2512'))
-    expect(calls).toContainEqual(expect.objectContaining({ method: 'POST', path: '/templates/image-poster/start' }))
+    expect(calls).toContainEqual(expect.objectContaining({ method: 'POST', path: '/prompt-templates/image-poster/start' }))
     expect(screen.getByTestId('prefill')).toHaveTextContent('Poster with text|{"prompt":"A poster that says \\"[TEXT]\\"","aspect":"2:3"}')
   })
 

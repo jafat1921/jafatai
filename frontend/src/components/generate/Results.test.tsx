@@ -15,7 +15,7 @@ const owl = media('o1', { title: 'Owl', prompt: 'An owl at night', created_at: '
 function api(items = [fox, owl]) {
   return mockApi((method, path) => {
     if (path === '/media') return { items }
-    if (path === '/templates' || path === '/brand-kits') return []
+    if (path === '/prompt-templates' || path === '/brand-kits') return []
     if (path === '/estimate') return new Response('', { status: 404 })
     const id = path.match(/^\/media\/(\w+)$/)?.[1]
     if (id) return { ...(items.find((m) => m.id === id) ?? media(id)), versions: [] }

@@ -35,6 +35,20 @@ Uploads create a `Generation(kind="upload", status="ready", target_type="media")
 **Video upscale (standalone):** `POST /generations/{id}/upscale` on an uploaded video's generation. Same engines and segment pipeline as renders. The result is a new version of the MediaItem.
 
 ## Templates
+
+> **Renamed: "Prompt templates" (contract v5.1).** Users now see this feature as *Prompt templates*
+> (a different kind of template is coming). Pages moved to `/image/prompt-templates` and
+> `/video/prompt-templates`; the old `/image/templates` and `/video/templates` redirect there. The API
+> answers on both `/api/prompt-templates…` (used by the frontend) and the old `/api/templates…` paths,
+> with the same shapes. New optional fields on each template: `category` (ordered by the JSON's
+> `categories` list), `tags`, `examples` (`{placeholder: sample value}`; hint text in the UI and what
+> the shipped preview shows), `preview_url` (or null) and, on image text templates, `defaults.model:
+> "qwen_image_2512"`, which `start` passes on as `prefill.model`. `start` also returns
+> `prefill.examples`. `GET /prompt-templates/{id}/preview` (also `/templates/{id}/preview`) serves the
+> shipped WebP from `backend/app/templates/previews/<id>.webp` (signed-in users, `Cache-Control:
+> private, max-age=86400`, 404 when there is none). Previews are rendered on the image GPU with
+> `scripts/gen_prompt_template_previews.py`.
+
 `Template = {id, type: "video"|"image", title, description, thumb?, defaults: {...}}`
 - **Video:** defaults hold Quick Create fields (`prompt_scaffold`, `duration_s`, `aspect_ratio`, `style`, `dialogue`) and, for studio starts, `{authoring_mode, logline_hint, target_runtime_s}`.
 - **Image:** `{prompt_scaffold, aspect, count, style, negative?}`.
@@ -45,7 +59,7 @@ Uploads create a `Generation(kind="upload", status="ready", target_type="media")
 | GET | `/templates?type=video\|image` | `Template[]` |
 | POST | `/templates/{id}/start` | `{target: "quick"\|"studio"\|"image", prefill: {...}}`. The frontend opens the matching form prefilled. **No generation happens until the user confirms** |
 
-**Built-in set (first version):**
+**Built-in set (first version; v5.1 ships 26 image and 16 video prompt templates in categories):**
 - **Video:** 30 s product ad · 60 s brand story · 2 min documentary · Music-video montage (1 min) · Short film (5 min, studio) · Social vertical teaser (15 s, 9:16).
 - **Image:** Portrait · Product shot · Character sheet · Poster · Landscape · Food photography.
 

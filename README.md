@@ -51,6 +51,9 @@ Never commit `.env`.
 
 `GET /api/system/comfy-check` reports anything missing.
 
+Prompt templates (Image and Video menus) ship with preview pictures; see
+[INSTALL.md](INSTALL.md#13-development-setup-workstation) for re-rendering them.
+
 ## Contributors
 
 | | GitHub |

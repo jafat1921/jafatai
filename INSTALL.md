@@ -312,3 +312,10 @@ python scripts/tasks.py dev        # API :8000 + worker + web :5173
   `ssh -L 8188:127.0.0.1:8188 -L 11434:127.0.0.1:11434 user@YOUR_HOST`, then set `GEN_DRIVER=comfy`.
 
 Tests: `python scripts/tasks.py test` (backend pytest and frontend Vitest).
+
+**Prompt template previews.** Each prompt template ships with an example picture in
+`backend/app/templates/previews/<id>.webp`. After adding or changing a template, render the missing
+ones on the image GPU (Z-Image Turbo; Qwen-Image Lightning for text templates; one prompt at a time,
+waiting for other people's jobs first):
+`cd backend && uv run python ../scripts/gen_prompt_template_previews.py --comfy https://YOUR_IMAGE_GPU [--only id,id] [--force]`
+(`--dry-run` prints the prompts without queueing anything).

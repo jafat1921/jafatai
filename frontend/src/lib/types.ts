@@ -764,6 +764,12 @@ export interface Template {
   description: string
   thumb?: string | null
   defaults: Record<string, unknown>
+  // prompt templates (v2 catalogue); older servers leave these out
+  category?: string | null
+  tags?: string[]
+  examples?: Record<string, string>
+  preview_url?: string | null
+  requires_brand?: boolean
 }
 
 export interface TemplateStart {

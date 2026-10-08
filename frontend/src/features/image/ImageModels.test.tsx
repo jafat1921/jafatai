@@ -13,7 +13,7 @@ describe('Create Image: model choice', () => {
   it('preselects from ?model=, shows speeds and the quotes hint for Qwen-Image, and sends model + speed', async () => {
     const calls = mockApi((method, path) => {
       if (path === '/media') return { items: [] }
-      if (path === '/templates') return []
+      if (path === '/prompt-templates') return []
       if (method === 'POST' && path === '/images/generate') return { items: [media('n1', { media_url: null })], jobs: [job('j1')] }
     })
     renderAt('/image/generate?model=qwen_image_2512', [{ path: '/image/generate', element: <ImageGeneratePage /> }], seedCatalog)
@@ -42,7 +42,7 @@ describe('Create Image: model choice', () => {
   it('switching to a model without speeds drops the speed picker, the hint and the speed field', async () => {
     const calls = mockApi((method, path) => {
       if (path === '/media') return { items: [] }
-      if (path === '/templates') return []
+      if (path === '/prompt-templates') return []
       if (method === 'POST') return { items: [], jobs: [] }
     })
     renderAt('/image/generate?model=qwen_image_2512', [{ path: '/image/generate', element: <ImageGeneratePage /> }], seedCatalog)

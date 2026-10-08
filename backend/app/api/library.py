@@ -1,4 +1,4 @@
-"""Media library, Image studio, Templates and the Home dashboard (contract v5).
+"""Media library, Image studio, Prompt templates and the Home dashboard (contract v5).
 
 Registered before app.api.media: GET /media/{id} here takes one path segment, while stored files are
 always served as /media/workspaces/..., so the two never compete for a URL.
@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -373,7 +374,17 @@ def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = D
                          model_resolved=model.id, magic_prompt=magic)
 
 
-# ---------------------------------------------------------------- templates
+# ---------------------------------------------------------------- prompt templates
+# Shown to users as "Prompt templates"; /templates stays as the old name for the same thing.
+
+PREVIEW_DIR = TEMPLATE_DIR / "previews"
+
+
+@lru_cache
+def categories() -> dict[str, list[str]]:
+    return {kind: json.loads((TEMPLATE_DIR / f"{kind}.json").read_text(encoding="utf-8")).get("categories", [])
+            for kind in ("video", "image")}
+
 
 @lru_cache
 def templates() -> dict[str, dict]:
@@ -385,11 +396,45 @@ def templates() -> dict[str, dict]:
     return out
 
 
+def preview_file(template_id: str) -> Path | None:
+    if template_id not in templates():
+        return None
+    root = PREVIEW_DIR.resolve()
+    target = (root / f"{template_id}.webp").resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        return None
+    return target
+
+
+def _template_out(t: dict) -> TemplateOut:
+    f = preview_file(t["id"])
+    # mtime in the URL so a re-rendered preview isn't stuck behind the cache
+    url = f"/api/prompt-templates/{t['id']}/preview?v={int(f.stat().st_mtime)}" if f else None
+    return TemplateOut(**{k: t.get(k) for k in ("id", "type", "title", "description", "thumb", "defaults", "category")},
+                       tags=t.get("tags") or [], examples=t.get("examples") or {}, preview_url=url,
+                       requires_brand=bool(t.get("requires_brand")))
+
+
 @router.get("/templates", response_model=list[TemplateOut])
+@router.get("/prompt-templates", response_model=list[TemplateOut])
 def list_templates(type: Literal["video", "image"] | None = None, cur: CurrentUser = Depends(get_current_user)):
-    return [TemplateOut(**{k: t.get(k) for k in ("id", "type", "title", "description", "thumb", "defaults")},
-                        requires_brand=bool(t.get("requires_brand")))
-            for t in templates().values() if type in (None, t["type"])]
+    rows = [t for t in templates().values() if type in (None, t["type"])]
+    order = categories()
+
+    def rank(t: dict) -> int:
+        cats = order.get(t["type"], [])
+        return cats.index(t["category"]) if t.get("category") in cats else len(cats)
+
+    return [_template_out(t) for t in sorted(rows, key=lambda t: (t["type"] != "video", rank(t)))]
+
+
+@router.get("/templates/{template_id}/preview")
+@router.get("/prompt-templates/{template_id}/preview")
+def template_preview(template_id: str, cur: CurrentUser = Depends(get_current_user)):
+    f = preview_file(template_id)
+    if f is None:
+        raise HTTPException(404, "No preview for this prompt template")
+    return FileResponse(f, media_type="image/webp", headers={"Cache-Control": "private, max-age=86400"})
 
 
 def placeholders(text: str) -> list[str]:
@@ -397,15 +442,18 @@ def placeholders(text: str) -> list[str]:
 
 
 @router.post("/templates/{template_id}/start", response_model=TemplateStartOut)
+@router.post("/prompt-templates/{template_id}/start", response_model=TemplateStartOut)
 def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user)):
     t = templates().get(template_id)
     if t is None:
-        raise HTTPException(404, "Template not found")
+        raise HTTPException(404, "Prompt template not found")
     d = dict(t["defaults"])
     scaffold = d.pop("prompt_scaffold", "")
     if t["type"] == "image":
         prefill = {"prompt": scaffold, "aspect": d.get("aspect", "1:1"), "count": d.get("count", 1),
                    "style": d.get("style"), "negative": d.get("negative"), "template_id": t["id"]}
+        if d.get("model"):
+            prefill["model"] = d["model"]
         target = "image"
     elif d.get("authoring_mode"):
         prefill = {"title": "", "authoring_mode": d["authoring_mode"], "logline": "",
@@ -417,6 +465,8 @@ def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user
                    "style": d.get("style"), "dialogue": d.get("dialogue"), "template_id": t["id"]}
         target = "quick"
     prefill["placeholders"] = placeholders(scaffold)
+    if t.get("examples"):
+        prefill["examples"] = t["examples"]
     if t.get("requires_brand"):
         prefill["requires_brand"] = True
     return TemplateStartOut(target=target, prefill=prefill)

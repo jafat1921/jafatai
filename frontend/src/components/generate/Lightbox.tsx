@@ -29,6 +29,8 @@ export interface LightboxEntry {
   favourite?: boolean
   // P4: the version this one was upscaled from, for the before/after compare (C)
   compare?: { src: string; label: string; afterLabel?: string } | null
+  // P5: the upload / first picture behind an upscaled or regenerated current version
+  originalId?: string | null
 }
 
 export interface LightboxActions {
@@ -254,7 +256,15 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                 <Button asChild size="sm" variant="ghost">
                   <a href={downloadUrl(entry.generationId)} download>
                     <Download aria-hidden />
-                    Download
+                    {entry.compare ? 'Download upscaled' : 'Download'}
+                  </a>
+                </Button>
+              )}
+              {entry.src && entry.originalId && entry.originalId !== entry.generationId && (
+                <Button asChild size="sm" variant="ghost">
+                  <a href={downloadUrl(entry.originalId)} download>
+                    <Download aria-hidden />
+                    Download original
                   </a>
                 </Button>
               )}

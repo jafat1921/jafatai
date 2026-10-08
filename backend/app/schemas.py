@@ -194,6 +194,8 @@ class GenerationOut(Out):
     approved_at: Utc | None = None
     parent_id: str | None = None
     job_id: str | None = None
+    # small WebP preview (/api/media/thumb/{id}); grids use it, the lightbox uses media_url
+    thumb_url: str | None = None
 
 
 class GenerationCreate(BaseModel):
@@ -655,6 +657,32 @@ class MediaItemOut(BaseModel):
     # polish P4
     folder_id: str | None = None
     favourite: bool = False
+    # set when the current version is an upscale: {"target": "4k", "label": "4K", "engine": "quick"}
+    upscale: dict[str, Any] | None = None
+    # the version this one descends from (the upload, or the first picture), for "Download original"
+    original_generation_id: str | None = None
+
+
+class UpscaleRowOut(BaseModel):
+    result: GenerationOut
+    source: GenerationOut | None = None
+    title: str
+    kind: str
+    media_id: str | None = None
+    project_id: str | None = None
+    engine: str | None = None
+    target: str | None = None
+    label: str | None = None
+    width: int | None = None
+    height: int | None = None
+    status: str
+    job: JobOut | None = None
+    error: str | None = None
+
+
+class UpscalePage(BaseModel):
+    items: list[UpscaleRowOut]
+    next_cursor: str | None = None
 
 
 class MediaDetailOut(MediaItemOut):

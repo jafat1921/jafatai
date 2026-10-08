@@ -140,6 +140,8 @@ export interface Generation {
   approved_at?: string | null
   parent_id?: string | null
   job_id?: string | null
+  // small webp preview for grids (P5); older servers leave it out
+  thumb_url?: string | null
 }
 
 export interface Character {
@@ -603,6 +605,9 @@ export interface MediaItem {
   // contract v8 P4; older servers leave them out
   folder_id?: string | null
   favourite?: boolean
+  // P5: the current version is an upscale ("4K", "2×"…), and the version it all started from
+  upscale?: { target: string; label: string; engine?: string | null } | null
+  original_generation_id?: string | null
 }
 
 export interface MediaDetail extends MediaItem {
@@ -861,4 +866,27 @@ export interface VideoGenerateRequest extends MagicFields {
 export interface TakesRequest {
   count?: number
   duration_s?: number
+}
+
+/** GET /api/upscales (P5): one upscale result with the version it was made from. */
+export interface UpscaleRow {
+  result: Generation
+  source?: Generation | null
+  title: string
+  kind: MediaKind
+  media_id?: string | null
+  project_id?: string | null
+  engine?: string | null
+  target?: string | null
+  label?: string | null
+  width?: number | null
+  height?: number | null
+  status: GenerationStatus
+  job?: Job | null
+  error?: string | null
+}
+
+export interface UpscalePage {
+  items: UpscaleRow[]
+  next_cursor?: string | null
 }

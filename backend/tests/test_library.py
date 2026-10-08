@@ -42,7 +42,8 @@ def test_upload_image_creates_item_and_serves_file(client):
     item = r.json()
     assert item["kind"] == "image" and item["origin"] == "upload" and item["title"] == "Beach day"
     assert (item["width"], item["height"]) == (320, 200) and item["status"] == "ready"
-    assert item["media_url"].startswith("/api/media/workspaces/") and item["thumb_url"] == item["media_url"]
+    assert item["media_url"].startswith("/api/media/workspaces/")
+    assert item["thumb_url"] == f"/api/media/thumb/{item['generation_id']}?w=512"
     # random stored name, not the user's
     assert "Beach" not in item["media_url"] and item["media_url"].endswith(".png")
     assert client.get(item["media_url"]).status_code == 200
@@ -119,7 +120,7 @@ def test_upload_video_probes_and_thumbs(client, film):
     item = r.json()
     assert item["kind"] == "video" and (item["width"], item["height"]) == (320, 180)
     assert 5.9 <= item["duration_s"] <= 6.1
-    assert item["thumb_url"] and item["thumb_url"].endswith(".thumb.jpg")
+    assert item["thumb_url"] == f"/api/media/thumb/{item['generation_id']}?w=512"
     assert client.get(item["thumb_url"]).status_code == 200
     with SessionLocal() as db:
         g = db.get(Generation, item["generation_id"])

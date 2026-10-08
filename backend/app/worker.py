@@ -315,6 +315,9 @@ FINISHED_HOOKS.append(wake_parent)
 from app.library import on_job_finished as media_finished  # noqa: E402
 
 FINISHED_HOOKS.append(media_finished)
+from app import thumbs  # noqa: E402
+
+FINISHED_HOOKS.append(thumbs.on_job_finished)
 from app import brand  # noqa: E402
 
 HANDLERS[brand.BRAND_JOB] = brand.handle_brand_apply

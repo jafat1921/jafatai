@@ -40,4 +40,7 @@ export const qk = {
   // contract-v8 P4
   folders: ['folders'] as const,
   savedFilters: ['saved-filters'] as const,
+  // P5
+  upscalesAll: ['upscales'] as const,
+  upscales: (kind: 'image' | 'video') => ['upscales', kind] as const,
 }

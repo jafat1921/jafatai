@@ -1,14 +1,17 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { ImageUpscale, Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { MediaTile } from '@/components/media/MediaTile'
+import { useMediaHost } from '@/components/generate/useMediaHost'
 import { UploadZone } from '@/components/media/UploadZone'
+import { qk } from '@/hooks/keys'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { mediaGeneration } from '@/lib/media'
-import type { ImageUpscaleEngineId, Job, MediaItem, MediaKind, UpscaleEngineId } from '@/lib/types'
+import type { Generation, ImageUpscaleEngineId, Job, MediaItem, MediaKind, UpscaleEngineId } from '@/lib/types'
 import { ImageUpscaleDialog } from './ImageUpscaleDialog'
 import { UpscaleResults } from './UpscaleResults'
 import { forgetUpscale, loadUpscales, rememberUpscale } from '@/lib/upscaleHistory'
@@ -30,26 +33,37 @@ const COPY: Record<MediaKind, { title: string; blurb: string; engines: string[] 
 /** /image/upscale and /video/upscale: choose a source, then the existing upscale dialog takes over. */
 export function UpscalePickPage({ kind }: { kind: MediaKind }) {
   const [params] = useSearchParams()
+  const qc = useQueryClient()
   const [source, setSource] = useState<MediaItem | null>(null)
+  // "Upscale again" from a result card: the original's generation, not a library tile
+  const [again, setAgain] = useState<{ gen: Generation; label: string } | null>(null)
   const [recent, setRecent] = useState(() => loadUpscales(kind))
+  const sourceGen = source ? mediaGeneration(source) : (again?.gen ?? null)
+  const close = () => {
+    setSource(null)
+    setAgain(null)
+  }
   const queued = (job: Job) => {
-    if (!source || !job.generation_id) return
-    const original = mediaGeneration(source)
-    if (!original) return
+    if (!sourceGen || !job.generation_id) return
     setRecent(
       rememberUpscale({
         jobId: job.id,
-        sourceId: original.id,
+        sourceId: sourceGen.id,
         resultId: job.generation_id,
         kind,
-        label: source.title || (kind === 'image' ? 'Image' : 'Video'),
+        label: source?.title || again?.label || (kind === 'image' ? 'Image' : 'Video'),
         at: Date.now(),
       }),
     )
-    requestAnimationFrame(() => document.getElementById('upscale-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    qc.invalidateQueries({ queryKey: qk.upscales(kind) })
+    requestAnimationFrame(() => document.getElementById('upscale-results')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
   }
+  const seen = useCallback((ids: string[]) => setRecent(ids.reduce((_, id) => forgetUpscale(id, kind), loadUpscales(kind))), [kind])
   const list = useMediaList({ kind, include: 'project' })
   const items = flatItems(list.data).filter((m) => m.media_url || m.thumb_url)
+  const { handlers, host, failure } = useMediaHost({ items })
+  // the page's own dialog does the upscale, so a queued job lands in "Your upscales"
+  const tileHandlers = { ...handlers, upscale: setSource }
   const copy = COPY[kind]
   // ?engine= from a mega-menu model; ignored if it isn't one this kind of media has
   const engine = params.get('engine') ?? undefined
@@ -73,7 +87,7 @@ export function UpscalePickPage({ kind }: { kind: MediaKind }) {
           </p>
         </header>
 
-        <UpscaleResults entries={recent} onRemove={(id) => setRecent(forgetUpscale(id, kind))} />
+        <UpscaleResults kind={kind} pending={recent} onSeen={seen} onAgain={(gen, label) => setAgain({ gen, label })} />
 
         <UploadZone kinds={[kind]} multiple={false} onUploaded={setSource} />
 
@@ -95,11 +109,12 @@ export function UpscalePickPage({ kind }: { kind: MediaKind }) {
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3" aria-label={`Your ${kind}s`}>
               {items.map((m) => (
                 <li key={m.id}>
-                  <MediaTile item={m} selectable selected={source?.id === m.id} onToggle={() => setSource(m)} />
+                  <MediaTile item={m} selectable selected={source?.id === m.id} onToggle={() => setSource(m)} handlers={tileHandlers} />
                 </li>
               ))}
             </ul>
           )}
+          {failure && <ErrorState compact title="That didn't work" error={failure} />}
           {list.hasNextPage && (
             <Button variant="secondary" className="self-center" loading={list.isFetchingNextPage} onClick={() => list.fetchNextPage()}>
               Load more
@@ -110,20 +125,21 @@ export function UpscalePickPage({ kind }: { kind: MediaKind }) {
 
       {kind === 'image' ? (
         <ImageUpscaleDialog
-          source={source ? mediaGeneration(source) : null}
+          source={sourceGen}
           subject="Image"
           initialEngine={preset as ImageUpscaleEngineId | undefined}
-          onOpenChange={(o) => !o && setSource(null)}
+          onOpenChange={(o) => !o && close()}
           onQueued={queued}
         />
       ) : (
         <UpscaleDialog
-          render={source ? mediaGeneration(source) : null}
+          render={sourceGen}
           initialEngine={preset as UpscaleEngineId | undefined}
-          onOpenChange={(o) => !o && setSource(null)}
+          onOpenChange={(o) => !o && close()}
           onQueued={queued}
         />
       )}
+      {host}
     </main>
   )
 }

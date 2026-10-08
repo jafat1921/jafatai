@@ -1,12 +1,17 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { MediaDetailSheet } from '@/components/media/MediaDetail'
+import { RenameDialog } from '@/components/media/RenameDialog'
+import { MoveDialog } from '@/features/library/MoveDialog'
 import { RegenerateDialog } from '@/components/review/RegenerateDialog'
 import { ImageUpscaleDialog } from '@/features/upscale/ImageUpscaleDialog'
 import { UpscaleDialog } from '@/features/upscale/UpscaleDialog'
-import { useDeleteMedia, useMediaItem, useMediaRegenerate } from '@/hooks/useMedia'
-import { mediaAlt, mediaGeneration } from '@/lib/media'
+import { useBatchAction, useFolders } from '@/hooks/useLibraryOrg'
+import { upsertMedia, useDeleteMedia, useMediaItem, useMediaRegenerate } from '@/hooks/useMedia'
+import { api } from '@/lib/api'
+import { mediaAlt, mediaGeneration, mediaRef } from '@/lib/media'
 import { modelUsedId } from '@/lib/models'
 import { upscaleInfo } from '@/lib/upscale'
 import type { MediaDetail, MediaItem, RegenerateMode } from '@/lib/types'
@@ -40,6 +45,7 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
     generationId: item.generation_id,
     favourite: fav,
     compare: source?.media_url ? { src: source.media_url, label: `Original · v${source.version}`, afterLabel: `Upscaled · v${gen?.version ?? ''}`.trim() } : null,
+    originalId: item.original_generation_id ?? source?.id ?? null,
   }
 }
 
@@ -65,8 +71,21 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
   const [regen, setRegen] = useState<{ item: MediaItem; mode: 'note' | 'edit' } | null>(null)
   const [upscaling, setUpscaling] = useState<MediaItem | null>(null)
   const [deleting, setDeleting] = useState<MediaItem | null>(null)
+  const [moving, setMoving] = useState<MediaItem | null>(null)
+  const [renaming, setRenaming] = useState<MediaItem | null>(null)
   const regenerate = useMediaRegenerate()
   const remove = useDeleteMedia()
+  const move = useBatchAction()
+  const { folders } = useFolders(moving?.kind, !!moving)
+  const qc = useQueryClient()
+  const rename = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => api.media.update(id, { title }),
+    onSuccess: (item) => {
+      upsertMedia(qc, item)
+      setRenaming(null)
+      announce(`Renamed to ${mediaAlt(item)}.`)
+    },
+  })
   const favs = useFavourites()
   const shown = items.filter(viewable)
   const index = viewing ? shown.findIndex((m) => m.id === viewing) : -1
@@ -92,6 +111,12 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
     upscale: setUpscaling,
     remove: setDeleting,
     edit: (item) => navigate(`/image/edit?sources=${item.id}`),
+    img2img: (item) => navigate(`/image/img2img?source=${item.id}`),
+    move: setMoving,
+    rename: (item) => {
+      rename.reset()
+      setRenaming(item)
+    },
     animate: (item) => navigate(`/video/img2vid?image=${item.id}`),
     onUseAsRef: (item) => {
       setViewing(null)
@@ -116,7 +141,7 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
     if (m) fn(m)
   }
 
-  const failure = regenerate.error ?? remove.error
+  const failure = regenerate.error ?? remove.error ?? move.error
 
   const host = (
     <>
@@ -152,6 +177,26 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
       />
       <ImageUpscaleDialog source={upscaling?.kind === 'image' ? mediaGeneration(upscaling) : null} subject="Image" onOpenChange={(o) => !o && setUpscaling(null)} />
       <UpscaleDialog render={upscaling?.kind === 'video' ? mediaGeneration(upscaling) : null} onOpenChange={(o) => !o && setUpscaling(null)} />
+      <MoveDialog
+        open={!!moving}
+        count={1}
+        folders={folders}
+        current={moving?.folder_id ?? null}
+        rootLabel={moving?.kind === 'video' ? 'All videos' : 'All images'}
+        onOpenChange={(o) => !o && setMoving(null)}
+        onMove={(folderId) => {
+          const item = moving
+          setMoving(null)
+          if (item) move.mutate({ action: 'move', refs: [mediaRef(item)], options: { folder_id: folderId } }, { onSuccess: () => announce(`Moved ${mediaAlt(item)}.`) })
+        }}
+      />
+      <RenameDialog
+        item={renaming}
+        pending={rename.isPending}
+        error={rename.error?.message}
+        onOpenChange={(o) => !o && setRenaming(null)}
+        onRename={(title) => renaming && rename.mutate({ id: renaming.id, title })}
+      />
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}

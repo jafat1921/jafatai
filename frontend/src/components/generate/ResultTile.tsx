@@ -1,5 +1,6 @@
-import { AlertTriangle, Check, Film, Heart, ImageIcon, Play } from 'lucide-react'
+import { AlertTriangle, Check, Heart, Play } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
+import { TilePicture, UpscaledBadge } from '@/components/media/TilePicture'
 import { useJobs } from '@/hooks/useJobs'
 import { useTileState } from '@/hooks/useMedia'
 import { formatDuration } from '@/lib/duration'
@@ -50,7 +51,6 @@ export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, selec
   const position = useQueuePosition(job)
   const fav = useIsFavourite(item.id)
   const label = useModelLabels()
-  const url = item.thumb_url ?? item.media_url ?? gen?.media_url
   const alt = mediaAlt(item)
   const used = label(modelUsedId(gen?.params, item.params, { model: item.model }))
 
@@ -93,18 +93,10 @@ export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, selec
               if (select && (select.active || e.shiftKey || e.ctrlKey || e.metaKey)) select.onSelect(e)
               else handlers.open(item)
             }}
-            className="block size-full"
+            className="relative block size-full"
             aria-label={`View ${alt}`}
           >
-            {url && (item.kind === 'image' || item.thumb_url) ? (
-              <img src={url} alt={alt} loading="lazy" className="size-full object-cover motion-safe:animate-fade-in" />
-            ) : url ? (
-              <video src={url} aria-label={alt} muted playsInline preload="metadata" className="size-full object-cover" />
-            ) : (
-              <span className="flex size-full items-center justify-center text-studio-on-dark-muted">
-                {item.kind === 'video' ? <Film aria-hidden className="size-6" /> : <ImageIcon aria-hidden className="size-6" />}
-              </span>
-            )}
+            <TilePicture item={item} alt={alt} fallbackUrl={gen?.thumb_url ?? gen?.media_url} />
           </button>
         )}
 
@@ -141,18 +133,17 @@ export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, selec
             {item.duration_s ? formatDuration(Math.round(item.duration_s)) : 'Video'}
           </span>
         )}
-        {state !== 'pending' && (
-          <TileActions
-            item={item}
-            state={state}
-            handlers={handlers}
-            fav={fav}
-            className={cn(
-              'absolute inset-x-1 top-1 justify-end opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100',
-              state === 'failed' && 'opacity-100',
-            )}
-          />
-        )}
+        {state === 'ready' && <UpscaledBadge item={item} />}
+        <TileActions
+          item={item}
+          state={state}
+          handlers={handlers}
+          fav={fav}
+          className={cn(
+            'absolute inset-x-1 top-1 justify-end opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100',
+            state === 'failed' && 'opacity-100',
+          )}
+        />
       </div>
       {showTitle && (
         <span className="truncate px-0.5 text-small font-medium" title={alt}>

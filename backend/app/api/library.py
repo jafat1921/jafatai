@@ -20,14 +20,14 @@ from app import library as lib
 from app import mentions as mn
 from app import models_catalog as mc
 from app import organise as org
-from app import prompt_enhance, uploads
+from app import prompt_enhance, thumbs, uploads
 from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db
 from app.models import Generation, Job, MediaItem, Project, new_id
 from app.schemas import (
     DashboardOut, ImageBatchOut, ImageEditIn, ImageGenerateIn, Img2ImgIn, JobOut, MediaDetailOut, MediaItemOut,
     MediaPage,
-    MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut,
+    MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut, UpscalePage,
 )
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import enqueue_generation, job_out, new_seed, project_out
@@ -88,14 +88,13 @@ def _store_upload(db: Session, cur: CurrentUser, got: uploads.Received, folder: 
     name = uuid.uuid4().hex
     final = folder / f"{name}{uploads.EXT[got.media_type]}"
     got.path.replace(final)
-    thumb_rel = None
-    if got.media_type.startswith("video/") and uploads.video_thumb(final, folder / f"{name}.thumb.jpg", info.duration_s):
-        thumb_rel = f"{rel_folder}/{name}.thumb.jpg"
+    # the grid asks for this straight away; a 40 MB upload shouldn't be what it gets
+    thumbs.ensure_all(final, got.media_type)
 
     kind = "image" if got.media_type.startswith("image/") else "video"
     title = (got.title or Path(got.filename).stem or "Upload")[:300]
     item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind=kind, origin="upload", title=title, tags=[],
-                     width=info.width, height=info.height, duration_s=info.duration_s, thumb_path=thumb_rel)
+                     width=info.width, height=info.height, duration_s=info.duration_s)
     params = {"original_name": got.filename[:300], "bytes": got.size, "size": [info.width, info.height],
               "created_by": {"user_id": cur.id, "flow": "upload"}}
     if kind == "video":
@@ -440,3 +439,25 @@ def dashboard(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_curr
     quick = [r.model_dump(mode="json") for r in recent(db, cur)[:4]]
     return DashboardOut(recent_projects=[project_out(db, p) for p in projects], recent_videos=videos,
                         recent_images=images, running_jobs=[job_out(j) for j in running], quick_recent=quick)
+
+
+# ---------------------------------------------------------------- upscales (P5)
+
+@router.get("/upscales", response_model=UpscalePage)
+def list_upscales(kind: Literal["image", "video"] | None = None, limit: int = Query(20, ge=1, le=lib.MAX_LIMIT),
+                  cursor: str | None = None, db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(get_current_user)):
+    rows, nxt = lib.list_upscales(db, cur.workspace_id, kind=kind, limit=limit, cursor=cursor)
+    return UpscalePage(items=rows, next_cursor=nxt)
+
+
+@router.delete("/upscales/{gen_id}", status_code=204)
+def delete_upscale(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    g = db.get(Generation, gen_id)
+    if g is None or g.workspace_id != cur.workspace_id or not isinstance((g.params or {}).get("upscale"), dict):
+        raise HTTPException(404, "Upscale not found")
+    if g.status == "approved":
+        raise HTTPException(409, "This upscale is the approved version in its project; pick another there first")
+    lib.delete_upscale(db, g)
+    db.commit()
+    return Response(status_code=204)

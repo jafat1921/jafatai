@@ -15,6 +15,7 @@ from PIL import Image
 from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from app import thumbs
 from app.config import get_settings
 from app.models import Character, Generation, Job, Location, MediaItem, Project, utcnow
 from app.schemas import MediaDetailOut, MediaItemOut
@@ -120,12 +121,45 @@ def _version_counts(db: Session, item_ids: list[str]) -> dict[str, int]:
     return dict(rows)
 
 
+UPSCALE_LABELS = {"2x": "2×", "4x": "4×", "2k": "2K", "4k": "4K", "1080p": "1080p", "1440p": "1440p"}
+
+
+def upscale_badge(g: Generation | None) -> dict | None:
+    up = (g.params or {}).get("upscale") if g is not None else None
+    if not isinstance(up, dict) or not up.get("target"):
+        return None
+    t = str(up["target"])
+    return {"target": t, "label": UPSCALE_LABELS.get(t, t.upper()), "engine": up.get("engine")}
+
+
+def originals(db: Session, gens: list[Generation]) -> dict[str, str]:
+    """generation id -> the root of its parent chain (the upload or first picture), for versions that have one."""
+    up: dict[str, str | None] = {g.id: g.parent_id for g in gens}
+    frontier = {p for p in up.values() if p and p not in up}
+    for _ in range(6):  # chains are short (upload -> upscale -> regenerate); stop on anything silly
+        if not frontier:
+            break
+        rows = db.execute(select(Generation.id, Generation.parent_id).where(Generation.id.in_(frontier))).all()
+        up.update({r[0]: r[1] for r in rows})
+        frontier = {r[1] for r in rows if r[1] and r[1] not in up}
+    out = {}
+    for g in gens:
+        cur, seen = g.parent_id, {g.id}
+        while cur and up.get(cur) and cur not in seen:
+            seen.add(cur)
+            cur = up[cur]
+        if cur and cur in up:
+            out[g.id] = cur
+    return out
+
+
 def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
     gen_ids = [i.generation_id for i in items if i.generation_id]
     gens = {g.id: g for g in db.scalars(select(Generation).where(Generation.id.in_(gen_ids)))} if gen_ids else {}
     counts = _version_counts(db, [i.id for i in items])
     pids = {i.project_id for i in items if i.project_id}
     ptitles = dict(db.execute(select(Project.id, Project.title).where(Project.id.in_(pids))).all()) if pids else {}
+    roots = originals(db, list(gens.values()))
     out = []
     for i in items:
         g = gens.get(i.generation_id)
@@ -135,10 +169,10 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
             project_id=i.project_id, project_title=ptitles.get(i.project_id), generation_id=i.generation_id,
             status=g.status if g is not None else None, media_type=g.media_type if g is not None else None,
             width=i.width, height=i.height, duration_s=i.duration_s, media_url=url,
-            # TODO: small webp thumbs for big uploads; the grid loads full 40 MB images for now
-            thumb_url=media_url(i.thumb_path) if i.thumb_path else (url if i.kind == "image" else None),
+            thumb_url=thumbs.url_for(g),
             created_at=i.created_at, updated_at=i.updated_at, versions_count=counts.get(i.id, 1),
-            folder_id=i.folder_id,
+            folder_id=i.folder_id, upscale=upscale_badge(g),
+            original_generation_id=roots.get(i.generation_id) if g is not None else None,
         ))
     return out
 
@@ -212,6 +246,7 @@ def _project_rows(db: Session, workspace_id: str, *, kind: str | None, project_i
                 Generation.target_id.in_({g.target_id for g in stills}), Generation.kind.in_(PROJECT_IMAGE_KINDS),
                 Generation.status != "rejected").group_by(Generation.target_id, Generation.kind))}
 
+    roots = originals(db, renders + stills)
     for g in renders:
         p = g.params or {}
         title = p.get("title") or "Full film"
@@ -220,9 +255,10 @@ def _project_rows(db: Session, workspace_id: str, *, kind: str | None, project_i
             id=g.id, workspace_id=g.workspace_id, kind="video", origin="project", title=title, tags=[],
             project_id=g.project_id, project_title=projects.get(g.project_id), generation_id=g.id, status=g.status,
             media_type=g.media_type, width=size[0] if size else None, height=size[1] if size else None,
-            duration_s=p.get("duration_s"), media_url=media_url(g.file_path), thumb_url=None,
+            duration_s=p.get("duration_s"), media_url=media_url(g.file_path), thumb_url=thumbs.url_for(g),
             created_at=g.created_at, updated_at=g.updated_at,
             versions_count=title_counts.get((g.project_id, title), 1),
+            upscale=upscale_badge(g), original_generation_id=roots.get(g.id),
         )))
     for g in stills:
         w, h = _image_dims(g)
@@ -232,9 +268,10 @@ def _project_rows(db: Session, workspace_id: str, *, kind: str | None, project_i
         rows.append((g, MediaItemOut(
             id=g.id, workspace_id=g.workspace_id, kind="image", origin="project", title=title, tags=[],
             project_id=g.project_id, project_title=projects.get(g.project_id), generation_id=g.id, status=g.status,
-            media_type=g.media_type, width=w, height=h, media_url=url, thumb_url=url,
+            media_type=g.media_type, width=w, height=h, media_url=url, thumb_url=thumbs.url_for(g),
             created_at=g.created_at, updated_at=g.updated_at,
             versions_count=still_counts.get((g.target_id, g.kind), 1),
+            upscale=upscale_badge(g), original_generation_id=roots.get(g.id),
         )))
     return rows
 
@@ -339,7 +376,8 @@ def delete_item(db: Session, item: MediaItem) -> None:
                    .values(status="cancelled", message="Cancelled: item deleted", finished_at=utcnow(),
                            updated_at=utcnow()))
     root = get_settings().data_dir
-    files = [g.file_path for g in gens if g.file_path] + ([item.thumb_path] if item.thumb_path else [])
+    own = [g.file_path for g in gens if g.file_path]
+    files = own + [thumbs.thumb_file(Path(f), w).as_posix() for f in own for w in thumbs.SIZES] +         ([item.thumb_path] if item.thumb_path else [])
     for g in gens:
         db.delete(g)
     db.delete(item)
@@ -383,11 +421,118 @@ def on_job_finished(db: Session, job: Job) -> None:
                 item.duration_s = dur
         except Exception:
             log.exception("couldn't read the size of %s", g.id)
-        if item.kind == "video" and g.kind == "video":
-            # Create Video clips get a poster like uploads do; the grid has nothing else to show
-            from app.uploads import video_thumb
-
-            src = get_settings().data_dir / g.file_path
-            if video_thumb(src, src.with_suffix(".thumb.jpg"), item.duration_s):
-                item.thumb_path = str(Path(g.file_path).with_suffix(".thumb.jpg").as_posix())
     touch(item)
+
+
+# ---------------------------------------------------------------- upscales (P5)
+
+IMAGE_UPSCALE_KINDS = ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_mid", "keyframe_end",
+                       "image")
+VIDEO_UPSCALE_KINDS = ("render", "video")
+UPSCALE_SCAN = 200
+
+
+def _upscale_title(g: Generation, items: dict[str, MediaItem], names: dict[str, str]) -> str:
+    if g.target_type == "media":
+        item = items.get(g.target_id)
+        return (item.title if item else "") or ("Video" if g.kind == "video" else "Image")
+    if g.kind == "render":
+        return ((g.params or {}).get("title") or "Full film").split(" · ")[0]
+    label = KIND_LABELS.get(g.kind, g.kind.replace("_", " ").title())
+    owner = names.get(g.target_id)
+    return f"{owner} · {label}" if owner else label
+
+
+def list_upscales(db: Session, workspace_id: str, *, kind: str | None = None, limit: int = 20,
+                  cursor: str | None = None) -> tuple[list[dict], str | None]:
+    """Every upscale result in the workspace, newest first, running and failed ones included.
+
+    Upscale results are the generations whose params carry "upscale"; they always have a parent, so the
+    SQL narrows to children and the JSON check happens here (portable across SQLite and Postgres)."""
+    limit = max(1, min(MAX_LIMIT, limit))
+    after = parse_cursor(cursor)
+    kinds = IMAGE_UPSCALE_KINDS if kind == "image" else VIDEO_UPSCALE_KINDS if kind == "video" else \
+        IMAGE_UPSCALE_KINDS + VIDEO_UPSCALE_KINDS
+    found: list[Generation] = []
+    while len(found) <= limit:
+        q = select(Generation).where(Generation.workspace_id == workspace_id, Generation.parent_id.is_not(None),
+                                     Generation.kind.in_(kinds), Generation.status != "rejected")
+        if after:
+            q = q.where(or_(Generation.created_at < after[0],
+                            (Generation.created_at == after[0]) & (Generation.id < after[1])))
+        batch = db.scalars(q.order_by(Generation.created_at.desc(), Generation.id.desc()).limit(UPSCALE_SCAN)).all()
+        found += [g for g in batch if isinstance((g.params or {}).get("upscale"), dict)]
+        if len(batch) < UPSCALE_SCAN:
+            break
+        after = (batch[-1].created_at, batch[-1].id)
+    page, more = found[:limit], len(found) > limit
+    if not page:
+        return [], None
+
+    sources = {g.id: g for g in db.scalars(select(Generation).where(Generation.id.in_({g.parent_id for g in page})))}
+    media_ids = {g.target_id for g in page if g.target_type == "media"}
+    items = {i.id: i for i in db.scalars(select(MediaItem).where(MediaItem.id.in_(media_ids)))} if media_ids else {}
+    job_ids = [g.job_id for g in page if g.job_id]
+    jobs = {j.id: j for j in db.scalars(select(Job).where(Job.id.in_(job_ids)))} if job_ids else {}
+    names: dict[str, str] = {}
+    chars = [g.target_id for g in page if g.target_type == "character"]
+    locs = [g.target_id for g in page if g.target_type == "location"]
+    if chars:
+        names.update(db.execute(select(Character.id, Character.name).where(Character.id.in_(chars))).all())
+    if locs:
+        names.update(db.execute(select(Location.id, Location.name).where(Location.id.in_(locs))).all())
+
+    from app.services import job_out
+
+    rows = []
+    for g in page:
+        up = g.params["upscale"]
+        job = jobs.get(g.job_id) if g.job_id else None
+        src = sources.get(g.parent_id)
+        rows.append({
+            "result": gen_out(g), "source": gen_out(src) if src is not None and src.workspace_id == workspace_id else None,
+            "title": _upscale_title(g, items, names),
+            "kind": "video" if g.kind in VIDEO_UPSCALE_KINDS else "image",
+            "media_id": g.target_id if g.target_type == "media" and g.target_id in items else None,
+            "project_id": g.project_id, "engine": up.get("engine"), "target": up.get("target"),
+            "label": UPSCALE_LABELS.get(str(up.get("target")), str(up.get("target") or "").upper() or None),
+            "width": up.get("width"), "height": up.get("height"), "status": g.status,
+            "job": job_out(job) if job is not None else None,
+            "error": (job.error if job is not None and job.status == "failed" else None)
+                     or (g.note if g.status == "failed" else None),
+        })
+    return rows, (_cursor(page[-1].created_at, page[-1].id) if more else None)
+
+
+def delete_upscale(db: Session, g: Generation) -> None:
+    """Drop one upscaled version; the version it was made from stays and becomes current again."""
+    if g.status in ("queued", "generating"):
+        db.execute(update(Job).where(Job.generation_id == g.id, Job.status.in_(("queued", "running")))
+                   .values(status="cancelled", message="Cancelled: upscale deleted", finished_at=utcnow(),
+                           updated_at=utcnow()))
+    if g.target_type == "media":
+        item = db.get(MediaItem, g.target_id)
+        if item is not None and item.generation_id == g.id:
+            parent = db.get(Generation, g.parent_id) if g.parent_id else None
+            if parent is None or parent.status not in FINISHED:
+                parent = db.scalars(select(Generation).where(
+                    Generation.target_type == "media", Generation.target_id == item.id, Generation.id != g.id,
+                    Generation.status.in_(FINISHED)).order_by(Generation.version.desc())).first()
+            if parent is not None:
+                item.generation_id = parent.id
+                try:
+                    item.width, item.height, dur = _dims_of(parent)
+                    if dur is not None:
+                        item.duration_s = dur
+                except Exception:
+                    log.exception("couldn't read the size of %s", parent.id)
+            touch(item)
+    # an upscale of this upscale keeps its file and now hangs off the original
+    db.execute(update(Generation).where(Generation.parent_id == g.id).values(parent_id=g.parent_id))
+    rel = g.file_path
+    db.delete(g)
+    db.flush()
+    if rel:
+        src = get_settings().data_dir / rel
+        src.unlink(missing_ok=True)
+        thumbs.remove_for(src)

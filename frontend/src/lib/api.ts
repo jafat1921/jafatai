@@ -62,6 +62,8 @@ import type {
   EstimateResult,
   PromptEnhanceRequest,
   PromptEnhanceResult,
+  MediaKind,
+  UpscalePage,
 } from './types'
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 import type { CameraPreset } from './camera'
@@ -353,6 +355,10 @@ export const api = {
     regenerate: (id: string, body: { mode: RegenerateMode; note?: string; prompt?: string }) =>
       post<Job>(`/media/${id}/regenerate`, body),
     // upload goes through lib/upload.ts (XHR, for progress)
+  },
+  upscales: {
+    list: (q: { kind?: MediaKind; limit?: number; cursor?: string }) => get<UpscalePage>('/upscales', { ...q }),
+    remove: (generationId: string) => del(`/upscales/${generationId}`),
   },
   images: {
     generate: (body: ImageGenerateRequest) => post<MediaBatch>('/images/generate', body),

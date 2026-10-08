@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Chip } from '@/components/studio/chip'
 import { EmptyState } from '@/components/studio/states'
+import { MediaDetailSheet } from '@/components/media/MediaDetail'
 import { MediaGrid } from '@/components/media/MediaGrid'
 import { UploadZone } from '@/components/media/UploadZone'
 import { TopBarActions } from '@/components/shell/TopBarActions'
@@ -41,6 +42,8 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
   const uid = useId()
   const [params, setParams] = useSearchParams()
   const folderId = params.get('folder')
+  // ?open=<id>: "Open in Library" from an upscale card lands on that item's versions
+  const openId = params.get('open')
   const [q, setQ] = useState('')
   const [origin, setOrigin] = useState<OriginFilter>('all')
   const [tag, setTag] = useState<string | null>(null)
@@ -336,6 +339,14 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
           )}
         </div>
       </div>
+      <MediaDetailSheet
+        id={openId}
+        onClose={() => {
+          const next = new URLSearchParams(params)
+          next.delete('open')
+          setParams(next, { replace: true })
+        }}
+      />
       <MoveDialog open={moving} count={selected.length} folders={folders} current={folderId} rootLabel={rootLabel} onOpenChange={setMoving} onMove={(t) => moveTo(t)} />
     </main>
   )

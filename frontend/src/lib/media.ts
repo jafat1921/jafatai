@@ -43,3 +43,17 @@ export function containedRect(w: number, h: number, nw: number, nh: number) {
   const dh = nh * s
   return { x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh }
 }
+
+const UPSCALE_LABELS: Record<string, string> = { '2x': '2×', '4x': '4×', '2k': '2K', '4k': '4K', '1080p': '1080p', '1440p': '1440p' }
+export const upscaleLabel = (target: string | null | undefined) => (target ? (UPSCALE_LABELS[target] ?? target.toUpperCase()) : '')
+
+/** "Original" / "Upscaled · 4K" / "Version 3": what a version is, for lists that show several. */
+export function versionRole(g: Pick<Generation, 'params' | 'version' | 'parent_id'>, isOriginal: boolean) {
+  const up = (g.params ?? {}).upscale as { target?: string } | undefined
+  if (up && typeof up === 'object') return `Upscaled · ${upscaleLabel(up.target)}`
+  return isOriginal ? 'Original' : `Version ${g.version}`
+}
+
+// renders live on Output, keyframes ("· Start frame") on the Storyboard, portraits and places on Cast
+export const projectLink = (item: Pick<MediaItem, 'project_id' | 'kind' | 'title'>) =>
+  `/projects/${item.project_id}/${item.kind === 'video' ? 'output' : /frame$/i.test(item.title) ? 'storyboard' : 'cast'}`

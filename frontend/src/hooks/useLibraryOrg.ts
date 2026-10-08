@@ -5,8 +5,8 @@ import { qk } from './keys'
 import { upsertJob } from './useJobs'
 
 /** Every folder of the workspace; pages filter by kind client-side so one cache serves both libraries. */
-export function useFolders(kind?: MediaKind) {
-  const q = useQuery({ queryKey: qk.folders, queryFn: () => api.folders.list() })
+export function useFolders(kind?: MediaKind, enabled = true) {
+  const q = useQuery({ queryKey: qk.folders, queryFn: () => api.folders.list(), enabled })
   const all = Array.isArray(q.data) ? q.data : []
   const folders = kind ? all.filter((f) => f.kind === 'any' || f.kind === kind) : all
   return { ...q, folders }

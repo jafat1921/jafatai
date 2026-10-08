@@ -5,6 +5,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { JobRow } from '@/components/shell/JobRow'
 import { MediaDetailSheet } from '@/components/media/MediaDetail'
 import { MediaTile } from '@/components/media/MediaTile'
+import type { TileHandlers } from '@/components/generate/TileMenu'
+import { useMediaHost } from '@/components/generate/useMediaHost'
 import { ProjectCard } from '@/features/projects/ProjectCard'
 import { RecentQuick } from '@/features/quick/RecentQuick'
 import { useJobs } from '@/hooks/useJobs'
@@ -35,13 +37,13 @@ function Section({ title, to, linkText, children }: { title: string; to?: string
   )
 }
 
-function Strip({ items, empty, onOpen, min }: { items: MediaItem[]; empty: string; onOpen: (id: string) => void; min: number }) {
+function Strip({ items, empty, onOpen, min, handlers }: { items: MediaItem[]; empty: string; onOpen: (id: string) => void; min: number; handlers: TileHandlers }) {
   if (!items.length) return <p className="py-3 text-body text-studio-muted">{empty}</p>
   return (
     <ul className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))` }}>
       {items.map((m) => (
         <li key={m.id}>
-          <MediaTile item={m} onOpen={() => onOpen(m.id)} />
+          <MediaTile item={m} onOpen={() => onOpen(m.id)} handlers={handlers} />
         </li>
       ))}
     </ul>
@@ -54,6 +56,8 @@ export function HomePage() {
   const projects = useProjects()
   const jobs = useJobs()
   const [detail, setDetail] = useState<string | null>(null)
+  const recent = [...(dash.data?.recent_videos ?? []), ...(dash.data?.recent_images ?? [])]
+  const { handlers, host } = useMediaHost({ items: recent })
 
   const recentProjects = dash.data?.recent_projects ?? (dash.isError ? (projects.data ?? []).slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 6) : [])
   const running = (jobs.data ?? []).filter((j) => isActiveJob(j.status)).slice(0, 5)
@@ -103,14 +107,15 @@ export function HomePage() {
 
         <div className="grid gap-7 xl:grid-cols-2">
           <Section title="Recent videos" to="/video/library">
-            {loading ? <Skeleton className="h-32" /> : <Strip items={dash.data?.recent_videos ?? []} min={180} onOpen={setDetail} empty="Finished videos show up here." />}
+            {loading ? <Skeleton className="h-32" /> : <Strip items={dash.data?.recent_videos ?? []} min={180} onOpen={setDetail} handlers={handlers} empty="Finished videos show up here." />}
           </Section>
           <Section title="Recent images" to="/image/library">
-            {loading ? <Skeleton className="h-32" /> : <Strip items={dash.data?.recent_images ?? []} min={120} onOpen={setDetail} empty="Images you create or upload show up here." />}
+            {loading ? <Skeleton className="h-32" /> : <Strip items={dash.data?.recent_images ?? []} min={120} onOpen={setDetail} handlers={handlers} empty="Images you create or upload show up here." />}
           </Section>
         </div>
       </div>
       <MediaDetailSheet id={detail} onClose={() => setDetail(null)} />
+      {host}
     </main>
   )
 }

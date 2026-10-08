@@ -2,6 +2,8 @@
 
   reset-password <email>   set a new password (prompted, or MIXAI_NEW_PASSWORD env)
   list-users
+  thumbs                   make missing grid thumbnails for every finished image/video (optional;
+                           the server also makes them on first view)
 """
 import getpass
 import os
@@ -37,11 +39,22 @@ def list_users() -> int:
     return 0
 
 
+def make_thumbs() -> int:
+    from app import thumbs
+
+    with SessionLocal() as db:
+        made, failed = thumbs.backfill(db)
+    print(f"thumbs: {made} made, {failed} failed")
+    return 1 if failed and not made else 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) >= 2 and argv[0] == "reset-password":
         return reset_password(argv[1])
     if argv[:1] == ["list-users"]:
         return list_users()
+    if argv[:1] == ["thumbs"]:
+        return make_thumbs()
     print(__doc__)
     return 2
 

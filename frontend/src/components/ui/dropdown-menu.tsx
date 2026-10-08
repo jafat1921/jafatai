@@ -8,13 +8,16 @@ export const DropdownMenuTrigger = DM.Trigger
 export const DropdownMenuRadioGroup = DM.RadioGroup
 export const DropdownMenuGroup = DM.Group
 
-export function DropdownMenuContent({ className, sideOffset = 6, ...props }: React.ComponentProps<typeof DM.Content>) {
+export function DropdownMenuContent({ className, sideOffset = 6, collisionPadding = 8, ...props }: React.ComponentProps<typeof DM.Content>) {
   return (
     <DM.Portal>
       <DM.Content
         sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
         className={cn(
-          'z-50 min-w-48 overflow-hidden rounded-[6px] border border-studio-border-strong bg-studio-panel p-1 shadow-pop data-[state=open]:animate-fade-in',
+          // long menus (the tile menu has ~17 items) scroll inside the space Radix says is free
+          // instead of spilling off-screen under the top bar
+          'z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-48 overflow-y-auto overflow-x-hidden rounded-[6px] border border-studio-border-strong bg-studio-panel p-1 shadow-pop data-[state=open]:animate-fade-in',
           className,
         )}
         {...props}

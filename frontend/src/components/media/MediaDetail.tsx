@@ -12,7 +12,7 @@ import { GenerationMedia } from '@/components/review/media'
 import type { CompareMode } from '@/components/review/ZoomView'
 import { useMediaItem } from '@/hooks/useMedia'
 import { comparePartner } from '@/lib/imageUpscale'
-import { downloadUrl, mediaAlt } from '@/lib/media'
+import { downloadUrl, mediaAlt, versionRole } from '@/lib/media'
 import { generationStatus, isPendingGeneration } from '@/lib/status'
 import type { Generation, MediaDetail as Detail } from '@/lib/types'
 import { cn, plural, timeAgo } from '@/lib/utils'
@@ -48,6 +48,8 @@ function Body({ item }: { item: Detail }) {
   const viewable = (g: Generation) => !!g.media_url && !isPendingGeneration(g.status) && g.id !== current.id
   const partner = still ? (versions.find((v) => v.id === compareId && viewable(v)) ?? comparePartner(current, versions)) : undefined
   const editOf = (current.params?.edit_of ?? null) as string[] | string | null
+  // the oldest version is what everything else was made from
+  const rootId = item.original_generation_id ?? versions[versions.length - 1]?.id
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -103,8 +105,8 @@ function Body({ item }: { item: Detail }) {
                 className={cn('w-full rounded-[6px] p-0.5', v.id === current.id && 'ring-2 ring-studio-accent')}
               >
                 <span className="darkroom flex aspect-square items-center justify-center overflow-hidden rounded-[4px]">
-                  {v.media_url && item.kind === 'image' ? (
-                    <img src={v.media_url} alt="" className="size-full object-cover" loading="lazy" />
+                  {(v.thumb_url || v.media_url) && (item.kind === 'image' || v.thumb_url) ? (
+                    <img src={v.thumb_url ?? v.media_url!} alt="" className="size-full object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <span className="font-mono text-small">v{v.version}</span>
                   )}
@@ -114,6 +116,20 @@ function Body({ item }: { item: Detail }) {
                 v{v.version}
                 {v.id === item.generation_id ? ' · current' : ''}
               </span>
+              <span className="block truncate text-center text-[11px]" title={versionRole(v, v.id === rootId)}>
+                {versionRole(v, v.id === rootId)}
+              </span>
+              {v.media_url && !isPendingGeneration(v.status) && (
+                <a
+                  href={downloadUrl(v.id)}
+                  download
+                  className="mt-0.5 flex items-center justify-center gap-1 rounded-[4px] text-[11px] text-studio-accent-hover underline-offset-2 hover:underline"
+                  aria-label={`Download version ${v.version} (${versionRole(v, v.id === rootId).toLowerCase()})`}
+                >
+                  <Download aria-hidden className="size-3" />
+                  Download
+                </a>
+              )}
             </li>
           ))}
         </ol>

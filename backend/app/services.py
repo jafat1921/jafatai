@@ -20,9 +20,12 @@ def media_url(rel_path: str | None) -> str | None:
 
 
 def gen_out(g: Generation) -> GenerationOut:
+    from app.thumbs import url_for
+
     out = GenerationOut.model_validate(g)
     if g.status in READY_STATES:
         out.media_url = media_url(g.file_path)
+        out.thumb_url = url_for(g)
     return out
 
 

@@ -119,3 +119,22 @@ describe('uploads', () => {
     expect(sent).toHaveLength(1)
   })
 })
+
+describe('upscaled items (P5)', () => {
+  it('badges the tile and ?open shows original and upscaled versions, each downloadable', async () => {
+    const item = media('a', { title: 'The Luminous Tree', generation_id: 'g-up', upscale: { target: '4k', label: '4K' }, original_generation_id: 'g-orig', versions_count: 2 })
+    const v = (id: string, version: number, params: Record<string, unknown>) => ({
+      id, target_type: 'media', target_id: 'a', kind: 'image', version, status: 'ready', prompt: 'a tree', params, seed: 1,
+      media_url: `/api/media/${id}.png`, thumb_url: `/api/media/thumb/${id}?w=512`, created_at: item.created_at,
+    })
+    mockApi((_m, path) => {
+      if (path === '/media') return { items: [item] }
+      if (path === '/media/a') return { ...item, versions: [v('g-up', 2, { upscale: { target: '4k' } }), v('g-orig', 1, {})] }
+    })
+    renderAt('/image/library?open=a', [{ path: '/image/library', element: <LibraryPage kind="image" /> }])
+    expect(await screen.findByText('Upscaled · 4K', { selector: 'span.pointer-events-none' })).toBeInTheDocument()
+    const sheet = await screen.findByRole('dialog')
+    expect(await within(sheet).findByRole('link', { name: 'Download version 1 (original)' })).toHaveAttribute('href', '/api/generations/g-orig/download')
+    expect(within(sheet).getByRole('link', { name: 'Download version 2 (upscaled · 4k)' })).toHaveAttribute('href', '/api/generations/g-up/download')
+  })
+})

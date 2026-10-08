@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.models import Generation, WorkerHeartbeat, utcnow
+from app.lanes import LANES
+from app.models import Generation, Job, WorkerHeartbeat, utcnow
 from app.schemas import _iso
 from app.security import CurrentUser, get_current_user
 
@@ -58,15 +59,16 @@ async def _probe_llm(client: httpx.AsyncClient, s: Settings) -> dict:
 @router.get("/system/status")
 async def system_status(db: Session = Depends(get_db), _=Depends(get_current_user)):
     s = get_settings()
+    urls = s.all_comfy_urls()
     async with httpx.AsyncClient(timeout=PROBE_TIMEOUT, verify=s.comfy_verify_tls) as comfy_client, \
             httpx.AsyncClient(timeout=PROBE_TIMEOUT) as llm_client:
         comfy_results, llm = await asyncio.gather(
-            asyncio.gather(*[_probe_comfy(comfy_client, u, s) for u in s.comfy_urls]),
+            asyncio.gather(*[_probe_comfy(comfy_client, u, s) for u in urls]),
             _probe_llm(llm_client, s),
         )
+    probes = dict(zip(urls, comfy_results))
 
-    # contract has a single comfy object; report the first healthy instance
-    # TODO: expose every GPU instance once the UI has somewhere to show them
+    # contract has a single comfy object; report the first healthy instance (per-GPU detail is in lanes)
     if comfy_results:
         comfy = next((c for c in comfy_results if c["ok"]), comfy_results[0])
     else:
@@ -77,7 +79,37 @@ async def system_status(db: Session = Depends(get_db), _=Depends(get_current_use
     if last:
         worker["last_heartbeat"] = _iso(last)
 
-    return {"comfy": comfy, "llm": llm, "driver": s.gen_driver, "worker": worker}
+    return {"comfy": comfy, "llm": llm, "driver": s.gen_driver, "worker": worker,
+            "lanes": _lanes(db, s, probes)}
+
+
+def _lanes(db: Session, s: Settings, probes: dict) -> dict:
+    """Per lane: is a worker serving it, what is it running, which ComfyUI it renders on."""
+    from app.worker import heartbeat_lanes
+
+    cutoff = utcnow() - WORKER_ALIVE_WINDOW
+    live = [hb for hb in db.scalars(select(WorkerHeartbeat)).all() if hb.last_seen >= cutoff]
+    running = db.scalars(select(Job).where(Job.status == "running").order_by(Job.started_at)).all()
+    out = {}
+    for lane in LANES:
+        mine = [hb for hb in live if lane in heartbeat_lanes(hb)]
+        job = next((j for j in running if j.lane == lane and not (j.payload or {}).get("inline_of")), None)
+        entry = {
+            "worker": {"alive": bool(mine), "count": len(mine), "ids": [hb.id for hb in mine]},
+            "job": {"id": job.id, "type": job.type, "progress": job.progress, "message": job.message}
+            if job else None,
+            "comfy": None,
+        }
+        if lane != "general":
+            lane_urls = s.comfy_urls_for(lane)
+            healthy = next((probes[u] for u in lane_urls if probes.get(u, {}).get("ok")), None)
+            # the driver takes the first healthy URL, so that's the GPU this lane is really using
+            pick = healthy or (probes.get(lane_urls[0]) if lane_urls else None)
+            entry["comfy"] = {"urls": lane_urls, "ok": bool(healthy), "url": (pick or {}).get("url", ""),
+                              **({"devices": pick.get("devices", [])} if healthy else
+                                 {"error": (pick or {}).get("error", "no ComfyUI URL for this lane")})}
+        out[lane] = entry
+    return out
 
 
 @router.get("/system/comfy-check")
@@ -88,7 +120,7 @@ async def comfy_check(_=Depends(get_current_user)):
 
     s = get_settings()
     try:
-        client = await pick_client(s.comfy_urls, s.comfy_auth_token, s.comfy_verify_tls)
+        client = await pick_client(s.all_comfy_urls(), s.comfy_auth_token, s.comfy_verify_tls)
     except Exception as e:
         return {"ok": False, "url": "", "error": str(e), "templates": {}}
     try:

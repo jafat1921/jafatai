@@ -307,6 +307,8 @@ export interface Job {
   project_id?: string | null
   generation_id?: string | null
   gpu?: string | null
+  // which GPU worker runs it when the server splits image and video work
+  lane?: 'image' | 'video' | 'general'
   attempts: number
   error?: string | null
   created_at: string

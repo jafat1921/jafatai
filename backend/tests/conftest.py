@@ -18,6 +18,8 @@ os.environ.update(
         "ADMIN_NAME": "Tester",
         "GEN_DRIVER": "mock",
         "COMFY_URLS": "",
+        "COMFY_IMAGE_URLS": "",
+        "COMFY_VIDEO_URLS": "",
         "CORS_ORIGINS": "http://localhost:5173",
         # nothing listens on port 9: tests never reach a real Ollama unless they install a fake transport
         "LLM_BASE_URL": "http://127.0.0.1:9/v1",

@@ -1,8 +1,10 @@
-"""Job worker: `python -m app.worker` (cwd=backend).
+"""Job worker: `python -m app.worker [--lanes image,video,general]` (cwd=backend).
 
-One job at a time per process. Jobs are claimed with a conditional UPDATE so
-several workers (one per GPU later) can share the same table safely.
+One job at a time per process. Jobs are claimed with a conditional UPDATE so several
+workers can share the table safely; on the two-GPU box there is one worker per lane
+(image GPU, video GPU, general/LLM) so a still never waits behind a long take.
 """
+import argparse
 import logging
 import os
 import signal
@@ -19,6 +21,7 @@ from sqlalchemy.orm import Session, aliased, sessionmaker
 from app.config import get_settings
 from app.db import SessionLocal
 from app.drivers import GenerationDriver, get_driver
+from app.lanes import IMAGE_KINDS, LANES, VIDEO_KINDS, parse_lanes
 from app.models import Generation, Job, UsageLedger, WorkerHeartbeat, utcnow
 
 log = logging.getLogger("mixai.worker")
@@ -28,8 +31,6 @@ STALE_AFTER = timedelta(seconds=90)
 HEARTBEAT_EVERY = 5.0
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
-IMAGE_KINDS = {"portrait", "sheet_view", "keyframe_start", "keyframe_end", "keyframe_mid", "establishing", "image"}
-VIDEO_KINDS = {"take", "tile", "render", "video"}
 TEXT_KINDS = {"scene_text"}
 EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt"}
 # same string as app.reel.ASSEMBLE_JOB (that module is imported at the bottom)
@@ -58,7 +59,14 @@ class JobDeferred(Exception):
         self.priority = priority
 
 
-def claim_next(db: Session, gpu: str | None = None) -> Job | None:
+def _lane_filter(lanes) -> list:
+    # all lanes (the classic single worker) needs no filter, which also keeps rows of an unknown lane runnable
+    if not lanes or set(LANES) <= set(lanes):
+        return []
+    return [Job.lane.in_(tuple(lanes))]
+
+
+def claim_next(db: Session, gpu: str | None = None, lanes=None) -> Job | None:
     # stitches of one project share scene mezzanines, so they run one after another
     other = aliased(Job)
     busy_project = exists().where(
@@ -67,7 +75,8 @@ def claim_next(db: Session, gpu: str | None = None) -> Job | None:
     for _ in range(5):
         job_id = db.scalars(
             select(Job.id)
-            .where(Job.status == "queued", or_(Job.type.not_in(SERIAL_PER_PROJECT), ~busy_project))
+            .where(Job.status == "queued", or_(Job.type.not_in(SERIAL_PER_PROJECT), ~busy_project),
+                   *_lane_filter(lanes))
             .order_by(Job.priority.desc(), Job.created_at)
             .limit(1)
         ).first()
@@ -95,9 +104,9 @@ def claim_next(db: Session, gpu: str | None = None) -> Job | None:
     return None
 
 
-def recover_stuck(db: Session, stale_after: timedelta | None = None) -> int:
+def recover_stuck(db: Session, stale_after: timedelta | None = None, lanes=None) -> int:
     """Put orphaned running jobs back in the queue (or fail them after MAX_ATTEMPTS)."""
-    q = select(Job).where(Job.status == "running")
+    q = select(Job).where(Job.status == "running", *_lane_filter(lanes))
     if stale_after is not None:
         cutoff = utcnow() - stale_after
         q = q.where(or_(Job.heartbeat_at.is_(None), Job.heartbeat_at < cutoff))
@@ -128,20 +137,69 @@ def recover_stuck(db: Session, stale_after: timedelta | None = None) -> int:
     return n
 
 
-def beat(db: Session) -> None:
+def beat(db: Session, lanes=None) -> None:
     hb = db.get(WorkerHeartbeat, WORKER_ID)
     if hb is None:
-        hb = WorkerHeartbeat(id=WORKER_ID, info={"driver": get_settings().gen_driver, "pid": os.getpid()})
+        s = get_settings()
+        lanes = list(lanes or LANES)
+        hb = WorkerHeartbeat(id=WORKER_ID, info={
+            "driver": s.gen_driver, "pid": os.getpid(), "lanes": lanes,
+            "comfy": {lane: s.comfy_urls_for(lane) for lane in lanes if lane != "general"},
+        })
         db.add(hb)
     hb.last_seen = utcnow()
     db.commit()
 
 
+def heartbeat_lanes(hb: WorkerHeartbeat) -> list[str]:
+    # rows from before lanes existed belong to an all-lanes worker
+    return list((hb.info or {}).get("lanes") or LANES)
+
+
+def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        return True  # os.kill(pid, 0) terminates the process on Windows; heartbeat age decides there
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def other_live_workers(db: Session, lanes=None) -> list[WorkerHeartbeat]:
+    """Other live workers sharing one of these lanes. Same-host rows whose process is gone are pruned."""
+    host = socket.gethostname()
+    cutoff = utcnow() - STALE_AFTER
+    out = []
+    for hb in db.scalars(select(WorkerHeartbeat)).all():
+        if hb.id == WORKER_ID:
+            continue
+        h, _, pid = hb.id.rpartition(":")
+        if h == host and pid.isdigit() and not _pid_alive(int(pid)):
+            db.delete(hb)  # crashed before it could clean up after itself
+            continue
+        if hb.last_seen >= cutoff and set(heartbeat_lanes(hb)) & set(lanes or LANES):
+            out.append(hb)
+    db.commit()
+    return out
+
+
+def recover_lanes(db: Session, lanes=None) -> int:
+    """Called while this worker is idle. If nobody else serves our lanes, whatever still runs in them is
+    an orphan; if another live worker does, it may be mid-job, so only take back stale ones."""
+    stale_after = STALE_AFTER if other_live_workers(db, lanes) else None
+    return recover_stuck(db, stale_after, lanes)
+
+
 class JobContext:
-    def __init__(self, db: Session, job: Job, driver_factory: Callable[[], GenerationDriver]):
+    def __init__(self, db: Session, job: Job, driver_factory: Callable[[], GenerationDriver], lanes=None):
         self.db = db
         self.job = job
         self.driver_factory = driver_factory
+        # the autopilot asks whether this worker has other queued work it could do instead
+        self.lanes = tuple(lanes or LANES)
         self._last_beat = time.monotonic()
 
     def progress(self, fraction: float, message: str = "") -> None:
@@ -281,9 +339,11 @@ def _close_generation(db: Session, job: Job, status: str = "failed") -> None:
             gen.status = status
 
 
-def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver] | None = None) -> None:
-    factory = driver_factory or (lambda: get_driver(get_settings().gen_driver))
-    ctx = JobContext(db, job, factory)
+def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver] | None = None,
+            lanes=None) -> None:
+    # the lane picks the ComfyUI instance: image GPU for stills, video GPU for takes and upscales
+    factory = driver_factory or (lambda: get_driver(get_settings().gen_driver, lane=job.lane))
+    ctx = JobContext(db, job, factory, lanes)
     t0 = time.monotonic()
     handler = HANDLERS.get(job.type)
     try:
@@ -358,21 +418,31 @@ def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver
 def process_one(
     session_factory: sessionmaker | Callable[[], Session] = SessionLocal,
     driver_factory: Callable[[], GenerationDriver] | None = None,
+    lanes=None,
 ) -> bool:
     """Claim and run a single job. Returns False when the queue was empty."""
     db = session_factory()
     try:
-        job = claim_next(db, gpu=get_settings().gen_driver)
+        job = claim_next(db, gpu=get_settings().gen_driver, lanes=lanes)
         if job is None:
             return False
-        log.info("running job %s (%s)", job.id, job.type)
-        run_job(db, job, driver_factory)
+        log.info("running job %s (%s, %s lane)", job.id, job.type, job.lane)
+        run_job(db, job, driver_factory, lanes)
         return True
     finally:
         db.close()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(prog="python -m app.worker")
+    ap.add_argument("--lanes", default="all",
+                    help="comma list of image, video, general (default: all, one worker does everything)")
+    args = ap.parse_args(argv)
+    try:
+        lanes = parse_lanes(args.lanes)
+    except ValueError as e:
+        ap.error(str(e))
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     s = get_settings()
     s.data_dir.mkdir(parents=True, exist_ok=True)
@@ -391,24 +461,27 @@ def main() -> None:
     get_driver(s.gen_driver)
 
     with SessionLocal() as db:
-        # single worker in M1, so anything still "running" belongs to a dead process
-        # TODO: with one worker per GPU, only recover by heartbeat staleness here
-        n = recover_stuck(db)
+        # only our lanes: the image worker must not grab the video worker's running take
+        n = recover_lanes(db, lanes)
         if n:
             log.info("recovered %d job(s) left running by a previous worker", n)
-        beat(db)
+        beat(db, lanes)
 
-    log.info("worker %s up, driver=%s, data=%s", WORKER_ID, s.gen_driver, s.data_dir)
+    log.info("worker %s up, lanes=%s, driver=%s, data=%s", WORKER_ID, ",".join(lanes), s.gen_driver, s.data_dir)
+    if s.gen_driver == "comfy":
+        for lane in lanes:
+            if lane != "general":
+                log.info("%s lane -> ComfyUI %s", lane, ", ".join(s.comfy_urls_for(lane)) or "(none set)")
     last_beat = 0.0
     while not _stop.is_set():
         now = time.monotonic()
         if now - last_beat >= HEARTBEAT_EVERY:
             with SessionLocal() as db:
-                beat(db)
-                recover_stuck(db, STALE_AFTER)
+                beat(db, lanes)
+                recover_lanes(db, lanes)
             last_beat = now
         try:
-            worked = process_one()
+            worked = process_one(lanes=lanes)
         except Exception:
             log.exception("worker loop error")
             worked = False

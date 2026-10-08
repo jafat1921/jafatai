@@ -19,6 +19,11 @@ function TrayRow({ job, to }: { job: Job; to: string }) {
     <li className="flex flex-col gap-1.5 rounded-[6px] border border-studio-border bg-studio-raised p-2">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-body font-medium">{jobLabel(job.type)}</span>
+        {job.lane === 'image' || job.lane === 'video' ? (
+          <span className="shrink-0 rounded-[4px] border border-studio-border px-1 text-small text-studio-muted">
+            {job.lane === 'image' ? 'Image GPU' : 'Video GPU'}
+          </span>
+        ) : null}
         {job.type === 'media_zip' && job.status === 'done' ? (
           // the finished zip is a file to save, not a page to open
           <a href={api.exportUrl(job.id)} download className="inline-flex items-center gap-0.5 rounded-[4px] px-1 text-small text-studio-accent-hover underline-offset-2 hover:underline">

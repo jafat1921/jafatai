@@ -269,7 +269,7 @@ def test_0008_adds_library_folders_and_keeps_media(tmp_path):
     con.commit()
     con.close()
 
-    _alembic(db, "upgrade", "head")
+    _alembic(db, "upgrade", "0008")
     con = sqlite3.connect(db)
     con.execute("PRAGMA foreign_keys=ON")
     assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0008"
@@ -293,5 +293,50 @@ def test_0008_adds_library_folders_and_keeps_media(tmp_path):
     _alembic(db, "downgrade", "0007")
     con = sqlite3.connect(db)
     assert con.execute("SELECT id, title FROM media_item").fetchall() == [("m1", "Beach")]
+    con.close()
+    _alembic(db, "upgrade", "head")
+
+
+def test_0009_adds_job_lane_and_classifies_existing_jobs(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0008")
+    con = sqlite3.connect(db)
+    now = "2026-10-08 10:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    for gid, kind in (("g-img", "portrait"), ("g-take", "take"), ("g-txt", "scene_text"), ("g-old", "keyframe_start")):
+        con.execute("INSERT INTO generation (id, workspace_id, target_type, target_id, kind, version, status, prompt,"
+                    " params, seed, created_at, updated_at) VALUES (?, 'w1', 'shot', 't1', ?, 1, 'queued', 'p', '{}',"
+                    " 1, ?, ?)", (gid, kind, now, now))
+    jobs = [("j-img", "generate", "g-img", "queued"), ("j-take", "generate", "g-take", "running"),
+            ("j-txt", "generate", "g-txt", "queued"), ("j-up", "upscale", None, "queued"),
+            ("j-ai", "ai_outline", None, "queued"), ("j-done", "generate", "g-old", "done")]
+    for jid, typ, gid, status in jobs:
+        con.execute("INSERT INTO job (id, workspace_id, type, payload, status, priority, progress, message, attempts,"
+                    " generation_id, created_at, updated_at) VALUES (?, 'w1', ?, '{}', ?, 0, 0, '', 0, ?, ?, ?)",
+                    (jid, typ, status, gid, now, now))
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "0009")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0009"
+    lanes = dict(con.execute("SELECT id, lane FROM job").fetchall())
+    # finished jobs too: Retry puts them back in the queue
+    assert lanes == {"j-img": "image", "j-take": "video", "j-txt": "general", "j-up": "video",
+                     "j-ai": "general", "j-done": "image"}
+    assert con.execute("SELECT count(*) FROM generation").fetchone()[0] == 4
+    assert "ix_job_lane" in {r[1] for r in con.execute("PRAGMA index_list(job)")}
+    # an old API process still inserting without the column gets the default
+    con.execute("INSERT INTO job (id, workspace_id, type, payload, status, priority, progress, message, attempts,"
+                " created_at, updated_at) VALUES ('j-new', 'w1', 'media_zip', '{}', 'queued', 0, 0, '', 0, ?, ?)",
+                (now, now))
+    assert con.execute("SELECT lane FROM job WHERE id = 'j-new'").fetchone() == ("general",)
+    con.commit()
+    con.close()
+
+    _alembic(db, "downgrade", "0008")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT count(*) FROM job").fetchone()[0] == 7
+    assert "lane" not in {r[1] for r in con.execute("PRAGMA table_info(job)")}
     con.close()
     _alembic(db, "upgrade", "head")

@@ -410,4 +410,4 @@ async def pick_client(urls: list[str], token: str = "", verify_tls: bool = True)
             return c
         errors.append(url)
         await c.close()
-    raise ComfyError(f"no healthy ComfyUI instance (tried {', '.join(errors) or 'none: COMFY_URLS is empty'})")
+    raise ComfyError(f"no healthy ComfyUI instance (tried {', '.join(errors) or 'none: no ComfyUI URLs configured (COMFY_URLS / COMFY_IMAGE_URLS / COMFY_VIDEO_URLS)'})")

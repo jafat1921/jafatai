@@ -426,11 +426,15 @@ class ComfyDriver:
         settings: Settings | None = None,
         client_factory: Callable[[], Awaitable[ComfyClient]] | None = None,
         lookup=None,
+        lane: str | None = None,
     ):
         self.settings = settings or get_settings()
         s = self.settings
+        self.lane = lane
+        # image jobs on the image GPU, video jobs on the video GPU (COMFY_IMAGE_URLS / COMFY_VIDEO_URLS)
+        self.urls = s.comfy_urls_for(lane)
         self._client_factory = client_factory or (
-            lambda: pick_client(s.comfy_urls, s.comfy_auth_token, s.comfy_verify_tls)
+            lambda: pick_client(self.urls, s.comfy_auth_token, s.comfy_verify_tls)
         )
         self.lookup = lookup or DbLookup()
 

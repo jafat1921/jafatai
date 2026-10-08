@@ -14,7 +14,7 @@ afterEach(() => {
 })
 
 const JOBS = [
-  job('a', { type: 'image_generate', status: 'running', progress: 0.4, started_at: new Date(Date.now() - 20_000).toISOString() }),
+  job('a', { type: 'image_generate', status: 'running', progress: 0.4, lane: 'image', started_at: new Date(Date.now() - 20_000).toISOString() }),
   job('b', { type: 'autopilot', status: 'queued', project_id: 'p1' }),
   job('c', { type: 'take', status: 'done', finished_at: new Date().toISOString() }),
 ]
@@ -47,6 +47,9 @@ describe('background jobs tray', () => {
     expect(within(rows[0]).getByText('40%')).toBeInTheDocument()
     expect(within(rows[0]).getByText(/^~\d+(–\d+)? s left$/)).toBeInTheDocument()
     expect(within(rows[1]).getByText('In the queue')).toBeInTheDocument()
+    // two-GPU servers: image/video jobs say which GPU; general (LLM, ffmpeg) jobs carry no tag
+    expect(within(rows[0]).getByText('Image GPU')).toBeInTheDocument()
+    expect(within(rows[1]).queryByText(/GPU$/)).toBeNull()
     expect(within(rows[1]).getByRole('link', { name: /Open/ })).toHaveAttribute('href', '/quick/p1')
     expect(within(tray).getByRole('link', { name: 'Open the queue' })).toHaveAttribute('href', '/queue')
   })

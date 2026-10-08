@@ -1,7 +1,7 @@
 from app.drivers.base import GenerationDriver, ProgressCallback
 
 
-def get_driver(name: str) -> GenerationDriver:
+def get_driver(name: str, lane: str | None = None) -> GenerationDriver:
     if name == "mock":
         from app.drivers.mock import MockDriver
 
@@ -9,7 +9,7 @@ def get_driver(name: str) -> GenerationDriver:
     if name == "comfy":
         from app.drivers.comfy import ComfyDriver
 
-        return ComfyDriver()
+        return ComfyDriver(lane=lane)
     raise ValueError(f"Unknown GEN_DRIVER '{name}' (expected mock or comfy)")
 
 

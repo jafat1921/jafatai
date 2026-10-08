@@ -13,11 +13,13 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, object_session
+from sqlalchemy.orm import Mapped, Session, mapped_column, object_session
 
 from app.db import Base
+from app.lanes import lane_for
 
 
 def new_id() -> str:
@@ -287,6 +289,8 @@ class Job(Base):
         String(36), ForeignKey("generation.id", ondelete="SET NULL"), nullable=True
     )
     gpu: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # image | video | general (app.lanes); set on insert by _classify_new_jobs, read by lane workers
+    lane: Mapped[str] = mapped_column(String(10), default="general", server_default="general", index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -431,3 +435,19 @@ class BrandKit(Base):
     settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
+
+
+@event.listens_for(Session, "before_flush")
+def _classify_new_jobs(session, _ctx, _instances):
+    # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)
+    for obj in session.new:
+        if not isinstance(obj, Job) or obj.lane:
+            continue
+        kind = None
+        if obj.type == "generate" and obj.generation_id:
+            gen = next((g for g in session.new if isinstance(g, Generation) and g.id == obj.generation_id), None)
+            if gen is None:
+                with session.no_autoflush:
+                    gen = session.get(Generation, obj.generation_id)
+            kind = gen.kind if gen is not None else None
+        obj.lane = lane_for(obj.type, kind)

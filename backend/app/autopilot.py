@@ -351,8 +351,12 @@ class Autopilot:
         return list(self.db.scalars(select(Job.id).where(Job.id.in_(ids), Job.status.in_(("queued", "running")))).all())
 
     def other_work_queued(self) -> bool:
+        # only work this worker could claim: with lane workers the takes queue for the video GPU, and
+        # deferring for them would just bounce us straight back onto the general worker
+        lanes = getattr(self.ctx, "lanes", None)
+        lane_ok = [Job.lane.in_(lanes)] if lanes else []
         return bool(self.db.scalar(select(func.count()).select_from(Job).where(
-            Job.status == "queued", Job.priority > WAIT_PRIORITY, Job.id != self.job.id)))
+            Job.status == "queued", Job.priority > WAIT_PRIORITY, Job.id != self.job.id, *lane_ok)))
 
     def wait(self, w: Wait) -> None:
         ids = list(dict.fromkeys(w.job_ids))

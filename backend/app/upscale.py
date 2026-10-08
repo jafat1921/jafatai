@@ -406,7 +406,7 @@ async def fetch_object_info(max_age: float = 120.0) -> tuple[dict | None, str | 
 
     s = get_settings()
     try:
-        client = await pick_client(s.comfy_urls, s.comfy_auth_token, s.comfy_verify_tls)
+        client = await pick_client(s.all_comfy_urls(), s.comfy_auth_token, s.comfy_verify_tls)
     except Exception as e:
         return None, str(e) or type(e).__name__
     try:

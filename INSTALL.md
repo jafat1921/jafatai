@@ -9,12 +9,13 @@ and on a **Windows/macOS/Linux workstation** for development. No Docker is neede
 - [4. Put it on the web with Caddy](#4-put-it-on-the-web-with-caddy)
 - [5. First login and checks](#5-first-login-and-checks)
 - [6. Manual install (step by step)](#6-manual-install-step-by-step)
-- [7. Configuration reference (.env)](#7-configuration-reference-env)
-- [8. Updating](#8-updating)
-- [9. Backup and restore](#9-backup-and-restore)
-- [10. Admin tasks](#10-admin-tasks)
-- [11. Troubleshooting](#11-troubleshooting)
-- [12. Development setup (workstation)](#12-development-setup-workstation)
+- [7. Two GPUs: images and video in parallel](#7-two-gpus-images-and-video-in-parallel)
+- [8. Configuration reference (.env)](#8-configuration-reference-env)
+- [9. Updating](#9-updating)
+- [10. Backup and restore](#10-backup-and-restore)
+- [11. Admin tasks](#11-admin-tasks)
+- [12. Troubleshooting](#12-troubleshooting)
+- [13. Development setup (workstation)](#13-development-setup-workstation)
 
 ---
 
@@ -31,6 +32,7 @@ and on a **Windows/macOS/Linux workstation** for development. No Docker is neede
 
 - **mixai-api** serves the web app and the API.
 - **mixai-worker** runs every generation job one at a time. Jobs survive restarts and resume.
+  With two GPUs it is split into three lane workers so images and video render at the same time (section 7).
 - Everything the app creates (the database and all media) lives in `DATA_DIR`.
 
 ## 2. Server requirements
@@ -87,7 +89,7 @@ The script:
 2. creates the Python 3.12 environment (`backend/.venv`) and builds the frontend (`frontend/dist`);
 3. creates `.env` with the **server profile**: production mode, ComfyUI and Ollama on loopback, the recommended models, a random `APP_SECRET` and a **random admin password, printed once at the end**;
 4. creates the database in `DATA_DIR` and applies migrations;
-5. with `--systemd`, installs and starts `mixai-api` and `mixai-worker`, then runs a health check.
+5. with `--systemd`, installs and starts `mixai-api` and `mixai-worker` (or, with two GPUs, the three lane workers of section 7), then runs a health check.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -98,6 +100,7 @@ The script:
 | `--port` | `8090` | Local API port that Caddy proxies to |
 | `--user` | current user | User the services run as |
 | `--systemd` | off | Install and start the services |
+| `--gpu-lanes` / `--no-gpu-lanes` | auto | One worker per GPU lane (section 7). Auto = on when `COMFY_IMAGE_URLS` and `COMFY_VIDEO_URLS` are both set, or two ComfyUI services / ports 8188+8189 are found |
 
 Re-running the script is safe. It never overwrites an existing `.env`.
 
@@ -146,7 +149,7 @@ cd /data/apps && git clone <REPO_URL> mixaicinemastudio && cd mixaicinemastudio
 curl -LsSf https://astral.sh/uv/install.sh | sh          # if uv is missing
 (cd backend && uv sync --frozen)
 (cd frontend && npm ci && npm run build)
-cp .env.example .env && chmod 600 .env && nano .env      # uncomment the SERVER PROFILE block, see section 7
+cp .env.example .env && chmod 600 .env && nano .env      # uncomment the SERVER PROFILE block, see section 8
 mkdir -p /data/outputs/mixai
 (cd backend && uv run alembic upgrade head)
 ```
@@ -166,7 +169,53 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8090 --timeout-graceful-shut
 uv run python -m app.worker
 ```
 
-## 7. Configuration reference (.env)
+## 7. Two GPUs: images and video in parallel
+
+With two GPUs, each running its own ComfyUI, the studio gives one GPU to **image** work and the other to
+**video** work, and runs both at once: a portrait or keyframe no longer waits behind a long take.
+
+Every job gets a **lane** when it's queued:
+
+| Lane | Jobs | ComfyUI |
+|---|---|---|
+| `image` | portraits, turnaround views, establishing shots, keyframes, Library images, image edits and image upscales | `COMFY_IMAGE_URLS` |
+| `video` | takes and long takes, video generations, video upscales (SeedVR2 / FlashVSR) | `COMFY_VIDEO_URLS` |
+| `general` | AI writing (Ollama), reel assembly, branding (ffmpeg), exports, Quick Create orchestration | none (if it ever needs one, the image GPU) |
+
+One worker serves each lane: `mixai-worker@image`, `mixai-worker@video` and `mixai-worker@general`
+(a systemd template, `deploy/mixai-worker@.service`; the instance name is the lane list). Quick Create keeps
+working across them: the autopilot waits on the general worker while its frames and takes run on the GPUs.
+
+**Server profile** (two ComfyUI services, `comfyui.service` = GPU 0 on 8188, `comfyui-gpu1.service` = GPU 1 on 8189):
+```ini
+COMFY_URLS=http://127.0.0.1:8188,http://127.0.0.1:8189
+COMFY_IMAGE_URLS=http://127.0.0.1:8188     # GPU 0: stills
+COMFY_VIDEO_URLS=http://127.0.0.1:8189     # GPU 1: video
+```
+To swap which GPU does what, swap the two values and restart the lane workers. An empty lane list falls back
+to `COMFY_URLS` (first healthy instance), which is the old single-GPU behaviour.
+
+Switch an existing install over (the installer does this for you, and fills in the two keys when both ports answer):
+```bash
+cd /data/apps/mixaicinemastudio && git pull
+./scripts/install-server.sh --systemd --gpu-lanes
+```
+By hand:
+```bash
+sudo cp deploy/mixai-worker@.service /etc/systemd/system/    # check User= and paths
+sudo systemctl daemon-reload
+sudo systemctl disable --now mixai-worker
+sudo systemctl enable --now mixai-worker@image mixai-worker@video mixai-worker@general
+sudo systemctl restart mixai-api
+```
+Going back to one worker: `sudo systemctl disable --now mixai-worker@image mixai-worker@video mixai-worker@general && sudo systemctl enable --now mixai-worker`
+(or re-run the installer with `--no-gpu-lanes`). Without systemd, start one `uv run python -m app.worker --lanes <lane>` per lane;
+`python -m app.worker` with no flag still serves every lane.
+
+`/api/system/status` has a `lanes` object: for each lane whether a worker is alive, the job it's running, and
+the ComfyUI URL it uses with its health and GPU. Logs: `journalctl -u mixai-worker@video -f`.
+
+## 8. Configuration reference (.env)
 
 All settings live in `.env` at the repository root. Restart both services after changing it.
 
@@ -176,12 +225,14 @@ All settings live in `.env` at the repository root. Restart both services after 
 | `APP_SECRET` | random, 64 hex chars | Signs login sessions. Changing it logs everyone out |
 | `APP_HOST` / `APP_PORT` | `127.0.0.1` / `8090` | Used by `scripts/tasks.py`; the systemd unit sets its own port |
 | `CORS_ORIGINS` | `https://YOUR_HOST:8443` | Comma-separated |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | your values | **Used only on the very first start** to create the owner. Later changes need `app.manage` (section 10) |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | your values | **Used only on the very first start** to create the owner. Later changes need `app.manage` (section 11) |
 | `DEV_LOGIN_PREFILL` | `false` | Pre-fills the login form on local dev machines only |
 | `DATABASE_URL` | `sqlite:////data/outputs/mixai/mixai.db` | Four slashes for an absolute path |
 | `DATA_DIR` | `/data/outputs/mixai` | Media and generated files |
 | `GEN_DRIVER` | `comfy` | `mock` makes placeholder images (no GPU) |
 | `COMFY_URLS` | `http://127.0.0.1:8188` | Comma-separated; the first healthy one is used |
+| `COMFY_IMAGE_URLS` | two GPUs: `http://127.0.0.1:8188` | ComfyUI for image jobs (section 7). Empty = `COMFY_URLS` |
+| `COMFY_VIDEO_URLS` | two GPUs: `http://127.0.0.1:8189` | ComfyUI for video jobs. Empty = `COMFY_URLS` |
 | `COMFY_AUTH_TOKEN` | empty | Bearer token, if ComfyUI sits behind an auth proxy |
 | `COMFY_VERIFY_TLS` | `true` | `false` only for self-signed HTTPS ComfyUI URLs |
 | `COMFY_OUTPUT_DIR` | `/data/apps/ComfyUI/output` | Optional, for faster local reads |
@@ -197,7 +248,7 @@ All settings live in `.env` at the repository root. Restart both services after 
 | `LLM_TIMEOUT_S` | `600` | Per-call timeout; first calls include model loading |
 | `FFMPEG_BIN` | empty | Empty means `ffmpeg` from PATH, else a bundled copy |
 
-## 8. Updating
+## 9. Updating
 
 ```bash
 cd /data/apps/mixaicinemastudio
@@ -206,34 +257,38 @@ git pull
 ```
 Restarting the worker during a render is safe: the job is re-queued and resumes.
 
-## 9. Backup and restore
+## 10. Backup and restore
 
 Everything is in `DATA_DIR`, plus your `.env`.
 ```bash
-sudo systemctl stop mixai-worker mixai-api
+sudo systemctl stop mixai-worker mixai-worker@image mixai-worker@video mixai-worker@general mixai-api
 tar czf mixai-backup-$(date +%F).tgz -C /data/outputs mixai /data/apps/mixaicinemastudio/.env
-sudo systemctl start mixai-api mixai-worker
+sudo systemctl start mixai-api mixai-worker      # two GPUs: mixai-worker@image mixai-worker@video mixai-worker@general
 ```
 To restore, stop the services, extract the archive back to the same paths, and start them.
 
-## 10. Admin tasks
+## 11. Admin tasks
 
 ```bash
 cd /data/apps/mixaicinemastudio/backend
 uv run python -m app.manage list-users
 uv run python -m app.manage reset-password you@example.com      # prompts for the new password
 journalctl -u mixai-api -f
-journalctl -u mixai-worker -f
+journalctl -u mixai-worker -f          # two GPUs: journalctl -u 'mixai-worker@*' -f
 ```
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Login page loads but signing in fails silently | Over plain HTTP with `APP_ENV=prod` the Secure cookie is dropped. Use HTTPS through Caddy |
 | Top bar says *ComfyUI unreachable* | Check `curl -s http://127.0.0.1:8188/system_stats` and `COMFY_URLS` |
 | A generation fails with *missing model / node* | Open `/api/system/comfy-check`; install what it lists, then restart ComfyUI |
-| Queue jobs stay *Waiting* | The worker isn't running: `systemctl status mixai-worker` |
+| Queue jobs stay *Waiting* | The worker isn't running: `systemctl status mixai-worker` (two GPUs: `systemctl status 'mixai-worker@*'`) |
+| Two GPUs: images still wait for video | Check `/api/system/status` → `lanes`: all three workers alive? `COMFY_IMAGE_URLS` and `COMFY_VIDEO_URLS` set to different ports? Restart the lane workers after editing `.env` |
+| Two GPUs: only one lane's jobs move | That lane's worker or ComfyUI is down: `systemctl status mixai-worker@video comfyui-gpu1` and `curl -s http://127.0.0.1:8189/system_stats` |
+| Both `mixai-worker` and `mixai-worker@*` running | They are either/or; `sudo systemctl disable --now mixai-worker` (the lane units also declare `Conflicts=`) |
+| Lane worker logs `unknown lane(s)` | The instance name must be `image`, `video`, `general` or a dash-joined list like `image-video` |
 | AI writing is very slow or times out | First call per model loads it (minutes). Check `nvidia-smi` that Ollama uses a GPU; raise `LLM_TIMEOUT_S` |
 | AI writing returns empty text | Use the recommended models; check `/api/system/llm-check` |
 | Live progress doesn't update | Make sure the Caddy block has `flush_interval -1` |
@@ -241,7 +296,7 @@ journalctl -u mixai-worker -f
 | `uv sync --frozen` fails after `git pull` | Run `uv sync` (without `--frozen`) once, then report it |
 | Port 8090 already in use | Re-run the installer with `--port <free port>` and update Caddy |
 
-## 12. Development setup (workstation)
+## 13. Development setup (workstation)
 
 Needs Python 3.12 via [uv](https://docs.astral.sh/uv/), Node 20+, and git.
 

@@ -248,6 +248,7 @@ class JobOut(Out):
     project_id: str | None = None
     generation_id: str | None = None
     gpu: str | None = None
+    lane: str = "general"
     attempts: int
     error: str | None = None
     created_at: Utc

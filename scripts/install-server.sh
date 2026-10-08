@@ -3,8 +3,11 @@
 #
 #   ./scripts/install-server.sh --admin-email you@example.com --public-url https://your.host:8443 --systemd
 #
-# Safe to re-run: an existing .env is never overwritten, the DB is migrated in place,
+# Safe to re-run: an existing .env is never overwritten (the only exception: with GPU lanes on, missing
+# COMFY_IMAGE_URLS / COMFY_VIDEO_URLS are filled in, after a backup), the DB is migrated in place,
 # and services are restarted at the end.
+#   --gpu-lanes / --no-gpu-lanes  one worker per GPU (image, video) plus one for LLM/ffmpeg work.
+#                                 Default: on when both lane URLs are in .env or two ComfyUIs are found.
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,6 +18,8 @@ API_PORT="${API_PORT:-8090}"
 ADMIN_EMAIL=""
 PUBLIC_URL=""
 INSTALL_SYSTEMD=0
+GPU_LANES=auto
+LANES=(image video general)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,7 +30,9 @@ while [[ $# -gt 0 ]]; do
     --port)        API_PORT="$2"; shift 2 ;;
     --user)        SERVICE_USER="$2"; shift 2 ;;
     --systemd)     INSTALL_SYSTEMD=1; shift ;;
-    -h|--help)     sed -n '2,8p' "$0"; exit 0 ;;
+    --gpu-lanes)   GPU_LANES=1; shift ;;
+    --no-gpu-lanes) GPU_LANES=0; shift ;;
+    -h|--help)     sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -66,6 +73,24 @@ set_kv() {  # replace the active KEY= line, or append it
   fi
 }
 
+env_get() {  # active value of KEY in .env, inline comment stripped
+  [[ -f "$ENV_FILE" ]] || return 0
+  grep -E "^${1}=" "$ENV_FILE" | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*#.*$//' -e 's/[[:space:]]*$//' || true
+}
+port_listening() {
+  command -v ss >/dev/null 2>&1 || return 1
+  ss -ltnH 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${1}\$"
+}
+comfy_services() {  # comfyui.service, comfyui-gpu1.service, ...
+  command -v systemctl >/dev/null 2>&1 || { echo 0; return; }
+  systemctl list-unit-files --type=service --no-legend 'comfyui*' 2>/dev/null | wc -l
+}
+# image on GPU 0 (8188), video on GPU 1 (8189): swapping the GPUs is swapping these two values in .env
+IMAGE_URL=http://127.0.0.1:8188
+VIDEO_URL=http://127.0.0.1:8189
+TWO_COMFY=0
+if port_listening 8188 && port_listening 8189; then TWO_COMFY=1; fi
+
 GENERATED_PW=""
 if [[ ! -f "$ENV_FILE" ]]; then
   say "Creating .env (server profile)"
@@ -85,7 +110,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
   set_kv DATA_DIR "$DATA_DIR"
   set_kv DATABASE_URL "sqlite:///${DATA_DIR}/mixai.db"
   set_kv GEN_DRIVER comfy
-  set_kv COMFY_URLS http://127.0.0.1:8188
+  if (( TWO_COMFY )); then
+    echo "    ComfyUI answers on 8188 and 8189: images -> GPU 0 (8188), video -> GPU 1 (8189)"
+    set_kv COMFY_URLS "${IMAGE_URL},${VIDEO_URL}"
+    set_kv COMFY_IMAGE_URLS "$IMAGE_URL"
+    set_kv COMFY_VIDEO_URLS "$VIDEO_URL"
+  else
+    set_kv COMFY_URLS http://127.0.0.1:8188
+  fi
   set_kv COMFY_VERIFY_TLS true
   set_kv COMFY_OUTPUT_DIR "${COMFY_ROOT}/output"
   set_kv COMFY_LORA_DIR "${COMFY_ROOT}/models/loras"
@@ -95,6 +127,29 @@ if [[ ! -f "$ENV_FILE" ]]; then
   set_kv LLM_MODEL_VISION gemma4:e4b
 else
   say ".env exists - leaving it untouched"
+fi
+
+# --- GPU lanes -----------------------------------------------------------------------
+if [[ "$GPU_LANES" == auto ]]; then
+  GPU_LANES=0
+  if [[ -n "$(env_get COMFY_IMAGE_URLS)" && -n "$(env_get COMFY_VIDEO_URLS)" ]]; then
+    GPU_LANES=1; why="COMFY_IMAGE_URLS and COMFY_VIDEO_URLS are set"
+  elif (( $(comfy_services) >= 2 )) || (( TWO_COMFY )); then
+    GPU_LANES=1; why="two ComfyUI instances found"
+  fi
+  if (( GPU_LANES )); then echo "    GPU lanes: on ($why)"; fi
+fi
+if (( GPU_LANES )) && [[ -z "$(env_get COMFY_IMAGE_URLS)" || -z "$(env_get COMFY_VIDEO_URLS)" ]]; then
+  if (( TWO_COMFY )); then
+    backup="$ENV_FILE.bak-$(date +%Y%m%d-%H%M%S)"
+    cp -p "$ENV_FILE" "$backup"
+    set_kv COMFY_IMAGE_URLS "$IMAGE_URL"
+    set_kv COMFY_VIDEO_URLS "$VIDEO_URL"
+    echo "    .env: set COMFY_IMAGE_URLS=$IMAGE_URL COMFY_VIDEO_URLS=$VIDEO_URL (backup: $backup)"
+  else
+    warn "GPU lanes on, but COMFY_IMAGE_URLS / COMFY_VIDEO_URLS aren't both set and 8188+8189 aren't both"
+    warn "listening; every lane falls back to COMFY_URLS. Set them in .env and re-run."
+  fi
 fi
 
 # --- data + database -------------------------------------------------------------
@@ -111,11 +166,35 @@ if (( INSTALL_SYSTEMD )); then
         -e "s|--port 8090|--port ${API_PORT}|" \
         "$APP_DIR/deploy/${unit}.service" | sudo tee "/etc/systemd/system/${unit}.service" >/dev/null
   done
+  sed -e "s|/data/apps/mixaicinemastudio|${APP_DIR}|g" \
+      -e "s|^User=.*|User=${SERVICE_USER}|" \
+      "$APP_DIR/deploy/mixai-worker@.service" | sudo tee /etc/systemd/system/mixai-worker@.service >/dev/null
   sudo systemctl daemon-reload
-  sudo systemctl enable mixai-api mixai-worker >/dev/null
-  sudo systemctl restart mixai-api mixai-worker
+  lane_units=("${LANES[@]/#/mixai-worker@}")
+  lane_units=("${lane_units[@]/%/.service}")
+  if (( GPU_LANES )); then
+    # the single all-lanes worker would race the lane workers for jobs; it goes first
+    if systemctl is-enabled --quiet mixai-worker 2>/dev/null || systemctl is-active --quiet mixai-worker 2>/dev/null; then
+      sudo systemctl disable --now mixai-worker >/dev/null 2>&1 || true
+      echo "    stopped and disabled mixai-worker.service (replaced by lane workers)"
+    fi
+    sudo systemctl enable mixai-api "${lane_units[@]}" >/dev/null
+    sudo systemctl restart mixai-api "${lane_units[@]}"
+    echo "    enabled + restarted ${lane_units[*]}"
+    workers=("${lane_units[@]}")
+  else
+    for u in "${lane_units[@]}"; do
+      if systemctl is-enabled --quiet "$u" 2>/dev/null || systemctl is-active --quiet "$u" 2>/dev/null; then
+        sudo systemctl disable --now "$u" >/dev/null 2>&1 || true
+        echo "    stopped and disabled $u (single worker mode)"
+      fi
+    done
+    sudo systemctl enable mixai-api mixai-worker >/dev/null
+    sudo systemctl restart mixai-api mixai-worker
+    workers=(mixai-worker)
+  fi
   sleep 3
-  systemctl --no-pager --lines=0 status mixai-api mixai-worker || true
+  systemctl --no-pager --lines=0 status mixai-api "${workers[@]}" || true
 fi
 
 # --- smoke test ----------------------------------------------------------------------
@@ -139,4 +218,11 @@ cat <<EOF
       - Open ${PUBLIC_URL:-your public URL} and sign in
       - Checks: curl -s http://127.0.0.1:${API_PORT}/api/health
 EOF
-(( INSTALL_SYSTEMD )) || echo "      - Run without systemd: cd backend && uv run uvicorn app.main:app --port ${API_PORT}  (and: uv run python -m app.worker)"
+if (( ! INSTALL_SYSTEMD )); then
+  echo "      - Run without systemd: cd backend && uv run uvicorn app.main:app --port ${API_PORT}"
+  if (( GPU_LANES )); then
+    echo "        and one worker per lane: uv run python -m app.worker --lanes image  (same for video, general)"
+  else
+    echo "        and: uv run python -m app.worker"
+  fi
+fi

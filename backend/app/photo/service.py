@@ -29,7 +29,7 @@ FINISHED = ("ready", "approved")
 # keys of the source's params that describe how *it* was made, not the new version
 DROP_KEYS = ("comfy", "upscale", "upscale_stats", "segments", "size", "approved_by", "auto_check",
              "auto_check_reason", "auto_issues", "autopilot", "compile_first", "created_by", "original_name",
-             "bytes", "develop", "effect", "look", "magic_prompt")
+             "bytes", "develop", "effect", "look", "magic_prompt", "restore", "cutout", "chain", "chain_skipped")
 
 
 class PhotoError(RuntimeError):
@@ -198,7 +198,7 @@ def version_line(db: Session, g: Generation) -> list[Generation]:
 
 def edit_kind(g: Generation) -> str | None:
     p = g.params or {}
-    for k in ("develop", "effect", "look", "upscale"):
+    for k in ("develop", "effect", "look", "upscale", "cutout", "restore"):
         if p.get(k):
             return k
     return None
@@ -216,8 +216,33 @@ def history(db: Session, g: Generation) -> dict:
         p = x.params or {}
         out.append({"generation": gen_out(x).model_dump(mode="json"), "current": x.id == current,
                     "edit": edit_kind(x), "develop": p.get("develop"), "effect": p.get("effect"),
-                    "look": p.get("look")})
+                    "look": p.get("look"), "restore": _restore_summary(p), "cutout": _cutout_summary(p),
+                    "chain": _chain_summary(p)})
     return {"target_type": g.target_type, "target_id": g.target_id, "current_id": current, "versions": out}
+
+
+def _restore_summary(p: dict) -> dict | None:
+    r = p.get("restore")
+    if not r:
+        return None
+    return {k: r.get(k) for k in ("tool", "variant", "strength", "user_prompt", "changed")}
+
+
+def _cutout_summary(p: dict) -> dict | None:
+    c = p.get("cutout")
+    if not c or not c.get("mask_file"):
+        return None
+    bg = c.get("background") or {}
+    return {"has_mask": True, "coverage": c.get("coverage"), "edge": c.get("edge"),
+            "background": {k: bg.get(k) for k in ("type", "colour", "radius", "prompt", "generation_id")}}
+
+
+def _chain_summary(p: dict) -> dict | None:
+    ch = p.get("chain")
+    if not ch:
+        return None
+    return {"id": ch.get("id"), "index": ch.get("index"), "steps": ch.get("steps"),
+            "skipped": p.get("chain_skipped")}
 
 
 def revert(db: Session, g: Generation) -> dict:
@@ -322,6 +347,10 @@ def handle_render(ctx) -> dict:
     if gen is None:
         raise PhotoError("The new version's record no longer exists")
     params = gen.params or {}
+    if (job.payload or {}).get("mode") == "cutout":
+        from app.photo.restore import render_cutout
+
+        return render_cutout(ctx, gen)
     spec = params.get("develop") or params.get("effect")
     if not spec:
         raise PhotoError("Nothing to render (no develop or effect settings)")

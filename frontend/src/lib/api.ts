@@ -68,7 +68,10 @@ import type {
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 import type { CameraPreset } from './camera'
 import type { MentionOption } from './mentions'
-import type { AutoResult, DevelopParams, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema, PreviewResult } from './photo/types'
+import type {
+  AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema,
+  PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan,
+} from './photo/types'
 
 type CameraPresets = Record<'shot_size' | 'angle' | 'motion' | 'speed', (CameraPreset<string> & { phrase: string })[]> & { default_speed: string }
 
@@ -443,6 +446,15 @@ export const api = {
     history: (id: string) => get<PhotoHistory>(`/photo/${id}/history`),
     revert: (id: string) => post<PhotoHistory>(`/photo/${id}/revert`),
     cube: async (params: DevelopParams, title: string, size = 33) => (await send('/photo/cube', jsonInit({ params, size, title }))).blob(),
+    tools: () => get<{ tools: RestoreTool[]; effects: EffectSpec[] }>('/photo/tools'),
+    smartPlan: (id: string) => get<SmartPlan>(`/photo/${id}/smart-plan`),
+    smartRestore: (id: string, steps: Pick<PlanStep, 'tool' | 'on' | 'variant' | 'strength'>[]) =>
+      post<{ chain_id: string; steps: { tool: string; label: string }[]; first_job_id: string }>(`/photo/${id}/smart-restore`, { steps }),
+    restore: (id: string, body: RestoreRequest) => post<Job>(`/photo/${id}/restore`, body),
+    effect: (id: string, name: string, strength = 1) => post<Job>(`/photo/${id}/effect`, { name, strength, format: 'png' }),
+    background: (id: string, background: Background, edge?: Edge) => post<Job>(`/photo/${id}/background`, { background, edge }),
+    maskUrl: (id: string) => `${API_BASE}/photo/${id}/mask`,
+    describe: (id: string) => post<Described>(`/photo/${id}/describe`),
   },
   looks: {
     list: () => get<Look[]>('/looks'),

@@ -1,0 +1,14 @@
+{
+  "name": "photo_model_1x",
+  "family": "spandrel",
+  "description": "One 1x restoration model (FBCNN JPEG clean-up, NAFNet denoise/deblur, SCUNet denoise) on one image. Same size out; core ImageUpscaleWithModel tiles on its own when VRAM is short.",
+  "inputs": {
+    "image": {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "model": {"type": "str", "default": "1x_NAFNet-SIDD-width64.pth", "targets": [["Model", "model_name"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/photo", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"upscale_models": ["1x_fbcnn_color.pth", "1x_NAFNet-SIDD-width64.pth", "1x_NAFNet-GoPro-width64.pth",
+                               "1x_scunet_color_real_psnr.pth"]},
+  "progress_weights": {"Apply": 6, "Model": 1}
+}

@@ -1,0 +1,9 @@
+{
+  "1": {"class_type": "LoadImage", "_meta": {"title": "Source"}, "inputs": {"image": "example.png"}},
+  "2": {"class_type": "FaceRestoreModelLoader", "_meta": {"title": "Model"}, "inputs": {"model_name": "GFPGANv1.4.pth"}},
+  "3": {"class_type": "FaceRestoreCFWithModel", "_meta": {"title": "Restore"},
+        "inputs": {"facerestore_model": ["2", 0], "image": ["1", 0], "facedetection": "retinaface_resnet50",
+                   "codeformer_fidelity": 0.5}},
+  "4": {"class_type": "SaveImage", "_meta": {"title": "Save"},
+        "inputs": {"images": ["3", 0], "filename_prefix": "mixai/photo"}}
+}

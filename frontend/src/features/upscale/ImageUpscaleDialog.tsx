@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { RadioGroup } from 'radix-ui'
-import { ShieldCheck, Sparkles, Zap } from 'lucide-react'
+import { Brush, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Kbd } from '@/components/ui/kbd'
@@ -19,6 +19,7 @@ import { DetailSlider } from './DetailSlider'
 const ENGINE_COPY: Record<ImageUpscaleEngineId, { name: string; blurb: string; icon: typeof Sparkles }> = {
   redraw: { name: 'Redraw', blurb: 'Sharpest, adds detail. Z-Image repaints the fine texture.', icon: Sparkles },
   quick: { name: 'Quick', blurb: 'Real-ESRGAN. Seconds, cleaner edges, no new detail.', icon: Zap },
+  anime: { name: 'Anime', blurb: 'For anime, cartoons and line art: crisp lines, flat colour.', icon: Brush },
   best: { name: 'Faithful', blurb: 'SeedVR2. Restores detail and stays true to the original.', icon: ShieldCheck },
 }
 

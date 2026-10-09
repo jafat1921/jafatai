@@ -1,0 +1,19 @@
+{
+  "name": "photo_supir",
+  "family": "supir",
+  "description": "SUPIR heavy restoration on SDXL base (core SUPIRApply). Sampled from noise with restore_cfg pulling every step back toward the input, at a size the pipeline caps to about 1.5 MP; the pipeline resizes back afterwards. NON-COMMERCIAL weights: only offered when PHOTO_ALLOW_NONCOMMERCIAL is on.",
+  "inputs": {
+    "image":  {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "width":  {"type": "int", "default": 1024, "multiple_of": 64, "targets": [["Resize", "width"]]},
+    "height": {"type": "int", "default": 1024, "multiple_of": 64, "targets": [["Resize", "height"]]},
+    "prompt": {"type": "str", "default": "high quality photograph, sharp focus, natural skin texture, fine detail",
+               "targets": [["Positive", "text"]]},
+    "fidelity": {"type": "float", "default": 4.0, "targets": [["SUPIR", "restore_cfg"]]},
+    "steps":  {"type": "int", "default": 30, "targets": [["Sampler", "steps"]]},
+    "seed":   {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/photo", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["sd_xl_base_1.0.safetensors"], "model_patches": ["SUPIR-v0Q_fp16.safetensors"]},
+  "progress_weights": {"Sampler": 10, "Base": 2, "Patch": 1, "Encode": 1, "Decode": 2}
+}

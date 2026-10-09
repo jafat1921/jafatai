@@ -13,6 +13,7 @@ import type { DevelopParams, HistoryVersion, PhotoHistory } from '@/lib/photo/ty
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { CropOverlay } from './CropOverlay'
+import { CutoutTab } from './CutoutTab'
 import { DarkroomCanvas, type Zoom } from './DarkroomCanvas'
 import { DevelopPanel } from './DevelopPanel'
 import { CompareDialog, Filmstrip } from './Filmstrip'
@@ -22,6 +23,9 @@ import { LightPointsOverlay } from './LightPointsOverlay'
 import { LocalPanel } from './LocalPanel'
 import { LooksTab, type AppliedLook } from './LooksTab'
 import { PhotoHeader } from './PhotoHeader'
+import { RestoreTab } from './RestoreTab'
+import { SelectPointsOverlay, type SelectPoints } from './SelectPointsOverlay'
+import { lastTab } from './session'
 import { StudioPanel, type StudioTab } from './StudioPanel'
 import { useDevelop } from './useDevelop'
 import { useLivePreview } from './useLivePreview'
@@ -48,7 +52,11 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
   const { params } = develop
   const actions = usePhotoActions({ routeId, baseId, title, develop })
 
-  const [tab, setTab] = useState<StudioTab>(initialTab)
+  const [tab, setTabState] = useState<StudioTab>(() => lastTab.get(routeId) ?? initialTab)
+  const setTab = (t: StudioTab) => {
+    lastTab.set(routeId, t)
+    setTabState(t)
+  }
   const [cropping, setCropping] = useState(false)
   const [aspect, setAspect] = useState('free')
   const [placing, setPlacing] = useState(false)
@@ -62,11 +70,14 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
   const [pair, setPair] = useState<[HistoryVersion, HistoryVersion] | null>(null)
   const [maxSide, setMaxSide] = useState(1600)
   const [applied, setApplied] = useState<AppliedLook | null>(null)
+  const [selectPts, setSelectPts] = useState<SelectPoints>({ include: [], exclude: [] })
+  const [clickMode, setClickMode] = useState<'include' | 'exclude' | null>(null)
+  const selecting = tab === 'cutout' && (clickMode != null || selectPts.include.length + selectPts.exclude.length > 0)
   const onMaxSide = useCallback((px: number) => setMaxSide(px), [])
 
-  // crop works on the whole, unturned source
+  // crop works on the whole, unturned source; so do cut-out clicks, which SAM reads in source pixels
   // TODO: draw the crop box on the turned frame so straightening and cropping can happen together
-  const shown = cropping ? { ...params, crop: null, rotate: 0, flipH: false, flipV: false } : params
+  const shown = cropping || selecting ? { ...params, crop: null, rotate: 0, flipH: false, flipV: false } : params
   const preview = useLivePreview({ sourceUrl, previewId: baseId, params: shown, before, maxSide })
   const dirty = paramsKey(params) !== paramsKey(initial) && !isIdentity(params)
   const src = preview.source
@@ -93,6 +104,9 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
 
   const overlay = (box: { width: number; height: number }) => {
     if (before || split) return null
+    if (selecting && clickMode) {
+      return <SelectPointsOverlay points={selectPts} mode={clickMode} box={box} onChange={setSelectPts} />
+    }
     if (cropping && src) {
       return (
         <CropOverlay
@@ -164,6 +178,26 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
           }}
         />
       }
+      restore={<RestoreTab photoId={baseId} routeId={routeId} title={title} history={history} />}
+      cutout={
+        <CutoutTab
+          key={opened.generation.id}
+          photoId={baseId}
+          routeId={routeId}
+          title={title}
+          version={opened}
+          points={selectPts}
+          onPoints={setSelectPts}
+          clickMode={clickMode}
+          onClickMode={(m) => {
+            setClickMode(m)
+            if (m) {
+              setCropping(false)
+              setPlacing(false)
+            }
+          }}
+        />
+      }
       looks={<LooksTab photoId={baseId} sourceUrl={sourceUrl} params={params} applied={applied} onApplied={setApplied} onParams={develop.replace} />}
     />
   )
@@ -184,7 +218,7 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
       onZoom={setZoom}
       onMaxSide={onMaxSide}
       overlay={overlay}
-      overlayActive={cropping || placing}
+      overlayActive={cropping || placing || (selecting && clickMode != null)}
     />
   )
 

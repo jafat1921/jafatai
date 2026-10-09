@@ -1,0 +1,9 @@
+{
+  "1": {"class_type": "LoadImage", "_meta": {"title": "Source"}, "inputs": {"image": "example.png"}},
+  "2": {"class_type": "UpscaleModelLoader", "_meta": {"title": "Model"},
+        "inputs": {"model_name": "1x_NAFNet-SIDD-width64.pth"}},
+  "3": {"class_type": "ImageUpscaleWithModel", "_meta": {"title": "Apply"},
+        "inputs": {"upscale_model": ["2", 0], "image": ["1", 0]}},
+  "4": {"class_type": "SaveImage", "_meta": {"title": "Save"},
+        "inputs": {"images": ["3", 0], "filename_prefix": "mixai/photo"}}
+}

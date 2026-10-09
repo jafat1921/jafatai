@@ -29,6 +29,7 @@ interface Props {
 const IMAGE_ENGINES: { value: ImageUpscaleEngineId; label: string }[] = [
   { value: 'redraw', label: 'Redraw' },
   { value: 'quick', label: 'Quick' },
+  { value: 'anime', label: 'Anime' },
   { value: 'best', label: 'Faithful' },
 ]
 const VIDEO_ENGINES: { value: UpscaleEngineId; label: string }[] = [

@@ -282,10 +282,15 @@ def handle_generate(ctx: JobContext) -> dict:
 
     if getattr(result, "params_update", None):
         gen.params = {**(gen.params or {}), **result.params_update}
+    meta = dict(result.meta or {})
+    if restore.needs_finish(gen.params):
+        # Photo Studio: back to the source's full size, blended / composited (app.photo.restore)
+        ctx.progress(0.995, "Finishing at full size")
+        meta.update(restore.finish(gen, abs_path))
     gen.file_path = rel_path
     gen.media_type = result.media_type
     gen.status = "ready"
-    return {"file_path": rel_path, "media_type": result.media_type, **result.meta}
+    return {"file_path": rel_path, "media_type": result.media_type, **meta}
 
 
 HANDLERS: dict[str, Callable[[JobContext], dict]] = {
@@ -329,9 +334,10 @@ FINISHED_HOOKS.append(brand_moments.on_job_finished)
 from app import organise  # noqa: E402
 
 HANDLERS[organise.ZIP_JOB] = organise.handle_zip
-from app.photo import looks as photo_looks, service as photo  # noqa: E402
+from app.photo import looks as photo_looks, restore, service as photo  # noqa: E402
 
 HANDLERS[photo.RENDER_JOB] = photo.handle_render
+FINISHED_HOOKS.append(restore.on_job_finished)
 HANDLERS[photo_looks.VIDEO_JOB] = photo_looks.handle_apply_video
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.

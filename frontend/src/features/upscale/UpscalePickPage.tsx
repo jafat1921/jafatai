@@ -21,7 +21,7 @@ const COPY: Record<MediaKind, { title: string; blurb: string; engines: string[] 
   image: {
     title: 'Upscale an image',
     blurb: 'Pick an image from your library or upload one. The bigger copy is saved as a new version; the original stays.',
-    engines: ['redraw', 'quick', 'best'],
+    engines: ['redraw', 'quick', 'anime', 'best'],
   },
   video: {
     title: 'Upscale a video',

@@ -1,0 +1,13 @@
+{
+  "name": "photo_face_restore",
+  "family": "gfpgan",
+  "description": "GFPGAN v1.4 face restoration through facerestore_cf: RetinaFace finds the faces, each is restored and pasted back, the rest of the picture is untouched. codeformer_fidelity only matters for CodeFormer, which we don't ship.",
+  "inputs": {
+    "image": {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "detector": {"type": "str", "default": "retinaface_resnet50", "targets": [["Restore", "facedetection"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/photo", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"facerestore_models": ["GFPGANv1.4.pth"]},
+  "progress_weights": {"Restore": 6, "Model": 1}
+}

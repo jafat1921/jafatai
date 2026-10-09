@@ -188,3 +188,52 @@ class ImportOut(BaseModel):
     looks: list[LookOut]
     reports: list[ImportReport]
 
+
+
+# ---------------------------------------------------------------- restore / cut-out (contract v10)
+
+class Point(_Loose):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
+class Edge(_Loose):
+    feather: float = Field(0.6, ge=0, le=20)
+    shift: int = Field(0, ge=-10, le=10)
+
+
+class RestoreIn(_Loose):
+    tool: str = Field(min_length=1, max_length=40)
+    variant: str | None = Field(None, max_length=40)
+    strength: float = Field(1.0, ge=0.05, le=1.0)
+    prompt: str | None = Field(None, max_length=600)
+    # select (SAM 3): words and/or clicks, 0..1 of the picture
+    words: str | None = Field(None, max_length=200)
+    include: list[Point] = Field(default_factory=list, max_length=24)
+    exclude: list[Point] = Field(default_factory=list, max_length=24)
+    op: Literal["replace", "add", "subtract"] | None = None
+    edge: Edge | None = None
+    note: str | None = Field(None, max_length=500)
+
+
+class SmartStep(_Loose):
+    tool: str = Field(min_length=1, max_length=40)
+    on: bool = True
+    variant: str | None = Field(None, max_length=40)
+    strength: float = Field(1.0, ge=0.05, le=1.0)
+
+
+class SmartRestoreIn(BaseModel):
+    steps: list[SmartStep] = Field(min_length=1, max_length=12)
+
+
+class Background(_Loose):
+    type: Literal["transparent", "colour", "image", "blur", "generated"] = "transparent"
+    colour: str | None = Field(None, max_length=9)
+    generation_id: str | None = Field(None, max_length=64)
+    radius: float | None = Field(None, ge=2, le=60)
+
+
+class BackgroundIn(BaseModel):
+    background: Background = Background()
+    edge: Edge | None = None

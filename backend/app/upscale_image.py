@@ -19,7 +19,8 @@ from app.upscale import UpscaleError, seedvr2_variant
 IMAGE_KINDS = ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end", "keyframe_mid", "image")
 TARGETS = {"2x": 2.0, "4x": 4.0, "2k": 2048, "4k": 3840}
 TARGET_LABELS = {"2x": "2×", "4x": "4×", "2k": "2K", "4k": "4K"}
-ALIASES = {"zimage": "redraw", "z-image": "redraw", "esrgan": "quick", "realesrgan": "quick",
+ANIME_MODEL = "RealESRGAN_x4plus_anime_6B.pth"
+ALIASES = {"cartoon": "anime", "zimage": "redraw", "z-image": "redraw", "esrgan": "quick", "realesrgan": "quick",
            "seedvr2": "best", "seedvr": "best", "faithful": "best"}
 GENERIC_REDRAW_PROMPT = "a sharp, detailed, high quality image with clean natural texture"
 DENOISE = (0.15, 0.5, 0.33)  # min, max, default: the product owner's workflow runs at 0.33
@@ -47,6 +48,8 @@ ENGINES = {
                           blurb="Sharpest. Re-draws fine detail with the image's own prompt."),
     "quick": ImageEngine("quick", "Quick · Real-ESRGAN", "image_upscale_esrgan", 8192, mp_capped=False,
                          load_s=3.0, rate_mp=0.6, blurb="A few seconds. Cleaner edges, no new detail."),
+    "anime": ImageEngine("anime", "Anime · Real-ESRGAN", "image_upscale_esrgan", 8192, mp_capped=False,
+                         load_s=3.0, rate_mp=0.4, blurb="For anime, cartoons and line art: crisp lines, flat colour."),
     "best": ImageEngine("best", "Faithful · SeedVR2", "image_upscale_seedvr2", 4096, load_s=30.0, rate_mp=6.0,
                         blurb="Restores detail while staying true to the original."),
 }
@@ -57,7 +60,7 @@ def engine_id(value: str | None) -> str:
     v = (value or DEFAULT_ENGINE).strip().lower()
     v = ALIASES.get(v, v)
     if v not in ENGINES:
-        raise UpscaleError(f"'{value}' isn't an image upscale engine (expected redraw, quick or best)")
+        raise UpscaleError(f"'{value}' isn't an image upscale engine (expected redraw, quick, anime or best)")
     return v
 
 
@@ -145,6 +148,9 @@ def engine_options(object_info: dict | None, *, driver: str, error: str | None =
                 problems = ([f"missing nodes: {', '.join(res['missing_nodes'])}"] if res["missing_nodes"] else []) + \
                            ([f"missing models: {', '.join(res['missing_models'])}"] if res["missing_models"] else []) + \
                            res["invalid"][:3]
+                if e.id == "anime" and ANIME_MODEL not in _model_options(object_info, "UpscaleModelLoader",
+                                                                         "model_name"):
+                    problems.append(f"missing models: {ANIME_MODEL}")
                 if e.id == "best":
                     have = set(_model_options(object_info, "UNETLoader", "unet_name"))
                     variants = load(e.template).manifest["variants"]
@@ -223,6 +229,8 @@ def queue_image_upscale(db: Session, source: Generation, engine: str | None, tar
         up["pre_enlarge"] = sz.scale >= 1.5
     if eid == "best":
         up["model"] = load(e.template).manifest["variants"][var]
+    if eid == "anime":
+        up["model"] = ANIME_MODEL
     params = {k: v for k, v in (source.params or {}).items() if k not in DROP_KEYS}
     params.update(upscale=up, size=[sz.width, sz.height], created_by={"user_id": user_id, "flow": "upscale"})
     # an upscaled upload is a made image, so it joins the item's line as kind "image"

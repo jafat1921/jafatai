@@ -90,3 +90,13 @@ export function useLookMutations() {
     }),
   }
 }
+
+// ---------------------------------------------------------------- restore / cut-out (contract v10)
+
+export const useRestoreTools = () =>
+  useQuery({ queryKey: ['photo', 'tools'], queryFn: api.photo.tools, staleTime: 60_000 })
+
+export const useSmartPlan = (id: string, enabled: boolean) =>
+  useQuery({ queryKey: ['photo', 'smart-plan', id], queryFn: () => api.photo.smartPlan(id), enabled, staleTime: Infinity, retry: false })
+
+export const useDescribe = () => useMutation({ mutationFn: (id: string) => api.photo.describe(id) })

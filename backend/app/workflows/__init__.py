@@ -16,7 +16,8 @@ TEMPLATE_DIR = Path(__file__).resolve().parent
 # loader inputs whose enum is a list of files on the GPU box
 MODEL_FIELDS = {
     "unet_name", "clip_name", "clip_name1", "clip_name2", "vae_name", "ckpt_name",
-    "lora_name", "text_encoder", "model_name", "upscale_model_name",
+    "lora_name", "text_encoder", "model_name", "upscale_model_name", "bg_removal_name", "checkpoint",
+    "name",
 }
 
 

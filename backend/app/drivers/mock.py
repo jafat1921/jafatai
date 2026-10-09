@@ -79,6 +79,8 @@ class MockDriver:
             progress_cb(upto * (i + 1) / self.steps, f"{label} {i + 1}/{self.steps}")
 
     def generate_image(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
+        if params.get("restore"):
+            return self._restore(params["restore"], out_path, progress_cb)
         if params.get("upscale"):
             return self._upscale_image(params["upscale"], out_path, progress_cb)
         self._tick(progress_cb, "Sampling")
@@ -144,6 +146,25 @@ class MockDriver:
         big.save(out_path, "PNG", compress_level=1)
         progress_cb(1.0, "Done")
         return DriverResult(out_path, "image/png", {"width": w, "height": h, "template": up.get("template")})
+
+    def _restore(self, r: dict, out_path: Path, progress_cb) -> DriverResult:
+        # what each real template returns, near enough: masks are a centred oval, edits change one patch
+        self._tick(progress_cb, "Restoring")
+        w, h = r["proc"]
+        with Image.open(get_settings().data_dir / r["source_file"]) as im:
+            img = im.convert("RGB").resize((w, h), Image.LANCZOS)
+        if r["template"] in ("photo_cutout_mask", "photo_sam_mask"):
+            img = Image.new("RGB", (w, h), 0)
+            ImageDraw.Draw(img).ellipse((w * 0.25, h * 0.15, w * 0.75, h * 0.9), fill=(255, 255, 255))
+        elif r["template"] == "photo_colourise":
+            img = Image.merge("RGB", [c.point(lambda v, k=k: min(255, int(v * k))) for c, k in
+                                      zip(img.convert("L").convert("RGB").split(), (1.08, 1.0, 0.86))])
+        elif r.get("tool") in ("fix", "scratches", "background", "stylise"):
+            ImageDraw.Draw(img).rectangle((w * 0.1, h * 0.1, w * 0.3, h * 0.3), fill=(200, 60, 40))
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(out_path, "PNG", compress_level=1)
+        progress_cb(1.0, "Done")
+        return DriverResult(out_path, "image/png", {"width": w, "height": h, "template": r["template"]})
 
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         self._tick(progress_cb, "Writing")

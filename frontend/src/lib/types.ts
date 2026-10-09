@@ -483,7 +483,7 @@ export interface UpscaleRequest {
 }
 
 // image upscaling (contract v4, "Image upscaling")
-export type ImageUpscaleEngineId = 'redraw' | 'quick' | 'best'
+export type ImageUpscaleEngineId = 'redraw' | 'quick' | 'anime' | 'best'
 export type ImageUpscaleTarget = '2x' | '4x' | '2k' | '4k'
 
 export interface ImageUpscaleEngine {

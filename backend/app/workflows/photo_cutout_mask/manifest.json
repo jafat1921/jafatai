@@ -1,0 +1,12 @@
+{
+  "name": "photo_cutout_mask",
+  "family": "birefnet",
+  "description": "BiRefNet subject mask (core RemoveBackground) saved as a greyscale image. The backend composites it with the full-size source, so transparency, feathering and background replacement never need the GPU again.",
+  "inputs": {
+    "image": {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/mask", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"background_removal": ["birefnet.safetensors"]},
+  "progress_weights": {"Detect": 6, "Model": 1}
+}

@@ -1,0 +1,13 @@
+{
+  "1": {"class_type": "LoadImage", "_meta": {"title": "Source"}, "inputs": {"image": "example.png"}},
+  "2": {"class_type": "CheckpointLoaderSimple", "_meta": {"title": "Model"}, "inputs": {"ckpt_name": "sam3.1_multiplex_fp16.safetensors"}},
+  "3": {"class_type": "CLIPTextEncode", "_meta": {"title": "Words"}, "inputs": {"clip": ["2", 1], "text": ""}},
+  "4": {"class_type": "PrimitiveString", "_meta": {"title": "Include"}, "inputs": {"value": "[]"}},
+  "5": {"class_type": "PrimitiveString", "_meta": {"title": "Exclude"}, "inputs": {"value": "[]"}},
+  "6": {"class_type": "SAM3_Detect", "_meta": {"title": "Detect"},
+        "inputs": {"model": ["2", 0], "image": ["1", 0], "threshold": 0.5, "refine_iterations": 2,
+                   "individual_masks": false, "conditioning": ["3", 0], "positive_coords": ["4", 0],
+                   "negative_coords": ["5", 0]}},
+  "7": {"class_type": "MaskToImage", "_meta": {"title": "AsImage"}, "inputs": {"mask": ["6", 0]}},
+  "8": {"class_type": "SaveImage", "_meta": {"title": "Save"}, "inputs": {"images": ["7", 0], "filename_prefix": "mixai/mask"}}
+}

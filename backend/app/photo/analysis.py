@@ -40,7 +40,7 @@ def analyse(rgb: np.ndarray, size: tuple[int, int] | None = None) -> dict:
         dr, dg, db = (means - avg) / 255
         big = max(abs(dr), abs(dg), abs(db))
         if big > 0.04:
-            strength = min(1.0, big * 2)
+            strength = float(min(1.0, big * 2))
             if dr > 0.04 and dg > 0.04 and db < 0:
                 cast = "yellow"
             elif db > 0.04 and dg > 0.04 and dr < 0:

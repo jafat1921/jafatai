@@ -1,0 +1,7 @@
+{
+  "1": {"class_type": "LoadImage", "_meta": {"title": "Source"}, "inputs": {"image": "example.png"}},
+  "2": {"class_type": "LoadBackgroundRemovalModel", "_meta": {"title": "Model"}, "inputs": {"bg_removal_name": "birefnet.safetensors"}},
+  "3": {"class_type": "RemoveBackground", "_meta": {"title": "Detect"}, "inputs": {"bg_removal_model": ["2", 0], "image": ["1", 0]}},
+  "4": {"class_type": "MaskToImage", "_meta": {"title": "AsImage"}, "inputs": {"mask": ["3", 0]}},
+  "5": {"class_type": "SaveImage", "_meta": {"title": "Save"}, "inputs": {"images": ["4", 0], "filename_prefix": "mixai/mask"}}
+}

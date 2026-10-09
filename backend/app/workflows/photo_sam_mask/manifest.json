@@ -1,0 +1,16 @@
+{
+  "name": "photo_sam_mask",
+  "family": "sam3",
+  "description": "SAM 3.1 selection mask from words (\"the dog\"), clicked points (pixel coords as JSON) or both. An unused prompt drops its node so SAM3_Detect never sees an empty one. The backend adds or subtracts the result against the current cut-out mask.",
+  "inputs": {
+    "image": {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "words": {"type": "str", "targets": [["Words", "text"]], "if_missing": {"drop": ["Words"]}},
+    "include": {"type": "str", "targets": [["Include", "value"]], "if_missing": {"drop": ["Include"]}},
+    "exclude": {"type": "str", "targets": [["Exclude", "value"]], "if_missing": {"drop": ["Exclude"]}},
+    "threshold": {"type": "float", "default": 0.5, "targets": [["Detect", "threshold"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/mask", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["sam3.1_multiplex_fp16.safetensors"]},
+  "progress_weights": {"Detect": 6, "Model": 2}
+}

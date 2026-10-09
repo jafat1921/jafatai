@@ -1,0 +1,21 @@
+{
+  "1": {"class_type": "LoadImage", "_meta": {"title": "Source"}, "inputs": {"image": "example.png"}},
+  "2": {"class_type": "ImageScale", "_meta": {"title": "Resize"},
+        "inputs": {"image": ["1", 0], "upscale_method": "lanczos", "width": 1024, "height": 1024, "crop": "disabled"}},
+  "3": {"class_type": "CheckpointLoaderSimple", "_meta": {"title": "Base"}, "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"}},
+  "4": {"class_type": "ModelPatchLoader", "_meta": {"title": "Patch"}, "inputs": {"name": "SUPIR-v0Q_fp16.safetensors"}},
+  "5": {"class_type": "SUPIRApply", "_meta": {"title": "SUPIR"},
+        "inputs": {"model": ["3", 0], "model_patch": ["4", 0], "vae": ["3", 2], "image": ["2", 0],
+                   "strength_start": 1.0, "strength_end": 1.0, "restore_cfg": 4.0, "restore_cfg_s_tmin": 0.05}},
+  "6": {"class_type": "CLIPTextEncode", "_meta": {"title": "Positive"},
+        "inputs": {"clip": ["3", 1], "text": "high quality photograph, sharp focus, natural skin texture, fine detail"}},
+  "7": {"class_type": "CLIPTextEncode", "_meta": {"title": "Negative"},
+        "inputs": {"clip": ["3", 1], "text": "painting, illustration, cartoon, blurry, noisy, jpeg artefacts, deformed, over-smooth, plastic skin"}},
+  "8": {"class_type": "VAEEncode", "_meta": {"title": "Encode"}, "inputs": {"pixels": ["2", 0], "vae": ["3", 2]}},
+  "9": {"class_type": "KSampler", "_meta": {"title": "Sampler"},
+        "inputs": {"model": ["5", 0], "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["8", 0],
+                   "seed": 0, "steps": 30, "cfg": 4.0, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0}},
+  "10": {"class_type": "VAEDecode", "_meta": {"title": "Decode"}, "inputs": {"samples": ["9", 0], "vae": ["3", 2]}},
+  "11": {"class_type": "SaveImage", "_meta": {"title": "Save"},
+         "inputs": {"images": ["10", 0], "filename_prefix": "mixai/photo"}}
+}

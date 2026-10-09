@@ -72,7 +72,8 @@ Notes
 | SDXL base 1.0 | the SDXL model SUPIR patches | https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors | CreativeML Open RAIL++-M (commercial use allowed with use restrictions); not gated | 6,938,078,334 | `models/checkpoints/sd_xl_base_1.0.safetensors` |
 
 ComfyUI's own SUPIR template pairs SUPIR with Juggernaut XL; we use SDXL base for its clearer licence.
-**Do not expose SUPIR to paying customers until the licence question is settled.**
+**Do not expose SUPIR to paying customers until the licence question is settled.** Mix AI keeps the
+"Heavy restore (SUPIR)" tool switched off unless `PHOTO_ALLOW_NONCOMMERCIAL=true` is set in `.env`.
 
 ## C) Extras, ~23 MB
 

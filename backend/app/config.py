@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     upscale_default_engine: str = "best"  # best | fast | quick
     upscale_seedvr2_model: str = "3b"  # 3b | 7b
     image_upscale_max_mp: float = 8.4  # redraw / faithful image outputs; 3840x2160 is 8.3
+    # SUPIR weights are non-commercial only; the owner turns this on for private/research use
+    photo_allow_noncommercial: bool = False
 
     @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
     @classmethod

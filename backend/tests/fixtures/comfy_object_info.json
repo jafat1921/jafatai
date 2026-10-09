@@ -4,10 +4,12 @@
    "required": {
     "ckpt_name": [
      [
-      "ltx-2.3-22b-distilled-fp8.safetensors",
       "ltx-2.3-22b-dev-fp8.safetensors",
       "ltx-2.3-22b-dev.safetensors",
-      "qx_asset.pth"
+      "ltx-2.3-22b-distilled-fp8.safetensors",
+      "qx_asset.pth",
+      "sam3.1_multiplex_fp16.safetensors",
+      "sd_xl_base_1.0.safetensors"
      ],
      {
       "tooltip": "The name of the checkpoint (model) to load."
@@ -16,6 +18,11 @@
    }
   },
   "output": [
+   "MODEL",
+   "CLIP",
+   "VAE"
+  ],
+  "output_name": [
    "MODEL",
    "CLIP",
    "VAE"
@@ -1655,7 +1662,7 @@
    "video_info"
   ],
   "name": "VHS_LoadVideo",
-  "category": "Video Helper Suite ðŸŽ¥ðŸ…¥ðŸ…—ðŸ…¢"
+  "category": "Video Helper Suite \u00c3\u00b0\u00c5\u00b8\u00c5\u00bd\u00c2\u00a5\u00c3\u00b0\u00c5\u00b8\u00e2\u20ac\u00a6\u00c2\u00a5\u00c3\u00b0\u00c5\u00b8\u00e2\u20ac\u00a6\u00e2\u20ac\u201d\u00c3\u00b0\u00c5\u00b8\u00e2\u20ac\u00a6\u00c2\u00a2"
  },
  "AILab_FlashVSR_Advanced": {
   "input": {
@@ -2062,7 +2069,12 @@
      {
       "multiselect": false,
       "options": [
+       "1x_NAFNet-GoPro-width64.pth",
+       "1x_NAFNet-SIDD-width64.pth",
+       "1x_fbcnn_color.pth",
+       "1x_scunet_color_real_psnr.pth",
        "RealESRGAN_x4plus.safetensors",
+       "RealESRGAN_x4plus_anime_6B.pth",
        "ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
        "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
        "ltx-2.3-temporal-upscaler-x2-1.0.safetensors"
@@ -2074,10 +2086,9 @@
   "output": [
    "UPSCALE_MODEL"
   ],
-  "output_is_list": [
-   false
-  ],
-  "python_module": "comfy_extras.nodes_upscale_model"
+  "output_name": [
+   "UPSCALE_MODEL"
+  ]
  },
  "VAEEncodeTiled": {
   "input": {
@@ -2631,5 +2642,355 @@
   "search_aliases": null,
   "essentials_category": null,
   "has_intermediate_output": false
+ },
+ "DDColor_Colorize": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ],
+    "model_input_size": [
+     "INT",
+     {
+      "default": 512,
+      "min": 32,
+      "max": 4096,
+      "step": 32
+     }
+    ],
+    "checkpoint": [
+     [
+      "ddcolor_paper_tiny.pth",
+      "ddcolor_paper.pth",
+      "ddcolor_modelscope.pth",
+      "ddcolor_artistic.pth"
+     ],
+     {
+      "default": "ddcolor_paper_tiny.pth"
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ],
+  "output_name": [
+   "colorized_image"
+  ]
+ },
+ "FaceRestoreCFWithModel": {
+  "input": {
+   "required": {
+    "facerestore_model": [
+     "FACERESTORE_MODEL"
+    ],
+    "image": [
+     "IMAGE"
+    ],
+    "facedetection": [
+     [
+      "retinaface_resnet50",
+      "retinaface_mobile0.25",
+      "YOLOv5l",
+      "YOLOv5n"
+     ]
+    ],
+    "codeformer_fidelity": [
+     "FLOAT",
+     {
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1,
+      "step": 0.05
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ],
+  "output_name": [
+   "IMAGE"
+  ]
+ },
+ "FaceRestoreModelLoader": {
+  "input": {
+   "required": {
+    "model_name": [
+     [
+      "GFPGANv1.4.pth"
+     ]
+    ]
+   }
+  },
+  "output": [
+   "FACERESTORE_MODEL"
+  ],
+  "output_name": [
+   "FACERESTORE_MODEL"
+  ]
+ },
+ "LoadBackgroundRemovalModel": {
+  "input": {
+   "required": {
+    "bg_removal_name": [
+     "COMBO",
+     {
+      "tooltip": "The model used to remove backgrounds from images",
+      "multiselect": false,
+      "options": [
+       "birefnet.safetensors"
+      ]
+     }
+    ]
+   }
+  },
+  "output": [
+   "BACKGROUND_REMOVAL"
+  ],
+  "output_name": [
+   "bg_model"
+  ]
+ },
+ "MaskToImage": {
+  "input": {
+   "required": {
+    "mask": [
+     "MASK",
+     {}
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ],
+  "output_name": [
+   "IMAGE"
+  ]
+ },
+ "ModelPatchLoader": {
+  "input": {
+   "required": {
+    "name": [
+     [
+      "SUPIR-v0Q_fp16.safetensors"
+     ]
+    ]
+   }
+  },
+  "output": [
+   "MODEL_PATCH"
+  ],
+  "output_name": [
+   "MODEL_PATCH"
+  ]
+ },
+ "PrimitiveString": {
+  "input": {
+   "required": {
+    "value": [
+     "STRING",
+     {
+      "multiline": false
+     }
+    ]
+   }
+  },
+  "output": [
+   "STRING"
+  ],
+  "output_name": [
+   "STRING"
+  ]
+ },
+ "RemoveBackground": {
+  "input": {
+   "required": {
+    "bg_removal_model": [
+     "BACKGROUND_REMOVAL",
+     {
+      "tooltip": "Background removal model used to generate the mask"
+     }
+    ],
+    "image": [
+     "IMAGE",
+     {
+      "tooltip": "Input image to remove the background from"
+     }
+    ]
+   }
+  },
+  "output": [
+   "MASK"
+  ],
+  "output_name": [
+   "mask"
+  ]
+ },
+ "SAM3_Detect": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {
+      "display_name": "model"
+     }
+    ],
+    "image": [
+     "IMAGE",
+     {
+      "display_name": "image"
+     }
+    ],
+    "threshold": [
+     "FLOAT",
+     {
+      "display_name": "threshold",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01
+     }
+    ],
+    "refine_iterations": [
+     "INT",
+     {
+      "display_name": "refine_iterations",
+      "tooltip": "SAM decoder refinement passes (0=use raw detector masks)",
+      "default": 2,
+      "min": 0,
+      "max": 5
+     }
+    ],
+    "individual_masks": [
+     "BOOLEAN",
+     {
+      "display_name": "individual_masks",
+      "tooltip": "Output per-object masks instead of union",
+      "default": false
+     }
+    ]
+   },
+   "optional": {
+    "conditioning": [
+     "CONDITIONING",
+     {
+      "display_name": "conditioning",
+      "tooltip": "Text conditioning from CLIPTextEncode"
+     }
+    ],
+    "bboxes": [
+     "BOUNDING_BOX",
+     {
+      "display_name": "bboxes",
+      "tooltip": "Bounding boxes to segment within",
+      "default": {
+       "x": 0,
+       "y": 0,
+       "width": 512,
+       "height": 512
+      },
+      "socketless": true,
+      "forceInput": true
+     }
+    ],
+    "positive_coords": [
+     "STRING",
+     {
+      "display_name": "positive_coords",
+      "tooltip": "Positive point prompts as JSON [{\"x\": int, \"y\": int}, ...] (pixel coords)",
+      "forceInput": true,
+      "multiline": false
+     }
+    ],
+    "negative_coords": [
+     "STRING",
+     {
+      "display_name": "negative_coords",
+      "tooltip": "Negative point prompts as JSON [{\"x\": int, \"y\": int}, ...] (pixel coords)",
+      "forceInput": true,
+      "multiline": false
+     }
+    ]
+   }
+  },
+  "output": [
+   "MASK",
+   "BOUNDING_BOX"
+  ],
+  "output_name": [
+   "masks",
+   "bboxes"
+  ]
+ },
+ "SUPIRApply": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {}
+    ],
+    "model_patch": [
+     "MODEL_PATCH",
+     {}
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ],
+    "image": [
+     "IMAGE",
+     {}
+    ],
+    "strength_start": [
+     "FLOAT",
+     {
+      "tooltip": "Control strength at the start of sampling (high sigma).",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 10.0,
+      "step": 0.01
+     }
+    ],
+    "strength_end": [
+     "FLOAT",
+     {
+      "tooltip": "Control strength at the end of sampling (low sigma). Linearly interpolated from start.",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 10.0,
+      "step": 0.01
+     }
+    ],
+    "restore_cfg": [
+     "FLOAT",
+     {
+      "tooltip": "Pulls denoised output toward the input latent. Higher = stronger fidelity to input. 0 to disable.",
+      "advanced": true,
+      "default": 4.0,
+      "min": 0.0,
+      "max": 20.0,
+      "step": 0.1
+     }
+    ],
+    "restore_cfg_s_tmin": [
+     "FLOAT",
+     {
+      "tooltip": "Sigma threshold below which restore_cfg is disabled.",
+      "advanced": true,
+      "default": 0.05,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01
+     }
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ],
+  "output_name": [
+   "MODEL"
+  ]
  }
 }

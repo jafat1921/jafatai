@@ -2,6 +2,7 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -13,7 +14,9 @@ from app.photo import effects as fx
 from app.photo import looks as lk
 from app.photo import lut as lt
 from app.photo import service as svc
-from app.photo.schemas import CubeIn, DevelopParams, EffectIn, ParamsIn, PreviewIn, RenderIn
+from app.photo import restore as rs
+from app.photo.schemas import (BackgroundIn, CubeIn, DevelopParams, EffectIn, ParamsIn, PreviewIn, RenderIn,
+                                RestoreIn, SmartRestoreIn)
 from app.schemas import JobOut
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import job_out, owned_source
@@ -139,3 +142,82 @@ def cube(body: CubeIn, db: Session = Depends(get_db), cur: CurrentUser = Depends
 def _file_name(title: str) -> str:
     safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in title).strip()
     return safe[:80] or "look"
+
+
+# ---------------------------------------------------------------- restore / cut-out (contract v10)
+
+async def _info() -> tuple[dict | None, str | None, str]:
+    from app.config import get_settings
+    from app.upscale import fetch_object_info
+
+    driver = get_settings().gen_driver
+    info, error = (None, None) if driver == "mock" else await fetch_object_info()
+    return info, error, driver
+
+
+@router.get("/tools")
+async def tools(cur: CurrentUser = Depends(get_current_user)):
+    info, error, driver = await _info()
+    return {"tools": rs.tool_options(info, driver=driver, error=error), "effects": fx.EFFECTS}
+
+
+@router.get("/{gen_id}/smart-plan")
+async def smart_plan(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    g = _source(db, cur, gen_id)
+    info, _, driver = await _info()
+    return await run_in_threadpool(rs.smart_plan, db, g, info, driver)
+
+
+@router.post("/{gen_id}/smart-restore", status_code=202)
+def smart_restore(gen_id: str, body: SmartRestoreIn, db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(require_editor)):
+    g = _source(db, cur, gen_id)
+    try:
+        out = rs.queue_smart(db, g, [s.model_dump() for s in body.steps], cur.user.id)
+    except rs.RestoreError as e:
+        raise HTTPException(422, str(e)) from None
+    db.commit()
+    return out
+
+
+@router.post("/{gen_id}/restore", response_model=JobOut, status_code=202)
+def restore(gen_id: str, body: RestoreIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    g = _source(db, cur, gen_id)
+    opts = body.model_dump(exclude={"tool", "note"})
+    try:
+        job = rs.queue_tool(db, g, body.tool, opts, cur.user.id, note=body.note)
+    except rs.RestoreError as e:
+        raise HTTPException(422, str(e)) from None
+    db.commit()
+    return job_out(job)
+
+
+@router.post("/{gen_id}/background", response_model=JobOut, status_code=202)
+def background(gen_id: str, body: BackgroundIn, db: Session = Depends(get_db),
+               cur: CurrentUser = Depends(require_editor)):
+    g = _source(db, cur, gen_id)
+    try:
+        job = rs.queue_background(db, g, body.background.model_dump(),
+                                  body.edge.model_dump() if body.edge else None, cur.user.id)
+    except (rs.RestoreError, ValueError) as e:
+        raise HTTPException(422, str(e)) from None
+    db.commit()
+    return job_out(job)
+
+
+@router.get("/{gen_id}/mask", responses={200: {"content": {"image/png": {}}}})
+def mask(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    from app.config import get_settings
+
+    g = _source(db, cur, gen_id)
+    _, rel = rs.cutout_base(db, g)
+    path = get_settings().data_dir / rel if rel else None
+    if not path or not path.is_file():
+        raise HTTPException(404, "This picture has no cut-out mask")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.post("/{gen_id}/describe")
+async def describe(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    g = _source(db, cur, gen_id)
+    return await run_in_threadpool(rs.describe, g)

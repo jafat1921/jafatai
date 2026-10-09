@@ -116,7 +116,7 @@ def test_no_template_uses_the_ltx_latent_upscalers():
         tpl = load(name)
         for n in tpl.graph.values():
             if n["class_type"] == "UpscaleModelLoader":
-                assert n["inputs"]["model_name"] == "RealESRGAN_x4plus.safetensors", name
+                assert not n["inputs"]["model_name"].startswith("ltx-"), name
 
 
 # ------------------------------------------------------------------ the endpoint
@@ -215,7 +215,7 @@ def test_options_per_media_type(client, character, project, fast_driver, film):
     src = _image(client, fast_driver, "character", character["id"], "portrait")
     body = client.get(f"/api/system/upscale-options?generation_id={src['id']}").json()
     assert body["media"] == "image" and body["default_engine"] == "redraw"
-    assert [e["id"] for e in body["engines"]] == ["redraw", "quick", "best"]
+    assert [e["id"] for e in body["engines"]] == ["redraw", "quick", "anime", "best"]
     redraw = body["engines"][0]
     assert redraw["denoise"] == {"min": 0.15, "max": 0.5, "default": 0.33}
     assert [t["id"] for t in body["targets"]] == ["2x", "4x", "2k", "4k"]
@@ -276,3 +276,20 @@ def test_take_runs_from_an_approved_4k_keyframe(client, project, fast_driver):
     with SessionLocal() as db:
         g = db.get(Generation, take["id"])
         assert g.status == "ready", db.get(Job, g.job_id).error
+
+
+def test_anime_engine_uses_the_anime_esrgan(client, character, fast_driver):
+    from app.drivers.comfy import image_upscale_plan
+
+    src = _image(client, fast_driver, "character", character["id"], "portrait")
+    r = client.post(f"/api/generations/{src['id']}/upscale", json={"engine": "cartoon", "target": "2x"})
+    assert r.status_code == 202, r.text
+    with SessionLocal() as db:
+        up = db.get(Generation, r.json()["generation_id"]).params["upscale"]
+    assert up["engine"] == "anime" and up["model"] == "RealESRGAN_x4plus_anime_6B.pth"
+
+    class Lookup:
+        def generation_file(self, gid):
+            return gid
+
+    assert image_upscale_plan(up, "", 1, Lookup()).inputs["model"] == "RealESRGAN_x4plus_anime_6B.pth"

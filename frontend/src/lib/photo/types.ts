@@ -114,10 +114,13 @@ export interface DevelopRecord {
 export interface HistoryVersion {
   generation: Generation
   current: boolean
-  edit: 'develop' | 'effect' | 'look' | 'upscale' | null
+  edit: 'develop' | 'effect' | 'look' | 'upscale' | 'restore' | 'cutout' | null
   develop: DevelopRecord | null
   effect: { name: string; strength?: number; parent?: string } | null
   look: { id: string; name: string; intensity?: number; source_id?: string } | null
+  restore?: { tool: string; variant?: string | null; strength?: number; user_prompt?: string | null; changed?: number } | null
+  cutout?: { has_mask: boolean; coverage?: number | null; edge?: Edge | null; background?: Partial<Background> | null } | null
+  chain?: { id: string; index: number; steps: ChainStep[]; skipped?: { tool: string; error: string }[] | null } | null
 }
 
 export interface PhotoHistory {
@@ -165,4 +168,103 @@ export interface PreviewResult {
   url: string
   ms: number | null
   outputSize: string | null
+}
+
+// ---------------------------------------------------------------- restore / cut-out (contract v10)
+
+export type ToolGroup = 'repair' | 'clean' | 'faces' | 'colour' | 'style' | 'cutout' | 'finish'
+
+export interface RestoreTool {
+  id: string
+  label: string
+  hint: string
+  group: ToolGroup
+  gpu: boolean
+  strength: boolean
+  prompt: 'required' | 'optional' | null
+  noncommercial: boolean
+  variants: { id: string; label: string }[]
+  default_variant: string | null
+  available: boolean
+  reason: string | null
+}
+
+export interface EffectSpec {
+  id: string
+  label: string
+  hint: string
+}
+
+export interface PlanStep {
+  id: string
+  tool: string
+  label: string
+  reason: string
+  on: boolean
+  available: boolean
+  unavailable_reason?: string | null
+  variant: string | null
+  strength: number
+  est_gpu_s: number
+}
+
+export interface PhotoAnalysis {
+  width: number
+  height: number
+  megapixels: number
+  is_grayscale: boolean
+  is_monotone?: boolean
+  color_cast: string | null
+  cast_strength: number
+  sharpness: number
+  noise?: number
+  is_likely_blurry: boolean
+  is_likely_damaged: boolean
+}
+
+export interface SmartPlan {
+  analysis: PhotoAnalysis
+  steps: PlanStep[]
+  source: { width: number; height: number }
+  message: string | null
+}
+
+export interface ChainStep {
+  tool: string
+  variant?: string | null
+  strength?: number
+  label: string
+}
+
+export interface Edge {
+  feather: number
+  shift: number
+}
+
+export interface Background {
+  type: 'transparent' | 'colour' | 'image' | 'blur' | 'generated'
+  colour?: string
+  generation_id?: string
+  radius?: number
+  prompt?: string
+}
+
+export interface RestoreRequest {
+  tool: string
+  variant?: string | null
+  strength?: number
+  prompt?: string
+  words?: string
+  include?: { x: number; y: number }[]
+  exclude?: { x: number; y: number }[]
+  op?: 'replace' | 'add' | 'subtract'
+  edge?: Edge
+  note?: string
+}
+
+export interface Described {
+  caption: string
+  details: string
+  defects: string[]
+  suggested_tools: string[]
 }

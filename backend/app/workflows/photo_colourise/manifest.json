@@ -1,0 +1,14 @@
+{
+  "name": "photo_colourise",
+  "family": "ddcolor",
+  "description": "DDColor on one image. The model predicts colour at model_input_size and the node carries it onto the full-size luminance, so the output keeps the source's resolution and detail.",
+  "inputs": {
+    "image": {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "checkpoint": {"type": "str", "default": "ddcolor_modelscope.pth", "targets": [["Colourise", "checkpoint"]]},
+    "model_size": {"type": "int", "default": 512, "multiple_of": 32, "targets": [["Colourise", "model_input_size"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/photo", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"ddcolor": ["ddcolor_modelscope.pth", "ddcolor_artistic.pth"]},
+  "progress_weights": {"Colourise": 6}
+}

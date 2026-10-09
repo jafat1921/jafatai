@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { job, mockApi, renderAt } from '@/test/media-fixtures'
 import { history, jpeg, schema, stubBrowser } from '@/test/photo-fixtures'
 import { PhotoStudioPage } from './PhotoStudioPage'
+import { forgetPhotoSession } from './session'
 
 beforeEach(stubBrowser)
 afterEach(() => {
+  forgetPhotoSession()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -45,13 +47,66 @@ describe('Photo Studio', () => {
     expect(screen.getByRole('img', { name: /exact preview/ })).toHaveAttribute('src', 'blob:preview-1')
   })
 
-  it('shows Restore and Cut-out, switched off until the models are installed', async () => {
-    setup()
-    const tabs = await screen.findByRole('tablist', { name: 'Photo Studio tools' })
-    expect(within(tabs).getByRole('tab', { name: 'Restore' })).toBeDisabled()
-    expect(within(tabs).getByRole('tab', { name: 'Cut-out' })).toBeDisabled()
-    expect(within(tabs).getByRole('tab', { name: 'Develop' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByText(/Coming next — needs the photo models on the server/)).toBeInTheDocument()
+  it('Smart Restore inspects, lets steps be switched off, and runs the rest', async () => {
+    const plan = {
+      analysis: { width: 800, height: 1000, megapixels: 0.8, is_grayscale: true, color_cast: null, cast_strength: 0, sharpness: 0.45, noise: 2,
+        is_likely_blurry: true, is_likely_damaged: true },
+      source: { width: 800, height: 1000 },
+      message: null,
+      steps: [
+        { id: 's1', tool: 'scratches', label: 'Remove scratches & creases', reason: 'Fading and edge wear', on: true, available: true, variant: null, strength: 1, est_gpu_s: 35 },
+        { id: 's2', tool: 'colourise', label: 'Colourise', reason: 'Black & white print', on: true, available: true, variant: 'natural', strength: 1, est_gpu_s: 9 },
+        { id: 's3', tool: 'polish', label: 'Final polish', reason: 'Light levels', on: true, available: true, variant: null, strength: 0.5, est_gpu_s: 0 },
+      ],
+    }
+    const calls = setup('/image/studio/g2', (method, p) => {
+      if (p === '/photo/tools') return { tools: [], effects: [] }
+      if (p === '/photo/g1/smart-plan') return plan
+      if (method === 'POST' && p === '/photo/g1/smart-restore') return { chain_id: 'c1', steps: [{ tool: 'scratches', label: 'Remove scratches & creases' }, { tool: 'polish', label: 'Final polish' }], first_job_id: 'j9' }
+      return undefined
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('tab', { name: 'Restore' }))
+    await user.click(await screen.findByRole('button', { name: 'Inspect photo' }))
+    expect(await screen.findByText(/black & white · sharpness 0.45/)).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: 'Step 2: Colourise' }))
+    await user.click(screen.getByRole('button', { name: /Restore · 2 steps/ }))
+    await waitFor(() => expect(calls.find((c) => c.path === '/photo/g1/smart-restore')).toBeTruthy())
+    expect((calls.find((c) => c.path === '/photo/g1/smart-restore')?.body as { steps: { tool: string }[] }).steps.map((s) => s.tool)).toEqual(['scratches', 'polish'])
+    expect(await screen.findByRole('list', { name: 'Smart Restore progress' })).toHaveTextContent('2. Final polish')
+  })
+
+  it('applies a single restore tool with its option and strength', async () => {
+    const tools = [{ id: 'denoise', label: 'Denoise', hint: 'Grain', group: 'clean', gpu: true, strength: true, prompt: null, noncommercial: false,
+      variants: [{ id: 'strong', label: 'Strong · NAFNet' }, { id: 'gentle', label: 'Gentle · SCUNet' }], default_variant: 'strong', available: true, reason: null }]
+    const calls = setup('/image/studio/g2', (method, p) => {
+      if (p === '/photo/tools') return { tools, effects: [] }
+      if (method === 'POST' && p === '/photo/g1/restore') return job('j5', { type: 'generate', lane: 'image', generation_id: 'g7' })
+      return undefined
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('tab', { name: 'Restore' }))
+    await user.click(await screen.findByRole('button', { name: /Denoise/ }))
+    await user.click(screen.getByRole('radio', { name: 'Gentle · SCUNet' }))
+    await user.click(screen.getByRole('button', { name: 'Apply denoise' }))
+    await waitFor(() => expect(calls.find((c) => c.path === '/photo/g1/restore')?.body).toEqual({ tool: 'denoise', variant: 'gentle', strength: 1 }))
+  })
+
+  it('Cut-out: remove background, then click points to select', async () => {
+    const calls = setup('/image/studio/g2', (method, p) => {
+      if (p === '/photo/tools') return { tools: [], effects: [] }
+      if (method === 'POST' && p === '/photo/g1/restore') return job('j6', { type: 'generate', lane: 'image', generation_id: 'g8' })
+      return undefined
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('tab', { name: 'Cut-out' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove background' }))
+    await waitFor(() => expect(calls.find((c) => c.path === '/photo/g1/restore')?.body).toMatchObject({ tool: 'cutout' }))
+    expect(screen.getByRole('button', { name: 'Apply edge & background' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Select' })).toBeDisabled()
+    await user.type(screen.getByRole('textbox', { name: 'What to select' }), 'the dog')
+    await user.click(screen.getByRole('button', { name: 'Select' }))
+    await waitFor(() => expect(calls.filter((c) => c.path === '/photo/g1/restore')[1]?.body).toMatchObject({ tool: 'select', words: 'the dog', op: 'replace' }))
   })
 
   it('saves the current settings from the base as a new version (Ctrl+S)', async () => {

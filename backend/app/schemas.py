@@ -618,7 +618,8 @@ class ReelEstimateOut(BaseModel):
 class UpscaleIn(BaseModel):
     # videos: best|fast|quick (None = UPSCALE_DEFAULT_ENGINE); images: redraw|quick|best (None = redraw).
     # Engine names (seedvr2, flashvsr, esrgan, zimage) are accepted as aliases.
-    engine: Literal["best", "fast", "quick", "redraw", "faithful", "seedvr2", "flashvsr", "esrgan", "zimage"] | None = None
+    engine: Literal["best", "fast", "quick", "redraw", "faithful", "seedvr2", "flashvsr", "esrgan", "zimage", "anime",
+                    "cartoon"] | None = None
     # videos take 1080p|1440p|4k (default 1080p), images 2x|4x|2k|4k (default 2x)
     target: Literal["1080p", "1440p", "4k", "2x", "4x", "2k"] | None = None
     # SeedVR2 size, engine "best" only; None = UPSCALE_SEEDVR2_MODEL

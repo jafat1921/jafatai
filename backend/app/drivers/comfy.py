@@ -37,12 +37,16 @@ ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
 
 TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23_extend": 3600.0,
             "upscale_seedvr2": 3600.0, "upscale_flashvsr": 3600.0, "upscale_esrgan": 1800.0,
+            "photo_model_1x": 900.0, "photo_face_restore": 600.0, "photo_colourise": 600.0, "photo_supir": 1800.0,
+            "photo_cutout_mask": 300.0, "photo_sam_mask": 300.0,
             "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0,
             "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
             "ltx23_two_stage": 3600.0, "wan22_t2v": 2400.0,
             "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
 LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend"}
+RESTORE_TEMPLATES = {"photo_model_1x", "photo_face_restore", "photo_colourise", "photo_supir", "photo_cutout_mask",
+                     "photo_sam_mask", "image_upscale_seedvr2"}
 IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
 UPSCALE_TEMPLATES = {"upscale_seedvr2", "upscale_flashvsr", "upscale_esrgan"}
 
@@ -148,6 +152,9 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
     negative = params.get("negative") or params.get("negative_prompt") or ""
     ref_ids = _ids(params.get("reference_ids"))[:3]
     loras = _loras(params)
+
+    if params.get("restore"):
+        return restore_plan(params["restore"], seed, lookup)
 
     if params.get("upscale") and kind in ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end",
                                           "keyframe_mid", "image"):
@@ -396,10 +403,27 @@ def image_upscale_plan(up: dict, negative: str, seed: int, lookup) -> Plan:
         # TODO: carry the source's Z-Image LoRAs over once LoRAs record which model family they're for
         inputs.update(prompt=up.get("prompt") or "", negative=negative, denoise=up.get("denoise") or 0.33,
                       pre_enlarge=True if up.get("pre_enlarge", True) else None)
-    elif template == "image_upscale_seedvr2" and up.get("model"):
+    elif template in ("image_upscale_seedvr2", "image_upscale_esrgan") and up.get("model"):
         inputs["model"] = up["model"]
     src = lookup.generation_file(up["source_id"])
     return Plan(template, inputs, {"image": src}, [], "image", {"source_id": up["source_id"]})
+
+
+def restore_plan(r: dict, seed: int, lookup) -> Plan:
+    """Photo Studio restore / cut-out tools (app.photo.restore). finish() there does the full-size work after."""
+    from app.photo.restore import comfy_input
+
+    template = r.get("template")
+    src = comfy_input(r, lookup.generation_file(r["source_id"]))
+    inputs: dict[str, Any] = {k: v for k, v in (r.get("inputs") or {}).items() if k != "template"}
+    inputs["seed"] = seed
+    sources = {"source_id": r["source_id"], "tool": r.get("tool")}
+    if template in {m.template for m in mc.MODELS.values() if m.type == "edit"}:
+        inputs.setdefault("negative", "")
+        return Plan(template, inputs, {"images": [src]}, [], "image", sources)
+    if template not in RESTORE_TEMPLATES:
+        raise ComfyError(f"unknown restore template {template!r}")
+    return Plan(template, inputs, {"image": src}, [], "image", sources)
 
 
 def exec_seconds(entry: dict) -> float | None:

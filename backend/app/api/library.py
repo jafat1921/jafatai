@@ -5,7 +5,6 @@ always served as /media/workspaces/..., so the two never compete for a URL.
 """
 import json
 import re
-import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -21,7 +20,7 @@ from app import library as lib
 from app import mentions as mn
 from app import models_catalog as mc
 from app import organise as org
-from app import prompt_enhance, thumbs, uploads
+from app import prompt_enhance, uploads
 from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db
 from app.models import Generation, Job, MediaItem, Project, new_id
@@ -81,46 +80,24 @@ def _folder(db: Session, workspace_id: str, folder_id: str | None):
         raise HTTPException(404, str(e)) from None
 
 
-def _store_upload(db: Session, cur: CurrentUser, got: uploads.Received, folder: Path, rel_folder: str) -> MediaItem:
-    if got.media_type.startswith("image/"):
-        info = uploads.probe_image(got.path, got.media_type)
-    else:
-        info = uploads.probe_video(got.path)
-    name = uuid.uuid4().hex
-    final = folder / f"{name}{uploads.EXT[got.media_type]}"
-    got.path.replace(final)
-    # the grid asks for this straight away; a 40 MB upload shouldn't be what it gets
-    thumbs.ensure_all(final, got.media_type)
-
-    kind = "image" if got.media_type.startswith("image/") else "video"
-    title = (got.title or Path(got.filename).stem or "Upload")[:300]
-    item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind=kind, origin="upload", title=title, tags=[],
-                     width=info.width, height=info.height, duration_s=info.duration_s)
-    params = {"original_name": got.filename[:300], "bytes": got.size, "size": [info.width, info.height],
-              "created_by": {"user_id": cur.id, "flow": "upload"}}
-    if kind == "video":
-        params.update(duration_s=info.duration_s, fps=info.fps, has_audio=info.has_audio)
-    g = Generation(workspace_id=cur.workspace_id, project_id=None, target_type="media", target_id=item.id,
-                   kind="upload", version=1, status="ready", prompt="", params=params, seed=0,
-                   file_path=f"{rel_folder}/{final.name}", media_type=got.media_type)
-    db.add(item)
-    db.add(g)
-    db.flush()
-    item.generation_id = g.id
-    db.commit()
-    return item
-
-
 @router.post("/media/upload", response_model=MediaItemOut, status_code=201)
-async def upload_media(request: Request, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+async def upload_media(request: Request, response: Response, db: Session = Depends(get_db),
+                       cur: CurrentUser = Depends(require_editor)):
+    from app.catalogue import importer
+
     folder, rel_folder = lib.media_dir(cur.workspace_id)
     got = await uploads.receive(request, folder)
     try:
-        item = await run_in_threadpool(_store_upload, db, cur, got, folder, rel_folder)
+        item, dup = await run_in_threadpool(importer.store, db, cur.workspace_id, cur.id, got, folder, rel_folder)
     except BaseException:
         got.path.unlink(missing_ok=True)
         raise
-    return await run_in_threadpool(lib.item_out, db, item)
+    out = await run_in_threadpool(lib.item_out, db, item)
+    if dup:
+        # already in the catalogue: nothing new was stored
+        response.status_code = 200
+        out.duplicate = True
+    return out
 
 
 @router.get("/media/{media_id}", response_model=MediaDetailOut)

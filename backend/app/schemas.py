@@ -662,6 +662,25 @@ class MediaItemOut(BaseModel):
     upscale: dict[str, Any] | None = None
     # the version this one descends from (the upload, or the first picture), for "Download original"
     original_generation_id: str | None = None
+    # photo catalogue (contract v11)
+    rating: int = 0
+    flag: str = ""
+    label: str = ""
+    caption: str = ""
+    captured_at: Utc | None = None
+    camera: str | None = None
+    lens: str | None = None
+    focal_mm: float | None = None
+    aperture: float | None = None
+    shutter_s: float | None = None
+    iso: int | None = None
+    original_name: str | None = None
+    bytes: int | None = None
+    source_type: str | None = None  # image/x-raw | image/heic | image/tiff when the original is kept
+    edited: bool = False
+    album_ids: list[str] = []
+    # upload only: this file was already in the catalogue, so nothing new was stored
+    duplicate: bool = False
 
 
 class UpscaleRowOut(BaseModel):

@@ -608,6 +608,24 @@ export interface MediaItem {
   // P5: the current version is an upscale ("4K", "2×"…), and the version it all started from
   upscale?: { target: string; label: string; engine?: string | null } | null
   original_generation_id?: string | null
+  // photo catalogue (contract v11); older servers leave them out
+  rating?: number
+  flag?: '' | 'pick' | 'reject'
+  label?: '' | 'red' | 'yellow' | 'green' | 'blue' | 'purple'
+  caption?: string
+  captured_at?: string | null
+  camera?: string | null
+  lens?: string | null
+  focal_mm?: number | null
+  aperture?: number | null
+  shutter_s?: number | null
+  iso?: number | null
+  original_name?: string | null
+  bytes?: number | null
+  source_type?: string | null
+  edited?: boolean
+  album_ids?: string[]
+  duplicate?: boolean
 }
 
 export interface MediaDetail extends MediaItem {

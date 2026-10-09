@@ -364,8 +364,76 @@ class MediaItem(Base):
     thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # migration 0008; not an FK (ADD COLUMN on SQLite), cleared in code when a folder goes
     folder_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    # photo catalogue (migration 0011): Lightroom-style marks and what the file says about itself
+    rating: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), index=True)
+    flag: Mapped[str] = mapped_column(String(8), default="", server_default="", index=True)  # pick | reject | ""
+    label: Mapped[str] = mapped_column(String(10), default="", server_default="", index=True)
+    caption: Mapped[str] = mapped_column(Text, default="", server_default="")
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    camera: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    lens: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    focal_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    aperture: Mapped[float | None] = mapped_column(Float, nullable=True)
+    shutter_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    iso: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gps_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gps_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exif: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    original_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # RAW / HEIC / TIFF uploads: the file as it came; generation_id points at the sRGB working copy
+    source_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
+
+
+class Client(Base):
+    """A photographer's client (M10). Shoots are albums of kind "shoot" pointing here."""
+
+    __tablename__ = "client"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    name: Mapped[str] = mapped_column(String(160))
+    email: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    phone: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Album(Base):
+    """Lightroom collections. kind: folder (holds albums, nests) | album | smart (rules) | shoot (an album
+    with client, date and venue). Unlike Folder, a photo can be in any number of albums."""
+
+    __tablename__ = "album"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(10), default="album", server_default="album")
+    name: Mapped[str] = mapped_column(String(160))
+    client_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("client.id", ondelete="SET NULL"), nullable=True, index=True)
+    shoot_date: Mapped[str | None] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD
+    venue: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    rules: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    cover_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sort: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class AlbumItem(Base):
+    __tablename__ = "album_item"
+    __table_args__ = (UniqueConstraint("album_id", "media_id", name="uq_album_item"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    album_id: Mapped[str] = mapped_column(String(36), ForeignKey("album.id", ondelete="CASCADE"), index=True)
+    media_id: Mapped[str] = mapped_column(String(36), ForeignKey("media_item.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Folder(Base):

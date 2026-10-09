@@ -5,6 +5,7 @@ upload would land on disk before we could say no. This parses the request stream
 part goes straight into a .part file next to its final home, the type is sniffed from the first bytes
 and the size limit is enforced as the bytes arrive.
 """
+import hashlib
 import re
 import subprocess
 import uuid
@@ -20,9 +21,11 @@ from app.config import get_settings
 
 MB = 1024 * 1024
 IMAGE_MAX = 40 * MB
+PHOTO_MAX = 250 * MB  # camera RAW, HEIC and TIFF (M10): a 100 MP RAW or a layered TIFF is big
 VIDEO_MAX = 2048 * MB
 MAX_PIXELS = 100_000_000  # a 40 MB JPEG can still decode to something silly
 SNIFF_BYTES = 64
+FIELDS = ("title", "album_id", "on_duplicate")
 
 EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
        "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
@@ -33,10 +36,18 @@ NAME_OK = {"image/png": {".png"}, "image/jpeg": {".jpg", ".jpeg", ".jfif"}, "ima
            "video/webm": {".webm"}, "font/ttf": {".ttf"}, "font/otf": {".otf"}, "image/svg+xml": {".svg"}}
 # ISO-BMFF brands that are stills or audio, not video
 NOT_VIDEO_BRANDS = (b"avif", b"avis", b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1", b"M4A ", b"M4B ", b"M4P ")
-ALLOWED = "PNG, JPEG or WebP images up to 40 MB, or MP4, MOV or WebM videos up to 2 GB"
+ALLOWED = ("PNG, JPEG or WebP images up to 40 MB, camera RAW, HEIC or TIFF photos up to 250 MB, "
+           "or MP4, MOV or WebM videos up to 2 GB")
+# kept as uploaded and given a JPEG working copy (app.catalogue.convert)
+CONVERTED = ("image/x-raw", "image/heic", "image/tiff")
 
 
-def sniff(head: bytes) -> str | None:
+def sniff(head: bytes, filename: str = "") -> str | None:
+    from app.catalogue import convert
+
+    extra = convert.sniff(head, filename)
+    if extra:
+        return extra
     if head.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
     if head[:3] == b"\xff\xd8\xff":
@@ -54,10 +65,14 @@ def sniff(head: bytes) -> str | None:
 
 
 def limit_for(media_type: str) -> int:
+    if media_type in CONVERTED:
+        return PHOTO_MAX
     return IMAGE_MAX if media_type.startswith("image/") else VIDEO_MAX
 
 
 def _too_big(media_type: str | None) -> HTTPException:
+    if media_type in CONVERTED:
+        return HTTPException(413, "RAW, HEIC and TIFF photos can be at most 250 MB")
     if media_type and media_type.startswith("image/"):
         return HTTPException(413, "Images can be at most 40 MB")
     return HTTPException(413, "Videos can be at most 2 GB")
@@ -83,6 +98,8 @@ class Received:
     size: int
     filename: str
     title: str | None = None
+    sha256: str | None = None
+    fields: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -110,6 +127,7 @@ class _Sink:
         self.done = False  # a file part has been fully received
         self.fields: dict[str, bytes] = {}
         self._field = None
+        self.hash = hashlib.sha256()
 
     def callbacks(self) -> dict:
         return {"on_part_begin": self.part_begin, "on_part_data": self.part_data, "on_part_end": self.part_end,
@@ -140,7 +158,7 @@ class _Sink:
             self.file = open(self.tmp, "wb")
             self.filename = self.part.filename
             self._field = None
-        elif self.part.filename is None and self.part.name in ("title",):
+        elif self.part.filename is None and self.part.name in FIELDS:
             self._field = self.part.name
             self.fields[self._field] = b""
         else:
@@ -158,6 +176,7 @@ class _Sink:
             if self.size > (pr.limit(self.media_type) if self.media_type else pr.max_bytes):
                 raise pr.too_big(self.media_type)
             self.file.write(chunk)
+            self.hash.update(chunk)
         elif self._field:
             buf = self.fields[self._field]
             if len(buf) < 2000:
@@ -173,11 +192,13 @@ class _Sink:
 
     def _sniff(self):
         pr = self.profile
-        self.media_type = pr.sniff(self.head)
+        self.media_type = pr.sniff(self.head, self.filename) if pr.sniff is sniff else pr.sniff(self.head)
         if self.media_type is None:
             raise HTTPException(415, f"Unsupported file type. Upload {pr.allowed}.")
         ext = Path(self.filename).suffix.lower()
-        if ext and ext not in NAME_OK[self.media_type]:
+        if self.media_type in CONVERTED:
+            pass  # sniff() already matched the name against the RAW / HEIC / TIFF extensions
+        elif ext and ext not in NAME_OK[self.media_type]:
             kind = EXT[self.media_type].lstrip(".").upper()
             raise HTTPException(415, f"This file is a {kind} but its name ends in {ext}. Upload {pr.allowed}.")
         if self.size > pr.limit(self.media_type):
@@ -214,8 +235,9 @@ async def receive(request: Request, folder: Path, profile: Profile = MEDIA) -> R
         sink.discard()
         raise
     sink.close()
-    title = sink.fields.get("title", b"").decode("utf-8", "replace").strip() or None
-    return Received(sink.tmp, sink.media_type, sink.size, sink.filename, title)
+    fields = {k: v.decode("utf-8", "replace").strip() for k, v in sink.fields.items()}
+    return Received(sink.tmp, sink.media_type, sink.size, sink.filename, fields.pop("title", "") or None,
+                    sink.hash.hexdigest(), fields)
 
 
 # ---------------------------------------------------------------- probing

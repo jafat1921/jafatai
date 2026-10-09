@@ -78,6 +78,10 @@ export const shellRoutes: RouteObject[] = [
     const { PhotoStudioPage } = await import('@/features/photo/PhotoStudioPage')
     return <PhotoStudioPage />
   }),
+  page('photos', async () => {
+    const { PhotosPage } = await import('@/features/photos/PhotosPage')
+    return <PhotosPage />
+  }),
   page('image/library', async () => {
     const { LibraryPage } = await import('@/features/library/LibraryPage')
     return <LibraryPage kind="image" />

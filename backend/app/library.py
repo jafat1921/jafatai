@@ -160,6 +160,9 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
     pids = {i.project_id for i in items if i.project_id}
     ptitles = dict(db.execute(select(Project.id, Project.title).where(Project.id.in_(pids))).all()) if pids else {}
     roots = originals(db, list(gens.values()))
+    from app.catalogue.albums import memberships
+
+    albums = memberships(db, [i.id for i in items])
     out = []
     for i in items:
         g = gens.get(i.generation_id)
@@ -173,6 +176,10 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
             created_at=i.created_at, updated_at=i.updated_at, versions_count=counts.get(i.id, 1),
             folder_id=i.folder_id, upscale=upscale_badge(g),
             original_generation_id=roots.get(i.generation_id) if g is not None else None,
+            rating=i.rating or 0, flag=i.flag or "", label=i.label or "", caption=i.caption or "",
+            captured_at=i.captured_at, camera=i.camera, lens=i.lens, focal_mm=i.focal_mm, aperture=i.aperture,
+            shutter_s=i.shutter_s, iso=i.iso, original_name=i.original_name, bytes=i.bytes,
+            source_type=i.source_type, edited=counts.get(i.id, 1) > 1, album_ids=albums.get(i.id, []),
         ))
     return out
 

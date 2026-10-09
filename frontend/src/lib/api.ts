@@ -68,6 +68,7 @@ import type {
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 import type { CameraPreset } from './camera'
 import type { MentionOption } from './mentions'
+import type { Album, Client, Facets, PhotoPage } from './catalogue'
 import type {
   AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema,
   PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan,
@@ -232,6 +233,23 @@ export interface GenerationQuery {
   include_rejected?: boolean
 }
 
+export interface PhotoExif {
+  captured_at: string | null
+  camera: string | null
+  lens: string | null
+  focal_mm: number | null
+  aperture: number | null
+  shutter: string | null
+  iso: number | null
+  gps: { lat: number; lng: number } | null
+  original_name: string | null
+  bytes: number | null
+  source_type: string | null
+  width: number | null
+  height: number | null
+  tags: Record<string, string>
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) => post<User>('/auth/login', { email, password }),
@@ -389,6 +407,32 @@ export const api = {
     regenerate: (id: string, body: { mode: RegenerateMode; note?: string; prompt?: string }) =>
       post<Job>(`/media/${id}/regenerate`, body),
     // upload goes through lib/upload.ts (XHR, for progress)
+  },
+  photos: {
+    list: (q: Record<string, string | number | boolean | undefined>) => get<PhotoPage>('/photos', q),
+    facets: (q: Record<string, string | number | boolean | undefined>) => get<Facets>('/photos/facets', q),
+    neighbours: (id: string, q: Record<string, string | number | boolean | undefined>) =>
+      get<{ ids: string[]; index: number | null; position?: number; total: number; prev?: string | null; next?: string | null }>(`/photos/${id}/neighbours`, q),
+    marks: (body: { ids: string[]; rating?: number; flag?: 'pick' | 'reject' | 'none'; label?: string }) =>
+      post<{ updated: number }>('/photos/marks', body),
+    update: (id: string, body: { title?: string; caption?: string; keywords?: string[] }) => patch<MediaItem>(`/photos/${id}`, body),
+    exif: (id: string) => get<PhotoExif>(`/photos/${id}/exif`),
+    sourceUrl: (id: string) => `${API_BASE}/photos/${id}/source`,
+  },
+  albums: {
+    list: () => get<Album[]>('/albums'),
+    create: (body: Partial<Album> & { name: string; kind: Album['kind'] }) => post<Album>('/albums', body),
+    update: (id: string, body: Partial<Album>) => patch<Album>(`/albums/${id}`, body),
+    remove: (id: string) => del(`/albums/${id}`),
+    items: (id: string, ids: string[], action: 'add' | 'remove' = 'add') =>
+      post<{ changed: number; album: Album }>(`/albums/${id}/items`, { ids, action }),
+    order: (id: string, ids: string[]) => post<void>(`/albums/${id}/order`, { ids }),
+  },
+  clients: {
+    list: () => get<Client[]>('/clients'),
+    create: (body: Pick<Client, 'name'> & Partial<Pick<Client, 'email' | 'phone' | 'notes'>>) => post<Client>('/clients', body),
+    update: (id: string, body: Partial<Pick<Client, 'name' | 'email' | 'phone' | 'notes'>>) => patch<Client>(`/clients/${id}`, body),
+    remove: (id: string) => del(`/clients/${id}`),
   },
   upscales: {
     list: (q: { kind?: MediaKind; limit?: number; cursor?: string }) => get<UpscalePage>('/upscales', { ...q }),

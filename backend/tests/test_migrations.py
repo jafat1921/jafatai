@@ -380,3 +380,38 @@ def test_0010_adds_look_table_and_keeps_data(tmp_path):
     assert con.execute("SELECT count(*) FROM generation").fetchone()[0] == 1
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0011_adds_catalogue_and_keeps_media(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0010")
+    con = sqlite3.connect(db)
+    now = "2026-10-09 10:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    con.execute("INSERT INTO media_item (id, workspace_id, kind, origin, title, tags, generation_id, created_at,"
+                " updated_at) VALUES ('m1', 'w1', 'image', 'upload', 'Beach', '[\"sea\"]', 'g1', ?, ?)", (now, now))
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "0011")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT title, tags, rating, flag, label, caption, captured_at FROM media_item").fetchall() == \
+        [("Beach", '["sea"]', 0, "", "", "", None)]
+    con.execute("INSERT INTO client (id, workspace_id, name, created_at, updated_at) VALUES ('c1', 'w1', 'Ayesha', ?, ?)",
+                (now, now))
+    con.execute("INSERT INTO album (id, workspace_id, kind, name, client_id, created_at, updated_at)"
+                " VALUES ('a1', 'w1', 'shoot', 'Mehndi', 'c1', ?, ?)", (now, now))
+    con.execute("INSERT INTO album_item (id, workspace_id, album_id, media_id, added_at) VALUES ('ai1', 'w1', 'a1', 'm1', ?)",
+                (now,))
+    assert con.execute("SELECT venue, notes, sort FROM album").fetchone() == ("", "", 0)
+    con.commit()
+    con.close()
+
+    _alembic(db, "downgrade", "0010")
+    con = sqlite3.connect(db)
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert not {"album", "album_item", "client"} & tables
+    assert "rating" not in {r[1] for r in con.execute("PRAGMA table_info(media_item)")}
+    assert con.execute("SELECT title FROM media_item").fetchall() == [("Beach",)]
+    con.close()
+    _alembic(db, "upgrade", "head")

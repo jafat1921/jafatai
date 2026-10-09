@@ -156,6 +156,8 @@ fi
 say "Preparing data dir and database"
 mkdir -p "$DATA_DIR"
 (cd "$APP_DIR/backend" && uv run alembic upgrade head)
+# photos uploaded before the catalogue get their EXIF and duplicate hash; quick when nothing is left
+(cd "$APP_DIR/backend" && uv run python -m app.manage catalogue-backfill) || warn "catalogue backfill failed (photos still work)"
 
 # --- systemd -------------------------------------------------------------------------
 if (( INSTALL_SYSTEMD )); then

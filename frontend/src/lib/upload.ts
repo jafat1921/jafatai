@@ -61,12 +61,12 @@ export interface UploadHandle<T = MediaItem> {
 type ErrorText = (status: number, detail: string | undefined, fileName: string) => string
 
 /** XHR rather than fetch: fetch still can't report upload progress. */
-function xhrUpload<T>(path: string, file: File, onProgress: (fraction: number) => void, errorText: ErrorText, title?: string): UploadHandle<T> {
+function xhrUpload<T>(path: string, file: File, onProgress: (fraction: number) => void, errorText: ErrorText, fields: Record<string, string | undefined> = {}): UploadHandle<T> {
   const xhr = new XMLHttpRequest()
   const promise = new Promise<T>((resolve, reject) => {
     const form = new FormData()
     form.append('file', file)
-    if (title) form.append('title', title)
+    for (const [k, v] of Object.entries(fields)) if (v) form.append(k, v)
     xhr.open('POST', `${API_BASE}${path}`)
     xhr.withCredentials = true
     xhr.setRequestHeader('Accept', 'application/json')
@@ -90,7 +90,24 @@ function xhrUpload<T>(path: string, file: File, onProgress: (fraction: number) =
 }
 
 export const uploadMedia = (file: File, onProgress: (fraction: number) => void, title?: string) =>
-  xhrUpload<MediaItem>('/media/upload', file, onProgress, uploadErrorText, title)
+  xhrUpload<MediaItem>('/media/upload', file, onProgress, uploadErrorText, { title })
+
+// contract v11: the photo catalogue also takes camera RAW, HEIC and TIFF (kept as the original, shown as a JPEG)
+export const RAW_EXTS = ['nef', 'nrw', 'cr2', 'cr3', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'dng', 'pef', 'srw', '3fr', 'iiq', 'erf', 'x3f', 'kdc', 'mrw', 'rwl']
+export const PHOTO_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'hif', 'tif', 'tiff', ...RAW_EXTS]
+export const PHOTO_ACCEPT = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/tiff', ...PHOTO_EXTS.map((e) => `.${e}`)].join(',')
+
+export function checkPhoto(file: File): string | null {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!PHOTO_EXTS.includes(ext)) return `“${file.name}” isn't a photo we can import. Try JPEG, PNG, WebP, HEIC, TIFF or a camera RAW file.`
+  const big = ['jpg', 'jpeg', 'png', 'webp'].includes(ext) ? 40 * MB : 250 * MB
+  if (file.size > big) return `“${file.name}” is ${sizeText(file.size)}, bigger than the ${sizeText(big)} limit for this kind of file.`
+  return null
+}
+
+export const uploadPhoto = (file: File, onProgress: (fraction: number) => void, fields: { album_id?: string; on_duplicate?: 'skip' | 'keep' }) =>
+  xhrUpload<MediaItem>('/media/upload', file, onProgress, (status, detail, name) =>
+    status === 415 && detail ? `“${name}”: ${detail}` : uploadErrorText(status, detail, name), fields)
 
 // contract-v7: brand assets go through their own endpoint, which sniffs each purpose differently
 export const BRAND_RULES: Record<BrandPurpose, { exts: string[]; types: string[]; maxBytes: number; label: string }> = {

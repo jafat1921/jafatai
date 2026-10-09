@@ -75,7 +75,8 @@ def sniff_logo(head: bytes) -> str | None:
 
 def sniff_photo(head: bytes) -> str | None:
     t = uploads.sniff(head)
-    return t if t and t.startswith("image/") else None
+    # brand products go straight into compositing; RAW/HEIC/TIFF only belong in the photo catalogue
+    return t if t and t.startswith("image/") and t not in uploads.CONVERTED else None
 
 
 def _limit_err(text: str):

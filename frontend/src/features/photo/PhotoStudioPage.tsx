@@ -9,6 +9,7 @@ import { usePhotoHistory } from '@/hooks/usePhoto'
 import { api } from '@/lib/api'
 import { editBase } from '@/lib/photo/history'
 import type { Generation } from '@/lib/types'
+import { LibraryNav } from './LibraryNav'
 import { PhotoWorkspace } from './PhotoWorkspace'
 import type { StudioTab } from './StudioPanel'
 
@@ -60,16 +61,21 @@ export function PhotoStudioPage() {
   }
 
   return (
-    <PhotoWorkspace
-      key={opened.generation.id}
-      routeId={generationId}
-      history={history.data}
-      opened={opened}
-      baseId={baseId}
-      sourceUrl={viewable(base) ?? viewable(opened.generation)}
-      initial={params}
-      title={title}
-      initialTab={tab as StudioTab | undefined}
-    />
+    <div className="flex h-full min-h-0 flex-col">
+      <LibraryNav itemId={history.data?.target_type === 'media' ? history.data.target_id : null} />
+      <div className="min-h-0 flex-1">
+        <PhotoWorkspace
+          key={opened.generation.id}
+          routeId={generationId}
+          history={history.data}
+          opened={opened}
+          baseId={baseId}
+          sourceUrl={viewable(base) ?? viewable(opened.generation)}
+          initial={params}
+          title={title}
+          initialTab={tab as StudioTab | undefined}
+        />
+      </div>
+    </div>
   )
 }

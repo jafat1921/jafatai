@@ -4,6 +4,8 @@
   list-users
   thumbs                   make missing grid thumbnails for every finished image/video (optional;
                            the server also makes them on first view)
+  catalogue-backfill       read EXIF, capture date, size and a duplicate-check hash for photos uploaded
+                           before the photo catalogue (M10); safe to run again
 """
 import getpass
 import os
@@ -48,6 +50,42 @@ def make_thumbs() -> int:
     return 1 if failed and not made else 0
 
 
+def catalogue_backfill() -> int:
+    import hashlib
+
+    from app.catalogue import exif as ex
+    from app.catalogue.importer import apply_exif
+    from app.config import get_settings
+    from app.models import Generation, MediaItem
+
+    done = missing = 0
+    with SessionLocal() as db:
+        items = db.scalars(select(MediaItem).where(MediaItem.kind == "image", MediaItem.content_hash.is_(None))).all()
+        for item in items:
+            first = db.scalars(select(Generation).where(Generation.target_type == "media",
+                                                        Generation.target_id == item.id)
+                               .order_by(Generation.version).limit(1)).first()
+            path = get_settings().data_dir / (item.source_path or (first.file_path if first else "") or "")
+            if not path.is_file():
+                missing += 1
+                continue
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            item.content_hash = h.hexdigest()
+            item.bytes = item.bytes or path.stat().st_size
+            item.original_name = item.original_name or ((first.params or {}).get("original_name") if first else None)
+            if item.origin == "upload" and item.captured_at is None:
+                apply_exif(item, ex.read(path))
+            done += 1
+            if done % 200 == 0:
+                db.commit()
+        db.commit()
+    print(f"catalogue: {done} photos updated, {missing} files missing")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) >= 2 and argv[0] == "reset-password":
         return reset_password(argv[1])
@@ -55,6 +93,8 @@ def main(argv: list[str]) -> int:
         return list_users()
     if argv[:1] == ["thumbs"]:
         return make_thumbs()
+    if argv[:1] == ["catalogue-backfill"]:
+        return catalogue_backfill()
     print(__doc__)
     return 2
 

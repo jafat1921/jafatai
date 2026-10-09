@@ -16,6 +16,7 @@ and on a **Windows/macOS/Linux workstation** for development. No Docker is neede
 - [11. Admin tasks](#11-admin-tasks)
 - [12. Troubleshooting](#12-troubleshooting)
 - [13. Development setup (workstation)](#13-development-setup-workstation)
+- [14. Photo Studio models (optional)](#14-photo-studio-models-optional)
 
 ---
 
@@ -319,3 +320,21 @@ ones on the image GPU (Z-Image Turbo; Qwen-Image Lightning for text templates; o
 waiting for other people's jobs first):
 `cd backend && uv run python ../scripts/gen_prompt_template_previews.py --comfy https://YOUR_IMAGE_GPU [--only id,id] [--force]`
 (`--dry-run` prints the prompts without queueing anything).
+
+## 14. Photo Studio models (optional)
+
+Background removal, face restore, colourisation, SAM 3.1 masks, JPEG/denoise/deblur clean-up and SUPIR
+need extra models and two custom nodes in ComfyUI. One script adds them; run it on the GPU server as the
+user that owns ComfyUI (it uses `sudo` only to restart the ComfyUI services):
+```bash
+cd /data/apps/mixaicinemastudio && git pull
+./scripts/install-photo-models.sh --all --dry-run   # what it would download, and the disk check
+./scripts/install-photo-models.sh                   # core set, ~5.5 GB
+./scripts/install-photo-models.sh --supir           # SUPIR + SDXL base, ~9.6 GB (SUPIR is non-commercial)
+./scripts/install-photo-models.sh --extras          # MediaPipe face landmarker + anime upscaler, ~23 MB
+```
+It skips what is already there, resumes broken downloads, checks size and sha256, restarts
+`comfyui*.service` and then asks each ComfyUI (`/object_info`, `/models`) whether every node and model is
+visible (OK / MISSING). `--uninstall-list` prints the matching `rm` lines; nothing is deleted for you.
+CodeFormer is not installed unless you add `--codeformer` (non-commercial licence).
+Every file, its source, licence and size: `docs/ops/photo-models.md`.

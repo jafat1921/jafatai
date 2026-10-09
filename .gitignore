@@ -30,6 +30,7 @@ docs/*
 !docs/ops/
 docs/ops/*
 !docs/ops/deploy-server.md
+!docs/ops/photo-models.md
 !docs/api/
 .claude/
 CLAUDE.md

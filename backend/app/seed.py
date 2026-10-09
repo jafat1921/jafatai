@@ -11,6 +11,9 @@ log = logging.getLogger(__name__)
 
 
 def seed(db: Session) -> None:
+    from app.photo.looks import ensure_builtins
+
+    ensure_builtins(db)
     if db.scalar(select(func.count()).select_from(User)):
         return
     s = get_settings()

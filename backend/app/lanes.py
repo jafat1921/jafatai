@@ -2,7 +2,8 @@
 
 image   -> stills, image edits and image upscales (COMFY_IMAGE_URLS)
 video   -> takes, long takes, renders, video upscales (COMFY_VIDEO_URLS)
-general -> LLM work, ffmpeg assembly / branding, exports, autopilot orchestration
+general -> LLM work, ffmpeg assembly / branding, exports, autopilot orchestration, Photo Studio renders and
+           looks on video (CPU only)
 
 Kept free of app imports on purpose: migration 0009 backfills with the same classifier.
 """
@@ -26,7 +27,7 @@ def lane_for(job_type: str, gen_kind: str | None = None) -> str:
             return "image"
         if gen_kind in VIDEO_KINDS:
             return "video"
-    # scene_text generations, ai_*, reel_assemble, brand_*, media_zip, autopilot...
+    # scene_text generations, ai_*, reel_assemble, brand_*, media_zip, autopilot, photo_render, look_video...
     return "general"
 
 

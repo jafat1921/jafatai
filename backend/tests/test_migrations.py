@@ -340,3 +340,43 @@ def test_0009_adds_job_lane_and_classifies_existing_jobs(tmp_path):
     assert "lane" not in {r[1] for r in con.execute("PRAGMA table_info(job)")}
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0010_adds_look_table_and_keeps_data(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0009")
+    con = sqlite3.connect(db)
+    now = "2026-10-09 10:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    con.execute("INSERT INTO media_item (id, workspace_id, kind, origin, title, tags, generation_id, created_at,"
+                " updated_at) VALUES ('m1', 'w1', 'image', 'upload', 'Beach', '[]', 'g1', ?, ?)", (now, now))
+    con.execute("INSERT INTO generation (id, workspace_id, target_type, target_id, kind, version, status, prompt,"
+                " params, seed, file_path, media_type, created_at, updated_at) VALUES ('g1', 'w1', 'media', 'm1',"
+                " 'upload', 1, 'ready', '', '{}', 1, 'workspaces/w1/media/g1.png', 'image/png', ?, ?)", (now, now))
+    con.execute("INSERT INTO job (id, workspace_id, type, payload, status, priority, progress, message, attempts,"
+                " lane, created_at, updated_at) VALUES ('j1', 'w1', 'upscale', '{}', 'done', 0, 1, '', 1, 'video',"
+                " ?, ?)", (now, now))
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "0010")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0010"
+    assert con.execute("SELECT title, generation_id FROM media_item").fetchall() == [("Beach", "g1")]
+    assert con.execute("SELECT file_path, status FROM generation").fetchall() == [("workspaces/w1/media/g1.png", "ready")]
+    assert con.execute("SELECT lane FROM job").fetchall() == [("video",)]
+    cols = {r[1] for r in con.execute("PRAGMA table_info(look)")}
+    assert {"id", "workspace_id", "name", "params", "cube_path", "source", "thumb_path", "created_at"} <= cols
+    # a built-in row has no workspace; params falls back to {}
+    con.execute("INSERT INTO look (id, workspace_id, name, source, created_at, updated_at)"
+                " VALUES ('builtin-x', NULL, 'X', 'builtin', ?, ?)", (now, now))
+    assert con.execute("SELECT params, description FROM look").fetchone() == ("{}", "")
+    con.commit()
+    con.close()
+
+    _alembic(db, "downgrade", "0009")
+    con = sqlite3.connect(db)
+    assert "look" not in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert con.execute("SELECT count(*) FROM generation").fetchone()[0] == 1
+    con.close()
+    _alembic(db, "upgrade", "head")

@@ -329,10 +329,15 @@ FINISHED_HOOKS.append(brand_moments.on_job_finished)
 from app import organise  # noqa: E402
 
 HANDLERS[organise.ZIP_JOB] = organise.handle_zip
+from app.photo import looks as photo_looks, service as photo  # noqa: E402
+
+HANDLERS[photo.RENDER_JOB] = photo.handle_render
+HANDLERS[photo_looks.VIDEO_JOB] = photo_looks.handle_apply_video
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.
 CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot", brand.BRAND_JOB: "brand",
-                  brand.REVEAL_JOB: "brand", organise.ZIP_JOB: "export"}
+                  brand.REVEAL_JOB: "brand", organise.ZIP_JOB: "export", photo.RENDER_JOB: "photo",
+                  photo_looks.VIDEO_JOB: "photo"}
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

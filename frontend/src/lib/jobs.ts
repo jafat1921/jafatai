@@ -27,6 +27,7 @@ export function etaText(job: Job, now = Date.now()) {
 export function jobOpenPath(job: Job): string {
   if (job.project_id && isQuickJob(job)) return `/quick/${job.project_id}`
   if (job.project_id) return `/projects/${job.project_id}/render`
+  if (job.type === 'photo_render' && job.generation_id) return `/image/studio/${job.generation_id}`
   if (/video|clip|i2v/.test(job.type)) return '/video/library'
   if (/image|edit|img2img|upscale/.test(job.type)) return '/image/library'
   return '/queue'

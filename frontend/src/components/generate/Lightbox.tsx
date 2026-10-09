@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { Brush, ChevronLeft, ChevronRight, Clapperboard, Columns2, Copy, Download, ExternalLink, Heart, ImageUpscale, Layers, PanelRightOpen, RotateCcw, X } from 'lucide-react'
+import { Aperture, Brush, ChevronLeft, ChevronRight, Clapperboard, Columns2, Copy, Download, ExternalLink, Heart, ImageUpscale, Layers, PanelRightOpen, RotateCcw, X } from 'lucide-react'
 import { BeforeAfter } from '@/components/media/BeforeAfter'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
@@ -240,6 +240,14 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                   Edit <Kbd>E</Kbd>
                 </Button>
               )}
+              {image && entry.src && (
+                <Button asChild size="sm" variant="ghost">
+                  <Link to={`/image/studio/${entry.generationId}`} onClick={onClose}>
+                    <Aperture aria-hidden />
+                    Open in Photo Studio
+                  </Link>
+                </Button>
+              )}
               {image && actions.animate && (
                 <Button type="button" size="sm" variant="ghost" onClick={run(actions.animate)}>
                   <Clapperboard aria-hidden />
@@ -256,7 +264,7 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                 <Button asChild size="sm" variant="ghost">
                   <a href={downloadUrl(entry.generationId)} download>
                     <Download aria-hidden />
-                    {entry.compare ? 'Download upscaled' : 'Download'}
+                    {entry.compare && (entry.compare.afterLabel ?? 'Upscaled').startsWith('Upscaled') ? 'Download upscaled' : 'Download'}
                   </a>
                 </Button>
               )}

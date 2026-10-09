@@ -70,6 +70,14 @@ export const shellRoutes: RouteObject[] = [
     const { UpscalePickPage } = await import('@/features/upscale/UpscalePickPage')
     return <UpscalePickPage kind="image" />
   }),
+  page('image/studio', async () => {
+    const { PhotoStudioPickPage } = await import('@/features/photo/PhotoStudioPickPage')
+    return <PhotoStudioPickPage />
+  }),
+  page('image/studio/:generationId', async () => {
+    const { PhotoStudioPage } = await import('@/features/photo/PhotoStudioPage')
+    return <PhotoStudioPage />
+  }),
   page('image/library', async () => {
     const { LibraryPage } = await import('@/features/library/LibraryPage')
     return <LibraryPage kind="image" />

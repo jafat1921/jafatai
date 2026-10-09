@@ -47,11 +47,12 @@ describe('tile menu per item type', () => {
     const h = show(item)
     const { user, menu, names } = await menuItems('The Luminous Tree')
     expect(names).toEqual([
-      'Open', 'Versions', 'Download', 'Download original', 'Upscale…', 'Edit', 'Image to Image', 'Animate → Image to Video', 'Use as reference',
+      'Open', 'Versions', 'Download', 'Download original', 'Upscale…', 'Open in Photo Studio', 'Edit', 'Image to Image', 'Animate → Image to Video', 'Use as reference',
       'Regenerate: same prompt, new seed', 'Regenerate with note…', 'Edit prompt & regenerate…', 'Move to folder…', 'Favourite', 'Rename', 'Delete',
     ])
     expect(within(menu).getByRole('menuitem', { name: 'Download original' })).toHaveAttribute('href', '/api/generations/g-orig/download')
     expect(within(menu).getByRole('menuitem', { name: 'Download' })).toHaveAttribute('href', '/api/generations/g-a/download')
+    expect(within(menu).getByRole('menuitem', { name: 'Open in Photo Studio' })).toHaveAttribute('href', '/image/studio/g-a')
     await user.click(within(menu).getByRole('menuitem', { name: 'Image to Image' }))
     expect(h.img2img).toHaveBeenCalledWith(item)
   })

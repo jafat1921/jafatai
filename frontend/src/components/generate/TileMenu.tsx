@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 import {
-  Brush, Clapperboard, Download, ExternalLink, FolderInput, Heart, ImageUpscale, Layers, Maximize2, MoreHorizontal, Palette, PanelRightOpen,
+  Aperture, Brush, Clapperboard, Download, ExternalLink, FolderInput, Heart, ImageUpscale, Layers, Maximize2, MoreHorizontal, Palette, PanelRightOpen,
   Pencil, Play, RefreshCw, Trash2,
 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -102,6 +102,12 @@ export function TileMenu({
         )}
         {ready && image && (
           <>
+            <DropdownMenuItem asChild>
+              <Link to={`/image/studio/${item.generation_id}`}>
+                <Aperture aria-hidden />
+                Open in Photo Studio
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => h.edit(item)}>
               <Brush aria-hidden />
               Edit

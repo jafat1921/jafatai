@@ -1,0 +1,89 @@
+[
+  {
+    "id": "builtin-natural-portrait",
+    "name": "Natural Portrait",
+    "category": "Portrait",
+    "description": "Subtle skin warmth, lifted shadows, restrained sharpening. A safe start for indoor portraits.",
+    "params": {
+      "exposure": 4, "contrast": 8, "highlights": -15, "shadows": 25, "whites": 5, "blacks": -5,
+      "temperature": 6, "tint": 3, "vibrance": 12, "saturation": -3,
+      "clarity": -8, "sharpness": 18, "noiseReduction": 10,
+      "hsl": {"orange": {"h": -3, "s": -8, "l": 5}, "red": {"h": -2, "s": -5, "l": 0}}
+    }
+  },
+  {
+    "id": "builtin-cinematic-portrait",
+    "name": "Cinematic Portrait",
+    "category": "Portrait",
+    "description": "Warm skin, deep blacks, cool muted shadows. An editorial film mood.",
+    "params": {
+      "exposure": 2, "contrast": 18, "highlights": -30, "shadows": 20, "whites": -10, "blacks": -25,
+      "temperature": 12, "tint": -4, "vibrance": 15, "saturation": -8,
+      "clarity": 6, "sharpness": 20, "vignette": -15,
+      "curve": {"blacks": -10, "shadows": -5, "highlights": -5},
+      "hsl": {"orange": {"h": -5, "s": -10, "l": 3}, "blue": {"h": 5, "s": -15, "l": -8}, "aqua": {"h": 0, "s": -20, "l": -5}}
+    }
+  },
+  {
+    "id": "builtin-vivid-landscape",
+    "name": "Vivid Landscape",
+    "category": "Landscape",
+    "description": "Rich greens and blues, recovered highlights, mid-tone punch. For outdoor scenes.",
+    "params": {
+      "contrast": 22, "highlights": -45, "shadows": 30, "whites": 15, "blacks": -10,
+      "temperature": -5, "vibrance": 25, "saturation": 8, "clarity": 18, "sharpness": 25,
+      "hsl": {"green": {"h": -8, "s": 15, "l": -5}, "blue": {"h": 5, "s": 18, "l": -8}, "aqua": {"h": 0, "s": 22, "l": -10}}
+    }
+  },
+  {
+    "id": "builtin-soft-light",
+    "name": "Soft Light",
+    "category": "Landscape",
+    "description": "Open shadows, gentle warmth, low contrast. For overcast days and golden hour.",
+    "params": {
+      "exposure": 8, "contrast": -8, "highlights": -25, "shadows": 35, "whites": 8, "blacks": 5,
+      "temperature": 8, "vibrance": 18, "clarity": 8, "sharpness": 18,
+      "curve": {"shadows": 8, "highlights": -6},
+      "hsl": {"yellow": {"h": -3, "s": 8, "l": 5}, "orange": {"h": 3, "s": 10, "l": 8}}
+    }
+  },
+  {
+    "id": "builtin-teal-orange",
+    "name": "Teal & Orange",
+    "category": "Mood",
+    "description": "Blockbuster grade: warm skin against teal shadows. Strong, use with care.",
+    "params": {
+      "contrast": 20, "highlights": -25, "shadows": 20, "whites": -5, "blacks": -30,
+      "temperature": 8, "tint": -2, "vibrance": 10, "saturation": -5,
+      "clarity": 8, "sharpness": 18, "vignette": -25,
+      "curve": {"blacks": -12, "shadows": -8, "highlights": -5},
+      "hsl": {"red": {"h": -5, "s": 5, "l": 0}, "orange": {"h": -8, "s": 15, "l": 5}, "yellow": {"h": -10, "s": -15, "l": -5},
+              "aqua": {"h": 0, "s": 25, "l": -15}, "blue": {"h": 0, "s": 20, "l": -10}}
+    }
+  },
+  {
+    "id": "builtin-faded-film",
+    "name": "Faded Film",
+    "category": "Mood",
+    "description": "Milky blacks, warm highlights, low contrast and muted colour, like a 1970s colour print.",
+    "params": {
+      "exposure": 3, "contrast": -12, "highlights": -15, "shadows": 25, "whites": -5, "blacks": 15,
+      "temperature": 15, "tint": 5, "vibrance": -8, "saturation": -15,
+      "clarity": -12, "sharpness": 10, "vignette": -20,
+      "curve": {"blacks": 18, "shadows": 5, "highlights": -8, "whites": -5},
+      "hsl": {"orange": {"s": -20, "l": 5}, "yellow": {"s": -15, "l": 8}, "green": {"h": -10, "s": -25, "l": -5}, "blue": {"s": -30, "l": -10}}
+    }
+  },
+  {
+    "id": "builtin-classic-mono",
+    "name": "Classic Mono",
+    "category": "Black & White",
+    "description": "Punchy black and white with the colour mixer shaping the grey tones. Portraits and architecture.",
+    "params": {
+      "contrast": 25, "highlights": -20, "shadows": 30, "whites": 15, "blacks": -20,
+      "saturation": -100, "clarity": 15, "sharpness": 22,
+      "curve": {"blacks": -8, "shadows": -3, "highlights": 5, "whites": 8},
+      "hsl": {"red": {"l": 5}, "orange": {"l": 12}, "yellow": {"l": 15}, "blue": {"l": -25}, "purple": {"l": -15}}
+    }
+  }
+]

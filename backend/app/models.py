@@ -437,6 +437,28 @@ class BrandKit(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 
 
+class Look(Base):
+    """A Photo Studio look (contract v9): develop params, an imported .cube, or both.
+
+    Built-ins have no workspace (shared, read-only) and fixed ids; app.photo.looks keeps them in step."""
+
+    __tablename__ = "look"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("workspace.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    category: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    params: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    cube_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    cube_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="user")  # builtin | user | imported
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

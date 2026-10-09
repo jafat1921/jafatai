@@ -28,7 +28,11 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
   const h = (p.height as number | undefined) ?? item.height
   // an upscaled version compares against the one it was made from
   const up = gen ? upscaleInfo(gen) : null
-  const source = up?.sourceId ? detail?.versions?.find((v) => v.id === up.sourceId && v.media_url) : undefined
+  // a video graded with a look (contract-v9) compares against the clip it was graded from
+  const look = gen?.params?.look as { source_id?: string; name?: string } | undefined
+  const sourceId = up?.sourceId ?? look?.source_id
+  const source = sourceId ? detail?.versions?.find((v) => v.id === sourceId && v.media_url) : undefined
+  const afterLabel = up ? `Upscaled · v${gen?.version ?? ''}` : `${look?.name ?? 'Graded'} · v${gen?.version ?? ''}`
   return {
     key: item.id,
     kind: item.kind,
@@ -44,7 +48,7 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
     projectId: item.project_id,
     generationId: item.generation_id,
     favourite: fav,
-    compare: source?.media_url ? { src: source.media_url, label: `Original · v${source.version}`, afterLabel: `Upscaled · v${gen?.version ?? ''}`.trim() } : null,
+    compare: source?.media_url ? { src: source.media_url, label: `Original · v${source.version}`, afterLabel: afterLabel.trim() } : null,
     originalId: item.original_generation_id ?? source?.id ?? null,
   }
 }

@@ -135,6 +135,8 @@ const JOB_LABELS: Record<string, string> = {
   quick_autopilot: 'Quick video',
   upscale: 'Upscale',
   media_zip: 'Zip download',
+  photo_render: 'Photo Studio save',
+  look_video: 'Look on video',
   image_generate: 'Create image',
   image_edit: 'Edit image',
 }

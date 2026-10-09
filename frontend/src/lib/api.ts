@@ -68,6 +68,7 @@ import type {
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 import type { CameraPreset } from './camera'
 import type { MentionOption } from './mentions'
+import type { AutoResult, DevelopParams, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema, PreviewResult } from './photo/types'
 
 type CameraPresets = Record<'shot_size' | 'angle' | 'motion' | 'speed', (CameraPreset<string> & { phrase: string })[]> & { default_speed: string }
 
@@ -190,6 +191,36 @@ async function postBlob(path: string, body: unknown): Promise<Blob> {
   }
   return res.blob()
 }
+
+// raw fetch for the binary and multipart photo routes; same error shape as request()
+async function send(path: string, init: RequestInit): Promise<Response> {
+  let res: Response
+  try {
+    res = await fetch(API_BASE + path, { credentials: 'include', ...init })
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw e
+    throw new ApiError(0, UNREACHABLE)
+  }
+  if (!res.ok) {
+    const text = await res.text()
+    let parsed: unknown = text
+    try {
+      parsed = text ? JSON.parse(text) : null
+    } catch {
+      /* plain text */
+    }
+    if (res.status === 401) unauthorizedHandler?.()
+    throw new ApiError(res.status, messageFrom(res.status, parsed), parsed)
+  }
+  return res
+}
+
+const jsonInit = (body: unknown, signal?: AbortSignal): RequestInit => ({
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+  signal,
+})
 
 export interface GenerationQuery {
   target_type: TargetType
@@ -395,6 +426,47 @@ export const api = {
   templates: {
     list: (type: 'video' | 'image') => get<Template[]>('/prompt-templates', { type }),
     start: (id: string) => post<TemplateStart>(`/prompt-templates/${id}/start`),
+  },
+  // contract-v9: Photo Studio
+  photo: {
+    schema: () => get<PhotoSchema>('/photo/schema'),
+    preview: async (id: string, params: DevelopParams, maxSide = 1280, signal?: AbortSignal): Promise<PreviewResult> => {
+      const res = await send(`/photo/${id}/preview`, jsonInit({ params, max_side: maxSide }, signal))
+      const ms = Number(res.headers.get('X-Develop-Ms'))
+      return { url: URL.createObjectURL(await res.blob()), ms: Number.isFinite(ms) && ms > 0 ? ms : null, outputSize: res.headers.get('X-Output-Size') }
+    },
+    histogram: (id: string, params: DevelopParams) => post<Histogram>(`/photo/${id}/histogram`, { params }),
+    auto: (id: string) => post<AutoResult>(`/photo/${id}/auto`),
+    palette: (id: string, k = 8) => get<{ clusters: NonNullable<DevelopParams['palette']> }>(`/photo/${id}/palette`, { k }),
+    render: (id: string, body: { params: DevelopParams; format?: ExportFormat; quality?: number; note?: string }) =>
+      post<Job>(`/photo/${id}/render`, body),
+    history: (id: string) => get<PhotoHistory>(`/photo/${id}/history`),
+    revert: (id: string) => post<PhotoHistory>(`/photo/${id}/revert`),
+    cube: async (params: DevelopParams, title: string, size = 33) => (await send('/photo/cube', jsonInit({ params, size, title }))).blob(),
+  },
+  looks: {
+    list: () => get<Look[]>('/looks'),
+    create: (body: { name: string; params: DevelopParams; description?: string; category?: string; generation_id?: string }) =>
+      post<Look>('/looks', body),
+    update: (id: string, body: { name?: string; params?: DevelopParams; description?: string; category?: string }) => patch<Look>(`/looks/${id}`, body),
+    remove: (id: string) => del(`/looks/${id}`),
+    importFiles: async (files: File[]): Promise<ImportResult> => {
+      const form = new FormData()
+      files.forEach((f) => form.append('files', f, f.name))
+      try {
+        return (await (await send('/looks/import', { method: 'POST', body: form })).json()) as ImportResult
+      } catch (e) {
+        // a 422 still carries the per-file reports
+        const detail = (e as ApiError).detail as Partial<ImportResult> | { detail?: Partial<ImportResult> } | undefined
+        const reports = (detail as Partial<ImportResult>)?.reports ?? (detail as { detail?: Partial<ImportResult> })?.detail?.reports
+        if (e instanceof ApiError && e.status === 422 && reports) return { looks: [], reports }
+        throw e
+      }
+    },
+    cubeUrl: (id: string, size = 33) => `${API_BASE}/looks/${id}/cube?size=${size}`,
+    thumbUrl: (id: string, generationId?: string) =>
+      `${API_BASE}/looks/${id}/thumb${generationId ? `?generation_id=${encodeURIComponent(generationId)}` : ''}`,
+    applyVideo: (id: string, body: { generation_id: string; intensity: number }) => post<Job>(`/looks/${id}/apply-video`, body),
   },
   dashboard: () => get<Dashboard>('/dashboard'),
   // contract-v8 P4: library organisation

@@ -61,7 +61,8 @@ export function mockApi(handler: Handler) {
       const path = url.pathname.replace(/^\/api/, '')
       const query = Object.fromEntries(url.searchParams.entries())
       const method = init?.method ?? 'GET'
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined
+      // multipart uploads (FormData) are passed through as they are
+      const body = init?.body ? (typeof init.body === 'string' ? JSON.parse(init.body) : init.body) : undefined
       calls.push({ method, path, query, body })
       const data = handler(method, path, query, body)
       if (data instanceof Response) return data

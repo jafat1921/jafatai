@@ -199,9 +199,13 @@ for row in "${REPOS[@]}"; do
   if [[ -d "$NODES/$dir/.git" ]]; then info "update node $dir"; else info "clone  node $dir  ($url)"; fi
 done
 
+seen_fs=""
 for d in "$MODELS" "$NODES"; do
+  mnt=$(df --output=target "$d" | tail -1)
+  [[ " $seen_fs " == *" $mnt "* ]] && continue
+  seen_fs+=" $mnt"
   avail=$(df -B1 --output=avail "$d" | tail -1 | tr -d ' ')
-  info "free on $(df --output=target "$d" | tail -1): $(human "$avail"), to download: $(human "$need") (+10G headroom)"
+  info "free on $mnt: $(human "$avail"), to download: $(human "$need") (+10G headroom)"
   if (( avail < need + FREE_MARGIN )); then
     if (( DRY )); then warn "not enough free space - a real run would stop here"
     else die "not enough disk space on $d: need $(human $((need + FREE_MARGIN))), have $(human "$avail")"; fi
@@ -353,9 +357,17 @@ for u in "${UNITS[@]}"; do
   [[ -n "$port" ]] && PORTS+=("$port")
 done
 
-if (( CHANGED )); then
+# a marker survives a failed/timed-out sudo, so the next run still restarts
+PENDING="$COMFY_ROOT/.mixai-photo-restart-pending"
+(( CHANGED )) && touch "$PENDING"
+if [[ -f "$PENDING" ]]; then
   say "Restarting: ${UNITS[*]}"
-  sudo systemctl restart "${UNITS[@]}"
+  if ! sudo systemctl restart "${UNITS[@]}"; then
+    warn "restart failed (sudo?). New nodes are NOT loaded yet - re-run this script, or:"
+    warn "  sudo systemctl restart ${UNITS[*]}"
+    exit 1
+  fi
+  rm -f "$PENDING"
 else
   say "Nothing new on disk - not restarting; checking the running ComfyUI"
 fi

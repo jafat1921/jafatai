@@ -40,12 +40,38 @@ async function loadSource(url: string, max: number): Promise<{ bitmap: TexImageS
  * that replaces it once it matches the current params ("exact preview"). Without WebGL2 the server
  * render is all there is.
  */
-export function useLivePreview({ sourceUrl, previewId, params, before, maxSide }: {
+/** Highlight (red) and shadow (blue) clipping as a transparent PNG over the frame, like Lightroom's J. */
+function clipImage(px: Uint8Array, w: number, h: number): string | null {
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const ctx = c.getContext('2d')
+  if (!ctx) return null
+  const img = ctx.createImageData(w, h)
+  for (let y = 0; y < h; y++) {
+    // readPixels is bottom-up
+    const src = (h - 1 - y) * w * 4
+    const dst = y * w * 4
+    for (let x = 0; x < w * 4; x += 4) {
+      const r = px[src + x], g = px[src + x + 1], b = px[src + x + 2]
+      if (r >= 254 || g >= 254 || b >= 254) img.data.set([255, 40, 40, 255], dst + x)
+      else if (r <= 1 && g <= 1 && b <= 1) img.data.set([40, 110, 255, 255], dst + x)
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return c.toDataURL('image/png')
+}
+
+export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, clip = false, wantBefore = false }: {
   sourceUrl: string | null
   previewId: string
   params: DevelopParams
   before: boolean
   maxSide: number
+  // J: show clipped pixels
+  clip?: boolean
+  // a split before/after view needs the unedited frame (crop and straighten applied) as an image
+  wantBefore?: boolean
 }) {
   const renderer = useRef<DevelopRenderer | null>(null)
   const [mode, setMode] = useState<PreviewMode>('init')
@@ -54,6 +80,9 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide }
   const [server, setServer] = useState<ServerPreview | null>(null)
   const [serverError, setServerError] = useState<unknown>(null)
   const [histogram, setHistogram] = useState<Histogram | null>(null)
+  const [clipUrl, setClipUrl] = useState<string | null>(null)
+  const [beforeUrl, setBeforeUrl] = useState<string | null>(null)
+  const pixels = useRef<{ data: Uint8Array; w: number; h: number } | null>(null)
   const urls = useRef<string[]>([])
   const key = paramsKey(params)
 
@@ -92,18 +121,25 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide }
     const frame = requestAnimationFrame(() => {
       const r = renderer.current
       if (!r) return
+      if (wantBefore) {
+        // draw the untouched frame once, keep it as a picture, then draw the edit over it
+        r.render(params, { before: true, maxSide })
+        setBeforeUrl(r.canvas.toDataURL('image/jpeg', 0.9))
+      }
       r.render(params, { before, maxSide })
       // the read-back is the slow part; one every 150 ms is plenty for a histogram
       timer = setTimeout(() => {
         const px = r.readPixels()
+        pixels.current = { data: px, w: r.canvas.width, h: r.canvas.height }
         setHistogram(histogramOf(px, Math.max(1, Math.floor(px.length / 4 / 250_000))))
+        setClipUrl(clip ? clipImage(px, r.canvas.width, r.canvas.height) : null)
       }, 150)
     })
     return () => {
       cancelAnimationFrame(frame)
       clearTimeout(timer)
     }
-  }, [mode, ready, params, before, maxSide])
+  }, [mode, ready, params, before, maxSide, clip, wantBefore])
 
   // the server's exact render, once the sliders rest
   useEffect(() => {
@@ -148,6 +184,16 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide }
     [mode, serverUrl],
   )
 
+  /** RGB 0..255 of the live preview at 0..1 of the frame (the histogram's readout). */
+  const sample = useCallback((x: number, y: number): [number, number, number] | null => {
+    const p = pixels.current
+    if (!p) return null
+    const ix = Math.min(p.w - 1, Math.max(0, Math.floor(x * p.w)))
+    const iy = p.h - 1 - Math.min(p.h - 1, Math.max(0, Math.floor(y * p.h)))
+    const i = (iy * p.w + ix) * 4
+    return [p.data[i], p.data[i + 1], p.data[i + 2]]
+  }, [])
+
   const exact = server?.key === key
   const geo = src ? geometryFor(src.w, src.h, params) : null
 
@@ -165,6 +211,9 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide }
     approximate: mode === 'webgl' && !exact && needsServer(params),
     histogram,
     snapshot,
+    sample,
+    clipUrl: clip && mode === 'webgl' ? clipUrl : null,
+    beforeUrl: mode === 'webgl' ? beforeUrl : sourceUrl,
   }
 }
 

@@ -29,3 +29,15 @@ export function redo<T>(s: UndoState<T>): UndoState<T> {
   if (!s.future.length) return s
   return { past: [...s.past, s.present], present: s.future[0], future: s.future.slice(1), group: null, at: 0 }
 }
+
+/** Every state in order (oldest first) and which one is showing; History lists these. */
+export function timeline<T>(s: UndoState<T>): { states: T[]; at: number } {
+  return { states: [...s.past, s.present, ...s.future], at: s.past.length }
+}
+
+/** Jump to a state in the timeline, like clicking a History step: later steps stay redoable. */
+export function jumpTo<T>(s: UndoState<T>, index: number): UndoState<T> {
+  const all = [...s.past, s.present, ...s.future]
+  if (index < 0 || index >= all.length || index === s.past.length) return s
+  return { past: all.slice(0, index), present: all[index], future: all.slice(index + 1), group: null, at: 0 }
+}

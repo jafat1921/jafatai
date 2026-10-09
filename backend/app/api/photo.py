@@ -15,8 +15,9 @@ from app.photo import looks as lk
 from app.photo import lut as lt
 from app.photo import service as svc
 from app.photo import restore as rs
+from app.photo import workflow as wf
 from app.photo.schemas import (BackgroundIn, CubeIn, DevelopParams, EffectIn, ParamsIn, PreviewIn, RenderIn,
-                                RestoreIn, SmartRestoreIn)
+                                RestoreIn, SmartRestoreIn, SnapshotIn, SnapshotPatch, SyncIn)
 from app.schemas import JobOut
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import job_out, owned_source
@@ -35,6 +36,7 @@ def schema(cur: CurrentUser = Depends(get_current_user)):
         "defaults": dv.defaults(),
         "ranges": dv.ranges(),
         "groups": dv.GROUPS,
+        "switchable": list(dv.SWITCHABLE),
         "hsl_bands": [{"id": k, "label": label, "hue": hue} for k, label, hue in dv.HSL_BANDS],
         "curve_points": [{"id": k, "label": label, "at": at} for k, label, at in dv.CURVE_POINTS],
         "spatial_keys": list(dv.SPATIAL_KEYS),
@@ -221,3 +223,53 @@ def mask(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(
 async def describe(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     g = _source(db, cur, gen_id)
     return await run_in_threadpool(rs.describe, g)
+
+
+# ---------------------------------------------------------------- develop workflow (M10 / D1)
+
+@router.post("/sync", status_code=202)
+def sync(body: SyncIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    out = wf.queue_sync(db, cur.workspace_id, body.ids, body.params.plain(), body.groups, body.format, body.quality,
+                        cur.user.id)
+    db.commit()
+    return {"results": out, "queued": sum(1 for r in out if r["job_id"])}
+
+
+@router.get("/{gen_id}/snapshots")
+def list_snapshots(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    return wf.snapshots(db, _source(db, cur, gen_id))
+
+
+@router.post("/{gen_id}/snapshots", status_code=201)
+def create_snapshot(gen_id: str, body: SnapshotIn, db: Session = Depends(get_db),
+                    cur: CurrentUser = Depends(require_editor)):
+    from app.models import PhotoSnapshot
+
+    g = _source(db, cur, gen_id)
+    base = _source(db, cur, body.base_id) if body.base_id else g
+    if (base.target_type, base.target_id) != (g.target_type, g.target_id):
+        raise HTTPException(422, "base_id must be a version of the same picture")
+    s = PhotoSnapshot(workspace_id=cur.workspace_id, target_type=g.target_type, target_id=g.target_id,
+                      base_id=base.id, name=body.name.strip(), params=dv.normalise(body.params.plain()))
+    db.add(s)
+    db.commit()
+    return wf.snapshot_out(s)
+
+
+@router.patch("/snapshots/{sid}")
+def patch_snapshot(sid: str, body: SnapshotPatch, db: Session = Depends(get_db),
+                   cur: CurrentUser = Depends(require_editor)):
+    s = wf.owned_snapshot(db, cur.workspace_id, sid)
+    if body.name is not None:
+        s.name = body.name.strip()
+    if body.params is not None:
+        s.params = dv.normalise(body.params.plain())
+    db.commit()
+    return wf.snapshot_out(s)
+
+
+@router.delete("/snapshots/{sid}", status_code=204)
+def delete_snapshot(sid: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    db.delete(wf.owned_snapshot(db, cur.workspace_id, sid))
+    db.commit()
+    return Response(status_code=204)

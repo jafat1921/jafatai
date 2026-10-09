@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { setValue } from '@/lib/photo/params'
 import type { DevelopParams } from '@/lib/photo/types'
-import { initUndo, push, redo, undo } from '@/lib/photo/undo'
+import { initUndo, jumpTo, push, redo, timeline, undo } from '@/lib/photo/undo'
 
 /** Develop params with in-session undo / redo. Every change goes through here. */
 export function useDevelop(initial: DevelopParams) {
@@ -23,6 +23,8 @@ export function useDevelop(initial: DevelopParams) {
     redo: useCallback(() => setState(redo), []),
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
+    timeline: timeline(state),
+    jump: useCallback((i: number) => setState((s) => jumpTo(s, i)), []),
   }
 }
 

@@ -14,11 +14,13 @@ interface Props {
   onVideo: () => void
   onRename: () => void
   onDelete: () => void
+  // Lightroom previews a preset on the photo while the pointer rests on it
+  onHover?: (on: boolean) => void
 }
 
-export function LookCard({ look, thumb, applied, onApply, onVideo, onRename, onDelete }: Props) {
+export function LookCard({ look, thumb, applied, onApply, onVideo, onRename, onDelete, onHover }: Props) {
   return (
-    <li className="group/look relative flex flex-col gap-1">
+    <li className="group/look relative flex flex-col gap-1" onMouseEnter={() => onHover?.(true)} onMouseLeave={() => onHover?.(false)}>
       <button
         type="button"
         onClick={onApply}

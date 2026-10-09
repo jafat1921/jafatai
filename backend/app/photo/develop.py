@@ -61,6 +61,8 @@ DEFAULTS = {
     "lightPoints": [],
     "palette": [],
     "lut": None,
+    # panels switched off with their eye icon: settings kept, effect bypassed (Lightroom's panel switch)
+    "off": [],
 }
 
 GROUPS = [
@@ -74,6 +76,11 @@ GROUPS = [
     {"id": "geometry", "label": "Crop & rotate", "keys": ["crop", "rotate", "flipH", "flipV"]},
     {"id": "look", "label": "Look", "keys": ["lut"]},
 ]
+
+
+GROUP_KEYS = {g["id"]: [k.split(".")[0] for k in g["keys"]] for g in GROUPS}
+# crop & rotate has no switch in Lightroom either: turning geometry off would move every pin and box
+SWITCHABLE = tuple(g for g in GROUP_KEYS if g != "geometry")
 
 
 def defaults() -> dict:
@@ -147,6 +154,19 @@ def normalise(p: dict | None) -> dict:
     lut = p.get("lut")
     if isinstance(lut, dict) and lut.get("look_id"):
         out["lut"] = {"look_id": str(lut["look_id"]), "amount": _num(lut.get("amount", 100), 0, 100, 100.0)}
+    off = p.get("off") or []
+    out["off"] = [g for g in SWITCHABLE if isinstance(off, (list, tuple)) and g in off]
+    return out
+
+
+def bypass(p: dict) -> dict:
+    """The params a render actually uses: switched-off groups back at their defaults."""
+    if not p.get("off"):
+        return p
+    out = dict(p)
+    for g in p["off"]:
+        for k in GROUP_KEYS.get(g, []):
+            out[k] = copy.deepcopy(DEFAULTS[k])
     return out
 
 
@@ -690,6 +710,9 @@ def develop(src: np.ndarray, params: dict | None, *, scale: float = 1.0, frame: 
     lut:   (table, amount 0..1) when params.lut is set; the caller resolves the look.
     Returns float32 sRGB 0..1, HxWx3."""
     p = normalise(params)
+    if "look" in p["off"]:
+        lut = None
+    p = bypass(p)
     h, w = src.shape[:2]
     src = src[..., :3]
     frame = frame or (max(1, int(round(w / scale))), max(1, int(round(h / scale))))

@@ -3,7 +3,15 @@ import { Check, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LivePreview } from './useLivePreview'
 
-export type Zoom = 'fit' | number
+export type Zoom = 'fit' | 'fill' | number
+
+export interface CanvasView {
+  scale: number
+  fit: number
+  box: { w: number; h: number }
+  frame: { width: number; height: number }
+  off: { x: number; y: number }
+}
 
 interface Props {
   preview: LivePreview
@@ -19,15 +27,20 @@ interface Props {
   overlay?: (box: { width: number; height: number }) => ReactNode
   // the overlay owns the pointer (crop, placing points): no panning
   overlayActive?: boolean
+  // pan lives with the page so the Navigator can show and move it
+  pan: { x: number; y: number }
+  onPan: (p: { x: number; y: number }) => void
+  onView?: (v: CanvasView) => void
+  // pointer position over the picture, 0..1 of the frame (RGB readout); null when it leaves
+  onSample?: (at: { x: number; y: number } | null) => void
 }
 
 const FALLBACK = { w: 900, h: 600 }
 
 /** The darkroom: the developed frame, fitted or zoomed (1:1 with L), panned by dragging when zoomed. */
-export function DarkroomCanvas({ preview, attach, sourceUrl, alt, before, zoom, onZoom, onMaxSide, overlay, overlayActive }: Props) {
+export function DarkroomCanvas({ preview, attach, sourceUrl, alt, before, zoom, onZoom, onMaxSide, overlay, overlayActive, pan, onPan: setPan, onView, onSample }: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState(FALLBACK)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
   const [drag, setDrag] = useState<{ x: number; y: number; px: number; py: number } | null>(null)
 
   useEffect(() => {
@@ -43,7 +56,8 @@ export function DarkroomCanvas({ preview, attach, sourceUrl, alt, before, zoom, 
 
   const frame = preview.frame ?? { width: 3, height: 2 }
   const fit = Math.min((box.w - 24) / frame.width, (box.h - 24) / frame.height)
-  const scale = zoom === 'fit' ? fit : zoom
+  const fill = Math.max(box.w / frame.width, box.h / frame.height)
+  const scale = zoom === 'fit' ? fit : zoom === 'fill' ? fill : zoom
   const w = Math.max(1, frame.width * scale)
   const h = Math.max(1, frame.height * scale)
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
@@ -56,6 +70,12 @@ export function DarkroomCanvas({ preview, attach, sourceUrl, alt, before, zoom, 
   const limit = { x: Math.max(0, (w - box.w) / 2 + 40), y: Math.max(0, (h - box.h) / 2 + 40) }
   const off = zoomed ? { x: Math.max(-limit.x, Math.min(limit.x, pan.x)), y: Math.max(-limit.y, Math.min(limit.y, pan.y)) } : { x: 0, y: 0 }
 
+  useEffect(() => {
+    onView?.({ scale, fit, box, frame, off })
+    // the numbers are what matter; the objects are new every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scale, fit, box.w, box.h, frame.width, frame.height, off.x, off.y])
+
   const onPointerDown = (e: RPointerEvent<HTMLDivElement>) => {
     if (!zoomed || overlayActive || e.button !== 0) return
     e.currentTarget.setPointerCapture?.(e.pointerId)
@@ -63,6 +83,12 @@ export function DarkroomCanvas({ preview, attach, sourceUrl, alt, before, zoom, 
   }
   const onPointerMove = (e: RPointerEvent<HTMLDivElement>) => {
     if (drag) setPan({ x: drag.px + e.clientX - drag.x, y: drag.py + e.clientY - drag.y })
+    if (onSample && wrap.current) {
+      const r = wrap.current.getBoundingClientRect()
+      const x = (e.clientX - r.left - (r.width - w) / 2 - off.x) / w
+      const y = (e.clientY - r.top - (r.height - h) / 2 - off.y) / h
+      onSample(x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null)
+    }
   }
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
     if (!e.ctrlKey && !e.metaKey) return
@@ -81,6 +107,7 @@ export function DarkroomCanvas({ preview, attach, sourceUrl, alt, before, zoom, 
       onPointerMove={onPointerMove}
       onPointerUp={() => setDrag(null)}
       onPointerCancel={() => setDrag(null)}
+      onPointerLeave={() => onSample?.(null)}
       onWheel={onWheel}
     >
       <div

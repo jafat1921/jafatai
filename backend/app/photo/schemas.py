@@ -96,6 +96,7 @@ class DevelopParams(_Loose):
     lightPoints: list[LightPoint] = Field(default_factory=list, max_length=16)  # noqa: N815
     palette: list[PaletteEntry] = Field(default_factory=list, max_length=16)
     lut: LutRef | None = None
+    off: list[str] = Field(default_factory=list, max_length=12)
 
     def plain(self) -> dict:
         return self.model_dump(exclude_none=False)
@@ -119,6 +120,25 @@ class RenderIn(BaseModel):
     format: Format = "jpeg"
     quality: int = Field(95, ge=60, le=100)
     note: str | None = Field(None, max_length=2000)
+
+
+class SyncIn(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+    params: DevelopParams = DevelopParams()
+    groups: list[str] = Field(min_length=1, max_length=12)
+    format: Format = "jpeg"
+    quality: int = Field(95, ge=60, le=100)
+
+
+class SnapshotIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    params: DevelopParams = DevelopParams()
+    base_id: str | None = None
+
+
+class SnapshotPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    params: DevelopParams | None = None
 
 
 class EffectIn(BaseModel):

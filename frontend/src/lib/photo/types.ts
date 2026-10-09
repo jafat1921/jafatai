@@ -59,6 +59,8 @@ export interface DevelopParams {
   lightPoints?: LightPoint[]
   palette?: PaletteEntry[]
   lut?: { look_id: string; amount: number } | null
+  // panels switched off with their eye: settings kept, effect bypassed
+  off?: string[]
 }
 
 export interface RangeSpec {
@@ -85,6 +87,7 @@ export interface PhotoSchema {
   spatial_keys: string[]
   formats: { id: ExportFormat; label: string; media_type: string }[]
   effects?: { id: string; label: string; hint?: string }[]
+  switchable?: string[]
 }
 
 export type ExportFormat = 'jpeg' | 'png' | 'png16' | 'tiff16'
@@ -267,4 +270,13 @@ export interface Described {
   details: string
   defects: string[]
   suggested_tools: string[]
+}
+
+export interface Snapshot {
+  id: string
+  name: string
+  base_id: string
+  params: DevelopParams
+  created_at: string
+  updated_at: string
 }

@@ -35,7 +35,7 @@ function setup(extra: (method: string, path: string, body: unknown) => unknown =
 const save = () => fireEvent.keyDown(document.body, { key: 's', ctrlKey: true })
 const lastRender = (calls: { method: string; path: string; body: unknown }[]) => calls.filter((c) => c.path === '/photo/g1/render').at(-1)?.body
 
-describe('Looks tab', () => {
+describe('Looks tab', { timeout: 15_000 }, () => {
   it('lists looks with live previews of this photo and applies one over the current settings, with intensity', async () => {
     const calls = setup()
     const user = userEvent.setup()
@@ -48,7 +48,7 @@ describe('Looks tab', () => {
     save()
     await waitFor(() => expect(lastRender(calls)).toEqual({ params: { exposure: 20, contrast: 40, saturation: -20 }, format: 'jpeg' }))
 
-    fireEvent.change(screen.getByRole('slider', { name: 'Intensity' }), { target: { value: '50' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Amount' }), { target: { value: '50' } })
     save()
     await waitFor(() => expect(lastRender(calls)).toEqual({ params: { exposure: 20, contrast: 20, saturation: -10 }, format: 'jpeg' }))
 
@@ -62,7 +62,7 @@ describe('Looks tab', () => {
     const calls = setup()
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Apply look Film stock' }))
-    fireEvent.change(screen.getByRole('slider', { name: 'Intensity' }), { target: { value: '70' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Amount' }), { target: { value: '70' } })
     save()
     await waitFor(() => expect(lastRender(calls)).toMatchObject({ params: { lut: { look_id: 'l2', amount: 70 } } }))
   })

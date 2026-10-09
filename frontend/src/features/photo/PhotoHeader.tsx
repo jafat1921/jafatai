@@ -1,4 +1,6 @@
-import { ChevronDown, Columns2, Download, History, Redo2, RotateCcw, Save, SlidersHorizontal, Undo2, Wand2 } from 'lucide-react'
+import { ChevronDown, ClipboardCopy, ClipboardPaste, Download, Keyboard, Layers, PanelLeft, PanelRight, Redo2, RefreshCw, Save, SlidersHorizontal, Undo2, Wand2 } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { SHORTCUTS } from './usePhotoShortcuts'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Kbd } from '@/components/ui/kbd'
@@ -13,9 +15,7 @@ const EXPORTS: { id: ExportFormat; label: string; hint: string }[] = [
 interface Props {
   title: string
   version: number | null
-  comparing: boolean
   dirty: boolean
-  resettable: boolean
   canUndo: boolean
   canRedo: boolean
   autoPending: boolean
@@ -25,10 +25,16 @@ interface Props {
   downloadHref: string | null
   onUndo: () => void
   onRedo: () => void
-  onCompare: () => void
   onHistory: () => void
+  onCopy: () => void
+  onPaste: (() => void) | null
+  onSync: (() => void) | null
+  syncCount: number
+  left: boolean
+  right: boolean
+  onLeft: () => void
+  onRight: () => void
   onAuto: () => void
-  onReset: () => void
   onSave: () => void
   onExport: (f: ExportFormat) => void
   onPanel?: () => void
@@ -53,21 +59,29 @@ export function PhotoHeader(p: Props) {
           <Redo2 aria-hidden />
         </Button>
       </div>
-      <Button size="sm" variant="ghost" aria-pressed={p.comparing} onClick={p.onCompare} aria-label="Before/After" title="Before / after (split). Hold \ for a quick look.">
-        <Columns2 aria-hidden />
-        {label('Before/After')}
-      </Button>
-      <Button size="sm" variant="ghost" onClick={p.onHistory} aria-label="History">
-        <History aria-hidden />
-        {label('History')}
+      <div className="flex items-center gap-0.5" role="group" aria-label="Settings">
+        <Button size="sm" variant="ghost" onClick={p.onCopy} aria-label="Copy settings (Ctrl+Alt+C)" title="Copy settings (Ctrl+Alt+C)">
+          <ClipboardCopy aria-hidden />
+          {label('Copy')}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={p.onPaste ?? undefined} disabled={!p.onPaste} aria-label="Paste settings (Ctrl+Alt+V)" title="Paste settings (Ctrl+Alt+V)">
+          <ClipboardPaste aria-hidden />
+          {label('Paste')}
+        </Button>
+        {p.onSync && (
+          <Button size="sm" variant="secondary" onClick={p.onSync} aria-label={`Sync settings to ${p.syncCount} photos (Ctrl+Alt+S)`} title="Sync settings to the photos picked in the filmstrip (Ctrl+Alt+S)">
+            <RefreshCw aria-hidden />
+            {label(`Sync ${p.syncCount}`)}
+          </Button>
+        )}
+      </div>
+      <Button size="sm" variant="ghost" onClick={p.onHistory} aria-label="Manage versions">
+        <Layers aria-hidden />
+        {label('Versions')}
       </Button>
       <Button size="sm" variant="ghost" onClick={p.onAuto} loading={p.autoPending} aria-label="Auto">
         <Wand2 aria-hidden />
         {label('Auto')}
-      </Button>
-      <Button size="sm" variant="ghost" onClick={p.onReset} disabled={!p.resettable} aria-label="Reset">
-        <RotateCcw aria-hidden />
-        {label('Reset')}
       </Button>
       <Button size="sm" variant="primary" onClick={p.onSave} loading={p.savePending} disabled={!p.dirty} aria-label="Save as new version">
         <Save aria-hidden />
@@ -105,6 +119,32 @@ export function PhotoHeader(p: Props) {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      <div className="flex items-center gap-0.5 max-md:hidden" role="group" aria-label="Panels">
+        <Button size="icon-sm" variant="ghost" aria-pressed={p.left} aria-label="Left panel (Tab hides both)" title="Left panel: Navigator, Presets, Snapshots, History" onClick={p.onLeft}>
+          <PanelLeft aria-hidden />
+        </Button>
+        <Button size="icon-sm" variant="ghost" aria-pressed={p.right} aria-label="Right panel" title="Right panel: histogram and edit panels" onClick={p.onRight}>
+          <PanelRight aria-hidden />
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button size="icon-sm" variant="ghost" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
+              <Keyboard aria-hidden />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80">
+            <h2 className="mb-2 font-display text-body font-semibold">Develop shortcuts</h2>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-small">
+              {SHORTCUTS.map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt><Kbd>{k}</Kbd></dt>
+                  <dd className="text-studio-muted">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </PopoverContent>
+        </Popover>
+      </div>
       {p.onPanel && (
         <Button size="sm" variant="secondary" onClick={p.onPanel} aria-label="Adjustments">
           <SlidersHorizontal aria-hidden />

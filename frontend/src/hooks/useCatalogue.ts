@@ -26,7 +26,7 @@ export function usePhotoList(q: Q, sort: SortKey, order: 'asc' | 'desc') {
   })
 }
 
-export const photosOf = (data: InfiniteData<PhotoPage> | undefined) => data?.pages.flatMap((p) => p.items) ?? []
+export const photosOf = (data: InfiniteData<PhotoPage> | undefined) => data?.pages.flatMap((p) => p?.items ?? []) ?? []
 
 export const useFacets = (q: Q) => useQuery({ queryKey: catalogueKeys.facets(q), queryFn: () => api.photos.facets(q), staleTime: 15_000 })
 export const useAlbums = () => useQuery({ queryKey: catalogueKeys.albums, queryFn: api.albums.list })

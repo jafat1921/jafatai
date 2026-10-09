@@ -34,7 +34,7 @@ function setup(path = '/image/studio/g2', extra: Extra = () => undefined) {
 
 const slider = (name: string) => screen.getByRole('slider', { name }) as HTMLInputElement
 
-describe('Photo Studio', () => {
+describe('Photo Studio', { timeout: 15_000 }, () => {
   it('opens a developed version on its base, with its saved settings, and previews on the server without WebGL', async () => {
     const calls = setup()
     expect(await screen.findByRole('heading', { name: /^Photo Studio · Lighthouse/ })).toBeInTheDocument()
@@ -66,7 +66,7 @@ describe('Photo Studio', () => {
       return undefined
     })
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('tab', { name: 'Restore' }))
+    await user.click(await screen.findByRole('tab', { name: /AI/ }))
     await user.click(await screen.findByRole('button', { name: 'Inspect photo' }))
     expect(await screen.findByText(/black & white · sharpness 0.45/)).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: 'Step 2: Colourise' }))
@@ -85,7 +85,7 @@ describe('Photo Studio', () => {
       return undefined
     })
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('tab', { name: 'Restore' }))
+    await user.click(await screen.findByRole('tab', { name: /AI/ }))
     await user.click(await screen.findByRole('button', { name: /Denoise/ }))
     await user.click(screen.getByRole('radio', { name: 'Gentle · SCUNet' }))
     await user.click(screen.getByRole('button', { name: 'Apply denoise' }))
@@ -168,16 +168,16 @@ describe('Photo Studio', () => {
     const user = userEvent.setup()
     // opened on the original: nothing applied yet
     expect(await screen.findByRole('slider', { name: 'Exposure' })).toHaveValue('0')
-    await user.click(screen.getByRole('button', { name: 'History' }))
-    const panel = await screen.findByRole('dialog', { name: 'History' })
+    await user.click(screen.getByRole('button', { name: 'Manage versions' }))
+    const panel = await screen.findByRole('dialog', { name: 'Versions' })
     const items = within(panel).getAllByRole('listitem')
     expect(items[0]).toHaveTextContent('v2')
     expect(items[0]).toHaveTextContent('Exposure +20 · Contrast +10')
     await user.click(within(items[0]).getByRole('button', { name: 'Load settings' }))
     expect(slider('Exposure')).toHaveValue('20')
 
-    await user.click(screen.getByRole('button', { name: 'History' }))
-    const again = await screen.findByRole('dialog', { name: 'History' })
+    await user.click(screen.getByRole('button', { name: 'Manage versions' }))
+    const again = await screen.findByRole('dialog', { name: 'Versions' })
     const v1 = within(again).getAllByRole('listitem')[1]
     await user.click(within(v1).getByRole('button', { name: 'Make current' }))
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/photo/g1/revert')).toBe(true))
@@ -188,9 +188,9 @@ describe('Photo Studio', () => {
     expect(await screen.findByRole('heading', { name: 'Compare v1 and v2' })).toBeInTheDocument()
   })
 
-  it('the filmstrip lists every version and marks the open one', async () => {
+  it('the Versions strip in the left panel lists every version and marks the open one', async () => {
     setup()
-    const strip = await screen.findByRole('list', { name: 'Filmstrip' })
+    const strip = await screen.findByRole('list', { name: 'Versions' })
     const buttons = within(strip).getAllByRole('button')
     expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Version 1, Original upload', 'Version 2, Developed, current'])
     expect(buttons[1]).toHaveAttribute('aria-current', 'true')

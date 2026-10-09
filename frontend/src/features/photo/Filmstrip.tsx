@@ -12,7 +12,7 @@ export function Filmstrip({ versions, openedId, onOpen }: { versions: HistoryVer
   const ordered = [...versions].sort((a, b) => a.generation.version - b.generation.version)
   return (
     <ScrollArea orientation="horizontal" className="w-full">
-      <ol className="flex gap-2 px-3 py-2" aria-label="Filmstrip">
+      <ol className="flex gap-2 px-3 py-2" aria-label="Versions">
         {ordered.map((v) => {
           const g = v.generation
           const pending = isPendingGeneration(g.status)

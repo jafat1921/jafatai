@@ -38,7 +38,8 @@ export function DevelopSlider({ name, label, value, range, onChange, spatial, tr
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     const big = e.shiftKey ? 10 : 1
-    const map: Record<string, number> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }
+    // + and - are Lightroom's nudge keys for the selected slider
+    const map: Record<string, number> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10, '+': 1, '=': 1, '-': -1, _: -1 }
     if (e.key in map) {
       e.preventDefault()
       set(value + map[e.key] * step * (e.key.startsWith('Page') ? 1 : big))
@@ -57,6 +58,7 @@ export function DevelopSlider({ name, label, value, range, onChange, spatial, tr
 
   return (
     <div
+      data-develop-slider
       className={cn('grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-0.5', className)}
       onDoubleClick={() => onChange(range.default, `reset:${name}`)}
       title="Double-click to reset"

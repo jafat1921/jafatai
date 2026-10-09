@@ -71,7 +71,7 @@ import type { MentionOption } from './mentions'
 import type { Album, Client, Facets, PhotoPage } from './catalogue'
 import type {
   AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema,
-  PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan,
+  PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan, Snapshot,
 } from './photo/types'
 
 type CameraPresets = Record<'shot_size' | 'angle' | 'motion' | 'speed', (CameraPreset<string> & { phrase: string })[]> & { default_speed: string }
@@ -499,6 +499,12 @@ export const api = {
     background: (id: string, background: Background, edge?: Edge) => post<Job>(`/photo/${id}/background`, { background, edge }),
     maskUrl: (id: string) => `${API_BASE}/photo/${id}/mask`,
     describe: (id: string) => post<Described>(`/photo/${id}/describe`),
+    snapshots: (id: string) => get<Snapshot[]>(`/photo/${id}/snapshots`),
+    createSnapshot: (id: string, body: { name: string; params: DevelopParams; base_id?: string }) => post<Snapshot>(`/photo/${id}/snapshots`, body),
+    updateSnapshot: (sid: string, body: { name?: string; params?: DevelopParams }) => patch<Snapshot>(`/photo/snapshots/${sid}`, body),
+    deleteSnapshot: (sid: string) => del(`/photo/snapshots/${sid}`),
+    sync: (body: { ids: string[]; params: DevelopParams; groups: string[]; format?: ExportFormat }) =>
+      post<{ queued: number; results: { id: string; job_id: string | null; error: string | null; unchanged?: boolean }[] }>('/photo/sync', body),
   },
   looks: {
     list: () => get<Look[]>('/looks'),

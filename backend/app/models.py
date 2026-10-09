@@ -436,6 +436,22 @@ class AlbumItem(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class PhotoSnapshot(Base):
+    """A named develop state for one picture (Lightroom Snapshots). Settings only; nothing is rendered."""
+
+    __tablename__ = "photo_snapshot"
+    __table_args__ = (Index("ix_photo_snapshot_target", "target_type", "target_id"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    target_type: Mapped[str] = mapped_column(String(20))
+    target_id: Mapped[str] = mapped_column(String(36))
+    base_id: Mapped[str] = mapped_column(String(36))  # the version the params develop
+    name: Mapped[str] = mapped_column(String(120))
+    params: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class Folder(Base):
     """A Library folder (polish P4). Nested through parent_id; deleting one hands its contents to the parent."""
 

@@ -31,9 +31,12 @@ interface Props {
   applied: AppliedLook | null
   onApplied: (a: AppliedLook | null) => void
   onParams: (next: DevelopParams, group: string | null) => void
+  // hover preview on the canvas; null when the pointer leaves
+  onPreview?: (p: DevelopParams | null) => void
 }
 
-const INTENSITY = { min: 0, max: 100, step: 1, default: 100, label: 'Look intensity' }
+// Lightroom's preset Amount: 0–200, so a look can be pushed past how it was made
+const INTENSITY = { min: 0, max: 200, step: 1, default: 100, label: 'Amount' }
 
 function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob)
@@ -45,7 +48,7 @@ function saveBlob(blob: Blob, name: string) {
 }
 
 /** Looks: one click applies (over the current settings), intensity, save / import / export, grade a video. */
-export function LooksTab({ photoId, sourceUrl, params, applied, onApplied, onParams }: Props) {
+export function LooksTab({ photoId, sourceUrl, params, applied, onApplied, onParams, onPreview }: Props) {
   const looks = useLooks()
   const m = useLookMutations()
   const thumbs = useLookThumbs(looks.data, sourceUrl, applied?.before ?? params)
@@ -107,7 +110,7 @@ export function LooksTab({ photoId, sourceUrl, params, applied, onApplied, onPar
               Remove
             </Button>
           </div>
-          <DevelopSlider name="look-intensity" label="Intensity" value={applied.intensity} range={INTENSITY} onChange={setIntensity} />
+          <DevelopSlider name="look-intensity" label="Amount" value={applied.intensity} range={INTENSITY} onChange={setIntensity} />
         </div>
       )}
 
@@ -135,6 +138,7 @@ export function LooksTab({ photoId, sourceUrl, params, applied, onApplied, onPar
               onVideo={() => setVideo({ lookId: l.id })}
               onRename={() => setRenaming(l)}
               onDelete={() => setDeleting(l)}
+              onHover={onPreview ? (on) => onPreview(on ? applyLook(applied ? applied.before : params, l, 100) : null) : undefined}
             />
           ))}
         </ul>

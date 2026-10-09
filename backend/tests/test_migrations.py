@@ -415,3 +415,17 @@ def test_0011_adds_catalogue_and_keeps_media(tmp_path):
     assert con.execute("SELECT title FROM media_item").fetchall() == [("Beach",)]
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0012_adds_photo_snapshot(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0012")
+    con = sqlite3.connect(db)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(photo_snapshot)")}
+    assert {"id", "workspace_id", "target_type", "target_id", "base_id", "name", "params"} <= cols
+    con.close()
+    _alembic(db, "downgrade", "0011")
+    con = sqlite3.connect(db)
+    assert "photo_snapshot" not in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    con.close()
+    _alembic(db, "upgrade", "head")

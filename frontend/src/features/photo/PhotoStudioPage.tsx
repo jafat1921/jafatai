@@ -74,6 +74,7 @@ export function PhotoStudioPage() {
           initial={params}
           title={title}
           initialTab={tab as StudioTab | undefined}
+          item={item}
         />
       </div>
     </div>

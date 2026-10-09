@@ -23,6 +23,9 @@ export interface PhotoKeys {
   reset: () => void
   snapshot: () => void
   panel: (n: number) => void
+  // V: colour / black & white; W: white balance picker
+  treatment?: () => void
+  whiteBalance?: () => void
 }
 
 // Lightroom's own Ctrl+Shift+C / Ctrl+Shift+R / Ctrl+N belong to the browser (inspector, hard reload,
@@ -32,7 +35,7 @@ export const SHORTCUTS: [string, string][] = [
   ['Y · Shift+Y · Alt+Y', 'Before|After · split · top/bottom'], ['Z', 'Fit / 100%'], ['R or C', 'Crop'],
   ['J', 'Show clipping'], ['I', 'Info overlay'], ['L', 'Lights dim / off'], ['Tab · Shift+Tab', 'Hide side panels · all'],
   ['F', 'Full screen'], ['Ctrl+Alt+O', 'Grid overlay'], [', .', 'Previous / next slider'], ['+ −', 'Nudge the slider'],
-  ['Ctrl+1…9', 'Open a panel'], ['Ctrl+Alt+C / V', 'Copy / paste settings'], ['Ctrl+Alt+P', 'Previous photo’s settings'],
+  ['Ctrl+1…9', 'Open a panel'], ['V', 'Black & white'], ['W', 'White balance picker'], ['Ctrl+Alt+C / V', 'Copy / paste settings'], ['Ctrl+Alt+P', 'Previous photo’s settings'],
   ['Ctrl+Alt+S', 'Sync to selected'], ['Ctrl+Alt+R', 'Reset'], ['Ctrl+Alt+N', 'New snapshot'], ['Ctrl+← →', 'Previous / next photo'], ['G', 'Back to Library'],
 ]
 
@@ -96,6 +99,8 @@ export function usePhotoShortcuts(keys: PhotoKeys) {
       if (key === 'i') return act(k.info)
       if (key === 'j') return act(k.clip)
       if (key === 'f') return act(k.fullscreen)
+      if (key === 'v' && k.treatment) return act(k.treatment)
+      if (key === 'w' && k.whiteBalance) return act(k.whiteBalance)
       if (e.key === 'Escape') k.escape()
     }
     window.addEventListener('keydown', onKey)

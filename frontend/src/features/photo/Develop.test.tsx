@@ -50,6 +50,22 @@ describe('Develop (Lightroom layout)', { timeout: 15_000 }, () => {
     expect(within(left).getByRole('list', { name: 'Edit history' })).toHaveTextContent('Opened')
   })
 
+  it('has the D2 panels: V for black & white, colour grading wheels, grain and calibration', async () => {
+    const calls = setup()
+    await screen.findByRole('slider', { name: 'Exposure' })
+    fireEvent.keyDown(window, { key: 'v' })
+    expect(screen.getByRole('radio', { name: 'B&W' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.keyDown(window, { key: '4', code: 'Digit4', ctrlKey: true })
+    expect(await screen.findByRole('slider', { name: 'Midtones hue and saturation' })).toBeInTheDocument()
+    expect(slider('Blending')).toHaveValue('50')
+    fireEvent.keyDown(window, { key: '6', code: 'Digit6', ctrlKey: true })
+    fireEvent.change(await screen.findByRole('slider', { name: 'Grain' }), { target: { value: '40' } })
+    fireEvent.keyDown(window, { key: '7', code: 'Digit7', ctrlKey: true })
+    expect(await screen.findByRole('slider', { name: 'Red hue' })).toBeInTheDocument()
+    fireEvent.keyDown(document.body, { key: 's', ctrlKey: true })
+    await waitFor(() => expect(calls.find((c) => c.path === '/photo/g1/render')?.body).toMatchObject({ params: { version: 2, treatment: 'bw', grainAmount: 40 } }))
+  })
+
   it('a panel switched off is saved as off, and comes back on', async () => {
     const calls = setup()
     const user = userEvent.setup()
@@ -57,7 +73,7 @@ describe('Develop (Lightroom layout)', { timeout: 15_000 }, () => {
     await user.click(screen.getByRole('button', { name: 'Turn off Basic' }))
     expect(screen.getByRole('button', { name: 'Turn on Basic' })).toHaveAttribute('aria-pressed', 'false')
     fireEvent.keyDown(document.body, { key: 's', ctrlKey: true })
-    await waitFor(() => expect(calls.find((c) => c.path === '/photo/g1/render')?.body).toMatchObject({ params: { exposure: 20, contrast: 10, off: ['basic'] } }))
+    await waitFor(() => expect(calls.find((c) => c.path === '/photo/g1/render')?.body).toMatchObject({ params: { version: 2, exposure: 0.3, contrast: 10, off: ['basic'] } }))
   })
 
   it('copies settings by group and pastes them back', async () => {
@@ -69,10 +85,10 @@ describe('Develop (Lightroom layout)', { timeout: 15_000 }, () => {
     await user.click(within(dialog).getByRole('button', { name: 'Check none' }))
     await user.click(within(dialog).getByRole('checkbox', { name: /Basic/ }))
     await user.click(within(dialog).getByRole('button', { name: 'Copy' }))
-    fireEvent.change(slider('Exposure'), { target: { value: '-50' } })
-    expect(slider('Exposure')).toHaveValue('-50')
+    fireEvent.change(slider('Exposure'), { target: { value: '-0.5' } })
+    expect(slider('Exposure')).toHaveValue('-0.5')
     await user.click(screen.getByRole('button', { name: /Paste settings/ }))
-    expect(slider('Exposure')).toHaveValue('20')
+    expect(slider('Exposure')).toHaveValue('0.3')
   })
 
   it('Ctrl+3 opens the colour mixer and closes the rest; the history list jumps back', async () => {
@@ -82,11 +98,11 @@ describe('Develop (Lightroom layout)', { timeout: 15_000 }, () => {
     fireEvent.keyDown(window, { key: '3', code: 'Digit3', ctrlKey: true })
     await waitFor(() => expect(screen.queryByRole('slider', { name: 'Exposure' })).not.toBeInTheDocument())
     fireEvent.keyDown(window, { key: '1', code: 'Digit1', ctrlKey: true })
-    fireEvent.change(await screen.findByRole('slider', { name: 'Exposure' }), { target: { value: '45' } })
+    fireEvent.change(await screen.findByRole('slider', { name: 'Exposure' }), { target: { value: '0.45' } })
     const hist = screen.getByRole('list', { name: 'Edit history' })
-    expect(within(hist).getByRole('button', { name: 'Exposure +45' })).toHaveAttribute('aria-current', 'step')
+    expect(within(hist).getByRole('button', { name: 'Exposure +0.45 EV' })).toHaveAttribute('aria-current', 'step')
     await user.click(within(hist).getByRole('button', { name: 'Opened' }))
-    expect(slider('Exposure')).toHaveValue('20')
+    expect(slider('Exposure')).toHaveValue('0.3')
   })
 
   it('saves a named snapshot of the current settings', async () => {
@@ -97,7 +113,7 @@ describe('Develop (Lightroom layout)', { timeout: 15_000 }, () => {
     const name = await screen.findByRole('textbox', { name: 'Snapshot name' })
     await user.clear(name)
     await user.type(name, 'Warm{Enter}')
-    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/photo/g1/snapshots')?.body).toEqual({ name: 'Warm', params: { exposure: 20, contrast: 10 }, base_id: 'g1' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/photo/g1/snapshots')?.body).toEqual({ name: 'Warm', params: { version: 2, exposure: 0.3, contrast: 10 }, base_id: 'g1' }))
   })
 
   it('Ctrl-click in the filmstrip picks photos to sync the current settings to', async () => {
@@ -109,7 +125,7 @@ describe('Develop (Lightroom layout)', { timeout: 15_000 }, () => {
     await user.click(screen.getByRole('button', { name: /Sync settings to 2 photos/ }))
     const dialog = await screen.findByRole('dialog', { name: 'Sync settings to 2 photos' })
     await user.click(within(dialog).getByRole('button', { name: 'Sync 2 photos' }))
-    await waitFor(() => expect(calls.find((c) => c.path === '/photo/sync')?.body).toMatchObject({ ids: ['m2', 'm3'], params: { exposure: 20, contrast: 10 } }))
+    await waitFor(() => expect(calls.find((c) => c.path === '/photo/sync')?.body).toMatchObject({ ids: ['m2', 'm3'], params: { version: 2, exposure: 0.3, contrast: 10 } }))
   })
 
   it('Tab hides the side panels; the view toolbar switches before/after modes', async () => {

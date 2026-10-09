@@ -11,9 +11,11 @@ import { api } from '@/lib/api'
 import { exposureLine } from '@/lib/catalogue'
 import { downloadUrl } from '@/lib/media'
 import { ASPECTS } from '@/lib/photo/geometry'
+import { rgbToHsv } from '@/lib/photo/maths'
 import { compact, isIdentity, paramsKey } from '@/lib/photo/params'
 import type { DevelopParams, HistoryVersion, PhotoHistory } from '@/lib/photo/types'
 import { DEFAULT_COPY, bypass, pasteGroups, pickGroups, readClipboard, readPrevious, writeClipboard, writePrevious } from '@/lib/photo/workflow'
+import { neutralWb } from '@/lib/photo/wb'
 import type { MediaItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { trackJobs } from '@/stores/toasts'
@@ -24,7 +26,7 @@ import { CopySettingsDialog } from './CopySettingsDialog'
 import { CropOverlay } from './CropOverlay'
 import { CutoutTab } from './CutoutTab'
 import { DarkroomCanvas, type CanvasView, type Zoom } from './DarkroomCanvas'
-import { DevelopPanel } from './DevelopPanel'
+import { DevelopPanel, type Picker } from './DevelopPanel'
 import { CompareDialog, Filmstrip } from './Filmstrip'
 import { GeometryControls } from './GeometryControls'
 import { HistogramPanel } from './HistogramPanel'
@@ -33,6 +35,7 @@ import { LeftPanel, Navigator } from './LeftPanel'
 import { LightPointsOverlay } from './LightPointsOverlay'
 import { LocalPanel } from './LocalPanel'
 import { LooksTab, type AppliedLook } from './LooksTab'
+import { PickOverlay } from './PickOverlay'
 import { PhotoHeader } from './PhotoHeader'
 import { RestoreTab } from './RestoreTab'
 import { SelectPointsOverlay, type SelectPoints } from './SelectPointsOverlay'
@@ -73,7 +76,7 @@ function store(key: string, v: unknown) {
 }
 
 // the edit panels in Lightroom's order; Ctrl+1…9 opens them in this order
-const PANEL_ORDER = ['basic', 'curve', 'hsl', 'detail', 'effects', 'local']
+const PANEL_ORDER = ['basic', 'curve', 'hsl', 'grading', 'detail', 'effects', 'calibration', 'local']
 
 /**
  * Develop, laid out like Lightroom's: Navigator, Presets, Snapshots and History on the left; the photo
@@ -99,6 +102,7 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
   const [cropping, setCropping] = useState(tab === 'crop')
   const [aspect, setAspect] = useState('free')
   const [placing, setPlacing] = useState(false)
+  const [picker, setPicker] = useState<Picker>(null)
   const [point, setPoint] = useState<number | null>(null)
   const [zoom, setZoom] = useState<Zoom>('fit')
   const [lastRatio, setLastRatio] = useState<Zoom>(() => ratioZoom(1))
@@ -210,6 +214,7 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
     },
     toggleCrop: () => setTab(tab === 'crop' ? 'develop' : 'crop'),
     escape: () => {
+      setPicker(null)
       if (tab === 'crop') setTab('develop')
       setPlacing(false)
       setLights(0)
@@ -245,6 +250,11 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
       setLeftSection('snapshots', true)
       setSnapshotAsk((n) => n + 1)
     },
+    treatment: () => develop.update((p) => ({ ...p, treatment: p.treatment === 'bw' ? 'color' : 'bw' }), null),
+    whiteBalance: () => {
+      if (tab !== 'develop') setTab('develop')
+      setPicker((p) => (p === 'wb' ? null : 'wb'))
+    },
     panel: (n) => {
       const id = PANEL_ORDER[n - 1]
       if (!id) return
@@ -268,6 +278,37 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
     [item?.camera, item ? exposureLine(item) : '', preview.frame ? `${preview.frame.width} × ${preview.frame.height}` : ''].filter(Boolean).join(' · '),
   ]
 
+  const pickAt = (x: number, y: number) => {
+    const rgb = preview.sample(x, y)
+    const kind = picker
+    setPicker(null)
+    if (!rgb) {
+      announce('The picker needs the live preview, which this browser can’t run.')
+      return
+    }
+    if (kind === 'wb') {
+      const wb = neutralWb(rgb, params.temperature ?? 0, params.tint ?? 0)
+      if (!wb) announce('That spot is clipped or black. Pick something mid grey.')
+      else {
+        develop.update((p) => ({ ...p, ...wb }), null)
+        announce(`White balance: temperature ${wb.temperature}, tint ${wb.tint}.`)
+      }
+    } else if (kind === 'pointColor') {
+      const [h, s, v] = rgbToHsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
+      develop.update((p) => ({ ...p, pointColor: [...(p.pointColor ?? []), { hue: Math.round(h), sat: Math.round(s * 1000) / 1000, val: Math.round(v * 1000) / 1000 }] }), null)
+      announce('Colour picked. Use the sliders to shift it.')
+    }
+  }
+
+  const autoWb = () =>
+    api.photo.auto(baseId).then(
+      (res) => {
+        develop.update((p) => ({ ...p, temperature: res.params.temperature ?? 0, tint: res.params.tint ?? 0 }), null)
+        announce('Auto white balance applied.')
+      },
+      () => announce('Auto white balance couldn’t run. Try again in a moment.'),
+    )
+
   const overlay = (box: { width: number; height: number }) => {
     const layers: React.ReactNode[] = []
     if (preview.clipUrl && !before) layers.push(<img key="clip" src={preview.clipUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 size-full mix-blend-normal" />)
@@ -278,6 +319,10 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
       return layers
     }
     if (before) return layers
+    if (picker) {
+      layers.push(<PickOverlay key="pick" label={picker === 'wb' ? 'Click something that should be neutral grey' : 'Click the colour to adjust'} onPick={pickAt} />)
+      return layers
+    }
     if (selecting && clickMode) layers.push(<SelectPointsOverlay key="sel" points={selectPts} mode={clickMode} box={box} onChange={setSelectPts} />)
     else if (cropping && src) {
       layers.push(
@@ -358,6 +403,15 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
             onOpen={openPanel}
             onSet={develop.set}
             onUpdate={develop.update}
+            picker={picker}
+            onPicker={(p) => {
+              setPicker(p)
+              if (p) {
+                setPlacing(false)
+                setCropping(false)
+              }
+            }}
+            onAutoWb={autoWb}
             custom={{
               local: (
                 <LocalPanel
@@ -455,7 +509,7 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
       onZoom={setZoom}
       onMaxSide={onMaxSide}
       overlay={overlay}
-      overlayActive={cropping || placing || (selecting && clickMode != null)}
+      overlayActive={cropping || placing || picker != null || (selecting && clickMode != null)}
       pan={pan}
       onPan={setPan}
       onView={setView}

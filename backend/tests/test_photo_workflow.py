@@ -34,8 +34,8 @@ def test_switched_off_panels_are_bypassed_but_kept():
     only_vignette = dv.develop(img, {"vignette": -50})
     assert not np.allclose(on, off) and np.allclose(off, only_vignette)
     p = dv.normalise({"exposure": 60, "off": ["basic", "geometry", "bogus"]})
-    assert p["off"] == ["basic"] and p["exposure"] == 60  # crop & rotate has no switch
-    assert dv.sparse(p) == {"exposure": 60.0, "off": ["basic"]}
+    assert p["off"] == ["basic"] and p["exposure"] == 0.9  # crop & rotate has no switch; v1 60 = 0.9 EV
+    assert dv.sparse(p) == {"version": 2, "exposure": 0.9, "off": ["basic"]}
 
 
 def test_schema_lists_switchable_groups(client):
@@ -47,7 +47,7 @@ def test_merge_groups_keeps_everything_not_ticked():
     mine = dv.normalise({"exposure": 10, "crop": {"x": 1, "y": 1, "width": 20, "height": 20}, "vignette": 30})
     theirs = dv.normalise({"exposure": -40, "temperature": 25, "vignette": -10, "off": ["effects"]})
     out = wf.merge_groups(mine, theirs, ["basic", "effects"])
-    assert out["exposure"] == -40 and out["temperature"] == 25 and out["vignette"] == -10
+    assert out["exposure"] == -0.6 and out["temperature"] == 25 and out["vignette"] == -10
     assert out["crop"] == mine["crop"] and out["off"] == ["effects"]
 
 
@@ -66,7 +66,7 @@ def test_sync_renders_each_picture_from_its_own_base(client):
     with SessionLocal() as db:
         gb = db.get(Generation, db.get(Job, res[b]["job_id"]).generation_id)
         d = gb.params["develop"]
-        assert d["params"]["exposure"] == 30 and d["params"]["vignette"] == 20 and d["params"]["crop"]["width"] == 40
+        assert d["params"]["exposure"] == 0.45 and d["params"]["vignette"] == 20 and d["params"]["crop"]["width"] == 40
         # the new version develops the original upload, not the previous render
         assert db.get(Generation, d["base"]).kind == "upload"
         assert Image.open(get_settings().data_dir / gb.file_path).size == (40, 30)
@@ -83,12 +83,12 @@ def test_snapshots_crud(client):
     r = client.post(f"/api/photo/{a}/snapshots", json={"name": "Warm v1", "params": {"temperature": 30}})
     assert r.status_code == 201, r.text
     sid = r.json()["id"]
-    assert r.json()["params"] == {"temperature": 30.0}
+    assert r.json()["params"] == {"version": 2, "temperature": 30.0}
     lst = client.get(f"/api/photo/{a}/snapshots").json()
     assert [s["name"] for s in lst] == ["Warm v1"]
     client.patch(f"/api/photo/snapshots/{sid}", json={"name": "Warm v2", "params": {"temperature": 40}})
-    assert client.get(f"/api/photo/{a}/snapshots").json()[0] | {} and \
-        client.get(f"/api/photo/{a}/snapshots").json()[0]["params"] == {"temperature": 40.0}
+    got = client.get(f"/api/photo/{a}/snapshots").json()[0]
+    assert (got["name"], got["params"]) == ("Warm v2", {"version": 2, "temperature": 40.0})
     assert client.delete(f"/api/photo/snapshots/{sid}").status_code == 204
     assert client.get(f"/api/photo/{a}/snapshots").json() == []
     assert client.delete(f"/api/photo/snapshots/{sid}").status_code == 404

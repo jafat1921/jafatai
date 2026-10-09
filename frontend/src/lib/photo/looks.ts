@@ -1,16 +1,24 @@
 import { rangeText } from '@/lib/estimate'
-import { mergeParams, scaleParams } from './params'
+import { FALLBACK_RANGES, mergeParams, rangeFor, scaleParams } from './params'
 import type { DevelopParams, Look } from './types'
 
-// sliders stop at ±100 however hard a look is pushed (the server refuses anything past them)
+const FIXED = new Set(['version', 'x', 'y', 'falloff', 'hue', 'sat', 'val'])
+
+// sliders stop at their ends however hard a look is pushed (the server refuses anything past them)
 function clampSliders(p: DevelopParams): DevelopParams {
-  const walk = (v: unknown, key: string): unknown => {
-    if (typeof v === 'number') return key === 'version' || key === 'x' || key === 'y' || key === 'falloff' || key.startsWith('ref') || key.startsWith('center') ? v : Math.max(-100, Math.min(100, v))
-    if (Array.isArray(v)) return v.map((x) => walk(x, ''))
-    if (v && typeof v === 'object' && key !== 'crop' && key !== 'lut') return Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, walk(vv, kk)]))
+  const walk = (v: unknown, key: string, path: string): unknown => {
+    if (typeof v === 'number') {
+      if (FIXED.has(key) || key.startsWith('ref') || key.startsWith('center') || /^grading\.\w+\.h$/.test(path)) return v
+      const lim = rangeFor(FALLBACK_RANGES, path.replace(/^(lightPoints|palette)\.\d+\./, '$1.').replace(/^pointColor\.\d+\./, 'pointColor.'))
+      return Math.max(lim.min, Math.min(lim.max, v))
+    }
+    if (Array.isArray(v)) return key === 'points' || path.startsWith('points.') ? v : v.map((x, i) => walk(x, '', `${path}.${i}`))
+    if (v && typeof v === 'object' && key !== 'crop' && key !== 'lut' && key !== 'profile') {
+      return Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, walk(vv, kk, path ? `${path}.${kk}` : kk)]))
+    }
     return v
   }
-  return walk(p, '') as DevelopParams
+  return walk(p, '', '') as DevelopParams
 }
 
 /**

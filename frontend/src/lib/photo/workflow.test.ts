@@ -22,7 +22,9 @@ describe('develop workflow', () => {
   })
 
   it('labels history steps like Lightroom', () => {
-    expect(stepLabel({}, { exposure: 38 })).toBe('Exposure +38')
+    expect(stepLabel({}, { exposure: 0.38 })).toBe('Exposure +0.38 EV')
+    expect(stepLabel({}, { contrast: 12 })).toBe('Contrast +12')
+    expect(stepLabel({}, { grading: { shadows: { h: 200 } } })).toBe('Colour grading shadows')
     expect(stepLabel({ exposure: 38 }, { exposure: 38, crop: { x: 0, y: 0, width: 1, height: 1 } })).toBe('Crop')
     expect(stepLabel({}, { curve: { mids: 10 } })).toBe('Tone curve mids')
     expect(stepLabel({ exposure: 1 }, { exposure: 1 })).toBe('No change')

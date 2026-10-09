@@ -1,13 +1,14 @@
 import { useCallback, useState } from 'react'
+import { upgradeParams } from '@/lib/photo/maths'
 import { setValue } from '@/lib/photo/params'
 import type { DevelopParams } from '@/lib/photo/types'
 import { initUndo, jumpTo, push, redo, timeline, undo } from '@/lib/photo/undo'
 
 /** Develop params with in-session undo / redo. Every change goes through here. */
 export function useDevelop(initial: DevelopParams) {
-  const [state, setState] = useState(() => initUndo(initial))
+  const [state, setState] = useState(() => initUndo(upgradeParams(initial)))
 
-  const replace = useCallback((next: DevelopParams, group: string | null = null) => setState((s) => push(s, next, group)), [])
+  const replace = useCallback((next: DevelopParams, group: string | null = null) => setState((s) => push(s, upgradeParams(next), group)), [])
   const update = useCallback(
     (fn: (p: DevelopParams) => DevelopParams, group: string | null = null) => setState((s) => push(s, fn(s.present), group)),
     [],

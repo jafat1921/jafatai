@@ -1,25 +1,31 @@
-import { FALLBACK_RANGES, changedKeys, getValue } from './params'
+import { humanize } from '@/lib/utils'
+import { upgradeParams } from './maths'
+import { changedKeys, formatValue, getValue, keyLabel } from './params'
 import type { DevelopParams } from './types'
 
 /** Develop workflow (M10 / D1): panel switches, Copy / Paste / Sync groups, history labels. */
 
 // top-level param keys per group; mirrors develop.GROUPS on the server
 export const GROUP_KEYS: Record<string, (keyof DevelopParams)[]> = {
-  basic: ['temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'vibrance', 'saturation'],
-  curve: ['curve'],
-  hsl: ['hsl'],
+  basic: ['profile', 'treatment', 'temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'vibrance', 'saturation'],
+  curve: ['curve', 'pcurve', 'points', 'refineSat'],
+  hsl: ['hsl', 'pointColor', 'bw'],
+  grading: ['grading'],
   detail: ['clarity', 'sharpness', 'noiseReduction'],
-  effects: ['vignette'],
+  effects: ['vignette', 'vignetteMidpoint', 'vignetteRoundness', 'vignetteFeather', 'vignetteHighlights', 'vignetteStyle', 'grainAmount', 'grainSize', 'grainRoughness'],
+  calibration: ['calibration'],
   local: ['lightPoints', 'palette'],
   geometry: ['crop', 'rotate', 'flipH', 'flipV'],
   look: ['lut'],
 }
 export const GROUP_LABELS: Record<string, string> = {
-  basic: 'Basic (white balance, tone, presence)',
+  basic: 'Basic (profile, white balance, tone, presence)',
   curve: 'Tone curve',
-  hsl: 'Colour mixer',
+  hsl: 'Colour mixer, point colour & B&W mix',
+  grading: 'Colour grading',
   detail: 'Detail (clarity, sharpening, noise)',
-  effects: 'Effects (vignette)',
+  effects: 'Effects (vignette, grain)',
+  calibration: 'Calibration',
   local: 'Local light & selective colour',
   geometry: 'Crop, straighten & flip',
   look: 'Look',
@@ -106,10 +112,17 @@ function write(key: string, v: unknown) {
   }
 }
 
-export const readClipboard = () => read<Clipboard>(CLIP)
+// anything saved before params v2 holds exposure on the old ±100 scale
+export function readClipboard() {
+  const c = read<Clipboard>(CLIP)
+  return c && { ...c, params: upgradeParams(c.params) }
+}
 export const writeClipboard = (c: Clipboard) => write(CLIP, c)
 /** Lightroom's "Previous": the settings of the last picture edited, whatever it was. */
-export const readPrevious = () => read<{ params: DevelopParams; from: string }>(PREV)
+export function readPrevious() {
+  const p = read<{ params: DevelopParams; from: string }>(PREV)
+  return p && { ...p, params: upgradeParams(p.params) }
+}
 export const writePrevious = (params: DevelopParams, from: string) => write(PREV, { params, from })
 
 // ---------------------------------------------------------------- history labels
@@ -117,6 +130,11 @@ export const writePrevious = (params: DevelopParams, from: string) => write(PREV
 const NAMES: Record<string, string> = {
   crop: 'Crop', rotate: 'Straighten', flipH: 'Flip horizontal', flipV: 'Flip vertical', lightPoints: 'Local light',
   palette: 'Selective colour', lut: 'Look', off: 'Panel switch',
+}
+
+const NESTED: Record<string, string> = {
+  curve: 'Tone curve', pcurve: 'Tone curve', points: 'Point curve', hsl: 'Colour mixer', bw: 'B&W mix',
+  grading: 'Colour grading', calibration: 'Calibration',
 }
 
 const sameJSON = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
@@ -129,11 +147,13 @@ export function stepLabel(a: DevelopParams, b: DevelopParams): string {
   if (!changed.length) return 'No change'
   const k = changed[0]
   if (NAMES[k]) return changed.length > 1 ? `${NAMES[k]} and ${changed.length - 1} more` : NAMES[k]
-  if (k === 'curve' || k === 'hsl') {
-    const inner = Object.keys({ ...(a[k] ?? {}), ...(b[k] ?? {}) }).find((x) => !sameJSON((a[k] as Record<string, unknown> | undefined)?.[x], (b[k] as Record<string, unknown> | undefined)?.[x]))
-    return k === 'curve' ? `Tone curve ${inner ?? ''}`.trim() : `Colour mixer ${inner ?? ''}`.trim()
+  if (k in NESTED) {
+    const pa = (a as Record<string, Record<string, unknown> | undefined>)[k] ?? {}
+    const pb = (b as Record<string, Record<string, unknown> | undefined>)[k] ?? {}
+    const inner = Object.keys({ ...pa, ...pb }).find((x) => !sameJSON(pa[x], pb[x]))
+    return `${NESTED[k]} ${inner ? humanize(inner).toLowerCase() : ''}`.trim()
   }
-  const v = getValue(b, k)
-  const label = FALLBACK_RANGES[k]?.label ?? k
-  return changed.length > 1 ? `${label} and ${changed.length - 1} more` : `${label} ${v > 0 ? '+' : ''}${Math.round(v)}`
+  if (typeof b[k as keyof DevelopParams] !== 'number' && typeof a[k as keyof DevelopParams] !== 'number') return keyLabel(k)
+  const label = keyLabel(k)
+  return changed.length > 1 ? `${label} and ${changed.length - 1} more` : `${label} ${formatValue(k, getValue(b, k))}`
 }

@@ -61,6 +61,24 @@ export interface DevelopParams {
   lut?: { look_id: string; amount: number } | null
   // panels switched off with their eye: settings kept, effect bypassed
   off?: string[]
+  // params v2 (M10 / D2); exposure is in EV from v2 on
+  profile?: { id: string; amount: number } | null
+  treatment?: 'color' | 'bw'
+  bw?: Partial<Record<HslBand, number>>
+  pcurve?: Partial<Record<'highlights' | 'lights' | 'darks' | 'shadows' | 's1' | 's2' | 's3', number>>
+  points?: Partial<Record<'rgb' | 'red' | 'green' | 'blue', [number, number][]>>
+  refineSat?: number
+  pointColor?: { hue: number; sat: number; val: number; dh?: number; ds?: number; dl?: number; hueRange?: number; satRange?: number; lumRange?: number }[]
+  grading?: Partial<Record<'shadows' | 'midtones' | 'highlights' | 'global', { h?: number; s?: number; l?: number }>> & { blending?: number; balance?: number }
+  calibration?: Partial<Record<'shadowsTint' | 'redHue' | 'redSat' | 'greenHue' | 'greenSat' | 'blueHue' | 'blueSat', number>>
+  vignetteMidpoint?: number
+  vignetteRoundness?: number
+  vignetteFeather?: number
+  vignetteHighlights?: number
+  vignetteStyle?: 'highlight' | 'color' | 'paint'
+  grainAmount?: number
+  grainSize?: number
+  grainRoughness?: number
 }
 
 export interface RangeSpec {
@@ -270,6 +288,12 @@ export interface Described {
   details: string
   defects: string[]
   suggested_tools: string[]
+}
+
+export interface ProfileInfo {
+  id: string
+  label: string
+  group: string
 }
 
 export interface Snapshot {

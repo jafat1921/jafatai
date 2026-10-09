@@ -29,8 +29,8 @@ describe('develop maths (WebGL preview reference)', () => {
   })
 
   it('exposure +1 stop doubles linear light', () => {
-    expect(exposureGain(100 / 1.5)).toBeCloseTo(2, 6)
-    const pp = prepare({ exposure: 100 / 1.5 })
+    expect(exposureGain(1)).toBeCloseTo(2, 6)
+    const pp = prepare({ version: 2, exposure: 1 })
     const { exposurePlusOneStop: a, exposurePlusOneStopDark: b } = FIXTURES
     close(developPixel([a.in, a.in, a.in], pp), [a.out, a.out, a.out], 1e-3)
     close(developPixel([b.in, b.in, b.in], pp), [b.out, b.out, b.out], 1e-3)
@@ -121,7 +121,7 @@ describe('params helpers', () => {
     const a = setValue({}, 'hsl.red.s', 20)
     const b = setValue(a, 'exposure', 0)
     expect(a).toEqual({ hsl: { red: { s: 20 } } })
-    expect(compact(b)).toEqual({ hsl: { red: { s: 20 } } })
+    expect(compact(b)).toEqual({ version: 2, hsl: { red: { s: 20 } } })
     expect(changedKeys(b)).toEqual(['hsl.red.s'])
   })
 
@@ -133,7 +133,23 @@ describe('params helpers', () => {
   it('knows which edits need the server for an exact preview', () => {
     expect(needsServer({ exposure: 30 })).toBe(false)
     expect(needsServer({ clarity: 30 })).toBe(true)
-    expect(needsServer({ lut: { look_id: 'l1', amount: 100 } })).toBe(true)
+    // looks are a 3D texture in the preview now
+    expect(needsServer({ lut: { look_id: 'l1', amount: 100 } })).toBe(false)
+  })
+
+  it('treats non-zero neutral values as unchanged', () => {
+    const p = { version: 2, vignetteMidpoint: 50, refineSat: 100, pcurve: { s2: 50 }, grading: { blending: 50, shadows: { h: 200 } } }
+    expect(changedKeys(p)).toEqual([])
+    // a zone's hue is kept: it's where the wheel was left
+    expect(compact(p)).toEqual({ version: 2, grading: { shadows: { h: 200 } } })
+    expect(changedKeys({ grainSize: 60, grading: { shadows: { h: 200, s: 30 } } })).toEqual(['grainSize', 'grading.shadows.s'])
+    // a v1 record keeps its look: 60 on the old slider was 0.9 EV
+    expect(compact({ exposure: 60 })).toEqual({ version: 2, exposure: 0.9 })
+  })
+
+  it('scales a look around neutral, leaving hues alone', () => {
+    const s = scaleParams({ exposure: 0.5, vignetteMidpoint: 80, grading: { shadows: { h: 210, s: 40 } } }, 0.5)
+    expect(s).toEqual({ exposure: 0.25, vignetteMidpoint: 65, grading: { shadows: { h: 210, s: 20 } } })
   })
 })
 

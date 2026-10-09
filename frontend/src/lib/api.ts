@@ -70,7 +70,7 @@ import type { CameraPreset } from './camera'
 import type { MentionOption } from './mentions'
 import type { Album, Client, Facets, PhotoPage } from './catalogue'
 import type {
-  AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema,
+  AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema, ProfileInfo,
   PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan, Snapshot,
 } from './photo/types'
 
@@ -503,6 +503,12 @@ export const api = {
     createSnapshot: (id: string, body: { name: string; params: DevelopParams; base_id?: string }) => post<Snapshot>(`/photo/${id}/snapshots`, body),
     updateSnapshot: (sid: string, body: { name?: string; params?: DevelopParams }) => patch<Snapshot>(`/photo/snapshots/${sid}`, body),
     deleteSnapshot: (sid: string) => del(`/photo/snapshots/${sid}`),
+    profiles: () => get<ProfileInfo[]>('/photo/profiles'),
+    // a 3D table for the WebGL preview: size³ RGB bytes, red fastest
+    lut: async (kind: 'profile' | 'look', id: string) => {
+      const t = await get<{ size: number; data: string }>(`/photo/luts/${kind}/${encodeURIComponent(id)}`)
+      return { size: t.size, data: Uint8Array.from(atob(t.data), (c) => c.charCodeAt(0)) }
+    },
     sync: (body: { ids: string[]; params: DevelopParams; groups: string[]; format?: ExportFormat }) =>
       post<{ queued: number; results: { id: string; job_id: string | null; error: string | null; unchanged?: boolean }[] }>('/photo/sync', body),
   },

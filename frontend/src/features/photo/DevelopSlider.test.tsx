@@ -12,7 +12,7 @@ function Harness({ onChange = () => {} }: { onChange?: (v: number, g: string) =>
       name="exposure"
       label="Exposure"
       value={v}
-      range={FALLBACK_RANGES.exposure}
+      range={FALLBACK_RANGES.contrast}
       onChange={(next, g) => {
         setV(next)
         onChange(next, g)

@@ -38,11 +38,11 @@ describe('Photo Studio', { timeout: 15_000 }, () => {
   it('opens a developed version on its base, with its saved settings, and previews on the server without WebGL', async () => {
     const calls = setup()
     expect(await screen.findByRole('heading', { name: /^Photo Studio · Lighthouse/ })).toBeInTheDocument()
-    expect(slider('Exposure')).toHaveValue('20')
+    expect(slider('Exposure')).toHaveValue('0.3')
     expect(slider('Contrast')).toHaveValue('10')
     // the base (g1) is what renders, with the stored params: no stacking of edits
     await waitFor(() => expect(calls.find((c) => c.path === '/photo/g1/preview')).toBeTruthy())
-    expect(calls.find((c) => c.path === '/photo/g1/preview')?.body).toEqual({ params: { exposure: 20, contrast: 10 }, max_side: 1280 })
+    expect(calls.find((c) => c.path === '/photo/g1/preview')?.body).toEqual({ params: { exposure: 0.3, contrast: 10, version: 2 }, max_side: 1280 })
     expect(await screen.findByText(/Exact preview/)).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /exact preview/ })).toHaveAttribute('src', 'blob:preview-1')
   })
@@ -115,10 +115,10 @@ describe('Photo Studio', { timeout: 15_000 }, () => {
     const exposure = await screen.findByRole('slider', { name: 'Exposure' })
     exposure.focus()
     await user.keyboard('{Shift>}{ArrowRight}{/Shift}')
-    expect(exposure).toHaveValue('30')
+    expect(exposure).toHaveValue('0.4')
     fireEvent.keyDown(document.body, { key: 's', ctrlKey: true })
     await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/photo/g1/render')).toBeTruthy())
-    expect(calls.find((c) => c.path === '/photo/g1/render')?.body).toEqual({ params: { exposure: 30, contrast: 10 }, format: 'jpeg' })
+    expect(calls.find((c) => c.path === '/photo/g1/render')?.body).toEqual({ params: { exposure: 0.4, contrast: 10, version: 2 }, format: 'jpeg' })
   })
 
   it('exports a 16-bit TIFF as a new version', async () => {
@@ -132,24 +132,24 @@ describe('Photo Studio', { timeout: 15_000 }, () => {
 
   it('Auto merges its suggestion in one undoable step', async () => {
     const calls = setup('/image/studio/g2', (method, p) =>
-      method === 'POST' && p === '/photo/g1/auto' ? { params: { exposure: 38, shadows: 20 }, notes: ['Underexposed: +0.6 stops'] } : undefined,
+      method === 'POST' && p === '/photo/g1/auto' ? { params: { version: 2, exposure: 0.38, shadows: 20 }, notes: ['Underexposed: +0.6 stops'] } : undefined,
     )
     const user = userEvent.setup()
     await screen.findByRole('slider', { name: 'Exposure' })
     await user.click(screen.getByRole('button', { name: 'Auto' }))
-    await waitFor(() => expect(slider('Exposure')).toHaveValue('38'))
+    await waitFor(() => expect(slider('Exposure')).toHaveValue('0.38'))
     expect(calls.some((c) => c.path === '/photo/g1/auto')).toBe(true)
     expect(slider('Shadows')).toHaveValue('20')
     expect(slider('Contrast')).toHaveValue('10')
     expect(screen.getByText('Underexposed: +0.6 stops')).toBeInTheDocument()
 
     fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true })
-    expect(slider('Exposure')).toHaveValue('20')
+    expect(slider('Exposure')).toHaveValue('0.3')
     expect(slider('Shadows')).toHaveValue('0')
     fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true, shiftKey: true })
-    expect(slider('Exposure')).toHaveValue('38')
+    expect(slider('Exposure')).toHaveValue('0.38')
     await user.click(screen.getByRole('button', { name: 'Undo (Ctrl+Z)' }))
-    expect(slider('Exposure')).toHaveValue('20')
+    expect(slider('Exposure')).toHaveValue('0.3')
   })
 
   it('Reset clears everything and can be undone', async () => {
@@ -160,7 +160,7 @@ describe('Photo Studio', { timeout: 15_000 }, () => {
     expect(slider('Exposure')).toHaveValue('0')
     expect(screen.getByRole('button', { name: 'Save as new version' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Undo (Ctrl+Z)' }))
-    expect(slider('Exposure')).toHaveValue('20')
+    expect(slider('Exposure')).toHaveValue('0.3')
   })
 
   it('History loads a version’s settings, makes an older version current, and compares two', async () => {
@@ -172,9 +172,9 @@ describe('Photo Studio', { timeout: 15_000 }, () => {
     const panel = await screen.findByRole('dialog', { name: 'Versions' })
     const items = within(panel).getAllByRole('listitem')
     expect(items[0]).toHaveTextContent('v2')
-    expect(items[0]).toHaveTextContent('Exposure +20 · Contrast +10')
+    expect(items[0]).toHaveTextContent('Exposure +0.30 EV · Contrast +10')
     await user.click(within(items[0]).getByRole('button', { name: 'Load settings' }))
-    expect(slider('Exposure')).toHaveValue('20')
+    expect(slider('Exposure')).toHaveValue('0.3')
 
     await user.click(screen.getByRole('button', { name: 'Manage versions' }))
     const again = await screen.findByRole('dialog', { name: 'Versions' })

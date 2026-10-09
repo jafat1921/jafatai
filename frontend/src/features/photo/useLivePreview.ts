@@ -3,7 +3,7 @@ import { api } from '@/lib/api'
 import { geometryFor } from '@/lib/photo/geometry'
 import { histogramOf } from '@/lib/photo/histogram'
 import { compact, needsServer, paramsKey } from '@/lib/photo/params'
-import { createRenderer, type DevelopRenderer } from '@/lib/photo/shader'
+import { createRenderer, type DevelopRenderer, type LutTable } from '@/lib/photo/shader'
 import type { DevelopParams, Histogram } from '@/lib/photo/types'
 
 const TEXTURE_MAX = 4096
@@ -11,6 +11,19 @@ const DEBOUNCE_MS = 250
 const PREVIEW_SIDE = 1280
 
 export type PreviewMode = 'init' | 'webgl' | 'server'
+
+// tables are small (33³) and never change for an id: one fetch per session
+const lutCache = new Map<string, Promise<LutTable>>()
+function lutFor(kind: 'profile' | 'look', id: string) {
+  const k = `${kind}:${id}`
+  let p = lutCache.get(k)
+  if (!p) {
+    p = api.photo.lut(kind, id)
+    p.catch(() => lutCache.delete(k))
+    lutCache.set(k, p)
+  }
+  return p
+}
 
 interface ServerPreview {
   key: string
@@ -85,6 +98,10 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
   const pixels = useRef<{ data: Uint8Array; w: number; h: number } | null>(null)
   const urls = useRef<string[]>([])
   const key = paramsKey(params)
+  const profileId = params.profile?.id && params.profile.id !== 'color' ? params.profile.id : null
+  const lookId = params.lut?.look_id ?? null
+  // tables the renderer holds; a change redraws with them
+  const [luts, setLuts] = useState<{ profile: string | null; look: string | null }>({ profile: null, look: null })
 
   const attachCanvas = useCallback((el: HTMLCanvasElement | null) => {
     if (!el) {
@@ -94,6 +111,7 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
     }
     renderer.current = createRenderer(el)
     setMode(renderer.current ? 'webgl' : 'server')
+    setLuts({ profile: null, look: null })
   }, [])
 
   // source: the texture in WebGL mode, and the true pixel size either way (crop and points use it)
@@ -113,6 +131,30 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
   }, [sourceUrl, mode])
 
   const ready = !!src && src.url === sourceUrl
+
+  useEffect(() => {
+    if (mode !== 'webgl') return
+    let gone = false
+    const want = [['profile', profileId], ['look', lookId]] as const
+    for (const [kind, id] of want) {
+      if (!id || renderer.current?.lutId(kind) === id) continue
+      lutFor(kind, id).then(
+        (t) => {
+          if (gone || !renderer.current) return
+          renderer.current.setLut(kind, id, t)
+          setLuts((l) => ({ ...l, [kind]: id }))
+        },
+        // no table: the server render still shows it, the preview just stays approximate
+        () => {},
+      )
+    }
+    return () => {
+      gone = true
+    }
+  }, [mode, profileId, lookId])
+  const lutsLoaded =
+    mode !== 'webgl' ||
+    ((!profileId || luts.profile === profileId) && (!lookId || luts.look === lookId))
 
   // instant draw on every change
   useEffect(() => {
@@ -139,7 +181,7 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
       cancelAnimationFrame(frame)
       clearTimeout(timer)
     }
-  }, [mode, ready, params, before, maxSide, clip, wantBefore])
+  }, [mode, ready, params, before, maxSide, clip, wantBefore, luts])
 
   // the server's exact render, once the sliders rest
   useEffect(() => {
@@ -207,8 +249,8 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
     server,
     serverError,
     exact,
-    // WebGL can't show spatial edits, the palette or a .cube: say so until the server catches up
-    approximate: mode === 'webgl' && !exact && needsServer(params),
+    // WebGL can't show spatial edits or the palette (nor a look whose table is still loading): say so until the server catches up
+    approximate: mode === 'webgl' && !exact && (needsServer(params) || !lutsLoaded),
     histogram,
     snapshot,
     sample,

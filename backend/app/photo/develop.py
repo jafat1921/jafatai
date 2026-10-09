@@ -19,9 +19,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
+from app.photo import colour as cl
 from app.photo.lut import apply_lut
 
-PARAMS_VERSION = 1
+# 2: exposure in EV (-5..+5) like Lightroom; v1 stored -100..100 for +-1.5 EV and is converted on read
+PARAMS_VERSION = 2
 
 HSL_BANDS = (("red", "Red", 0), ("orange", "Orange", 30), ("yellow", "Yellow", 60), ("green", "Green", 120),
              ("aqua", "Aqua", 180), ("blue", "Blue", 240), ("purple", "Purple", 270), ("magenta", "Magenta", 300))
@@ -32,7 +34,7 @@ CURVE_POINTS = (("blacks", "Blacks", 0.0), ("shadows", "Shadows", 0.25), ("mids"
 SLIDERS = {
     "temperature": (-100, 100, "Temperature", False),
     "tint": (-100, 100, "Tint", False),
-    "exposure": (-100, 100, "Exposure", False),
+    "exposure": (-5, 5, "Exposure", False),
     "contrast": (-100, 100, "Contrast", False),
     "highlights": (-100, 100, "Highlights", False),
     "shadows": (-100, 100, "Shadows", False),
@@ -44,10 +46,29 @@ SLIDERS = {
     "sharpness": (0, 100, "Sharpening", True),
     "noiseReduction": (0, 100, "Noise reduction", True),
     "vignette": (-100, 100, "Vignette", False),
+    "vignetteMidpoint": (0, 100, "Midpoint", False),
+    "vignetteRoundness": (-100, 100, "Roundness", False),
+    "vignetteFeather": (0, 100, "Feather", False),
+    "vignetteHighlights": (0, 100, "Highlights", False),
+    "grainAmount": (0, 100, "Grain", False),
+    "grainSize": (0, 100, "Size", False),
+    "grainRoughness": (0, 100, "Roughness", False),
+    "refineSat": (0, 100, "Refine saturation", False),
 }
+STEPS = {"exposure": 0.01}
+# sliders whose neutral position is not 0
+SLIDER_DEFAULTS = {"vignetteMidpoint": 50, "vignetteFeather": 50, "grainSize": 25, "grainRoughness": 50, "refineSat": 100}
+PCURVE_KEYS = (("highlights", "Highlights"), ("lights", "Lights"), ("darks", "Darks"), ("shadows", "Shadows"))
+PCURVE_SPLITS = {"s1": 25, "s2": 50, "s3": 75}
+CURVE_CHANNELS = ("rgb", "red", "green", "blue")
+GRADE_ZONES = ("shadows", "midtones", "highlights", "global")
+CALIBRATION_KEYS = (("shadowsTint", "Shadows tint"), ("redHue", "Red hue"), ("redSat", "Red saturation"),
+                    ("greenHue", "Green hue"), ("greenSat", "Green saturation"), ("blueHue", "Blue hue"),
+                    ("blueSat", "Blue saturation"))
+VIGNETTE_STYLES = ("highlight", "color", "paint")
 SPATIAL_KEYS = ("clarity", "sharpness", "noiseReduction", "lightPoints")
 # what a .cube (or a video grade) can't carry: anything that looks at neighbours or at the pixel's position
-NOT_IN_LUT = ("clarity", "sharpness", "noiseReduction", "vignette", "lightPoints")
+NOT_IN_LUT = ("clarity", "sharpness", "noiseReduction", "vignette", "lightPoints", "grainAmount")
 MAX_POINTS = 16
 
 DEFAULTS = {
@@ -61,17 +82,36 @@ DEFAULTS = {
     "lightPoints": [],
     "palette": [],
     "lut": None,
+    # params v2 (M10 / D2): every slider present, at its own neutral value
+    **{k: SLIDER_DEFAULTS.get(k, 0) for k in SLIDERS if k not in ("exposure", "contrast", "highlights", "shadows",
+                                                                   "whites", "blacks", "temperature", "tint", "vibrance",
+                                                                   "saturation", "clarity", "sharpness",
+                                                                   "noiseReduction", "vignette")},
+    "vignetteStyle": "highlight",
+    "profile": None,
+    "treatment": "color",
+    "bw": {k: 0 for k, _, _ in HSL_BANDS},
+    "pcurve": {**{k: 0 for k, _ in PCURVE_KEYS}, **PCURVE_SPLITS},
+    "points": {c: [] for c in CURVE_CHANNELS},
+    "pointColor": [],
+    "grading": {**{z: {"h": 0, "s": 0, "l": 0} for z in GRADE_ZONES}, "blending": 50, "balance": 0},
+    "calibration": {k: 0 for k, _ in CALIBRATION_KEYS},
     # panels switched off with their eye icon: settings kept, effect bypassed (Lightroom's panel switch)
     "off": [],
 }
 
 GROUPS = [
-    {"id": "basic", "label": "Basic", "keys": ["temperature", "tint", "exposure", "contrast", "highlights", "shadows",
-                                               "whites", "blacks", "vibrance", "saturation"]},
-    {"id": "curve", "label": "Tone curve", "keys": [f"curve.{k}" for k, _, _ in CURVE_POINTS]},
-    {"id": "hsl", "label": "Colour mixer", "keys": ["hsl"]},
+    {"id": "basic", "label": "Basic", "keys": ["profile", "treatment", "temperature", "tint", "exposure", "contrast",
+                                               "highlights", "shadows", "whites", "blacks", "vibrance", "saturation"]},
+    {"id": "curve", "label": "Tone curve", "keys": [f"curve.{k}" for k, _, _ in CURVE_POINTS]
+     + [f"pcurve.{k}" for k, _ in PCURVE_KEYS] + ["points", "refineSat"]},
+    {"id": "hsl", "label": "Colour mixer", "keys": ["hsl", "pointColor", "bw"]},
+    {"id": "grading", "label": "Colour grading", "keys": ["grading"]},
     {"id": "detail", "label": "Detail", "keys": ["clarity", "sharpness", "noiseReduction"]},
-    {"id": "effects", "label": "Effects", "keys": ["vignette"]},
+    {"id": "effects", "label": "Effects", "keys": ["vignette", "vignetteMidpoint", "vignetteRoundness", "vignetteFeather",
+                                                   "vignetteHighlights", "vignetteStyle", "grainAmount", "grainSize",
+                                                   "grainRoughness"]},
+    {"id": "calibration", "label": "Calibration", "keys": ["calibration"]},
     {"id": "local", "label": "Local light · Selective colour", "keys": ["lightPoints", "palette"]},
     {"id": "geometry", "label": "Crop & rotate", "keys": ["crop", "rotate", "flipH", "flipV"]},
     {"id": "look", "label": "Look", "keys": ["lut"]},
@@ -88,8 +128,26 @@ def defaults() -> dict:
 
 
 def ranges() -> dict:
-    out = {k: {"min": lo, "max": hi, "step": 1, "default": 0, "label": label, "spatial": sp}
-           for k, (lo, hi, label, sp) in SLIDERS.items()}
+    out = {k: {"min": lo, "max": hi, "step": STEPS.get(k, 1), "default": SLIDER_DEFAULTS.get(k, 0), "label": label,
+               "spatial": sp} for k, (lo, hi, label, sp) in SLIDERS.items()}
+    for k, label in PCURVE_KEYS:
+        out[f"pcurve.{k}"] = {"min": -100, "max": 100, "step": 1, "default": 0, "label": label, "spatial": False}
+    for k, d in PCURVE_SPLITS.items():
+        out[f"pcurve.{k}"] = {"min": 5, "max": 95, "step": 1, "default": d, "label": "Split", "spatial": False}
+    out["grading.h"] = {"min": 0, "max": 360, "step": 1, "default": 0, "label": "Hue", "spatial": False}
+    out["grading.s"] = {"min": 0, "max": 100, "step": 1, "default": 0, "label": "Saturation", "spatial": False}
+    out["grading.l"] = {"min": -100, "max": 100, "step": 1, "default": 0, "label": "Luminance", "spatial": False}
+    out["grading.blending"] = {"min": 0, "max": 100, "step": 1, "default": 50, "label": "Blending", "spatial": False}
+    out["grading.balance"] = {"min": -100, "max": 100, "step": 1, "default": 0, "label": "Balance", "spatial": False}
+    for k, label in CALIBRATION_KEYS:
+        out[f"calibration.{k}"] = {"min": -100, "max": 100, "step": 1, "default": 0, "label": label, "spatial": False}
+    out["bw"] = {"min": -100, "max": 100, "step": 1, "default": 0, "label": "B&W mix", "spatial": False}
+    out["profile.amount"] = {"min": 0, "max": 200, "step": 1, "default": 100, "label": "Amount", "spatial": False}
+    for k, label, lo, hi, d in (("dh", "Hue", -100, 100, 0), ("ds", "Saturation", -100, 100, 0),
+                                ("dl", "Luminance", -100, 100, 0), ("hueRange", "Hue range", 0, 100, 50),
+                                ("satRange", "Saturation range", 0, 100, 50), ("lumRange", "Luminance range", 0, 100, 50)):
+        out[f"pointColor.{k}"] = {"min": lo, "max": hi, "step": 1, "default": d, "label": label, "spatial": False,
+                                  "max_items": cl.MAX_POINT_COLORS}
     for k, label, at in CURVE_POINTS:
         out[f"curve.{k}"] = {"min": -100, "max": 100, "step": 1, "default": 0, "label": label, "at": at, "spatial": False}
     for ch, label in (("h", "Hue"), ("s", "Saturation"), ("l", "Luminance")):
@@ -118,9 +176,14 @@ def normalise(p: dict | None) -> dict:
     the API validates first (pydantic) so users get a 422 instead of a silent clamp."""
     p = p or {}
     out = defaults()
+    v1 = int(_num(p.get("version"), 0, 99, 1)) < 2
     for k, (lo, hi, _, _) in SLIDERS.items():
         if p.get(k) is not None:
-            out[k] = _num(p[k], lo, hi)
+            raw = p[k]
+            if k == "exposure" and v1:
+                # v1 slider: +-100 was +-1.5 EV
+                raw = round(_num(raw, -100, 100) * 0.015, 3)
+            out[k] = _num(raw, lo, hi, SLIDER_DEFAULTS.get(k, 0.0))
     for k, _, _ in CURVE_POINTS:
         out["curve"][k] = _num((p.get("curve") or {}).get(k), -100, 100)
     for k, _, _ in HSL_BANDS:
@@ -156,7 +219,50 @@ def normalise(p: dict | None) -> dict:
         out["lut"] = {"look_id": str(lut["look_id"]), "amount": _num(lut.get("amount", 100), 0, 100, 100.0)}
     off = p.get("off") or []
     out["off"] = [g for g in SWITCHABLE if isinstance(off, (list, tuple)) and g in off]
+    _normalise_v2(p, out)
     return out
+
+
+def _sub(p: dict, key: str) -> dict:
+    v = p.get(key)
+    return v if isinstance(v, dict) else {}
+
+
+def _normalise_v2(p: dict, out: dict) -> None:
+    out["vignetteStyle"] = p.get("vignetteStyle") if p.get("vignetteStyle") in VIGNETTE_STYLES else "highlight"
+    out["treatment"] = "bw" if p.get("treatment") == "bw" else "color"
+    prof = p.get("profile")
+    if isinstance(prof, dict) and prof.get("id") and prof["id"] != "color":
+        out["profile"] = {"id": str(prof["id"])[:60], "amount": _num(prof.get("amount", 100), 0, 200, 100.0)}
+    out["bw"] = {k: _num(_sub(p, "bw").get(k), -100, 100) for k, _, _ in HSL_BANDS}
+    pc = _sub(p, "pcurve")
+    out["pcurve"] = {k: _num(pc.get(k), -100, 100) for k, _ in PCURVE_KEYS}
+    out["pcurve"].update({k: _num(pc.get(k), 5, 95, float(d)) for k, d in PCURVE_SPLITS.items()})
+    pts = _sub(p, "points")
+    for c in CURVE_CHANNELS:
+        clean = []
+        for pt in (pts.get(c) or [])[:cl.MAX_CURVE_POINTS]:
+            if isinstance(pt, (list, tuple)) and len(pt) == 2:
+                clean.append([_num(pt[0], 0, 255), _num(pt[1], 0, 255)])
+        out["points"][c] = clean if cl.points_active(clean) else []
+    pcs = []
+    for e in (p.get("pointColor") or [])[:cl.MAX_POINT_COLORS]:
+        if not isinstance(e, dict):
+            continue
+        pcs.append({"hue": _num(e.get("hue"), 0, 360), "sat": _num(e.get("sat"), 0, 1), "val": _num(e.get("val"), 0, 1),
+                    "dh": _num(e.get("dh"), -100, 100), "ds": _num(e.get("ds"), -100, 100),
+                    "dl": _num(e.get("dl"), -100, 100), "hueRange": _num(e.get("hueRange"), 0, 100, 50.0),
+                    "satRange": _num(e.get("satRange"), 0, 100, 50.0),
+                    "lumRange": _num(e.get("lumRange"), 0, 100, 50.0)})
+    out["pointColor"] = pcs
+    g = _sub(p, "grading")
+    for z in GRADE_ZONES:
+        gz = _sub(g, z)
+        out["grading"][z] = {"h": _num(gz.get("h"), 0, 360), "s": _num(gz.get("s"), 0, 100),
+                             "l": _num(gz.get("l"), -100, 100)}
+    out["grading"]["blending"] = _num(g.get("blending"), 0, 100, 50.0)
+    out["grading"]["balance"] = _num(g.get("balance"), -100, 100)
+    out["calibration"] = {k: _num(_sub(p, "calibration").get(k), -100, 100) for k, _ in CALIBRATION_KEYS}
 
 
 def bypass(p: dict) -> dict:
@@ -173,14 +279,22 @@ def bypass(p: dict) -> dict:
 def sparse(p: dict | None) -> dict:
     """Only what differs from the defaults (how looks are stored: applying one leaves other sliders alone)."""
     full, base = normalise(p), DEFAULTS
-    out = {}
+    # the version always travels: without it a stored v2 exposure would be read as v1
+    out = {"version": PARAMS_VERSION}
     for k, v in full.items():
         if k == "version" or v == base[k]:
             continue
-        if k == "curve":
+        if k in ("curve", "bw", "calibration"):
+            v = {c: x for c, x in v.items() if x}
+        elif k == "pcurve":
+            v = {c: x for c, x in v.items() if x != base[k][c]}
+        elif k == "points":
             v = {c: x for c, x in v.items() if x}
         elif k == "hsl":
             v = {band: {c: x for c, x in vals.items() if x} for band, vals in v.items() if any(vals.values())}
+        elif k == "grading":
+            v = {z: (x if z in ("blending", "balance") else {c: y for c, y in x.items() if y})
+                 for z, x in v.items() if x != base[k][z]}
         out[k] = v
     return out
 
@@ -290,7 +404,21 @@ def tone_curve(p: dict, n: int = _M) -> np.ndarray:
 
 def tone_active(p: dict) -> bool:
     return any(abs(p[k]) > 0.01 for k in ("contrast", "highlights", "shadows", "whites", "blacks")) or \
-        any(abs(v) > 0.01 for v in p["curve"].values())
+        any(abs(v) > 0.01 for v in p["curve"].values()) or cl.parametric_active(p["pcurve"]) or \
+        any(p["points"][c] for c in CURVE_CHANNELS)
+
+
+def tone_tables(p: dict, n: int = _M) -> np.ndarray:
+    """(n,) master curve, or (n, 3) when a red/green/blue curve is set. sRGB in, sRGB out."""
+    y = tone_curve(p, n).astype(np.float64)
+    if cl.parametric_active(p["pcurve"]):
+        y = np.maximum.accumulate(np.clip(y + cl.parametric(y, p["pcurve"]), 0.0, 1.0))
+    if p["points"]["rgb"]:
+        y = cl.monotone(p["points"]["rgb"], y)
+    chans = [p["points"][c] for c in ("red", "green", "blue")]
+    if not any(chans):
+        return y.astype(np.float32)
+    return np.stack([cl.monotone(c, y) if c else y for c in chans], axis=1).astype(np.float32)
 
 
 def wb_gains(p: dict) -> np.ndarray:
@@ -340,6 +468,17 @@ def _hsl_tables(p: dict) -> np.ndarray:
     table[:, 0] *= 30.0
     table[:, 2] *= 0.5
     return table.astype(np.float32)
+
+
+def refine_saturation(before: np.ndarray, after: np.ndarray, refine: float) -> np.ndarray:
+    """Curves change saturation as a side effect; Refine below 100 pulls the chroma back toward before."""
+    def chroma(x):
+        return x.max(1) - x.min(1)
+
+    y = after @ LUMA
+    k = np.where(chroma(after) > 1e-5, chroma(before) / np.maximum(chroma(after), 1e-5), 1.0)
+    k = 1 + (1 - refine) * (np.minimum(k, 4.0) - 1)
+    return np.clip(y[:, None] + (after - y[:, None]) * k[:, None], 0, 1)
 
 
 def hsl_active(p: dict) -> bool:
@@ -582,17 +721,31 @@ def apply_geometry(im: Image.Image, p: dict, src_size: tuple[int, int]) -> Image
 class _Plan:
     """Everything that is per-call rather than per-pixel, worked out once."""
 
-    def __init__(self, p: dict, src: np.ndarray, scale: float, frame: tuple[int, int], lut):
+    def __init__(self, p: dict, src: np.ndarray, scale: float, frame: tuple[int, int], lut, profile=None):
         self.p = p
         self.h, self.w = src.shape[:2]
-        self.gains = wb_gains(p) * np.float32(2.0 ** (1.5 * p["exposure"] / 100))
+        self.gains = wb_gains(p) * np.float32(2.0 ** p["exposure"])
+        self.calib = cl.calibration_matrix(p["calibration"])
+        self.profile = profile
+        self.chan_tone = None
         self.gain_on = not np.allclose(self.gains, 1.0, atol=1e-6)
-        self.tone = tone_curve(p) if tone_active(p) else None
+        self.tone = tone_tables(p) if tone_active(p) else None
+        if self.tone is not None and self.tone.ndim == 2:
+            self.chan_tone, self.tone = self.tone, None
+        self.refine = p["refineSat"] / 100
+        self.point_color = p["pointColor"]
+        self.bw = p["bw"] if p["treatment"] == "bw" else None
+        self.grading = p["grading"] if cl.grading_active(p["grading"]) else None
+        self.shadow_tint = p["calibration"]["shadowsTint"]
+        self.grain_on = p["grainAmount"] > 0.5
+        self.frame_long = float(max(frame))
         self.hsl = _hsl_tables(p) if hsl_active(p) else None
         self.palette = _palette_ctx(p["palette"])
         self.vib = p["vibrance"] / 100
         self.sat = p["saturation"] / 100
-        self.srgb_stage = self.hsl is not None or self.palette is not None or abs(self.vib) > 0.005
+        self.srgb_stage = (self.hsl is not None or self.palette is not None or abs(self.vib) > 0.005
+                           or self.profile is not None or self.chan_tone is not None or bool(self.point_color)
+                           or self.bw is not None or (self.refine < 0.999 and self.tone is not None))
         self.tone_lin = None
         if self.tone is not None and not self.srgb_stage:
             # tone folded into one linear -> linear table, indexed by sqrt(lin) like enc
@@ -636,33 +789,52 @@ class _Plan:
         return lin * np.exp2(stops)[..., None]
 
     def vignette_mul(self, rows: int, y0: int, lin: np.ndarray) -> np.ndarray:
-        xs = (np.arange(self.w, dtype=np.float32) + 0.5) / self.w - 0.5
-        ys = (np.arange(y0, y0 + rows, dtype=np.float32) + 0.5) / self.h - 0.5
-        d = np.sqrt(ys[:, None] ** 2 + xs[None, :] ** 2) / 0.75
-        alpha = (0.8 * abs(self.vignette) * _smoothstep(0.5, 1.0, d))[..., None]
-        if self.vignette < 0:
-            return lin * (1 - alpha)
-        return lin + (1 - lin) * alpha
+        u, v = self._uv(rows, y0)
+        alpha = cl.vignette_alpha(u, v, self.w / max(1, self.h), self.p)
+        yp = enc(np.clip(lin @ LUMA, 0, 1))
+        return cl.apply_vignette(lin, alpha, self.p, yp)
 
     def run(self, block: np.ndarray, y0: int) -> np.ndarray:
         """block: rows x W x 3 of sRGB values (uint8/uint16 or float 0..1). Returns float32 sRGB."""
         lin = to_linear(block)
+        if self.calib is not None:
+            lin = np.clip(lin @ self.calib.T, 0, None)
         if self.gain_on:
             lin = lin * self.gains
         if self.points is not None:
             lin = self.light(lin, y0)
         np.clip(lin, 0, 1, out=lin)
         rows = lin.shape[0]
+        bw_done = False
         if self.srgb_stage:
             pb = enc(lin).reshape(-1, 3)
+            if self.profile is not None:
+                table, amount = self.profile
+                prof = apply_lut(pb, table)
+                pb = prof if abs(amount - 1) < 1e-3 else np.clip(pb + (prof - pb) * np.float32(amount), 0, 1)
             if self.palette is not None:
                 pb = apply_palette(pb, self.palette)
-            if self.tone is not None:
-                pb = lookup(pb, self.tone)
+            if self.tone is not None or self.chan_tone is not None:
+                before_tone = pb
+                if self.tone is not None:
+                    pb = lookup(pb, self.tone)
+                else:
+                    pb = np.stack([lookup(pb[:, c], self.chan_tone[:, c]) for c in range(3)], axis=1)
+                if self.refine < 0.999:
+                    pb = refine_saturation(before_tone, pb, self.refine)
             if self.hsl is not None:
                 pb = apply_hsl(pb, self.hsl)
+            if self.point_color or self.bw is not None:
+                h, sv, v = rgb_to_hsv(pb)
+                if self.point_color:
+                    h, sv, v = cl.point_color(h, sv, v, self.point_color)
+                    pb = hsv_to_rgb(h, sv, v)
+                if self.bw is not None:
+                    y = cl.bw_mix(dec(pb), h, sv, self.bw)
+                    pb = np.repeat(enc(y)[:, None], 3, axis=1)
+                    bw_done = True
             sat_p = None
-            if abs(self.vib) > 0.005:
+            if abs(self.vib) > 0.005 and not bw_done:
                 mx = pb.max(1)
                 sat_p = np.where(mx > 1e-6, (mx - pb.min(1)) / np.maximum(mx, 1e-6), 0.0)
             lin = dec(pb).reshape(rows, self.w, 3)
@@ -670,7 +842,7 @@ class _Plan:
             sat_p = None
             if self.tone_lin is not None:
                 lin = lookup(np.sqrt(lin), self.tone_lin)
-        if sat_p is not None or abs(self.sat) > 0.005:
+        if not bw_done and (sat_p is not None or abs(self.sat) > 0.005):
             f = np.float32(1 + self.sat)
             if sat_p is not None:
                 f = (1 + 0.6 * self.vib * (1 - sat_p.reshape(rows, self.w))) * f
@@ -684,9 +856,26 @@ class _Plan:
             if amount < 0.999:
                 graded = pb + (graded - pb) * np.float32(amount)
             lin = dec(graded)
+        if self.grading is not None or abs(self.shadow_tint) > 0.01:
+            flat = lin.reshape(-1, 3)
+            yp = enc(np.clip(flat @ LUMA, 0, 1))
+            if self.grading is not None:
+                flat = cl.grade(flat, yp, self.grading)
+            if abs(self.shadow_tint) > 0.01:
+                flat = cl.shadow_tint(flat, yp, self.shadow_tint)
+            lin = flat.reshape(rows, self.w, 3)
         if abs(self.vignette) > 0.005:
             lin = self.vignette_mul(rows, y0, lin)
-        return enc(lin)
+        out = enc(lin)
+        if self.grain_on:
+            u, v = self._uv(rows, y0)
+            out = np.clip(out + cl.grain(u, v, self.frame_long, self.p)[..., None], 0, 1)
+        return out
+
+    def _uv(self, rows: int, y0: int):
+        xs = (np.arange(self.w, dtype=np.float32) + 0.5) / self.w
+        ys = (np.arange(y0, y0 + rows, dtype=np.float32) + 0.5) / self.h
+        return np.broadcast_to(xs[None, :], (rows, self.w)), np.broadcast_to(ys[:, None], (rows, self.w))
 
 
 BLOCK_PIXELS = 1 << 18
@@ -713,12 +902,19 @@ def develop(src: np.ndarray, params: dict | None, *, scale: float = 1.0, frame: 
     if "look" in p["off"]:
         lut = None
     p = bypass(p)
+    profile = None
+    if p["profile"]:
+        from app.photo import profiles
+
+        table = profiles.table(p["profile"]["id"])
+        if table is not None and p["profile"]["amount"] > 0.5:
+            profile = (table, p["profile"]["amount"] / 100)
     h, w = src.shape[:2]
     src = src[..., :3]
     frame = frame or (max(1, int(round(w / scale))), max(1, int(round(h / scale))))
     if p["noiseReduction"] > 0.5:
         src = denoise(to_unit(src), p["noiseReduction"] / 100, scale)
-    plan = _Plan(p, src, scale, frame, lut)
+    plan = _Plan(p, src, scale, frame, lut, profile)
     out = np.empty((h, w, 3), dtype=np.float32)
     step = max(1, BLOCK_PIXELS // max(1, w))
 

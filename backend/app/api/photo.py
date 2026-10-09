@@ -273,3 +273,52 @@ def delete_snapshot(sid: str, db: Session = Depends(get_db), cur: CurrentUser = 
     db.delete(wf.owned_snapshot(db, cur.workspace_id, sid))
     db.commit()
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- profiles and LUT tables (M10 / D2)
+
+@router.get("/profiles")
+def list_profiles(cur: CurrentUser = Depends(get_current_user)):
+    from app.photo import profiles
+
+    return profiles.listing()
+
+
+def _table_json(table) -> dict:
+    import base64
+
+    import numpy as np
+
+    n = int(table.shape[0])
+    data = np.clip(np.rint(table.reshape(-1, 3) * 255), 0, 255).astype(np.uint8).tobytes()
+    # red runs fastest, then green, then blue: a WebGL TEXTURE_3D (width = red) takes it as it is
+    return {"size": n, "data": base64.b64encode(data).decode("ascii")}
+
+
+@router.get("/luts/profile/{profile_id}")
+def profile_lut(profile_id: str, response: Response, cur: CurrentUser = Depends(get_current_user)):
+    from app.photo import profiles
+
+    if profile_id not in profiles.PROFILES:
+        raise HTTPException(404, "No such profile")
+    table = profiles.table(profile_id)
+    if table is None:
+        table = lt.identity(profiles.SIZE)
+    response.headers["Cache-Control"] = "private, max-age=86400"
+    return _table_json(table)
+
+
+@router.get("/luts/look/{look_id}")
+def look_lut(look_id: str, response: Response, db: Session = Depends(get_db),
+             cur: CurrentUser = Depends(get_current_user)):
+    look = svc.visible_look(db, cur.workspace_id, look_id)
+    if look is None:
+        raise HTTPException(404, "Look not found")
+    try:
+        table = svc.look_table(look)
+    except (svc.PhotoError, lt.CubeError) as e:
+        raise HTTPException(422, str(e)) from None
+    if table is None:
+        raise HTTPException(404, "This look has no .cube")
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return _table_json(table)

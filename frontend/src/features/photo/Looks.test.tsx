@@ -46,11 +46,11 @@ describe('Looks tab', { timeout: 15_000 }, () => {
     await user.click(within(grid).getByRole('button', { name: 'Apply look Look l1' }))
     expect(within(grid).getByRole('button', { name: 'Apply look Look l1' })).toHaveAttribute('aria-pressed', 'true')
     save()
-    await waitFor(() => expect(lastRender(calls)).toEqual({ params: { exposure: 20, contrast: 40, saturation: -20 }, format: 'jpeg' }))
+    await waitFor(() => expect(lastRender(calls)).toEqual({ params: { version: 2, exposure: 0.3, contrast: 40, saturation: -20 }, format: 'jpeg' }))
 
     fireEvent.change(screen.getByRole('slider', { name: 'Amount' }), { target: { value: '50' } })
     save()
-    await waitFor(() => expect(lastRender(calls)).toEqual({ params: { exposure: 20, contrast: 20, saturation: -10 }, format: 'jpeg' }))
+    await waitFor(() => expect(lastRender(calls)).toEqual({ params: { version: 2, exposure: 0.3, contrast: 20, saturation: -10 }, format: 'jpeg' }))
 
     await user.click(screen.getByRole('button', { name: 'Remove' }))
     save()
@@ -79,7 +79,7 @@ describe('Looks tab', { timeout: 15_000 }, () => {
     const dialog = await screen.findByRole('dialog', { name: 'Save as a look' })
     await user.type(within(dialog).getByLabelText('Name'), 'Warm dusk')
     await user.click(within(dialog).getByRole('button', { name: 'Save look' }))
-    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/looks')?.body).toEqual({ name: 'Warm dusk', params: { exposure: 20, contrast: 10 }, generation_id: 'g1' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/looks')?.body).toEqual({ name: 'Warm dusk', params: { version: 2, exposure: 0.3, contrast: 10 }, generation_id: 'g1' }))
     expect(await screen.findByRole('button', { name: 'Apply look Warm dusk' })).toBeInTheDocument()
   })
 

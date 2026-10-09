@@ -91,10 +91,15 @@ def _slider(stops: float) -> int:
     return int(round(stops / 1.5 * 100))
 
 
+def _ev(stops: float) -> float:
+    # params v2 exposure is in EV already
+    return round(stops, 2)
+
+
 def suggest(a: dict, rgb: np.ndarray) -> tuple[dict, list[str]]:
     """Smart Auto: NoorViz suggestDevelopParams + smartAuto, expressed as develop sliders. Conservative:
     it aims for a balanced exposure and neutral grey, not for a look."""
-    out: dict = {}
+    out: dict = {"version": 2}
     notes: list[str] = []
     faces = bool(a.get("face_count"))
 
@@ -105,7 +110,7 @@ def suggest(a: dict, rgb: np.ndarray) -> tuple[dict, list[str]]:
         stops *= 0.5  # brightening would clip more
     stops = max(-1.0, min(1.2, stops))
     if abs(_slider(stops)) >= 3:
-        out["exposure"] = _slider(stops)
+        out["exposure"] = _ev(stops)
         notes.append(f"{'Underexposed' if stops > 0 else 'Overexposed'}: {stops:+.1f} stops")
 
     # white balance: grey world on the mid-tones, half strength so sunsets stay sunsets

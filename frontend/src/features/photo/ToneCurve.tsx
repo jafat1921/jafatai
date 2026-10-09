@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import { toneCurve } from '@/lib/photo/maths'
+import { toneTables } from '@/lib/photo/maths'
 import type { DevelopParams } from '@/lib/photo/types'
 
 const ANCHORS = [
@@ -29,7 +29,8 @@ export function ToneCurve({ params, onChange }: { params: DevelopParams; onChang
   const x = (t: number) => PAD + t * (W - PAD * 2)
   const y = (v: number) => PAD + (1 - Math.max(0, Math.min(1, v))) * (H - PAD * 2)
 
-  const full = toneCurve(params, 1024)
+  // the line shows the region curve too; point curves have their own view
+  const full = toneTables({ ...params, points: undefined }, 1024).master ?? Float32Array.from({ length: 1024 }, (_, i) => i / 1023)
   const path = `M${Array.from({ length: 65 }, (_, i) => `${x(i / 64).toFixed(1)},${y(full[Math.round((i / 64) * 1023)]).toFixed(1)}`).join('L')}`
 
   const set = (k: AnchorKey, v: number, group = `curve:${k}`) => onChange(k, clamp(v), group)

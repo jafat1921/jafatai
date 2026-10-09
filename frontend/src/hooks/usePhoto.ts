@@ -12,6 +12,7 @@ export const photoKeys = {
 }
 
 export const usePhotoSchema = () => useQuery({ queryKey: photoKeys.schema, queryFn: api.photo.schema, staleTime: Infinity })
+export const usePhotoProfiles = () => useQuery({ queryKey: ['photo', 'profiles'], queryFn: api.photo.profiles, staleTime: Infinity })
 
 /**
  * Versions of the item. Refreshes while one of them is still rendering, so the filmstrip fills in

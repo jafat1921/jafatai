@@ -76,7 +76,7 @@ def test_schema_lists_every_param(client):
     r = client.get("/api/photo/schema")
     assert r.status_code == 200
     s = r.json()
-    assert s["defaults"] == dv.normalise({}) and s["version"] == 1
+    assert s["defaults"] == dv.normalise({}) and s["version"] == 2
     for k in dv.SLIDERS:
         assert k in s["ranges"]
     assert s["ranges"]["sharpness"]["min"] == 0 and s["ranges"]["sharpness"]["spatial"] is True
@@ -92,10 +92,11 @@ def test_schema_lists_every_param(client):
 def test_normalise_clamps_and_sparse_round_trips():
     p = dv.normalise({"exposure": 500, "sharpness": -5, "hsl": {"blue": {"s": -300}}, "bogus": 1,
                       "lightPoints": [{"x": 1, "y": 2, "exposure": 50}] * 30})
-    assert p["exposure"] == 100 and p["sharpness"] == 0 and p["hsl"]["blue"]["s"] == -100
+    # no version: a v1 record, whose exposure slider (+-100) was +-1.5 EV
+    assert p["exposure"] == 1.5 and p["sharpness"] == 0 and p["hsl"]["blue"]["s"] == -100
     assert "bogus" not in p and len(p["lightPoints"]) == dv.MAX_POINTS
     assert dv.normalise(dv.sparse(p)) == p
-    assert dv.sparse({}) == {} and dv.is_identity({"curve": {"mids": 0}})
+    assert dv.sparse({}) == {"version": 2} and dv.is_identity({"curve": {"mids": 0}})
 
 
 def test_api_rejects_out_of_range_params(client):
@@ -281,7 +282,7 @@ def test_histogram_analysis_palette(client):
 def test_auto_brightens_an_underexposed_photo(client):
     dark = upload(client, scene(dark=0.25), "dark.png")
     out = client.post(f"/api/photo/{dark['gen']}/auto").json()
-    assert out["params"]["exposure"] > 20 and out["analysis"]["is_underexposed"]
+    assert out["params"]["exposure"] > 0.3 and out["params"]["version"] == 2 and out["analysis"]["is_underexposed"]
     assert any("Underexposed" in n for n in out["notes"])
     bright = upload(client, np.clip(scene().astype(int) + 90, 0, 255).astype(np.uint8), "bright.png")
     assert client.post(f"/api/photo/{bright['gen']}/auto").json()["params"].get("exposure", 0) < 0
@@ -360,7 +361,7 @@ def test_history_and_revert_on_a_library_item(client):
     h = client.get(f"/api/photo/{ids['item']}/history").json()
     v2 = h["versions"][0]
     assert len(h["versions"]) == 2 and v2["current"] and v2["edit"] == "develop"
-    assert v2["develop"]["params"]["exposure"] == 20 and h["versions"][1]["edit"] is None
+    assert v2["develop"]["params"]["exposure"] == 0.3 and h["versions"][1]["edit"] is None
     # develop again from the developed version: base still points at the original
     client.post(f"/api/photo/{v2['generation']['id']}/render", json={"params": {"contrast": 10}})
     run_jobs()

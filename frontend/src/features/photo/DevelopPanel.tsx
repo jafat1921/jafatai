@@ -4,9 +4,13 @@ import { Section } from '@/components/studio/section'
 import { FALLBACK_GROUPS, FALLBACK_RANGES, changedKeys, getValue, rangeFor } from '@/lib/photo/params'
 import type { DevelopParams, HslBand, PhotoSchema, RangeSpec, SchemaGroup } from '@/lib/photo/types'
 import { SWITCHABLE, toggleGroup } from '@/lib/photo/workflow'
+import { ColourGrading } from './ColourGrading'
 import { ColourMixer } from './ColourMixer'
+import { BasicHeader, CalibrationPanel, EffectsPanel } from './DevelopTools'
 import { DevelopSlider } from './DevelopSlider'
-import { ToneCurve } from './ToneCurve'
+import { ToneCurvePanel } from './ToneCurvePanel'
+
+export type Picker = 'wb' | 'pointColor' | null
 
 const TRACKS: Record<string, string> = {
   temperature: 'linear-gradient(90deg, #4a78b8, #d8cdb6, #d39a3a)',
@@ -31,6 +35,10 @@ interface Props {
   onUpdate: (fn: (p: DevelopParams) => DevelopParams, group: string | null) => void
   // groups that need more than sliders (local light, crop) are drawn by the page
   custom: Partial<Record<string, ReactNode>>
+  // the eyedropper on the picture: white balance or a point colour
+  picker?: Picker
+  onPicker?: (p: Picker) => void
+  onAutoWb?: () => void
 }
 
 function groupChanges(g: SchemaGroup, changed: string[]) {
@@ -44,7 +52,7 @@ function resetGroup(p: DevelopParams, g: SchemaGroup): DevelopParams {
 }
 
 /** The edit panels in Lightroom's order, each with an on/off eye, a reset and a change count. */
-export function DevelopPanel({ schema, params, open, onOpen, onSet, onUpdate, custom }: Props) {
+export function DevelopPanel({ schema, params, open, onOpen, onSet, onUpdate, custom, picker = null, onPicker, onAutoWb }: Props) {
   const ranges: Record<string, RangeSpec> = schema?.ranges ?? {}
   const groups = schema?.groups ?? FALLBACK_GROUPS
   const spatial = new Set(schema?.spatial_keys ?? ['clarity', 'sharpness', 'noiseReduction', 'lightPoints'])
@@ -69,12 +77,21 @@ export function DevelopPanel({ schema, params, open, onOpen, onSet, onUpdate, cu
 
   const body = (g: SchemaGroup): ReactNode => {
     if (custom[g.id]) return custom[g.id]
-    if (g.id === 'hsl') return <ColourMixer params={params} ranges={ranges} labels={labels} onChange={onSet} />
-    if (g.id === 'curve') {
+    const toggle = (p: Exclude<Picker, null>) => onPicker?.(picker === p ? null : p)
+    if (g.id === 'hsl') {
+      return (
+        <ColourMixer params={params} ranges={ranges} labels={labels} onChange={onSet} onUpdate={onUpdate} picking={picker === 'pointColor'} onPick={onPicker && (() => toggle('pointColor'))} />
+      )
+    }
+    if (g.id === 'curve') return <ToneCurvePanel params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} />
+    if (g.id === 'grading') return <ColourGrading params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} />
+    if (g.id === 'effects') return <EffectsPanel params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} />
+    if (g.id === 'calibration') return <CalibrationPanel params={params} ranges={ranges} onSet={onSet} />
+    if (g.id === 'basic') {
       return (
         <div className="flex flex-col gap-2.5">
-          <ToneCurve params={params} onChange={(k, v, grp) => onSet(`curve.${k}`, v, grp)} />
-          {g.keys.map(slider)}
+          <BasicHeader params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} picking={picker === 'wb'} onPick={() => toggle('wb')} onAutoWb={() => onAutoWb?.()} />
+          {g.keys.filter((k) => k in ranges || k in FALLBACK_RANGES).map(slider)}
         </div>
       )
     }

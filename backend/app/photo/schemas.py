@@ -71,9 +71,84 @@ class LutRef(_Loose):
     amount: float = Field(100, ge=0, le=100)
 
 
+class ProfileRef(_Loose):
+    id: str = Field(min_length=1, max_length=60)
+    amount: float = Field(100, ge=0, le=200)
+
+
+class PCurve(_Loose):
+    highlights: float = _s()
+    lights: float = _s()
+    darks: float = _s()
+    shadows: float = _s()
+    s1: float = Field(25, ge=5, le=95)
+    s2: float = Field(50, ge=5, le=95)
+    s3: float = Field(75, ge=5, le=95)
+
+
+CurvePts = list[tuple[float, float]]
+
+
+class CurvePoints(_Loose):
+    rgb: CurvePts = Field(default_factory=list, max_length=16)
+    red: CurvePts = Field(default_factory=list, max_length=16)
+    green: CurvePts = Field(default_factory=list, max_length=16)
+    blue: CurvePts = Field(default_factory=list, max_length=16)
+
+
+class PointColorEntry(_Loose):
+    hue: float = Field(0, ge=0, le=360)
+    sat: float = Field(0, ge=0, le=1)
+    val: float = Field(0, ge=0, le=1)
+    dh: float = _s()
+    ds: float = _s()
+    dl: float = _s()
+    hueRange: float = Field(50, ge=0, le=100)  # noqa: N815
+    satRange: float = Field(50, ge=0, le=100)  # noqa: N815
+    lumRange: float = Field(50, ge=0, le=100)  # noqa: N815
+
+
+class GradeZone(_Loose):
+    h: float = Field(0, ge=0, le=360)
+    s: float = Field(0, ge=0, le=100)
+    l: float = _s()  # noqa: E741
+
+
+class Grading(_Loose):
+    shadows: GradeZone = GradeZone()
+    midtones: GradeZone = GradeZone()
+    highlights: GradeZone = GradeZone()
+    global_: GradeZone = Field(GradeZone(), alias="global")
+    blending: float = Field(50, ge=0, le=100)
+    balance: float = _s()
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+
+class Calibration(_Loose):
+    shadowsTint: float = _s()  # noqa: N815
+    redHue: float = _s()  # noqa: N815
+    redSat: float = _s()  # noqa: N815
+    greenHue: float = _s()  # noqa: N815
+    greenSat: float = _s()  # noqa: N815
+    blueHue: float = _s()  # noqa: N815
+    blueSat: float = _s()  # noqa: N815
+
+
+class BwMix(_Loose):
+    red: float = _s()
+    orange: float = _s()
+    yellow: float = _s()
+    green: float = _s()
+    aqua: float = _s()
+    blue: float = _s()
+    purple: float = _s()
+    magenta: float = _s()
+
+
 class DevelopParams(_Loose):
     version: int = 1
-    exposure: float = _s()
+    exposure: float = Field(0, ge=-100, le=100)  # v2: EV -5..5; v1 records: -100..100
     contrast: float = _s()
     highlights: float = _s()
     shadows: float = _s()
@@ -97,9 +172,27 @@ class DevelopParams(_Loose):
     palette: list[PaletteEntry] = Field(default_factory=list, max_length=16)
     lut: LutRef | None = None
     off: list[str] = Field(default_factory=list, max_length=12)
+    # params v2 (M10 / D2)
+    profile: ProfileRef | None = None
+    treatment: Literal["color", "bw"] = "color"
+    bw: BwMix = BwMix()
+    pcurve: PCurve = PCurve()
+    points: CurvePoints = CurvePoints()
+    refineSat: float = Field(100, ge=0, le=100)  # noqa: N815
+    pointColor: list[PointColorEntry] = Field(default_factory=list, max_length=8)  # noqa: N815
+    grading: Grading = Grading()
+    calibration: Calibration = Calibration()
+    vignetteMidpoint: float = Field(50, ge=0, le=100)  # noqa: N815
+    vignetteRoundness: float = _s()  # noqa: N815
+    vignetteFeather: float = Field(50, ge=0, le=100)  # noqa: N815
+    vignetteHighlights: float = Field(0, ge=0, le=100)  # noqa: N815
+    vignetteStyle: Literal["highlight", "color", "paint"] = "highlight"  # noqa: N815
+    grainAmount: float = Field(0, ge=0, le=100)  # noqa: N815
+    grainSize: float = Field(25, ge=0, le=100)  # noqa: N815
+    grainRoughness: float = Field(50, ge=0, le=100)  # noqa: N815
 
     def plain(self) -> dict:
-        return self.model_dump(exclude_none=False)
+        return self.model_dump(exclude_none=False, by_alias=True)
 
 
 Format = Literal["jpeg", "png", "png16", "tiff16"]

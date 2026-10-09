@@ -16,7 +16,7 @@ interface Props {
 }
 
 const fmt = (v: number, step: number) => {
-  const r = step < 1 ? v.toFixed(1) : String(Math.round(v))
+  const r = step < 0.1 ? v.toFixed(2) : step < 1 ? v.toFixed(1) : String(Math.round(v))
   return v > 0 ? `+${r}` : r
 }
 
@@ -32,7 +32,8 @@ export function DevelopSlider({ name, label, value, range, onChange, spatial, tr
   const draft = typed && typed.over === value ? typed.text : null
   const setDraft = (text: string | null) => setTyped(text == null ? null : { text, over: value })
   const { min, max, step } = range
-  const clamp = (v: number) => Math.min(max, Math.max(min, Math.round(v / step) * step))
+  // rounded through the step's own decimals, so 0.1 + 0.2 lands on 0.3 rather than 0.30000000000000004
+  const clamp = (v: number) => Math.min(max, Math.max(min, Number((Math.round(v / step) * step).toFixed(step < 1 ? 2 : 0))))
   const set = (v: number) => onChange(clamp(v), `slider:${name}`)
   const changed = Math.abs(value - range.default) > step / 2
 

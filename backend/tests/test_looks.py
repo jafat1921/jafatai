@@ -91,12 +91,12 @@ def test_builtins_and_crud(client):
                                         "category": "Mine", "generation_id": ids["item"]})
     assert r.status_code == 201, r.text
     mine = r.json()
-    assert mine["params"] == {"contrast": 30.0, "hsl": {"red": {"s": 10.0}}} and mine["editable"]
+    assert mine["params"] == {"version": 2, "contrast": 30.0, "hsl": {"red": {"s": 10.0}}} and mine["editable"]
     with SessionLocal() as db:
         assert db.get(Look, mine["id"]).thumb_path
     assert client.get(f"/api/looks/{mine['id']}/thumb", params={"generation_id": ids["gen"]}).status_code == 200
     r = client.patch(f"/api/looks/{mine['id']}", json={"name": "Punchier", "params": {"contrast": 45}})
-    assert r.json()["name"] == "Punchier" and r.json()["params"] == {"contrast": 45.0}
+    assert r.json()["name"] == "Punchier" and r.json()["params"] == {"version": 2, "contrast": 45.0}
     assert client.get("/api/looks").json()[7]["id"] == mine["id"]
     assert client.delete(f"/api/looks/{mine['id']}").status_code == 204
     assert client.get(f"/api/looks/{mine['id']}").status_code == 404
@@ -117,24 +117,27 @@ def test_xmp_mapping():
     out = xmp.parse("Harbour.xmp", XMP.encode())
     p = out["params"]
     assert out["name"] == "Harbour Dusk" and out["kind"] == "xmp"
-    assert p["exposure"] == 50  # 0.75 stops on a 1.5-stop slider
+    assert p["exposure"] == 0.75  # EV, like Lightroom
     assert (p["contrast"], p["highlights"], p["shadows"], p["whites"], p["blacks"]) == (20, -40, 35, 10, -15)
     assert (p["vibrance"], p["saturation"], p["temperature"], p["tint"]) == (12, -5, 8, -3)
     assert (p["clarity"], p["sharpness"], p["noiseReduction"], p["vignette"]) == (15, 40, 20, -25)
-    assert p["curve"]["shadows"] == 3 and p["curve"]["highlights"] == -6 and p["curve"]["mids"] == pytest.approx(-0.3)
+    # params v2: the parametric curve and the point curve come across one to one
+    assert p["pcurve"]["shadows"] == 10 and p["pcurve"]["darks"] == -6 and p["pcurve"]["lights"] == 4 and p["pcurve"]["highlights"] == -20
+    assert p["points"]["rgb"] == [[0, 0], [128, 140], [255, 255]]
+    assert p["grainAmount"] > 0 and p["grading"]["shadows"]["s"] > 0
     assert p["hsl"]["blue"] == {"h": -10, "s": 25, "l": 0} and p["hsl"]["orange"]["l"] == 8
     assert "Exposure2012" in out["mapped"] and "HueAdjustmentBlue" in out["mapped"]
-    assert set(out["unmapped"]) == {"SplitToningShadowHue", "SplitToningShadowSaturation", "Texture", "GrainAmount",
-                                    "ToneCurvePV2012"}  # Dehaze=0 isn't a change, metadata never listed
+    assert set(out["unmapped"]) == {"Texture"}  # Texture comes in D2b; Dehaze=0 isn't a change, metadata never listed
 
 
 def test_lrtemplate_mapping():
     out = xmp.parse("quiet.lrtemplate", LRTEMPLATE.encode())
     p = out["params"]
     assert out["name"] == "Quiet Morning" and out["kind"] == "lrtemplate"
-    assert p["exposure"] == -20 and p["contrast"] == -10 and p["saturation"] == -100
+    assert p["exposure"] == -0.3 and p["contrast"] == -10 and p["treatment"] == "bw"
     assert p["hsl"]["green"] == {"h": 12, "s": -30, "l": 0} and p["vignette"] == -12
-    assert set(out["unmapped"]) == {"SplitToningHighlightHue", "ToneCurvePV2012"}
+    # a split-toning hue with no saturation does nothing, so it stays unmapped
+    assert set(out["unmapped"]) == {"SplitToningHighlightHue"} and p["points"]["rgb"]
 
 
 def test_preset_errors():
@@ -160,7 +163,7 @@ def test_import_endpoint_reports_per_file(client):
     assert not reps["notes.txt"]["ok"] and "Only .xmp" in reps["notes.txt"]["error"]
     assert not reps["broken.cube"]["ok"] and "Expected 27" in reps["broken.cube"]["error"]
     plain = next(x for x in body["looks"] if x["has_cube"])
-    assert plain["source"] == "imported" and plain["params"] == {}
+    assert plain["source"] == "imported" and plain["params"] == {"version": 2}
     r = _import(client, ("lut1d.cube", b"LUT_1D_SIZE 2\n0 0 0\n1 1 1\n", "text/plain"))
     assert r.status_code == 422 and "1D" in str(r.json())
 

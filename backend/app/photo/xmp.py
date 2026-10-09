@@ -87,7 +87,8 @@ def _clamp(v, lo=-100.0, hi=100.0) -> float:
 
 def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
     """Lightroom key map -> (params, mapped keys, unmapped keys with a non-default value)."""
-    p: dict = {}
+    # params v2: exposure in EV, like Lightroom itself
+    p: dict = {"version": 2}
     used: set[str] = set()
 
     def num(key):
@@ -102,8 +103,7 @@ def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
         used.add(key)
         return True
 
-    take("Exposure2012", "exposure", lambda v: _clamp(v / 1.5 * 100)) or \
-        take("Exposure", "exposure", lambda v: _clamp(v / 1.5 * 100))
+    take("Exposure2012", "exposure", lambda v: _clamp(v, -5, 5)) or take("Exposure", "exposure", lambda v: _clamp(v, -5, 5))
     take("Contrast2012", "contrast") or take("Contrast", "contrast", lambda v: _clamp(v - 25))
     for lr, ours in (("Highlights2012", "highlights"), ("Shadows2012", "shadows"), ("Whites2012", "whites"),
                      ("Blacks2012", "blacks"), ("Vibrance", "vibrance"), ("Saturation", "saturation")):
@@ -112,6 +112,27 @@ def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
     take("Sharpness", "sharpness", lambda v: _clamp(v, 0, 100))
     take("LuminanceSmoothing", "noiseReduction", lambda v: _clamp(v, 0, 100))
     take("PostCropVignetteAmount", "vignette")
+    take("PostCropVignetteMidpoint", "vignetteMidpoint", lambda v: _clamp(v, 0, 100))
+    take("PostCropVignetteRoundness", "vignetteRoundness")
+    take("PostCropVignetteFeather", "vignetteFeather", lambda v: _clamp(v, 0, 100))
+    take("PostCropVignetteHighlightContrast", "vignetteHighlights", lambda v: _clamp(v, 0, 100))
+    style = num("PostCropVignetteStyle")
+    if style is not None:
+        p["vignetteStyle"] = {1: "highlight", 2: "color", 3: "paint"}.get(int(style), "highlight")
+        used.add("PostCropVignetteStyle")
+    take("GrainAmount", "grainAmount", lambda v: _clamp(v, 0, 100))
+    take("GrainSize", "grainSize", lambda v: _clamp(v, 0, 100))
+    take("GrainFrequency", "grainRoughness", lambda v: _clamp(v, 0, 100))
+    calib = {}
+    for lr, ours in (("ShadowTint", "shadowsTint"), ("RedHue", "redHue"), ("RedSaturation", "redSat"),
+                     ("GreenHue", "greenHue"), ("GreenSaturation", "greenSat"), ("BlueHue", "blueHue"),
+                     ("BlueSaturation", "blueSat")):
+        v = num(lr)
+        if v is not None:
+            calib[ours] = _clamp(v)
+            used.add(lr)
+    if calib:
+        p["calibration"] = calib
 
     # white balance: incremental (JPEG presets) is already relative; an absolute Kelvin only counts when the
     # preset sets a custom white balance, otherwise it is just the camera's value saved along
@@ -125,25 +146,70 @@ def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
             take("Tint", "tint")
 
     if m.get("ConvertToGrayscale") is True:
-        p["saturation"] = -100.0
+        p["treatment"] = "bw"
         used.add("ConvertToGrayscale")
+        bw = {}
+        for band in HSL:
+            v = num(f"GrayMixer{band}")
+            if v is not None:
+                bw[band.lower()] = _clamp(v)
+                used.add(f"GrayMixer{band}")
+        if bw:
+            p["bw"] = bw
 
-    # parametric curve: LR splits 0..1 into shadows/darks/lights/highlights quarters; our anchors sit at
-    # .25/.5/.75, and LR's slider moves the curve about a third as far as ours (approximate)
-    curve = {}
-    sh, dk, li, hi = (num(k) for k in ("ParametricShadows", "ParametricDarks", "ParametricLights",
-                                        "ParametricHighlights"))
-    if sh is not None:
-        curve["shadows"] = _clamp(sh * 0.3)
-    if dk is not None or li is not None:
-        curve["mids"] = _clamp(((dk or 0) + (li or 0)) * 0.15)
-    if hi is not None:
-        curve["highlights"] = _clamp(hi * 0.3)
-    for k in ("ParametricShadows", "ParametricDarks", "ParametricLights", "ParametricHighlights"):
-        if num(k) is not None:
-            used.add(k)
-    if curve:
-        p["curve"] = curve
+    # Color Grading (2020+), or the older Split Toning it replaced
+    grading: dict = {}
+    for zone, lr in (("shadows", "Shadow"), ("midtones", "Midtone"), ("highlights", "Highlight"), ("global", "Global")):
+        h, sat, lum = num(f"ColorGrade{lr}Hue"), num(f"ColorGrade{lr}Sat"), num(f"ColorGrade{lr}Lum")
+        if any(v is not None for v in (h, sat, lum)):
+            grading[zone] = {"h": _clamp(h or 0, 0, 360), "s": _clamp(sat or 0, 0, 100), "l": _clamp(lum or 0)}
+            used.update(k for k in (f"ColorGrade{lr}Hue", f"ColorGrade{lr}Sat", f"ColorGrade{lr}Lum") if num(k) is not None)
+    if not grading:
+        for zone, lr in (("shadows", "Shadow"), ("highlights", "Highlight")):
+            h, sat = num(f"SplitToning{lr}Hue"), num(f"SplitToning{lr}Saturation")
+            if sat:
+                grading[zone] = {"h": _clamp(h or 0, 0, 360), "s": _clamp(sat, 0, 100), "l": 0}
+                used.update((f"SplitToning{lr}Hue", f"SplitToning{lr}Saturation"))
+    for lr, ours, lo in (("ColorGradeBlending", "blending", 0), ("SplitToningBalance", "balance", -100)):
+        v = num(lr)
+        if v is not None and grading:
+            grading[ours] = _clamp(v, lo, 100)
+            used.add(lr)
+    if grading:
+        p["grading"] = grading
+
+    # parametric curve and its split points map one to one since params v2
+    pcurve = {}
+    for lr, ours in (("ParametricShadows", "shadows"), ("ParametricDarks", "darks"), ("ParametricLights", "lights"),
+                     ("ParametricHighlights", "highlights")):
+        v = num(lr)
+        if v is not None:
+            pcurve[ours] = _clamp(v)
+            used.add(lr)
+    for lr, ours in (("ParametricShadowSplit", "s1"), ("ParametricMidtoneSplit", "s2"), ("ParametricHighlightSplit", "s3")):
+        v = num(lr)
+        if v is not None:
+            pcurve[ours] = _clamp(v, 5, 95)
+            used.add(lr)
+    if pcurve:
+        p["pcurve"] = pcurve
+    points = {}
+    for lr, ours in (("ToneCurvePV2012", "rgb"), ("ToneCurvePV2012Red", "red"), ("ToneCurvePV2012Green", "green"),
+                     ("ToneCurvePV2012Blue", "blue")):
+        raw = m.get(lr)
+        if isinstance(raw, (list, tuple)):
+            pts = []
+            for item in raw:
+                try:
+                    x, y = (float(t) for t in str(item).split(","))
+                    pts.append([_clamp(x, 0, 255), _clamp(y, 0, 255)])
+                except ValueError:
+                    continue
+            if pts:
+                points[ours] = pts
+                used.add(lr)
+    if points:
+        p["points"] = points
 
     hsl = {}
     for band in HSL:
@@ -163,7 +229,7 @@ def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
     for k, v in m.items():
         if k in used or k in META or k.startswith("Parametric") and k.endswith("Split"):
             continue
-        if v in (0, 0.0, False, "", None) or (isinstance(v, str) and k not in ("ToneCurvePV2012",)):
+        if v in (0, 0.0, False, "", None) or isinstance(v, (str, list)):
             continue
         unmapped.append(k)
     return p, sorted(used), sorted(unmapped)
@@ -181,17 +247,21 @@ def parse(filename: str, data: bytes) -> dict:
         raise PresetError("Not an .xmp or .lrtemplate file")
     if not m:
         raise PresetError("No Lightroom develop settings found in this file")
-    params, mapped, unmapped = to_params(m)
-    if not mapped:
-        raise PresetError("None of this preset's settings can be applied here"
-                          + (f" ({', '.join(unmapped[:6])})" if unmapped else ""))
-    # point curves are nested (rdf:Seq / Lua table), invisible to the key regex; flag one that isn't straight
+    # point curves are nested (rdf:Seq / Lua table), invisible to the key regex: pick them up here
     if ext == ".xmp":
         for key, seq in re.findall(r"<crs:(ToneCurvePV2012\w*)>(.*?)</crs:\1>", text, re.S):
             pts = [s.replace(" ", "") for s in re.findall(r"<rdf:li>([^<]*)</rdf:li>", seq)]
             if any(pt not in ("0,0", "255,255") for pt in pts):
-                unmapped.append(key)
-    elif re.search(r"ToneCurvePV2012\w*\s*=\s*\{", text):
-        unmapped.append("ToneCurvePV2012")
+                m[key] = pts
+    else:
+        for key, body in re.findall(r"(ToneCurvePV2012\w*)\s*=\s*\{([^}]*)\}", text):
+            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", body)]
+            pts = [f"{nums[i]:g},{nums[i + 1]:g}" for i in range(0, len(nums) - 1, 2)]
+            if any(pt not in ("0,0", "255,255") for pt in pts):
+                m[key] = pts
+    params, mapped, unmapped = to_params(m)
+    if not mapped:
+        raise PresetError("None of this preset's settings can be applied here"
+                          + (f" ({', '.join(unmapped[:6])})" if unmapped else ""))
     return {"name": (name or Path(filename).stem)[:200], "kind": ext[1:], "params": dv.normalise(params),
             "mapped": mapped, "unmapped": sorted(set(unmapped))}

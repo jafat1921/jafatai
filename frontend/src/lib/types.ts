@@ -921,6 +921,8 @@ export interface AudioGenerateRequest {
   seed?: number
   steps?: number
   timbre_ref_id?: string
+  // Urdu songs: the server adds zer / zabar / pesh to unmarked lines before singing
+  aerab?: boolean
   title?: string
 }
 
@@ -930,11 +932,21 @@ export interface LyricsRequest {
   mood?: string
   style?: string
   sections?: string[]
+  aerab?: boolean
 }
 
 export interface LyricsResponse {
   lyrics: string
   tags?: string | string[] | null
+  marked?: number
+  kept?: number
+}
+
+export interface AerabResponse {
+  lyrics: string
+  marked: number
+  // lines left as written: the marking pass changed their letters
+  kept: number
 }
 
 // quality and smooth motion come from project.settings; the server drops them for long takes

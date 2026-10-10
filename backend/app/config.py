@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     photo_allow_noncommercial: bool = False
     # MiniMax-Music3 has its own community licence (revenue cap), so it stays hidden until the owner opts in
     audio_allow_noncommercial: bool = False
+    # Urdu sung lyrics and spoken lines in video prompts get aerab (zer, zabar, pesh) before rendering
+    urdu_aerab: bool = True
 
     @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
     @classmethod

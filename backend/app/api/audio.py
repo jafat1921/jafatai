@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import aerab
 from app import library as lib
 from app import models_catalog as mc
 from app.config import get_settings
 from app.db import get_db
 from app.llm import LLMError, chat
 from app.models import Generation, Job, MediaItem, new_id
-from app.schemas import AudioGenerateIn, ImageBatchOut, LyricsIn, LyricsOut
+from app.schemas import AerabIn, AerabOut, AudioGenerateIn, ImageBatchOut, LyricsIn, LyricsOut
 from app.security import CurrentUser, require_editor
 from app.services import enqueue_generation, job_out, owned_source
 
@@ -57,7 +58,7 @@ def generate_audio(body: AudioGenerateIn, db: Session = Depends(get_db), cur: Cu
               "created_by": {"user_id": cur.id, "flow": "audio_generate"}, **chosen}
     if body.kind == "song":
         # lyrics, language and voice only mean something to the song models
-        params.update(lyrics=body.lyrics.strip(), language=body.language, vocal=body.vocal or "none")
+        params.update(lyrics=body.lyrics.strip(), language=body.language, vocal=body.vocal or "none", aerab=body.aerab)
     for key in ("bpm", "category", "steps"):
         if getattr(body, key) is not None:
             params[key] = getattr(body, key)
@@ -132,4 +133,24 @@ async def write_lyrics(body: LyricsIn, cur: CurrentUser = Depends(require_editor
     lyrics = _tidy(res.data.lyrics)
     if not lyrics:
         raise HTTPException(502, "The lyrics writer came back empty; try again")
-    return LyricsOut(lyrics=lyrics, tags=" ".join(res.data.tags.split())[:300])
+    tags = " ".join(res.data.tags.split())[:300]
+    marked = kept = 0
+    # a second, narrow pass: writing and marking in one go gives worse lyrics and patchier aerab
+    if body.aerab and body.language.lower() == "ur":
+        try:
+            lyrics, marked, kept = await aerab.mark(lyrics)
+        except LLMError as e:
+            log.warning("aerab pass failed, returning plain lyrics: %s", e)
+    return LyricsOut(lyrics=lyrics, tags=tags, marked=marked, kept=kept)
+
+
+@router.post("/lyrics/aerab", response_model=AerabOut)
+async def add_aerab(body: AerabIn, cur: CurrentUser = Depends(require_editor)):
+    if not aerab.lines_to_mark(body.lyrics):
+        raise HTTPException(422, "There are no Urdu lines to mark")
+    try:
+        lyrics, marked, kept = await aerab.mark(body.lyrics)
+    except LLMError as e:
+        log.warning("aerab unavailable: %s", e)
+        raise HTTPException(503, OFFLINE) from None
+    return AerabOut(lyrics=lyrics, marked=marked, kept=kept)

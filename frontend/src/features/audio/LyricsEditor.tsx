@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react'
-import { Music2, Sparkles } from 'lucide-react'
+import { Music2, Sparkles, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
@@ -7,9 +7,9 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { SwitchRow } from '@/components/studio/switch-row'
-import { useWriteLyrics } from '@/hooks/useModels'
+import { useAddAerab, useWriteLyrics } from '@/hooks/useModels'
 import { ApiError } from '@/lib/api'
-import { insertSection, LYRIC_SECTIONS, LYRICS_LANGUAGES, LYRICS_MAX, type LyricSection } from '@/lib/audio'
+import { aerabNote, hasUrdu, insertSection, LYRIC_SECTIONS, LYRICS_LANGUAGES, LYRICS_MAX, type LyricSection } from '@/lib/audio'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 
@@ -20,6 +20,9 @@ interface Props {
   onInstrumental: (on: boolean) => void
   // the writer's language, so the song can be sung in it
   onLanguage?: (lyricsLanguage: string) => void
+  // Urdu: add aerab to unmarked lines before singing (server side)
+  aerab?: boolean
+  onAerab?: (on: boolean) => void
 }
 
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body'
@@ -30,10 +33,27 @@ function writerError(e: unknown) {
 }
 
 /** Lyrics with section buttons, a character count, an Instrumental switch and the ✨ writer. */
-export function LyricsEditor({ lyrics, onLyrics, instrumental, onInstrumental, onLanguage }: Props) {
+export function LyricsEditor({ lyrics, onLyrics, instrumental, onInstrumental, onLanguage, aerab = true, onAerab }: Props) {
   const uid = useId()
   const field = useRef<HTMLTextAreaElement>(null)
   const [pending, setPending] = useState<string | null>(null)
+  // the lyrics before "Add aerab", for one-step undo
+  const [before, setBefore] = useState<string | null>(null)
+  const marking = useAddAerab()
+  const urdu = !instrumental && hasUrdu(lyrics)
+
+  const addAerab = () => {
+    marking.mutate(lyrics, {
+      onSuccess: (res) => {
+        if (res.lyrics !== lyrics) {
+          setBefore(lyrics)
+          onLyrics(res.lyrics.slice(0, LYRICS_MAX))
+        }
+        announce(aerabNote(res.marked, res.kept))
+      },
+      onError: (e) => announce(writerError(e)),
+    })
+  }
 
   const add = (s: LyricSection) => {
     const el = field.current
@@ -47,9 +67,10 @@ export function LyricsEditor({ lyrics, onLyrics, instrumental, onInstrumental, o
     })
   }
 
-  const take = (text: string) => {
+  const take = (text: string, note?: string) => {
+    setBefore(null)
     onLyrics(text.slice(0, LYRICS_MAX))
-    announce('Lyrics written into the editor.')
+    announce(note ? `Lyrics written into the editor. ${note}` : 'Lyrics written into the editor.')
   }
 
   const near = lyrics.length > LYRICS_MAX * 0.9
@@ -68,13 +89,41 @@ export function LyricsEditor({ lyrics, onLyrics, instrumental, onInstrumental, o
             </Button>
           ))}
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          {urdu && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              loading={marking.isPending}
+              onClick={addAerab}
+              title="Add zer, zabar, pesh, jazm and tashdeed so the singer pronounces every word. Your words are never changed."
+            >
+              <span aria-hidden lang="ur" className="font-[system-ui] text-[15px] leading-none">اَ</span>
+              Add aerab
+            </Button>
+          )}
+          {before !== null && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                onLyrics(before)
+                setBefore(null)
+                announce('Aerab removed: the lyrics are back as you wrote them.')
+              }}
+            >
+              <Undo2 aria-hidden />
+              Undo aerab
+            </Button>
+          )}
           <WriteLyrics
             disabled={instrumental}
-            onWritten={(text, lang) => {
+            onWritten={(text, lang, note) => {
               onLanguage?.(lang)
               if (lyrics.trim()) setPending(text)
-              else take(text)
+              else take(text, note)
             }}
           />
         </div>
@@ -87,7 +136,10 @@ export function LyricsEditor({ lyrics, onLyrics, instrumental, onInstrumental, o
         value={instrumental ? '' : lyrics}
         disabled={instrumental}
         maxLength={LYRICS_MAX}
-        onChange={(e) => onLyrics(e.target.value)}
+        onChange={(e) => {
+          setBefore(null)
+          onLyrics(e.target.value)
+        }}
         placeholder={instrumental ? 'Instrumental: no lyrics are sent.' : '[verse]\nFirst lines here…\n\n[chorus]\nThe line everyone sings back'}
         aria-describedby={`${uid}-count`}
         className="min-h-24 resize-y font-mono text-[13px] leading-5"
@@ -101,6 +153,16 @@ export function LyricsEditor({ lyrics, onLyrics, instrumental, onInstrumental, o
           hint="No vocals. Your lyrics stay here for later but aren't sent."
           className="max-w-sm py-1.5"
         />
+        {urdu && onAerab && (
+          <SwitchRow
+            id={`${uid}-aerab`}
+            checked={aerab}
+            onChange={onAerab}
+            title="Aerab before singing"
+            hint="Lines without zer, zabar and pesh get them just before the song is made, so vowels aren't guessed."
+            className="max-w-sm py-1.5"
+          />
+        )}
         <p id={`${uid}-count`} className={cn('font-mono text-small', near ? 'text-studio-warning' : 'text-studio-muted')}>
           {lyrics.length.toLocaleString('en')} / {LYRICS_MAX.toLocaleString('en')}
           {' '}<span className="sr-only">characters</span>
@@ -121,23 +183,25 @@ export function LyricsEditor({ lyrics, onLyrics, instrumental, onInstrumental, o
   )
 }
 
-function WriteLyrics({ disabled, onWritten }: { disabled?: boolean; onWritten: (lyrics: string, language: string) => void }) {
+function WriteLyrics({ disabled, onWritten }: { disabled?: boolean; onWritten: (lyrics: string, language: string, note?: string) => void }) {
   const uid = useId()
   const [open, setOpen] = useState(false)
   const [topic, setTopic] = useState('')
   const [language, setLanguage] = useState('en')
   const [mood, setMood] = useState('')
+  const [withAerab, setWithAerab] = useState(true)
   const write = useWriteLyrics()
   const ready = topic.trim().length > 0
 
   const go = () => {
     if (!ready || write.isPending) return
     write.mutate(
-      { topic: topic.trim().slice(0, 500), language, ...(mood.trim() ? { mood: mood.trim() } : {}) },
+      { topic: topic.trim().slice(0, 500), language, ...(mood.trim() ? { mood: mood.trim() } : {}), ...(language === 'ur' ? { aerab: withAerab } : {}) },
       {
         onSuccess: (res) => {
           setOpen(false)
-          onWritten(res.lyrics ?? '', language)
+          const note = language === 'ur' && withAerab ? aerabNote(res.marked ?? 0, res.kept ?? 0) : undefined
+          onWritten(res.lyrics ?? '', language, note)
         },
       },
     )
@@ -198,6 +262,15 @@ function WriteLyrics({ disabled, onWritten }: { disabled?: boolean; onWritten: (
             <Input id={`${uid}-mood`} value={mood} onChange={(e) => setMood(e.target.value)} placeholder="Hopeful" />
           </div>
         </div>
+        {language === 'ur' && (
+          <label className="flex items-start gap-2 text-small">
+            <input type="checkbox" checked={withAerab} onChange={(e) => setWithAerab(e.target.checked)} className="mt-0.5" />
+            <span>
+              With aerab <span lang="ur">(زَبَر، زیر، پیش)</span>
+              <span className="block text-studio-muted">Clearer pronunciation when it's sung. Takes a few seconds longer.</span>
+            </span>
+          </label>
+        )}
         {write.error && (
           <p role="alert" className="text-small text-studio-danger">
             {writerError(write.error)}

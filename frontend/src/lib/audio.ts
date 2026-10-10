@@ -129,6 +129,7 @@ export interface AudioForm {
   vocal: AudioVocal | null
   language: string
   timbreId: string | null
+  aerab: boolean
   // music only
   category: AudioCategory | null
 }
@@ -143,6 +144,7 @@ const BASE: Omit<AudioForm, 'kind' | 'durationS'> = {
   vocal: null,
   language: 'en',
   timbreId: null,
+  aerab: true,
   category: null,
 }
 
@@ -173,6 +175,17 @@ export function audioBlockedReason(f: AudioForm, m: ModelInfo | undefined): stri
   return null
 }
 
+const ARABIC_SCRIPT = /[؀-ۿ]/
+
+export const hasUrdu = (text: string) => ARABIC_SCRIPT.test(text)
+
+/** "Aerab added to 12 lines" plus the lines the check left alone, for the live region. */
+export function aerabNote(marked: number, kept: number) {
+  const lines = (n: number) => `${n} line${n === 1 ? '' : 's'}`
+  const head = marked ? `Aerab added to ${lines(marked)}.` : 'No lines needed aerab.'
+  return kept ? `${head} ${lines(kept)} kept as written: the marking changed their words, so they were left alone.` : head
+}
+
 export function audioPayload(f: AudioForm, m: ModelInfo): AudioGenerateRequest {
   const body: AudioGenerateRequest = {
     kind: f.kind,
@@ -188,6 +201,7 @@ export function audioPayload(f: AudioForm, m: ModelInfo): AudioGenerateRequest {
     const lyrics = f.lyrics.trim()
     if (lyrics && !instrumental(f)) body.lyrics = lyrics.slice(0, LYRICS_MAX)
     if (f.timbreId && has(m, 'timbre_ref')) body.timbre_ref_id = f.timbreId
+    if (body.language === 'ur') body.aerab = f.aerab
   }
   if (f.kind === 'music' && f.category) body.category = f.category
   const bpm = int(f.bpm)
@@ -248,6 +262,7 @@ export function audioFormFrom(kind: AudioKind, p: Record<string, unknown>): Audi
     count: Math.min(MAX_TAKES, Math.max(1, Math.round(num(p.count) ?? 1))),
     vocal: vocal ?? null,
     language: str(p.language) ?? d.language,
+    aerab: p.aerab !== false,
     category: category ?? null,
     bpm: bpm ? String(Math.round(bpm)) : '',
     ...(str(p.model) && p.model !== AUTO_ID ? { model: str(p.model) } : {}),

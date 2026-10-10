@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LibraryPage } from '@/features/library/LibraryPage'
@@ -51,7 +51,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function api(opts: { items?: MediaItem[]; lyrics?: () => unknown } = {}) {
+function api(opts: { items?: MediaItem[]; lyrics?: () => unknown; aerab?: (lyrics: string) => unknown } = {}) {
   return mockApi((method, path, query, body) => {
     if (path === '/media') return { items: query.kind === 'audio' ? (opts.items ?? []) : [] }
     const one = path.match(/^\/media\/(\w+)$/)
@@ -61,6 +61,7 @@ function api(opts: { items?: MediaItem[]; lyrics?: () => unknown } = {}) {
       return { items: [track('n1', { title: 'New take', media_url: null, params: { kind, model } })], jobs: [job('j1', { generation_id: 'g-n1' })], model_resolved: model }
     }
     if (method === 'POST' && path === '/audio/lyrics') return opts.lyrics?.()
+    if (method === 'POST' && path === '/audio/lyrics/aerab') return opts.aerab?.((body as { lyrics: string }).lyrics)
     if (path === '/jobs') return []
   })
 }
@@ -102,6 +103,7 @@ describe('Audio Studio', { timeout: 15_000 }, () => {
       language: 'ur',
       vocal: 'female',
       lyrics: '[verse]\nRaat ka safar\n[chorus]',
+      aerab: true,
     })
     expect(await screen.findByRole('listitem', { name: 'Request: soulful qawwali, harmonium, tabla' })).toBeInTheDocument()
   })
@@ -144,6 +146,46 @@ describe('Audio Studio', { timeout: 15_000 }, () => {
     expect(await screen.findByRole('alertdialog', { name: 'Replace your lyrics?' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('textbox', { name: 'Lyrics' })).toHaveValue('[verse]\nDil ki baat')
+  })
+
+  it('Urdu lyrics: Add aerab marks them, can be undone, and the song asks for aerab', async () => {
+    const calls = api({ aerab: (l) => ({ lyrics: l.replace('دل', 'دِل'), marked: 1, kept: 1 }) })
+    renderAt('/audio/song', routes, seedCatalog)
+    const user = userEvent.setup()
+    const lyrics = screen.getByRole('textbox', { name: 'Lyrics' })
+    expect(screen.queryByRole('button', { name: /Add aerab/ })).not.toBeInTheDocument()
+    await user.click(lyrics)
+    await user.paste('[verse]\nدل کی بات\nآج کی رات')
+
+    await user.click(screen.getByRole('button', { name: /Add aerab/ }))
+    await waitFor(() => expect(lyrics).toHaveValue('[verse]\nدِل کی بات\nآج کی رات'))
+    expect(posted(calls, '/audio/lyrics/aerab')).toEqual({ lyrics: '[verse]\nدل کی بات\nآج کی رات' })
+    await user.click(screen.getByRole('button', { name: 'Undo aerab' }))
+    expect(lyrics).toHaveValue('[verse]\nدل کی بات\nآج کی رات')
+
+    const auto = screen.getByRole('switch', { name: /Aerab before singing/ })
+    expect(auto).toBeChecked()
+    await user.click(auto)
+    await user.click(screen.getByRole('textbox', { name: 'Style tags' }))
+    await user.paste('ghazal, harmonium')
+    await user.click(within(await openChip(user, 'Language')).getByRole('button', { name: 'Urdu' }))
+    await closeChip(user)
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    expect(posted(calls)).toMatchObject({ language: 'ur', aerab: false })
+  })
+
+  it('Write lyrics in Urdu asks for aerab by default', async () => {
+    const calls = api({ lyrics: () => ({ lyrics: '[verse]\nدِل کی بات', tags: 'ghazal', marked: 1, kept: 0 }) })
+    renderAt('/audio/song', routes, seedCatalog)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Write lyrics' }))
+    const pop = await screen.findByRole('dialog', { name: 'Write lyrics' })
+    await user.type(within(pop).getByRole('textbox', { name: 'What is the song about?' }), 'Rain')
+    await user.selectOptions(within(pop).getByRole('combobox', { name: 'Language' }), 'ur')
+    expect(within(pop).getByRole('checkbox', { name: /With aerab/ })).toBeChecked()
+    await user.click(within(pop).getByRole('button', { name: 'Write' }))
+    expect(await screen.findByRole('textbox', { name: 'Lyrics' })).toHaveValue('[verse]\nدِل کی بات')
+    expect(posted(calls, '/audio/lyrics')).toEqual({ topic: 'Rain', language: 'ur', aerab: true })
   })
 
   it('Write lyrics says so plainly when the writer is offline', async () => {

@@ -246,7 +246,9 @@ class FakeWriter:
         self.messages = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
-        self.messages = json.loads(request.content)["messages"]
+        # the writing call; Urdu then gets a marking pass (and maybe a JSON repair) after it
+        if self.messages is None:
+            self.messages = json.loads(request.content)["messages"]
         return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(self.reply)},
                                                       "finish_reason": "stop"}], "usage": {}})
 
@@ -266,7 +268,9 @@ def test_lyrics_in_urdu_script(client, writer):
     r = client.post("/api/audio/lyrics", json={"topic": "monsoon longing", "language": "ur", "mood": "tender",
                                                 "sections": ["verse", "chorus"]})
     assert r.status_code == 200, r.text
-    assert r.json() == {"lyrics": f"[verse]\n{URDU}\n\n[chorus]\n{URDU}", "tags": "ghazal, harmonium, male vocal"}
+    # the fake answers the marking pass with the same reply, which isn't a list of lines: plain lyrics come back
+    assert r.json() == {"lyrics": f"[verse]\n{URDU}\n\n[chorus]\n{URDU}", "tags": "ghazal, harmonium, male vocal",
+                        "marked": 0, "kept": 0}
     system, user = fake.messages[0]["content"], fake.messages[-1]["content"]
     assert "Urdu" in system and "Urdu script" in system and "[verse], [chorus]" in system
     assert "monsoon longing" in user and "tender" in user

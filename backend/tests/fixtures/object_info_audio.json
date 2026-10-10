@@ -5,10 +5,18 @@
     "ckpt_name": [
      [
       "ace_step_1.5_turbo_aio.safetensors",
+      "ltx-2.3-22b-dev-fp8.safetensors",
+      "ltx-2.3-22b-dev.safetensors",
+      "ltx-2.3-22b-distilled-fp8.safetensors",
+      "qx_asset.pth",
+      "sam3.1_multiplex_fp16.safetensors",
+      "sd_xl_base_1.0.safetensors",
       "stable_audio_3_medium.safetensors",
       "stable_audio_3_small_music.safetensors",
-      "stable_audio_3_small_sfx.safetensors"
-     ]
+      "stable_audio_3_small_sfx.safetensors",
+      "yue2_3b_int8_convrot.safetensors"
+     ],
+     {}
     ]
    }
   },
@@ -24,7 +32,18 @@
     "unet_name": [
      [
       "acestep_v1.5_turbo.safetensors",
-      "minimax_music3_dit_fp16.safetensors"
+      "flux-2-klein-4b-fp8.safetensors",
+      "flux-2-klein-base-4b.safetensors",
+      "ltx23/ltx-2.3-22b-distilled_transformer_only_fp8_scaled.safetensors",
+      "minimax_music3_dit_fp16.safetensors",
+      "qwen_image_2512_fp8_e4m3fn.safetensors",
+      "qwen_image_edit_2511_bf16.safetensors",
+      "qwen_image_edit_2511_fp8mixed.safetensors",
+      "seedvr2_3b_int8_convrot.safetensors",
+      "seedvr2_7b_int8_convrot.safetensors",
+      "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+      "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+      "z_image_turbo_bf16.safetensors"
      ]
     ],
     "weight_dtype": [
@@ -33,7 +52,10 @@
       "fp8_e4m3fn",
       "fp8_e4m3fn_fast",
       "fp8_e5m2"
-     ]
+     ],
+     {
+      "advanced": true
+     }
     ]
    }
   },
@@ -46,25 +68,58 @@
    "required": {
     "clip_name": [
      [
+      "comfy_gemma_3_12B_it.safetensors",
+      "gemma_3_12B_it_fp4_mixed.safetensors",
+      "ltx-2.3_text_projection_bf16.safetensors",
+      "minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
       "qwen_0.6b_ace15.safetensors",
       "qwen_1.7b_ace15.safetensors",
+      "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "qwen_3_4b.safetensors",
       "qwen_4b_ace15.safetensors",
       "t5gemma_b_b_ul2.safetensors",
-      "minimax_music3_text_encoder_pruned_int8_convrot.safetensors"
+      "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
      ]
     ],
     "type": [
      [
+      "stable_diffusion",
+      "stable_cascade",
+      "sd3",
       "stable_audio",
+      "mochi",
+      "ltxv",
+      "pixart",
+      "cosmos",
+      "lumina2",
+      "wan",
+      "hidream",
+      "chroma",
       "ace",
-      "minimax"
+      "omnigen2",
+      "qwen_image",
+      "hunyuan_image",
+      "flux2",
+      "ovis",
+      "longcat_image",
+      "cogvideox",
+      "lens",
+      "pixeldit",
+      "ideogram4",
+      "boogu",
+      "krea2",
+      "joyimage",
+      "mage",
+      "minimax",
+      "yue2"
      ]
     ]
    },
    "optional": {
     "device": [
      [
-      "default"
+      "default",
+      "cpu"
      ],
      {
       "advanced": true
@@ -81,8 +136,16 @@
    "required": {
     "vae_name": [
      [
+      "LTX23_audio_vae_bf16.safetensors",
+      "LTX23_video_vae_bf16.safetensors",
       "ace_1.5_vae.safetensors",
-      "minimax_music3_dav.safetensors"
+      "ae.safetensors",
+      "flux2-vae.safetensors",
+      "minimax_music3_dav.safetensors",
+      "qwen_image_vae.safetensors",
+      "seedvr2_ema_vae_fp16.safetensors",
+      "wan_2.1_vae.safetensors",
+      "pixel_space"
      ]
     ]
    }
@@ -95,25 +158,30 @@
   "input": {
    "required": {
     "clip": [
-     "CLIP"
+     "CLIP",
+     {}
     ],
     "tags": [
      "STRING",
      {
-      "multiline": true
+      "multiline": true,
+      "dynamicPrompts": true
      }
     ],
     "lyrics": [
      "STRING",
      {
-      "multiline": true
+      "multiline": true,
+      "dynamicPrompts": true
      }
     ],
     "seed": [
      "INT",
      {
       "default": 0,
-      "min": 0
+      "min": 0,
+      "max": 18446744073709551615,
+      "control_after_generate": true
      }
     ],
     "bpm": [
@@ -129,12 +197,14 @@
      {
       "default": 120.0,
       "min": 0.0,
-      "max": 2000.0
+      "max": 2000.0,
+      "step": 0.1
      }
     ],
     "timesignature": [
      "COMBO",
      {
+      "multiselect": false,
       "options": [
        "2",
        "3",
@@ -146,6 +216,8 @@
     "language": [
      "COMBO",
      {
+      "default": "en",
+      "multiselect": false,
       "options": [
        "ar",
        "az",
@@ -198,13 +270,13 @@
        "yue",
        "zh",
        "unknown"
-      ],
-      "default": "en"
+      ]
      }
     ],
     "keyscale": [
      "COMBO",
      {
+      "multiselect": false,
       "options": [
        "C major",
        "C# major",
@@ -246,43 +318,57 @@
     "generate_audio_codes": [
      "BOOLEAN",
      {
-      "default": true,
-      "advanced": true
+      "advanced": true,
+      "default": true
      }
     ],
     "cfg_scale": [
      "FLOAT",
      {
+      "advanced": true,
       "default": 2.0,
-      "advanced": true
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.1
      }
     ],
     "temperature": [
      "FLOAT",
      {
+      "advanced": true,
       "default": 0.85,
-      "advanced": true
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.01
      }
     ],
     "top_p": [
      "FLOAT",
      {
+      "advanced": true,
       "default": 0.9,
-      "advanced": true
+      "min": 0.0,
+      "max": 2000.0,
+      "step": 0.01
      }
     ],
     "top_k": [
      "INT",
      {
+      "advanced": true,
       "default": 0,
-      "advanced": true
+      "min": 0,
+      "max": 100
      }
     ],
     "min_p": [
      "FLOAT",
      {
+      "advanced": true,
       "default": 0.0,
-      "advanced": true
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.001
      }
     ]
    }
@@ -297,13 +383,18 @@
     "seconds": [
      "FLOAT",
      {
-      "default": 120.0
+      "default": 120.0,
+      "min": 1.0,
+      "max": 1000.0,
+      "step": 0.01
      }
     ],
     "batch_size": [
      "INT",
      {
-      "default": 1
+      "default": 1,
+      "min": 1,
+      "max": 4096
      }
     ]
    }
@@ -316,12 +407,14 @@
   "input": {
    "required": {
     "conditioning": [
-     "CONDITIONING"
+     "CONDITIONING",
+     {}
     ]
    },
    "optional": {
     "latent": [
-     "LATENT"
+     "LATENT",
+     {}
     ]
    }
   },
@@ -333,21 +426,29 @@
   "input": {
    "required": {
     "positive": [
-     "CONDITIONING"
+     "CONDITIONING",
+     {}
     ],
     "negative": [
-     "CONDITIONING"
+     "CONDITIONING",
+     {}
     ],
     "seconds_start": [
      "FLOAT",
      {
-      "default": 0.0
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1000.0,
+      "step": 0.1
      }
     ],
     "seconds_total": [
      "FLOAT",
      {
-      "default": 47.0
+      "default": 47.0,
+      "min": 0.0,
+      "max": 1000.0,
+      "step": 0.1
      }
     ]
    }
@@ -363,13 +464,18 @@
     "seconds": [
      "FLOAT",
      {
-      "default": 47.6
+      "default": 47.6,
+      "min": 1.0,
+      "max": 1000.0,
+      "step": 0.1
      }
     ],
     "batch_size": [
      "INT",
      {
-      "default": 1
+      "default": 1,
+      "min": 1,
+      "max": 4096
      }
     ]
    }
@@ -382,42 +488,59 @@
   "input": {
    "required": {
     "clip": [
-     "CLIP"
+     "CLIP",
+     {}
     ],
     "caption": [
      "STRING",
      {
-      "multiline": true
+      "multiline": true,
+      "dynamicPrompts": true
      }
     ],
     "lyrics": [
      "STRING",
      {
-      "multiline": true
+      "multiline": true,
+      "dynamicPrompts": true
      }
     ],
     "seed": [
      "INT",
      {
-      "default": 0
+      "default": 0,
+      "min": 0,
+      "max": 18446744073709551615,
+      "control_after_generate": true
      }
     ],
     "max_duration": [
      "FLOAT",
      {
-      "default": 120.0
+      "default": 120.0,
+      "min": 0.04,
+      "max": 360.0,
+      "step": 0.04
      }
     ],
     "cfg_scale": [
      "FLOAT",
      {
-      "advanced": true
+      "advanced": true,
+      "default": 1.5,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.1,
+      "round": 0.01
      }
     ],
     "top_k": [
      "INT",
      {
-      "advanced": true
+      "advanced": true,
+      "default": 50,
+      "min": 1,
+      "max": 16384
      }
     ]
    }
@@ -433,13 +556,18 @@
     "seconds": [
      "FLOAT",
      {
-      "default": 120.0
+      "default": 120.0,
+      "min": 0.04,
+      "max": 360.0,
+      "step": 0.04
      }
     ],
     "batch_size": [
      "INT",
      {
-      "default": 1
+      "default": 1,
+      "min": 1,
+      "max": 4096
      }
     ]
    }
@@ -467,10 +595,12 @@
   "input": {
    "required": {
     "samples": [
-     "LATENT"
+     "LATENT",
+     {}
     ],
     "vae": [
-     "VAE"
+     "VAE",
+     {}
     ]
    }
   },
@@ -482,21 +612,29 @@
   "input": {
    "required": {
     "samples": [
-     "LATENT"
+     "LATENT",
+     {}
     ],
     "vae": [
-     "VAE"
+     "VAE",
+     {}
     ],
     "tile_size": [
      "INT",
      {
-      "default": 512
+      "default": 512,
+      "min": 32,
+      "max": 8192,
+      "step": 8
      }
     ],
     "overlap": [
      "INT",
      {
-      "default": 64
+      "default": 64,
+      "min": 0,
+      "max": 1024,
+      "step": 8
      }
     ]
    }
@@ -509,12 +647,14 @@
   "input": {
    "required": {
     "audio": [
-     "AUDIO"
+     "AUDIO",
+     {}
     ],
     "filename_prefix": [
      "STRING",
      {
-      "default": "audio/ComfyUI"
+      "default": "audio/ComfyUI",
+      "multiline": false
      }
     ]
    }
@@ -525,14 +665,21 @@
   "input": {
    "required": {
     "audio": [
-     "AUDIO"
+     "AUDIO",
+     {}
     ],
     "filename_prefix": [
-     "STRING"
+     "STRING",
+     {
+      "default": "audio/ComfyUI",
+      "multiline": false
+     }
     ],
     "quality": [
      "COMBO",
      {
+      "default": "V0",
+      "multiselect": false,
       "options": [
        "V0",
        "128k",
@@ -548,10 +695,12 @@
   "input": {
    "required": {
     "audio": [
-     [
-      "example.flac"
-     ],
+     "COMBO",
      {
+      "multiselect": false,
+      "options": [
+       "upscale_test.mp4"
+      ],
       "audio_upload": true
      }
     ]
@@ -568,7 +717,25 @@
      "MODEL"
     ],
     "shift": [
-     "FLOAT"
+     "FLOAT",
+     {
+      "default": 1.73,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.01
+     }
+    ]
+   },
+   "optional": {
+    "sampling": [
+     [
+      "flow",
+      "img_to_img_velocity"
+     ],
+     {
+      "default": "flow",
+      "advanced": true
+     }
     ]
    }
   },
@@ -580,44 +747,119 @@
   "input": {
    "required": {
     "model": [
-     "MODEL"
+     "MODEL",
+     {}
     ],
     "seed": [
-     "INT"
+     "INT",
+     {
+      "default": 0,
+      "min": 0,
+      "max": 18446744073709551615
+     }
     ],
     "steps": [
-     "INT"
+     "INT",
+     {
+      "default": 20,
+      "min": 1,
+      "max": 10000
+     }
     ],
     "cfg": [
-     "FLOAT"
+     "FLOAT",
+     {
+      "default": 8.0,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.1,
+      "round": 0.01
+     }
     ],
     "sampler_name": [
      [
       "euler",
-      "lcm",
+      "euler_cfg_pp",
+      "euler_ancestral",
+      "euler_ancestral_cfg_pp",
+      "heun",
+      "heunpp2",
+      "exp_heun_2_x0",
+      "exp_heun_2_x0_sde",
+      "dpm_2",
+      "dpm_2_ancestral",
+      "lms",
+      "dpm_fast",
+      "dpm_adaptive",
+      "dpmpp_2s_ancestral",
+      "dpmpp_2s_ancestral_cfg_pp",
+      "dpmpp_sde",
+      "dpmpp_sde_gpu",
       "dpmpp_2m",
-      "res_multistep"
-     ]
+      "dpmpp_2m_cfg_pp",
+      "dpmpp_2m_sde",
+      "dpmpp_2m_sde_gpu",
+      "dpmpp_2m_sde_heun",
+      "dpmpp_2m_sde_heun_gpu",
+      "dpmpp_3m_sde",
+      "dpmpp_3m_sde_gpu",
+      "ddpm",
+      "lcm",
+      "ipndm",
+      "ipndm_v",
+      "deis",
+      "cfgpp_ud10_ab",
+      "res_multistep",
+      "res_multistep_cfg_pp",
+      "res_multistep_ancestral",
+      "res_multistep_ancestral_cfg_pp",
+      "gradient_estimation",
+      "gradient_estimation_cfg_pp",
+      "er_sde",
+      "seeds_2",
+      "seeds_3",
+      "sa_solver",
+      "sa_solver_pece",
+      "ddim",
+      "uni_pc",
+      "uni_pc_bh2"
+     ],
+     {}
     ],
     "scheduler": [
      [
       "simple",
-      "normal",
+      "sgm_uniform",
       "karras",
-      "beta"
-     ]
+      "exponential",
+      "ddim_uniform",
+      "beta",
+      "normal",
+      "linear_quadratic",
+      "kl_optimal"
+     ],
+     {}
     ],
     "positive": [
-     "CONDITIONING"
+     "CONDITIONING",
+     {}
     ],
     "negative": [
-     "CONDITIONING"
+     "CONDITIONING",
+     {}
     ],
     "latent_image": [
-     "LATENT"
+     "LATENT",
+     {}
     ],
     "denoise": [
-     "FLOAT"
+     "FLOAT",
+     {
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01
+     }
     ]
    }
   },
@@ -650,6 +892,78 @@
   },
   "output": [
    "CONDITIONING"
+  ]
+ },
+ "MiniMaxLowVRAMAttention": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {}
+    ],
+    "head_chunks": [
+     "INT",
+     {
+      "default": 4,
+      "min": 1,
+      "max": 56,
+      "step": 1
+     }
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ]
+ },
+ "DualCLIPLoader": {
+  "input": {
+   "required": {
+    "clip_name1": [
+     [
+      "qwen_0.6b_ace15.safetensors",
+      "qwen_1.7b_ace15.safetensors",
+      "qwen_4b_ace15.safetensors"
+     ]
+    ],
+    "clip_name2": [
+     [
+      "qwen_0.6b_ace15.safetensors",
+      "qwen_1.7b_ace15.safetensors",
+      "qwen_4b_ace15.safetensors"
+     ]
+    ],
+    "type": [
+     [
+      "sdxl",
+      "sd3",
+      "flux",
+      "hunyuan_video",
+      "hidream",
+      "hunyuan_image",
+      "hunyuan_video_15",
+      "kandinsky5",
+      "kandinsky5_image",
+      "ltxv",
+      "newbie",
+      "ace"
+     ]
+    ]
+   },
+   "optional": {
+    "device": [
+     [
+      "default",
+      "cpu"
+     ],
+     {
+      "advanced": true
+     }
+    ]
+   }
+  },
+  "output": [
+   "CLIP"
   ]
  }
 }

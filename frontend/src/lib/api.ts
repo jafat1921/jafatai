@@ -1,6 +1,7 @@
 import type {
   AssistAction,
   AudioGenerateRequest,
+  AerabResponse,
   LyricsRequest,
   LyricsResponse,
   TemplateType,
@@ -455,6 +456,7 @@ export const api = {
   audio: {
     generate: (body: AudioGenerateRequest) => post<MediaBatch>('/audio/generate', body),
     lyrics: (body: LyricsRequest) => post<LyricsResponse>('/audio/lyrics', body),
+    aerab: (lyrics: string) => post<AerabResponse>('/audio/lyrics/aerab', { lyrics }),
   },
   videos: {
     // a MediaItem plus its job; tolerate a batch too

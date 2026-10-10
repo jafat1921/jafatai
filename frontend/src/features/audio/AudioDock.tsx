@@ -127,6 +127,8 @@ export function AudioDock({ form, setForm, modelPicked, onRun, pending, error }:
         instrumental={instrumental(form)}
         onInstrumental={setInstrumental}
         onLanguage={(l) => set('language', songLanguageOf(l))}
+        aerab={form.aerab}
+        onAerab={(on) => set('aerab', on)}
       />
     ) : kind === 'sfx' ? (
       <div role="group" aria-label="Quick presets" className="flex flex-wrap gap-1">

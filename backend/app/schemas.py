@@ -823,6 +823,8 @@ class AudioGenerateIn(BaseModel):
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     steps: int | None = Field(None, ge=1, le=100)
     timbre_ref_id: str | None = None
+    # Urdu songs: add zer / zabar / pesh to unmarked lines before singing
+    aerab: bool = True
     title: str | None = Field(None, max_length=200)
     folder_id: str | None = None
 
@@ -834,11 +836,25 @@ class LyricsIn(BaseModel):
     style: str | None = Field(None, max_length=200)
     sections: list[Annotated[str, Field(min_length=2, max_length=30)]] = Field(
         default_factory=lambda: ["verse", "chorus", "verse", "chorus", "bridge", "chorus"], min_length=1, max_length=16)
+    aerab: bool = True
 
 
 class LyricsOut(BaseModel):
     lyrics: str
     tags: str
+    # Urdu only: lines that got aerab, and lines left as written because the marking pass changed their letters
+    marked: int = 0
+    kept: int = 0
+
+
+class AerabIn(BaseModel):
+    lyrics: str = Field(min_length=1, max_length=6000)
+
+
+class AerabOut(BaseModel):
+    lyrics: str
+    marked: int
+    kept: int
 
 
 class TemplateOut(BaseModel):

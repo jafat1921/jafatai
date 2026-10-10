@@ -232,6 +232,34 @@ def _out_path(gen: Generation, media_ext: str) -> tuple[Path, str]:
     return get_settings().data_dir / rel, rel.as_posix()
 
 
+def _add_aerab(ctx: JobContext, gen: Generation) -> None:
+    # without zer / zabar / pesh the models guess Urdu vowels and get many of them wrong
+    from app import aerab
+    from app.llm import LLMError
+
+    p = dict(gen.params or {})
+    try:
+        if gen.kind == "song":
+            lyrics = p.get("lyrics") or ""
+            if not p.get("aerab", True) or p.get("language") != "ur" or not any(map(aerab.unmarked, lyrics.split("\n"))):
+                return
+            ctx.progress(0.01, "Adding aerab to the lyrics")
+            marked, n, _ = aerab.mark_sync(lyrics, tick=lambda: ctx.progress(0.01, "Adding aerab to the lyrics"))
+            if n:
+                gen.params = {**p, "lyrics": marked, "lyrics_written": lyrics}
+        elif aerab.quoted_urdu(gen.prompt or ""):
+            ctx.progress(0.01, "Adding aerab to the Urdu dialogue")
+            marked = aerab.mark_quotes_sync(gen.prompt, tick=lambda: ctx.progress(0.01, "Adding aerab to the Urdu dialogue"))
+            if marked != gen.prompt:
+                gen.params = {**p, "prompt_written": gen.prompt}
+                gen.prompt = marked
+    except LLMError as e:
+        # better an unmarked render than none
+        log.warning("aerab skipped for %s: %s", gen.id, e)
+        return
+    ctx.db.commit()
+
+
 def handle_generate(ctx: JobContext) -> dict:
     db, job = ctx.db, ctx.job
     gen = db.get(Generation, job.generation_id) if job.generation_id else None
@@ -260,6 +288,9 @@ def handle_generate(ctx: JobContext) -> dict:
         from app.prompt_enhance import run_in_job
 
         run_in_job(ctx, gen)
+
+    if get_settings().urdu_aerab and (gen.kind in VIDEO_KINDS or gen.kind == "song"):
+        _add_aerab(ctx, gen)
 
     driver = ctx.driver_factory()
     job.gpu = job.gpu or getattr(driver, "name", None)

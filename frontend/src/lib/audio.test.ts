@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CATALOG, MINIMAX } from '@/test/model-fixtures'
 import {
+  aerabNote,
   audioBlockedReason,
   audioDurationPresets,
   audioFormFrom,
@@ -9,6 +10,7 @@ import {
   clampAudioDuration,
   clock,
   DEFAULT_AUDIO_FORM,
+  hasUrdu,
   insertSection,
   maxAudioDuration,
 } from './audio'
@@ -33,9 +35,16 @@ describe('audio payload', () => {
       language: 'ur',
       vocal: 'male',
       lyrics: '[verse]\nDil',
+      aerab: true,
       bpm: 92,
       seed: 7,
     })
+  })
+
+  it('reports aerab results in plain words', () => {
+    expect(aerabNote(12, 0)).toBe('Aerab added to 12 lines.')
+    expect(aerabNote(1, 1)).toBe('Aerab added to 1 line. 1 line kept as written: the marking changed their words, so they were left alone.')
+    expect(hasUrdu('دل کی بات') && !hasUrdu('dil ki baat')).toBe(true)
   })
 
   it('drops the lyrics for an instrumental, and the timbre for a model that can’t use it', () => {

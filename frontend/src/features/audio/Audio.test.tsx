@@ -357,8 +357,11 @@ describe('Audio navigation', () => {
       ['Speak', '/audio/speak'],
       ['Voices', '/audio/voices'],
       ['Design a voice', '/audio/design'],
+      ['Dialogue', '/audio/dialogue'],
       ['Editor', '/audio/edit'],
       ['Score a Clip', '/audio/score'],
+      ['Transcribe', '/audio/transcribe'],
+      ['Dub a video', '/audio/dub'],
       ['Prompt templates', '/audio/prompt-templates'],
       ['Library', '/audio/library'],
     ])

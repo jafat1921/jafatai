@@ -180,10 +180,66 @@ class MockDriver:
         return words / 2.5 / float(params.get("speed") or 1.0) + pauses
 
     def transcribe(self, path: Path, language, progress_cb) -> dict:
+        # one line every 2.5 s of the clip, with evenly spaced word timings, so the transcript and dub
+        # editors have real-looking segments to show
+        from app.audio_analysis import stream_info
+
         self._tick(progress_cb, "Transcribing")
-        text = "This is a mock transcript of the reference clip."
-        return {"text": text, "language": language or "en",
-                "segments": [{"start": 0.0, "end": 2.0, "text": text, "words": []}]}
+        total = stream_info(path).duration or 2.0
+        lines = ["This is a mock transcript of the reference clip."]
+        segs, t, n = [], 0.0, 1
+        while t < total - 0.5 or not segs:
+            end = min(total, t + 2.2) if total > 2.0 else 2.0
+            text = lines[0] if n == 1 else f"Mock line {n} of the transcript."
+            words = text.split()
+            step = (end - t) / len(words)
+            segs.append({"start": round(t, 3), "end": round(end, 3), "text": text,
+                         "words": [{"start": round(t + i * step, 3), "end": round(t + (i + 1) * step, 3), "word": w}
+                                   for i, w in enumerate(words)]})
+            t, n = t + 2.5, n + 1
+        return {"text": " ".join(s["text"] for s in segs), "language": language or "en", "segments": segs,
+                "duration_s": total}
+
+    # ---- Dub a video (contract v18): the same calls ComfyDriver sends to app.dub.engines
+
+    def separate(self, src: Path, out_dir: Path, model: str, progress_cb) -> dict:
+        # "vocals" is the mix itself, the "instrumental" a quiet bed of noise the same length
+        from app.audio_analysis import stream_info
+
+        self._tick(progress_cb, "Separating")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        vocals, bed = out_dir / "mock_vocals.wav", out_dir / "mock_instrumental.wav"
+        ff = get_settings().ffmpeg_path()
+        seconds = stream_info(src).duration or 1.0
+        for cmd in ([ff, "-y", "-loglevel", "error", "-i", str(src), "-ac", "2", "-ar", "48000", str(vocals)],
+                    [ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                     f"anoisesrc=d={seconds:.3f}:c=pink:r=48000:a=0.03", "-ac", "2", str(bed)]):
+            subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+        progress_cb(1.0, "Done")
+        return {"vocals": vocals, "instrumental": bed}
+
+    def speaker_embed(self, src: Path, spans, progress_cb) -> list[list[float]]:
+        from app.audio_analysis import _decode_mono
+        from app.dub.engines import band_embedding
+
+        rate = 16000
+        audio = _decode_mono(src, rate)
+        progress_cb(0.5, "Listening for speakers")
+        return [band_embedding(audio[int(a * rate):int(b * rate)], rate) for a, b in spans]
+
+    def speak_many(self, params: dict, texts: list[str], outs: list[Path], seed, progress_cb) -> list[float]:
+        out = []
+        for i, (text, path) in enumerate(zip(texts, outs)):
+            progress_cb(i / max(1, len(texts)), f"Speaking line {i + 1}/{len(texts)}")
+            res = self.generate_audio(text, {**params, "kind": "speech", "text": text, "duration_s": None},
+                                      seed, path, lambda f, m: None)
+            out.append(res.meta["duration_s"])
+        return out
+
+    def transcribe_many(self, paths: list[Path], language, progress_cb, expect: list[str] | None = None) -> list[str]:
+        # the mock hears exactly what it was asked to say; tests patch this to hear mistakes
+        progress_cb(0.5, "Checking the takes")
+        return list(expect) if expect is not None else ["mock" for _ in paths]
 
     def generate_audio(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         # a tone (songs, music) or pink noise (sfx) at the exact length, so players and waveforms have

@@ -573,6 +573,78 @@ class VoiceProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class VoiceScript(Base):
+    """A dialogue / narration project (contract v17). Cast and lines are JSON: the editor saves the
+    whole array at once and nothing queries into single lines."""
+
+    __tablename__ = "voice_script"
+    __table_args__ = (Index("ix_voice_script_ws_updated", "workspace_id", "updated_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    title: Mapped[str] = mapped_column(String(200))
+    language: Mapped[str] = mapped_column(String(12), default="en", server_default="en")
+    engine: Mapped[str] = mapped_column(String(20), default="auto", server_default="auto")
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("project.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cast: Mapped[list] = mapped_column(JSON, default=list)
+    lines: Mapped[list] = mapped_column(JSON, default=list)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    mix: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class DubProject(Base):
+    """Dub a video (contract v18). The pipeline state, speakers and segments are JSON written whole by
+    the stage jobs and the editor; the files (stems, takes, fitted lines) live in the dub's data dir."""
+
+    __tablename__ = "dub_project"
+    __table_args__ = (Index("ix_dub_project_ws_updated", "workspace_id", "updated_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    video_id: Mapped[str] = mapped_column(String(36), index=True)
+    # the version being dubbed, pinned so a later edit of the video doesn't shift every timing
+    video_generation_id: Mapped[str] = mapped_column(String(36))
+    title: Mapped[str] = mapped_column(String(200))
+    source_language: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    targets: Mapped[list] = mapped_column(JSON, default=list)
+    stage: Mapped[str] = mapped_column(String(20), default="extract", server_default="extract")
+    stages: Mapped[dict] = mapped_column(JSON, default=dict)
+    speakers: Mapped[list] = mapped_column(JSON, default=list)
+    segments: Mapped[list] = mapped_column(JSON, default=list)
+    glossary: Mapped[list] = mapped_column(JSON, default=list)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    tracks: Mapped[dict] = mapped_column(JSON, default=dict)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Transcript(Base):
+    """A timed transcript of a Library audio or video item (contract v18)."""
+
+    __tablename__ = "transcript"
+    __table_args__ = (Index("ix_transcript_ws_created", "workspace_id", "created_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    media_id: Mapped[str] = mapped_column(String(36), index=True)
+    generation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    title: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    language: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    words: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    status: Mapped[str] = mapped_column(String(20), default="queued", server_default="queued")
+    text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    segments: Mapped[list] = mapped_column(JSON, default=list)
+    cleanup_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

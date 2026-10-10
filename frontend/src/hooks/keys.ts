@@ -50,4 +50,12 @@ export const qk = {
   voiceLists: ['voices', 'list'] as const,
   voices: (q: VoiceQuery) => ['voices', 'list', q] as const,
   voiceEngines: ['voice-engines'] as const,
+  // contract-v17
+  scripts: ['scripts', 'list'] as const,
+  script: (id: string) => ['scripts', 'one', id] as const,
+  // contract-v18
+  dubs: ['dubs', 'list'] as const,
+  dub: (id: string) => ['dubs', 'one', id] as const,
+  transcripts: ['transcripts', 'list'] as const,
+  transcript: (id: string) => ['transcripts', 'one', id] as const,
 }

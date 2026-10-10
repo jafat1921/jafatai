@@ -12,7 +12,7 @@ from app.config import Settings
 from app.db import SessionLocal
 from app.drivers.base import DriverResult
 from app.drivers.comfy import ComfyDriver
-from app.lanes import lane_for, parse_lanes
+from app.lanes import dub_lane, lane_for, parse_lanes
 from app.models import Job, WorkerHeartbeat, utcnow
 from app.services import enqueue_generation
 from app.worker import claim_next, process_one, recover_lanes
@@ -43,6 +43,10 @@ def test_every_registered_job_type_has_a_lane():
         "photo_render": "general", "look_video": "general",  # numpy / ffmpeg on the CPU
         "audio_render": "general", "audio_mix": "general",
         "voice_transcribe": "audio",  # faster-whisper on whichever GPU worker claims it
+        "script_mix": "general", "script_stems": "general",  # dialogue: ffmpeg joins of finished takes
+        "transcribe": "audio", "transcript_cleanup": "general", "transcript_video": "general",
+        "dub_stage": None,  # by payload.stage, below
+        "dub_export": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):
@@ -51,6 +55,14 @@ def test_every_registered_job_type_has_a_lane():
         assert t in expected, f"classify new job type {t!r} in app.lanes"
         if expected[t]:
             assert lane_for(t) == expected[t], t
+
+
+def test_dub_stages_split_between_the_gpu_and_the_cpu():
+    from app.dub.project import STAGES
+
+    gpu = {s for s in STAGES if dub_lane(s) == "audio"}
+    assert gpu == {"separate", "transcribe", "render", "verify"}
+    assert all(dub_lane(s) == "general" for s in STAGES if s not in gpu)
 
 
 def test_parse_lanes():

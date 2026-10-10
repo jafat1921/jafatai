@@ -90,6 +90,8 @@ import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './
 import type { CameraPreset } from './camera'
 import type { MentionOption } from './mentions'
 import type { Album, Client, Facets, PhotoPage } from './catalogue'
+import type { RenderResponse, Script, ScriptCreate, ScriptPatch, ScriptSummary, SplitMode } from './dialogue'
+import type { Dub, DubCreate, DubExportBody, DubPatch, DubSummary, Transcript, TranscriptSummary } from './dub'
 import type {
   AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema, ProfileInfo,
   PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan, Snapshot,
@@ -517,6 +519,43 @@ export const api = {
       return 'job' in res ? res.job : res
     },
     designPreview: (body: DesignPreviewRequest) => post<DesignPreviewResponse>('/voices/design/preview', body),
+  },
+  // contract-v17
+  scripts: {
+    list: async () => listOf(await get<ScriptSummary[] | { items: ScriptSummary[] }>('/scripts')),
+    get: (id: string) => get<Script>(`/scripts/${id}`),
+    create: (body: ScriptCreate) => post<Script>('/scripts', body),
+    update: (id: string, body: ScriptPatch) => patch<Script>(`/scripts/${id}`, body),
+    remove: (id: string) => del(`/scripts/${id}`),
+    split: (id: string, body: { text: string; mode: SplitMode; speaker_id?: string | null }) => post<Script>(`/scripts/${id}/split`, body),
+    importProject: (id: string, body: { project_id: string; scene_ids?: string[]; include_action?: boolean }) =>
+      post<Script>(`/scripts/${id}/import-project`, body),
+    render: (id: string, lineIds?: string[]) => post<RenderResponse>(`/scripts/${id}/render`, lineIds ? { line_ids: lineIds } : {}),
+    mix: (id: string) => post<Job>(`/scripts/${id}/mix`),
+    stems: (id: string) => post<Job>(`/scripts/${id}/stems`),
+  },
+  // contract-v18
+  dubs: {
+    list: async () => listOf(await get<DubSummary[] | { items: DubSummary[] }>('/dubs')),
+    get: (id: string) => get<Dub>(`/dubs/${id}`),
+    create: (body: DubCreate) => post<Dub>('/dubs', body),
+    update: (id: string, body: DubPatch) => patch<Dub>(`/dubs/${id}`, body),
+    remove: (id: string) => del(`/dubs/${id}`),
+    continue: (id: string) => post<Dub>(`/dubs/${id}/continue`),
+    regen: (id: string, body: { lang: string; segment_ids?: string[] }) => post<Dub>(`/dubs/${id}/regen`, body),
+    split: (id: string, body: { segment_id: string; at: number }) => post<Dub>(`/dubs/${id}/segments/split`, body),
+    merge: (id: string, segmentIds: string[]) => post<Dub>(`/dubs/${id}/segments/merge`, { segment_ids: segmentIds }),
+    export: (id: string, body: DubExportBody) => post<{ job: Job; item_id: string; generation_id: string }>(`/dubs/${id}/export`, body),
+  },
+  transcripts: {
+    start: (body: { media_id: string; language?: string; words?: boolean; cleanup?: boolean }) =>
+      post<{ transcript_id: string; job: Job }>('/transcribe', body),
+    list: async (mediaId?: string) => listOf(await get<TranscriptSummary[] | { items: TranscriptSummary[] }>('/transcripts', { media_id: mediaId })),
+    get: (id: string) => get<Transcript>(`/transcripts/${id}`),
+    remove: (id: string) => del(`/transcripts/${id}`),
+    cleanup: (id: string) => post<Job>(`/transcripts/${id}/cleanup`),
+    video: (id: string, body: { mode: 'soft' | 'burn'; clean?: boolean }) =>
+      post<{ job: Job; item_id: string; generation_id: string }>(`/transcripts/${id}/video`, body),
   },
   videos: {
     // a MediaItem plus its job; tolerate a batch too

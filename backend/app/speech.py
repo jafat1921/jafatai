@@ -63,7 +63,9 @@ def runner_job(params: dict, e: voices.Engine, texts: list[str], work: Path, see
     job = {"engine": e.id, "language": params.get("language") or "en", "seed": seed, "device": "cuda",
            "segments": [{"text": t, "out": str(work / f"seg{i}.wav")} for i, t in enumerate(texts)],
            "ref_audio": str(ref) if ref else None, "ref_text": v.get("ref_text") or None,
-           "instruct": (v.get("design") or {}).get("description"), "voice": v.get("preset")}
+           "instruct": ", ".join(x for x in ((v.get("design") or {}).get("description"), params.get("emotion"))
+                                 if x) or None,
+           "voice": v.get("preset")}
     # a fixed length wins over speed; the engine only gets it when there's one piece to fit
     if duration and e.native_duration and len(texts) == 1:
         job["duration"] = float(duration)

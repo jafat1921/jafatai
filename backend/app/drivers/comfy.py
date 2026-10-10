@@ -563,6 +563,27 @@ class ComfyDriver:
 
         return speech.transcribe(path, language, progress_cb, lane=self.lane)
 
+    # Dub a video (contract v18): engine venvs on this worker's GPU, like speech
+    def separate(self, src: Path, out_dir: Path, model: str, progress_cb: ProgressCallback) -> dict:
+        from app.dub import engines
+
+        return engines.separate(src, out_dir, model, progress_cb, lane=self.lane)
+
+    def speaker_embed(self, src: Path, spans, progress_cb: ProgressCallback) -> list[list[float]]:
+        from app.dub import engines
+
+        return engines.speaker_embed(src, spans, progress_cb, lane=self.lane)
+
+    def speak_many(self, params: dict, texts: list[str], outs: list[Path], seed, progress_cb: ProgressCallback):
+        from app.dub import engines
+
+        return engines.speak_many(params, texts, outs, seed, progress_cb, lane=self.lane)
+
+    def transcribe_many(self, paths: list[Path], language, progress_cb: ProgressCallback, expect=None) -> list[str]:
+        from app.dub import engines
+
+        return engines.transcribe_many(paths, language, progress_cb, lane=self.lane)
+
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
         raise ComfyError("Text generations go to the LLM lane, not ComfyUI")
 

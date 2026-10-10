@@ -116,6 +116,14 @@ export const shellRoutes: RouteObject[] = [
         const { DesignPage } = await import('@/features/audio/voice/DesignPage')
         return <DesignPage />
       }),
+      page('dialogue', async () => {
+        const { DialogueListPage } = await import('@/features/audio/dialogue/DialogueListPage')
+        return <DialogueListPage />
+      }),
+      page('dialogue/:id', async () => {
+        const { DialogueEditorPage } = await import('@/features/audio/dialogue/DialogueEditorPage')
+        return <DialogueEditorPage />
+      }),
       page('edit', async () => {
         const { EditPickPage } = await import('@/features/audio/editor/EditPickPage')
         return <EditPickPage />
@@ -127,6 +135,19 @@ export const shellRoutes: RouteObject[] = [
       page('score', async () => {
         const { ScorePage } = await import('@/features/audio/score/ScorePage')
         return <ScorePage />
+      }),
+      // contract v18
+      page('transcribe', async () => {
+        const { TranscribePage } = await import('@/features/audio/transcribe/TranscribePage')
+        return <TranscribePage />
+      }),
+      page('dub', async () => {
+        const { DubListPage } = await import('@/features/audio/dub/DubListPage')
+        return <DubListPage />
+      }),
+      page('dub/:id', async () => {
+        const { DubWorkspacePage } = await import('@/features/audio/dub/DubWorkspacePage')
+        return <DubWorkspacePage />
       }),
       page('prompt-templates', async () => {
         const { TemplatesPage } = await import('@/features/templates/TemplatesPage')

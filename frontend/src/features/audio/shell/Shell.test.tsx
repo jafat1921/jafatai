@@ -73,7 +73,7 @@ describe('Audio workspace', () => {
     const nav = await screen.findByRole('navigation', { name: 'Audio Studio' })
     expect(within(nav).getAllByRole('list').map((l) => l.getAttribute('aria-label'))).toEqual(['Create', 'Voice', 'Story', 'Edit', 'Tools', 'Library'])
     expect(within(nav).getByRole('link', { name: 'Song' })).toHaveAttribute('aria-current', 'page')
-    for (const soon of ['Dialogue', 'Stems', 'Transcribe', 'Dub']) {
+    for (const soon of ['Stems']) {
       const el = within(nav).getByRole('link', { name: new RegExp(`^${soon}`) })
       expect(el).toHaveAttribute('aria-disabled', 'true')
       expect(el).not.toHaveAttribute('href')
@@ -83,6 +83,11 @@ describe('Audio workspace', () => {
     expect(within(nav).getByRole('link', { name: 'Speak' })).toHaveAttribute('href', '/audio/speak')
     expect(within(nav).getByRole('link', { name: 'Voices' })).toHaveAttribute('href', '/audio/voices')
     expect(within(nav).getByRole('link', { name: 'Design' })).toHaveAttribute('href', '/audio/design')
+    // B3
+    expect(within(nav).getByRole('link', { name: /^Dialogue/ })).toHaveAttribute('href', '/audio/dialogue')
+    // B4
+    expect(within(nav).getByRole('link', { name: /^Transcribe/ })).toHaveAttribute('href', '/audio/transcribe')
+    expect(within(nav).getByRole('link', { name: /^Dub/ })).toHaveAttribute('href', '/audio/dub')
   })
 
   it('folds a group, and collapses to an icon rail that it remembers', async () => {

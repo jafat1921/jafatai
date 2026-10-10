@@ -404,25 +404,39 @@ def prepare_location_generation(db: Session, loc: Location, kind: str, prompt: s
 _CUE = re.compile(r"^[A-Z][A-Z0-9 .'\-]{1,40}(\s*\([^)]*\))?$")
 
 
-def script_duration(text: str, lo: float = 2.0, hi: float = 20.0) -> float:
-    """Screen time from a flush-left script: dialogue at ~150 wpm, action lines a bit faster."""
-    dialogue = action = 0
-    in_dialogue = False
+def cue_name(line: str) -> str:
+    # MAYA (V.O.) and MAYA (CONT'D) are both Maya
+    return re.sub(r"\s*\([^)]*\)\s*$", "", line).strip()
+
+
+def screenplay_lines(text: str):
+    """Walk a flush-left script (llm.prompts SCRIPT_RULES): yields (kind, cue, line) where kind is
+    cue | paren | dialogue | action | break. `cue` is the speaking character while in a dialogue block."""
+    cue = None
     for raw in (text or "").split("\n"):
         line = raw.strip()
         if not line:
-            in_dialogue = False
+            cue = None
+            yield "break", None, ""
             continue
         if _CUE.match(line) and len(line.split()) <= 5:
-            in_dialogue = True
+            cue = cue_name(line)
+            yield "cue", cue, line
             continue
         if line.startswith("(") and line.endswith(")"):
+            yield "paren", cue, line
             continue
-        n = len(line.split())
-        if in_dialogue:
-            dialogue += n
-        else:
-            action += n
+        yield ("dialogue" if cue is not None else "action"), cue, line
+
+
+def script_duration(text: str, lo: float = 2.0, hi: float = 20.0) -> float:
+    """Screen time from a flush-left script: dialogue at ~150 wpm, action lines a bit faster."""
+    dialogue = action = 0
+    for kind, _, line in screenplay_lines(text):
+        if kind == "dialogue":
+            dialogue += len(line.split())
+        elif kind == "action":
+            action += len(line.split())
     seconds = dialogue / 2.5 + action / 3.5
     return max(lo, min(hi, round(seconds * 2) / 2))
 

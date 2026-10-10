@@ -31,3 +31,11 @@ Migration **0014** adds `voice_script` (a dialogue / narration project). It buil
 - Speech for lines goes through the same `queue_speech` as `/audio/speak`: aerab for Urdu, tags per engine.
 - A line whose voice is a clone voice with an engine that can't clone fails with a readable `error`.
 - Line jobs report progress per line, and the editor polls `GET /scripts/{id}`.
+
+## As built (B3)
+- Lines also carry `para` (the line ends a paragraph: the gap after it is `paragraph_gap_s` unless `pause_after_s` is set), and, read-only, `take_media_id`, `take_url`, `duration_s` and `error` (when `failed`).
+- `ScriptOut` also has `counts` (`lines, ready, stale, empty, rendering, failed`) and `mix_job` / `stems_job` (the last job of each, so the editor can follow them). `mix` also has `url` and `duration_s`.
+- `engine` defaults to `auto` (the voice decides, as on Speak).
+- `render` with no `line_ids` takes `stale`, `empty` and `failed` lines that have words. Its 202 body also has `failed`: lines that couldn't be queued (the reason lands on the line).
+- Takes are tagged `script:<id without dashes>`, because Library tags stop at 40 characters. `GET /media` leaves out anything tagged `script:…` unless that tag is what's asked for.
+- Stems are not levelled (the mix is); each WAV runs the whole mix timeline.

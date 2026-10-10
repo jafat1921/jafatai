@@ -393,11 +393,27 @@ from app import voices  # noqa: E402
 
 HANDLERS[voices.TRANSCRIBE_JOB] = voices.handle_transcribe
 FINISHED_HOOKS.append(audio_analysis.on_job_finished)
+from app import dialogue  # noqa: E402
+
+HANDLERS[dialogue.MIX_JOB] = dialogue.handle_mix
+HANDLERS[dialogue.STEMS_JOB] = dialogue.handle_stems
+FINISHED_HOOKS.append(dialogue.on_job_finished)
+CPU_JOB_LEDGER_DIALOGUE = {dialogue.MIX_JOB: "audio_edit", dialogue.STEMS_JOB: "export"}
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.
 CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot", brand.BRAND_JOB: "brand",
                   brand.REVEAL_JOB: "brand", organise.ZIP_JOB: "export", photo.RENDER_JOB: "photo",
                   photo_looks.VIDEO_JOB: "photo", audio_jobs.RENDER_JOB: "audio_edit", audio_jobs.MIX_JOB: "audio_edit"}
+CPU_JOB_LEDGER.update(CPU_JOB_LEDGER_DIALOGUE)
+from app import transcripts  # noqa: E402
+from app.dub import project as dub_project, stages as dub_stages  # noqa: E402
+
+HANDLERS[transcripts.TRANSCRIBE_JOB] = transcripts.handle_transcribe
+HANDLERS[transcripts.CLEANUP_JOB] = transcripts.handle_cleanup
+HANDLERS[transcripts.VIDEO_JOB] = transcripts.handle_video
+HANDLERS[dub_project.STAGE_JOB] = dub_stages.handle_stage
+HANDLERS[dub_project.EXPORT_JOB] = dub_stages.handle_export
+CPU_JOB_LEDGER.update({transcripts.VIDEO_JOB: "export", dub_project.EXPORT_JOB: "export"})
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

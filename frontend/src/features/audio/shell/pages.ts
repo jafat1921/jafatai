@@ -54,7 +54,7 @@ export const AUDIO_GROUPS: AudioGroup[] = [
       { id: 'design', label: 'Design', to: '/audio/design', icon: Sparkles },
     ],
   },
-  { id: 'story', label: 'Story', pages: [{ id: 'dialogue', label: 'Dialogue', to: '/audio/dialogue', icon: MessagesSquare, soon: true }] },
+  { id: 'story', label: 'Story', pages: [{ id: 'dialogue', label: 'Dialogue', to: '/audio/dialogue', icon: MessagesSquare }] },
   {
     id: 'edit',
     label: 'Edit',
@@ -68,8 +68,8 @@ export const AUDIO_GROUPS: AudioGroup[] = [
     label: 'Tools',
     pages: [
       { id: 'stems', label: 'Stems', to: '/audio/stems', icon: SquareSplitHorizontal, soon: true },
-      { id: 'transcribe', label: 'Transcribe', to: '/audio/transcribe', icon: Captions, soon: true },
-      { id: 'dub', label: 'Dub', to: '/audio/dub', icon: Languages, soon: true },
+      { id: 'transcribe', label: 'Transcribe', to: '/audio/transcribe', icon: Captions },
+      { id: 'dub', label: 'Dub', to: '/audio/dub', icon: Languages },
     ],
   },
   {

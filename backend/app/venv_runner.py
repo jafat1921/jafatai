@@ -80,6 +80,11 @@ def run(runner: str, venv: str, job: dict, *, lane: str | None = None,
     timeout = timeout or get_settings().audio_runner_timeout_s
     env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(gpu_index(lane)), "PYTHONUNBUFFERED": "1",
            "PYTHONIOENCODING": "utf-8"}
+    # systemd doesn't source the shell profile, so the models' cache has to be named here or every
+    # engine would download its weights again into ~/.cache
+    hf_home = get_settings().audio_hf_home
+    if hf_home:
+        env["HF_HOME"] = hf_home
 
     proc = subprocess.Popen([exe, str(script)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8", errors="replace")

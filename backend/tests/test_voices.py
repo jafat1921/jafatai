@@ -466,6 +466,18 @@ def test_runner_protocol_progress_and_env(runners):
     assert venv_runner.run(name, "any", {"x": 1}, lane="image", python=sys.executable)["cuda"] == "0"
 
 
+def test_runner_gets_the_models_cache(runners, monkeypatch, tmp_path):
+    name = runners("hf", """
+        import json, os, sys
+        json.load(sys.stdin)
+        print(json.dumps({"done": {"hf": os.environ.get("HF_HOME")}}))
+    """)
+    monkeypatch.delenv("HF_HOME", raising=False)
+    assert venv_runner.run(name, "any", {}, python=sys.executable)["hf"] is None
+    monkeypatch.setattr(get_settings(), "audio_hf_home", str(tmp_path))
+    assert venv_runner.run(name, "any", {}, python=sys.executable)["hf"] == str(tmp_path)
+
+
 def test_runner_errors_and_exit_codes(runners):
     err = runners("err", """
         import json, sys

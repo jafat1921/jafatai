@@ -28,6 +28,7 @@ PROJECT_IMAGE_KINDS = ("portrait", "establishing", "keyframe_start", "keyframe_m
 KIND_LABELS = {"portrait": "Portrait", "establishing": "Establishing", "keyframe_start": "Start frame",
                "keyframe_mid": "Mid frame", "keyframe_end": "End frame"}
 MAX_LIMIT = 100
+TAKE_TAG = "script:"
 
 
 @dataclass
@@ -317,6 +318,10 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
             # tags are stored lower-case and quote-free, so the JSON text match is exact enough
             t = (clean_tags([tag]) or [tag])[0]
             stmt = stmt.where(cast(MediaItem.tags, String).like(f'%"{t}"%'))
+        if not (tag or "").lower().startswith(TAKE_TAG):
+            # dialogue line takes (contract v17) are working files of their script; asking for the
+            # script's own tag is the one way to list them
+            stmt = stmt.where(~cast(MediaItem.tags, String).like(f'%"{TAKE_TAG}%'))
         if after:
             stmt = stmt.where(or_(MediaItem.created_at < after[0],
                                   (MediaItem.created_at == after[0]) & (MediaItem.id < after[1])))

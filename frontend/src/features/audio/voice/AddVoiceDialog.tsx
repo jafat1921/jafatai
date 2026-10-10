@@ -34,20 +34,31 @@ function Warnings({ list }: { list: RefWarning[] }) {
   )
 }
 
-export function AddVoiceDialog({ open, onOpenChange, languages }: { open: boolean; onOpenChange: (o: boolean) => void; languages: VoiceLanguage[] }) {
+interface Prefill extends Partial<CloneForm> {
+  // shown in place of the upload row, e.g. "Speaker 1, cut from the video"
+  clipLabel?: string
+}
+
+export function AddVoiceDialog({ open, onOpenChange, languages, prefill, onCreated }: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  languages: VoiceLanguage[]
+  prefill?: Prefill
+  onCreated?: (v: Voice) => void
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         {/* a fresh form every time it opens */}
-        {open && <AddVoiceForm languages={languages} onDone={() => onOpenChange(false)} />}
+        {open && <AddVoiceForm languages={languages} prefill={prefill} onCreated={onCreated} onDone={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function AddVoiceForm({ languages, onDone }: { languages: VoiceLanguage[]; onDone: () => void }) {
+function AddVoiceForm({ languages, prefill, onCreated, onDone }: { languages: VoiceLanguage[]; prefill?: Prefill; onCreated?: (v: Voice) => void; onDone: () => void }) {
   const uid = useId()
-  const [form, setForm] = useState<CloneForm>(EMPTY_CLONE)
+  const [form, setForm] = useState<CloneForm>(() => ({ ...EMPTY_CLONE, ...prefill }))
   const [source, setSource] = useState<'upload' | 'record'>('upload')
   const [created, setCreated] = useState<Voice | null>(null)
   const [transcript, setTranscript] = useState('')
@@ -77,6 +88,7 @@ function AddVoiceForm({ languages, onDone }: { languages: VoiceLanguage[]; onDon
     create.mutate(clonePayload(form), {
       onSuccess: (v) => {
         setCreated(v)
+        onCreated?.(v)
         setTranscript(v.ref_text || form.refText)
         announce(`${v.name} is in your voices.${v.warnings?.length ? ` ${v.warnings.map((w) => REF_WARNING_TEXT[w]).join(' ')}` : ''}`)
       },
@@ -199,6 +211,15 @@ function AddVoiceForm({ languages, onDone }: { languages: VoiceLanguage[]; onDon
             </div>
           ) : (
             <Recorder prompt={sampleLine(form.language) || undefined} onRecorded={(file, seconds) => addFile(file, seconds)} disabled={uploading} />
+          )}
+          {!row && prefill?.clipLabel && form.refMediaId === prefill.refMediaId && (
+            <div className="flex flex-col gap-1 rounded-[6px] border border-studio-border bg-studio-raised/60 px-2.5 py-2">
+              <p className="flex items-center gap-2 text-small">
+                <span className="min-w-0 flex-1 truncate">{prefill.clipLabel}</span>
+                {form.refDurationS != null && <span className="font-mono text-studio-muted">{clock(form.refDurationS)}</span>}
+              </p>
+              {problem ? <p className="text-small text-studio-danger">{problem}</p> : <Warnings list={local} />}
+            </div>
           )}
           {row && (
             <div className="flex flex-col gap-1 rounded-[6px] border border-studio-border bg-studio-raised/60 px-2.5 py-2">

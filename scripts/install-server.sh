@@ -155,6 +155,11 @@ if (( GPU_LANES )) && [[ -z "$(env_get COMFY_IMAGE_URLS)" || -z "$(env_get COMFY
     warn "listening; every lane falls back to COMFY_URLS. Set them in .env and re-run."
   fi
 fi
+# the voice engines' models sit in the HF cache the installing shell uses; the workers must look there too
+if [[ -z "$(env_get AUDIO_HF_HOME)" && -n "${HF_HOME:-}" && -d "$HF_HOME" ]]; then
+  set_kv AUDIO_HF_HOME "$HF_HOME"
+  echo "    .env: set AUDIO_HF_HOME=$HF_HOME"
+fi
 
 # --- data + database -------------------------------------------------------------
 say "Preparing data dir and database"

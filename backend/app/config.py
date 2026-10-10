@@ -85,9 +85,16 @@ class Settings(BaseSettings):
     urdu_aerab: bool = True
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
+    # where the engine venvs keep their Hugging Face downloads (empty: their own default)
+    audio_hf_home: str = ""
     audio_gpu_image: int = 0
     audio_gpu_video: int = 1
     audio_runner_timeout_s: float = 900.0
+    # Dub a video (contract v18): audio-separator's vocal model, downloaded into the model dir on first use
+    dub_separation_model: str = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+    dub_separation_model_dir: str = "/data/models/audio-separator"
+    # cosine distance under which two speech segments count as one speaker ("auto" speaker count)
+    dub_speaker_threshold: float = 0.25
 
     @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
     @classmethod

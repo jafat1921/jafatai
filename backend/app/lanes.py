@@ -22,7 +22,13 @@ GPU_LANES = ("image", "video")
 # job types that always run on the video GPU whatever their generation says (SeedVR2 / FlashVSR segments)
 VIDEO_JOB_TYPES = frozenset({"upscale"})
 # speech-to-text on a voice's reference clip: a GPU model, but either card will do
-AUDIO_JOB_TYPES = frozenset({"voice_transcribe"})
+AUDIO_JOB_TYPES = frozenset({"voice_transcribe", "transcribe"})
+# a dub_stage job's lane depends on its payload's stage, so it is set when the job is made (dub_lane)
+DUB_GPU_STAGES = frozenset({"separate", "transcribe", "render", "verify"})
+
+
+def dub_lane(stage: str) -> str:
+    return "audio" if stage in DUB_GPU_STAGES else "general"
 
 
 def lane_for(job_type: str, gen_kind: str | None = None) -> str:

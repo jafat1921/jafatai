@@ -805,9 +805,45 @@ class ImageBatchOut(BaseModel):
     magic_prompt: dict | None = None
 
 
+AudioKind = Literal["song", "music", "sfx"]
+
+
+class AudioGenerateIn(BaseModel):
+    kind: AudioKind
+    prompt: str = Field(min_length=1, max_length=2000)
+    lyrics: str = Field("", max_length=6000)
+    # ISO 639-1, plus "ur-latn" for Roman Urdu; ACE-Step reads anything it doesn't know as "unknown"
+    language: str = Field("en", min_length=2, max_length=12, pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$")
+    vocal: Literal["male", "female", "duet", "none"] | None = None
+    bpm: int | None = Field(None, ge=40, le=220)
+    category: Literal["music", "instrument", "loop", "sfx", "oneshot"] | None = None
+    duration_s: float = Field(30.0, ge=1, le=380)
+    model: str | None = Field(None, max_length=60)
+    count: int = Field(1, ge=1, le=4)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    steps: int | None = Field(None, ge=1, le=100)
+    timbre_ref_id: str | None = None
+    title: str | None = Field(None, max_length=200)
+    folder_id: str | None = None
+
+
+class LyricsIn(BaseModel):
+    topic: str = Field(min_length=1, max_length=500)
+    language: str = Field("en", min_length=2, max_length=12, pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$")
+    mood: str | None = Field(None, max_length=200)
+    style: str | None = Field(None, max_length=200)
+    sections: list[Annotated[str, Field(min_length=2, max_length=30)]] = Field(
+        default_factory=lambda: ["verse", "chorus", "verse", "chorus", "bridge", "chorus"], min_length=1, max_length=16)
+
+
+class LyricsOut(BaseModel):
+    lyrics: str
+    tags: str
+
+
 class TemplateOut(BaseModel):
     id: str
-    type: Literal["video", "image"]
+    type: Literal["video", "image", "audio"]
     title: str
     description: str
     thumb: str | None = None
@@ -820,7 +856,7 @@ class TemplateOut(BaseModel):
 
 
 class TemplateStartOut(BaseModel):
-    target: Literal["quick", "studio", "image"]
+    target: Literal["quick", "studio", "image", "audio"]
     prefill: dict[str, Any]
 
 
@@ -833,7 +869,7 @@ class DashboardOut(BaseModel):
 
 
 # polish P4: library organisation
-FolderKind = Literal["any", "image", "video"]
+FolderKind = Literal["any", "image", "video", "audio"]
 
 
 class FolderIn(BaseModel):

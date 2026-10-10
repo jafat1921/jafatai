@@ -27,6 +27,10 @@ class GenerationDriver(Protocol):
         self, prompt: str, params: dict, seed: int, out_path: Path, progress_cb: ProgressCallback
     ) -> DriverResult: ...
 
+    def generate_audio(
+        self, prompt: str, params: dict, seed: int, out_path: Path, progress_cb: ProgressCallback
+    ) -> DriverResult: ...
+
     def generate_text(
         self, prompt: str, params: dict, seed: int, out_path: Path, progress_cb: ProgressCallback
     ) -> DriverResult: ...

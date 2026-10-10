@@ -10,7 +10,7 @@ import { useJob } from '@/hooks/useJobs'
 import { useDeleteUpscale, useUpscaleList } from '@/hooks/useUpscales'
 import { downloadUrl, upscaleLabel } from '@/lib/media'
 import type { UpscaleEntry } from '@/lib/upscaleHistory'
-import type { Generation, MediaKind, UpscaleRow } from '@/lib/types'
+import type { Generation, UpscaleRow, VisualKind } from '@/lib/types'
 import { announce } from '@/stores/ui'
 
 const READY = new Set(['ready', 'approved'])
@@ -24,7 +24,7 @@ const sizeOf = (g: Generation | null | undefined, w?: number | null, h?: number 
   return w && h ? `${w}×${h}` : null
 }
 
-function Panel({ gen, title, kind, size }: { gen?: Generation | null; title: string; kind: MediaKind; size: string | null }) {
+function Panel({ gen, title, kind, size }: { gen?: Generation | null; title: string; kind: VisualKind; size: string | null }) {
   const ready = !!gen?.media_url && READY.has(gen.status)
   const [natural, setNatural] = useState<string | null>(null)
   const preview = gen?.thumb_url ?? gen?.media_url
@@ -178,7 +178,7 @@ function QueuedCard({ entry }: { entry: UpscaleEntry }) {
 }
 
 interface Props {
-  kind: MediaKind
+  kind: VisualKind
   // what this browser just queued; dropped as soon as the server lists it
   pending?: UpscaleEntry[]
   onSeen?: (resultIds: string[]) => void

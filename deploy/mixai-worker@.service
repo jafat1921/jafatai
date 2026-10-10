@@ -1,5 +1,6 @@
-# One worker per job lane: mixai-worker@image, mixai-worker@video, mixai-worker@general.
-# The instance name is the lane list (several lanes: mixai-worker@image-video). Which GPU a lane
+# One worker per job lane: mixai-worker@image-audio, mixai-worker@video-audio, mixai-worker@general.
+# The instance name is the lane list, dash-separated. Both GPU workers take audio jobs (whichever is
+# idle) and render them on their own GPU. Which GPU a lane
 # renders on comes from COMFY_IMAGE_URLS / COMFY_VIDEO_URLS in .env, not from this file.
 [Unit]
 Description=Mix AI Cinema Studio worker (%i lane)

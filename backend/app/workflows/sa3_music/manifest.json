@@ -1,0 +1,87 @@
+{
+  "name": "sa3_music",
+  "family": "stable-audio-3",
+  "description": "Stable Audio 3 Small Music: instrumental music and loops up to 2 minutes. The graph of Comfy's audio_stable_audio_3_medium template without its Qwen reprompt (our prompt goes in as written).",
+  "inputs": {
+    "prompt": {
+      "type": "str",
+      "required": true,
+      "targets": [
+        [
+          "Positive",
+          "text"
+        ]
+      ]
+    },
+    "negative": {
+      "type": "str",
+      "default": "",
+      "targets": [
+        [
+          "Negative",
+          "text"
+        ]
+      ]
+    },
+    "seed": {
+      "type": "int",
+      "default": 0,
+      "targets": [
+        [
+          "Sampler",
+          "seed"
+        ]
+      ]
+    },
+    "duration_s": {
+      "type": "float",
+      "default": 30.0,
+      "targets": [
+        [
+          "Latent",
+          "seconds"
+        ]
+      ]
+    },
+    "steps": {
+      "type": "int",
+      "default": 8,
+      "targets": [
+        [
+          "Sampler",
+          "steps"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/sa3",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "audio": {
+      "node": "Save",
+      "kind": "audio"
+    }
+  },
+  "models": {
+    "checkpoints": [
+      "stable_audio_3_small_music.safetensors"
+    ],
+    "text_encoders": [
+      "t5gemma_b_b_ul2.safetensors"
+    ]
+  },
+  "progress_weights": {
+    "Sampler": 6,
+    "Checkpoint": 2,
+    "TextEncoder": 1,
+    "Decode": 2
+  }
+}

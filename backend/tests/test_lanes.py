@@ -26,6 +26,7 @@ from tests.test_autopilot import brain, create, stages  # noqa: F401  (brain is 
     ("portrait", "image"), ("sheet_view", "image"), ("establishing", "image"), ("keyframe_start", "image"),
     ("keyframe_end", "image"), ("keyframe_mid", "image"), ("image", "image"),
     ("take", "video"), ("video", "video"), ("render", "video"), ("tile", "video"),
+    ("song", "audio"), ("music", "audio"), ("sfx", "audio"), ("speech", "audio"),
     ("scene_text", "general"), (None, "general"),
 ])
 def test_generate_jobs_follow_their_generation_kind(kind, lane):
@@ -51,11 +52,12 @@ def test_every_registered_job_type_has_a_lane():
 
 
 def test_parse_lanes():
-    assert parse_lanes(None) == ("image", "video", "general")
-    assert parse_lanes("all") == ("image", "video", "general")
+    assert parse_lanes(None) == ("image", "video", "audio", "general")
+    assert parse_lanes("all") == ("image", "video", "audio", "general")
     assert parse_lanes("video") == ("video",)
     assert parse_lanes("image,general") == ("image", "general")
     assert parse_lanes("image-video") == ("image", "video")  # systemd instance names have no commas
+    assert parse_lanes("video-audio") == ("video", "audio")
     with pytest.raises(ValueError):
         parse_lanes("gpu2")
 
@@ -265,7 +267,7 @@ def test_status_reports_each_lane(client, character, db):
     _beat(db, "gpu-box:1", ["image"])
     _beat(db, "gpu-box:2", ["video"], age=timedelta(minutes=5))
     lanes = client.get("/api/system/status").json()["lanes"]
-    assert set(lanes) == {"image", "video", "general"}
+    assert set(lanes) == {"image", "video", "audio", "general"}
     assert lanes["image"]["worker"]["alive"] is True and lanes["image"]["job"]["id"] == img.id
     assert lanes["video"]["worker"]["alive"] is False and lanes["video"]["job"] is None
     assert lanes["general"]["comfy"] is None

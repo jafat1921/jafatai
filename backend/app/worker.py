@@ -1,4 +1,4 @@
-"""Job worker: `python -m app.worker [--lanes image,video,general]` (cwd=backend).
+"""Job worker: `python -m app.worker [--lanes image,video,audio,general]` (cwd=backend).
 
 One job at a time per process. Jobs are claimed with a conditional UPDATE so several
 workers can share the table safely; on the two-GPU box there is one worker per lane
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, aliased, sessionmaker
 from app.config import get_settings
 from app.db import SessionLocal
 from app.drivers import GenerationDriver, get_driver
-from app.lanes import IMAGE_KINDS, LANES, VIDEO_KINDS, parse_lanes
+from app.lanes import AUDIO_KINDS, IMAGE_KINDS, LANES, VIDEO_KINDS, gpu_lane, parse_lanes
 from app.models import Generation, Job, UsageLedger, WorkerHeartbeat, utcnow
 
 log = logging.getLogger("mixai.worker")
@@ -32,7 +32,8 @@ HEARTBEAT_EVERY = 5.0
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
 TEXT_KINDS = {"scene_text"}
-EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt"}
+EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt", "audio/flac": ".flac", "audio/mpeg": ".mp3",
+       "audio/wav": ".wav", "audio/ogg": ".ogg", "audio/mp4": ".m4a"}
 # same string as app.reel.ASSEMBLE_JOB (that module is imported at the bottom)
 SERIAL_PER_PROJECT = ("reel_assemble",)
 
@@ -144,7 +145,8 @@ def beat(db: Session, lanes=None) -> None:
         lanes = list(lanes or LANES)
         hb = WorkerHeartbeat(id=WORKER_ID, info={
             "driver": s.gen_driver, "pid": os.getpid(), "lanes": lanes,
-            "comfy": {lane: s.comfy_urls_for(lane) for lane in lanes if lane != "general"},
+            "comfy": {lane: s.comfy_urls_for(gpu_lane(lanes) if lane == "audio" else lane)
+                      for lane in lanes if lane != "general"},
         })
         db.add(hb)
     hb.last_seen = utcnow()
@@ -240,6 +242,8 @@ def handle_generate(ctx: JobContext) -> dict:
         method, media_type = "generate_image", "image/png"
     elif gen.kind in VIDEO_KINDS:
         method, media_type = "generate_video", "video/mp4"
+    elif gen.kind in AUDIO_KINDS:
+        method, media_type = "generate_audio", "audio/flac"
     elif gen.kind in TEXT_KINDS:
         method, media_type = "generate_text", "text/plain"
     else:
@@ -355,8 +359,10 @@ def _close_generation(db: Session, job: Job, status: str = "failed") -> None:
 
 def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver] | None = None,
             lanes=None) -> None:
-    # the lane picks the ComfyUI instance: image GPU for stills, video GPU for takes and upscales
-    factory = driver_factory or (lambda: get_driver(get_settings().gen_driver, lane=job.lane))
+    # the lane picks the ComfyUI instance: image GPU for stills, video GPU for takes and upscales.
+    # Audio has no GPU of its own: both GPU workers claim it and render on whichever card they drive.
+    lane = gpu_lane(lanes or LANES) if job.lane == "audio" else job.lane
+    factory = driver_factory or (lambda: get_driver(get_settings().gen_driver, lane=lane))
     ctx = JobContext(db, job, factory, lanes)
     t0 = time.monotonic()
     handler = HANDLERS.get(job.type)
@@ -450,7 +456,7 @@ def process_one(
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m app.worker")
     ap.add_argument("--lanes", default="all",
-                    help="comma list of image, video, general (default: all, one worker does everything)")
+                    help="comma list of image, video, audio, general (default: all, one worker does everything)")
     args = ap.parse_args(argv)
     try:
         lanes = parse_lanes(args.lanes)
@@ -485,7 +491,8 @@ def main(argv: list[str] | None = None) -> None:
     if s.gen_driver == "comfy":
         for lane in lanes:
             if lane != "general":
-                log.info("%s lane -> ComfyUI %s", lane, ", ".join(s.comfy_urls_for(lane)) or "(none set)")
+                own = gpu_lane(lanes) if lane == "audio" else lane
+                log.info("%s lane -> ComfyUI %s", lane, ", ".join(s.comfy_urls_for(own)) or "(none set)")
     last_beat = 0.0
     while not _stop.is_set():
         now = time.monotonic()

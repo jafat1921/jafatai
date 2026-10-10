@@ -51,7 +51,7 @@ def _owned_item(db: Session, media_id: str, workspace_id: str) -> MediaItem:
 
 @router.get("/media", response_model=MediaPage)
 def list_media(
-    kind: Literal["image", "video"] | None = None,
+    kind: Literal["image", "video", "audio"] | None = None,
     origin: Literal["generated", "upload", "project"] | None = None,
     q: str | None = Query(None, max_length=200),
     tag: str | None = Query(None, max_length=40),
@@ -360,13 +360,13 @@ PREVIEW_DIR = TEMPLATE_DIR / "previews"
 @lru_cache
 def categories() -> dict[str, list[str]]:
     return {kind: json.loads((TEMPLATE_DIR / f"{kind}.json").read_text(encoding="utf-8")).get("categories", [])
-            for kind in ("video", "image")}
+            for kind in ("video", "image", "audio")}
 
 
 @lru_cache
 def templates() -> dict[str, dict]:
     out: dict[str, dict] = {}
-    for kind in ("video", "image"):
+    for kind in ("video", "image", "audio"):
         data = json.loads((TEMPLATE_DIR / f"{kind}.json").read_text(encoding="utf-8"))
         for t in data["templates"]:
             out[t["id"]] = {**t, "type": kind}
@@ -394,7 +394,7 @@ def _template_out(t: dict) -> TemplateOut:
 
 @router.get("/templates", response_model=list[TemplateOut])
 @router.get("/prompt-templates", response_model=list[TemplateOut])
-def list_templates(type: Literal["video", "image"] | None = None, cur: CurrentUser = Depends(get_current_user)):
+def list_templates(type: Literal["video", "image", "audio"] | None = None, cur: CurrentUser = Depends(get_current_user)):
     rows = [t for t in templates().values() if type in (None, t["type"])]
     order = categories()
 
@@ -402,7 +402,8 @@ def list_templates(type: Literal["video", "image"] | None = None, cur: CurrentUs
         cats = order.get(t["type"], [])
         return cats.index(t["category"]) if t.get("category") in cats else len(cats)
 
-    return [_template_out(t) for t in sorted(rows, key=lambda t: (t["type"] != "video", rank(t)))]
+    kinds = ("video", "image", "audio")
+    return [_template_out(t) for t in sorted(rows, key=lambda t: (kinds.index(t["type"]), rank(t)))]
 
 
 @router.get("/templates/{template_id}/preview")
@@ -432,6 +433,11 @@ def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user
         if d.get("model"):
             prefill["model"] = d["model"]
         target = "image"
+    elif t["type"] == "audio":
+        prefill = {k: d.get(k) for k in ("kind", "lyrics", "language", "vocal", "bpm", "category", "duration_s")
+                   if d.get(k) is not None}
+        prefill.update(prompt=scaffold, template_id=t["id"])
+        target = "audio"
     elif d.get("authoring_mode"):
         prefill = {"title": "", "authoring_mode": d["authoring_mode"], "logline": "",
                    "logline_hint": d.get("logline_hint", scaffold), "target_runtime_s": d.get("target_runtime_s"),

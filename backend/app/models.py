@@ -349,7 +349,7 @@ class MediaItem(Base):
     __table_args__ = (Index("ix_media_item_ws_created", "workspace_id", "created_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
-    kind: Mapped[str] = mapped_column(String(10))  # image | video
+    kind: Mapped[str] = mapped_column(String(10))  # image | video | audio (and brand fonts)
     origin: Mapped[str] = mapped_column(String(20))  # generated | upload
     title: Mapped[str] = mapped_column(String(300), default="", server_default="")
     tags: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
@@ -460,7 +460,7 @@ class Folder(Base):
     workspace_id: Mapped[str] = _ws()
     name: Mapped[str] = mapped_column(String(120))
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    kind: Mapped[str] = mapped_column(String(10), default="any", server_default="any")  # any | image | video
+    kind: Mapped[str] = mapped_column(String(10), default="any", server_default="any")  # any | image | video | audio
     sort: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

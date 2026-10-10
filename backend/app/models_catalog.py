@@ -27,7 +27,7 @@ class Speed:
 @dataclass(frozen=True)
 class Model:
     id: str
-    type: str  # image | edit | video | upscale
+    type: str  # image | edit | video | upscale | audio
     label: str
     badge: str | None
     description: str
@@ -42,6 +42,9 @@ class Model:
     est_seconds: float | None = None
     default: bool = False
     smooth_motion: bool = False  # the template carries the optional temporal x2 nodes
+    licence: str | None = None  # shown beside the model in the picker (audio models)
+    # hidden and refused unless AUDIO_ALLOW_NONCOMMERCIAL: its licence limits commercial use
+    noncommercial: bool = False
 
 
 QWEN_LIGHTNING = "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors"
@@ -49,6 +52,7 @@ QWEN_TURBO = "Wuli-Qwen-Image-2512-Turbo-LoRA-2steps-V1.0-bf16.safetensors"
 SINGLE_PASS_S = 256 / 24  # 257 frames, one LTX pass
 WAN_FPS = 16.0
 WAN_FRAMES = 81
+SA3_LICENCE = "Stability AI Community Licence: free for commercial use under US$1M annual revenue"
 
 MODELS: dict[str, Model] = {m.id: m for m in (
     Model("zimage_turbo", "image", "Z-Image Turbo", "FAST",
@@ -93,14 +97,56 @@ MODELS: dict[str, Model] = {m.id: m for m in (
     Model("esrgan", "upscale", "ESRGAN", "QUICK", "Quickest upscale, sharpening only.", (), "upscale_esrgan"),
     Model("zimage_redraw", "upscale", "Z-Image redraw", "UPSCALE",
           "Image upscale that redraws fine detail.", (), "image_upscale_zimage"),
+
+    # audio est_seconds: per 30 s of output, warm (the UI scales by length; guesses until measured)
+    Model("ace15_turbo", "audio", "ACE-Step 1.5", "SONG",
+          "Full songs with vocals from style tags and lyrics, 50+ languages including Urdu and Hindi.",
+          ("song", "lyrics", "vocals", "timbre_ref"), "ace15_song", max_duration_s=240, est_seconds=5,
+          default=True, licence="MIT licence: free for commercial use"),
+    Model("minimax_music3", "audio", "MiniMax-Music3", None,
+          "Songs with vocals from a description and lyrics; may end a little before the length you ask for. "
+          "MiniMax-Music3 Community Licence (commercial use under US$20M revenue).",
+          ("song", "lyrics", "vocals"), "minimax_music3", max_duration_s=240, est_seconds=18,
+          licence="MiniMax-Music3 Community Licence: commercial use only under US$20M annual revenue",
+          noncommercial=True),
+    Model("sa3_small_music", "audio", "Stable Audio 3 Small Music", "FAST",
+          "Instrumental music, beds and loops up to 2 minutes.", ("music",), "sa3_music", max_duration_s=120,
+          est_seconds=3, default=True, licence=SA3_LICENCE),
+    Model("sa3_medium", "audio", "Stable Audio 3 Medium", "LONG",
+          "Longer, more structured instrumental pieces, up to about 6 minutes.", ("music", "long"), "sa3_medium",
+          max_duration_s=380, est_seconds=9, licence=SA3_LICENCE),
+    Model("sa3_small_sfx", "audio", "Stable Audio 3 Small SFX", "SFX",
+          "Sound effects, one-shots and ambience up to 2 minutes.", ("sfx",), "sa3_sfx", max_duration_s=120,
+          est_seconds=3, default=True, licence=SA3_LICENCE),
 )}
 
-TYPES = ("image", "edit", "video", "upscale")
+TYPES = ("image", "edit", "video", "upscale", "audio")
+AUDIO_TEMPLATES = frozenset(m.template for m in MODELS.values() if m.type == "audio")
+# what a generation kind needs from an audio model, and how to say it in an error
+AUDIO_KIND_LABELS = {"song": "songs", "music": "music", "sfx": "sound effects"}
 QUALITIES = {"standard": "ltx23_distilled", "hq": "ltx23_hq"}
 
 
 def default_for(type_: str) -> Model:
     return next(m for m in MODELS.values() if m.type == type_ and m.default)
+
+
+def audio_default(kind: str) -> Model:
+    return next(m for m in MODELS.values() if m.type == "audio" and m.default and kind in m.capabilities)
+
+
+def hidden(m: Model) -> bool:
+    from app.config import get_settings
+
+    return m.noncommercial and m.type == "audio" and not get_settings().audio_allow_noncommercial
+
+
+def check_audio(m: Model, kind: str, duration_s: float) -> None:
+    if kind not in m.capabilities:
+        makes = " and ".join(AUDIO_KIND_LABELS[c] for c in m.capabilities if c in AUDIO_KIND_LABELS)
+        raise HTTPException(422, f"{m.label} makes {makes}, not {AUDIO_KIND_LABELS.get(kind, kind)}")
+    if m.max_duration_s is not None and duration_s > m.max_duration_s + 1e-6:
+        raise HTTPException(422, f"{m.label} makes up to {m.max_duration_s:g} s; asked for {duration_s:g} s")
 
 
 def get(model_id: str | None, type_: str) -> Model:
@@ -109,8 +155,11 @@ def get(model_id: str | None, type_: str) -> Model:
     if not model_id or model_id == AUTO:
         return default_for(type_)
     m = MODELS.get(model_id)
+    if m is not None and hidden(m):
+        raise HTTPException(422, f"{m.label} is turned off on this server: its licence limits commercial use "
+                                 "(the owner can allow it with AUDIO_ALLOW_NONCOMMERCIAL)")
     if m is None or m.type != type_:
-        names = ", ".join(x.id for x in MODELS.values() if x.type == type_)
+        names = ", ".join(x.id for x in MODELS.values() if x.type == type_ and not hidden(x))
         what = "an image" if type_ == "image" else ("an edit" if type_ == "edit" else f"a {type_}")
         raise HTTPException(422, f"'{model_id}' isn't {what} model (choose one of: {names})")
     reason = known_unavailable(m)
@@ -122,7 +171,7 @@ def get(model_id: str | None, type_: str) -> Model:
 # ---------------------------------------------------------------- auto
 
 AUTO = "auto"
-AUTO_TYPES = ("image", "edit", "video")
+AUTO_TYPES = ("image", "edit", "video", "audio")
 AUTO_DESCRIPTION = "Picks the best model for your prompt"
 _NON_LATIN = re.compile(r"[֐-ࣿऀ-෿฀-࿿ᄀ-ᇿ぀-ヿ㐀-鿿가-힯"
                         r"Ѐ-ӿͰ-Ͽﭐ-﷿ﹰ-﻿]")
@@ -141,7 +190,7 @@ def _usable(model_id: str) -> bool:
 
 
 def resolve_auto(type_: str, prompt: str = "", *, count: int = 1, refs: int = 0,
-                 quality: str | None = None) -> tuple[Model, str]:
+                 quality: str | None = None, kind: str | None = None) -> tuple[Model, str]:
     """(model, why) for the catalog's "auto" entry. Skips a pick the last /object_info says is broken."""
     if type_ == "image":
         if wants_text(prompt):
@@ -159,6 +208,9 @@ def resolve_auto(type_: str, prompt: str = "", *, count: int = 1, refs: int = 0,
     elif type_ == "video":
         picks = [("ltx23_hq", "high quality asked for")] if quality == "hq" else []
         picks.append(("ltx23_distilled", "video with sound"))
+    elif type_ == "audio":
+        m = audio_default(kind or "song")
+        picks = [(m.id, f"default for {AUDIO_KIND_LABELS.get(kind or 'song', kind)}")]
     else:
         raise HTTPException(422, f"There's no auto choice for {type_} models")
     for mid, why in picks:
@@ -171,7 +223,8 @@ def resolve_auto(type_: str, prompt: str = "", *, count: int = 1, refs: int = 0,
 
 def choose(model_id: str | None, type_: str, prompt: str = "", **kw) -> tuple[Model, dict]:
     """Route helper: the model plus what goes into params (model_resolved, and the reason when auto)."""
-    if model_id == AUTO:
+    # audio has a default per kind, so leaving the model out means auto there
+    if model_id == AUTO or (type_ == "audio" and not model_id):
         m, why = resolve_auto(type_, prompt, **kw)
         return m, {"model_requested": AUTO, "model_resolved": m.id, "model_auto_reason": why}
     m = get(model_id, type_)
@@ -314,7 +367,8 @@ def measured_seconds(rows: list[dict]) -> dict[str, float]:
         if not gpu or not tpl:
             continue
         key = tpl + (f":{p['speed']}" if p.get("speed") else "")
-        dur = p.get("duration_s") if tpl in ("ltx23_i2v", "ltx23_two_stage", "wan22_t2v") else None
+        per_second = tpl in ("ltx23_i2v", "ltx23_two_stage", "wan22_t2v") or tpl in AUDIO_TEMPLATES
+        dur = p.get("duration_s") if per_second else None
         acc.setdefault(key, []).append(float(gpu) / float(dur) if dur else float(gpu))
     return {k: statistics.median(v[:15]) for k, v in acc.items()}
 
@@ -326,7 +380,7 @@ def model_out(m: Model, av: dict, measured: dict[str, float] | None = None) -> d
     key = m.template + (f":{m.default_speed}" if m.default_speed else "")
     if key in measured:
         per = measured[key]
-        est = per * (5.0 if m.type == "video" else 1.0)  # videos: a typical 5 s clip
+        est = per * {"video": 5.0, "audio": 30.0}.get(m.type, 1.0)  # a typical 5 s clip / per 30 s of audio
         source = "measured"
     out = {
         "id": m.id, "type": m.type, "label": m.label, "badge": m.badge, "description": m.description,
@@ -339,6 +393,9 @@ def model_out(m: Model, av: dict, measured: dict[str, float] | None = None) -> d
         out["default_speed"] = m.default_speed
     if m.max_refs is not None:
         out["max_refs"] = m.max_refs
+    if m.type == "audio":
+        out["max_duration_s"] = m.max_duration_s
+        out["extra"] = {"licence": m.licence, **({"noncommercial": True} if m.noncommercial else {})}
     if m.type == "video":
         if m.max_duration_s is not None:
             out["max_duration_s"] = round(m.max_duration_s, 2)
@@ -359,7 +416,7 @@ def catalog(type_: str | None, info: dict | None, *, driver: str, error: str | N
         if type_ not in (None, t):
             continue
         rows = [model_out(m, availability(m, info, driver=driver, error=error), measured)
-                for m in MODELS.values() if m.type == t]
+                for m in MODELS.values() if m.type == t and not hidden(m)]
         if t in AUTO_TYPES:
             auto = auto_out(t)
             if not any(r["available"] for r in rows):

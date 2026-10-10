@@ -12,6 +12,7 @@ from app.config import Settings, get_settings
 from app.drivers.base import DriverResult, ProgressCallback
 from app.drivers.comfy_client import ComfyClient, ComfyError, ComfyOutput, parse_outputs, pick_client
 from app import models_catalog as mc
+from app.lanes import AUDIO_KINDS
 from app.workflows import build, frames_for, load, snap_multiple
 
 log = logging.getLogger("mixai.comfy")
@@ -42,13 +43,22 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0,
             "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
             "ltx23_two_stage": 3600.0, "wan22_t2v": 2400.0,
-            "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0}
+            "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0,
+            "ace15_song": 900.0, "sa3_music": 600.0, "sa3_sfx": 600.0, "sa3_medium": 1200.0, "minimax_music3": 1800.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
 LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend"}
 RESTORE_TEMPLATES = {"photo_model_1x", "photo_face_restore", "photo_colourise", "photo_supir", "photo_cutout_mask",
                      "photo_sam_mask", "image_upscale_seedvr2"}
 IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
 UPSCALE_TEMPLATES = {"upscale_seedvr2", "upscale_flashvsr", "upscale_esrgan"}
+
+# TextEncodeAceStepAudio1.5's language list (comfy_extras/nodes_ace.py); anything else goes in as "unknown"
+ACE_LANGUAGES = frozenset({
+    "ar", "az", "bg", "bn", "ca", "cs", "da", "de", "el", "en", "es", "fa", "fi", "fr", "he", "hi", "hr", "ht", "hu",
+    "id", "is", "it", "ja", "ko", "la", "lt", "ms", "ne", "nl", "no", "pa", "pl", "pt", "ro", "ru", "sa", "sk", "sr",
+    "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "yue", "zh"})
+VOCALS = {"male": "male vocals", "female": "female vocals", "duet": "male and female duet vocals"}
+SA3_HINTS = {"loop": "seamless loop", "oneshot": "one-shot", "instrument": "solo instrument"}
 
 
 @dataclass
@@ -286,6 +296,9 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
     if kind == "upscale_segment":
         return upscale_plan(params, seed)
 
+    if kind in AUDIO_KINDS:
+        return audio_plan(kind, prompt, params, seed, lookup)
+
     raise ComfyError(f"The ComfyUI driver doesn't handle '{kind}' generations")
 
 
@@ -426,6 +439,62 @@ def restore_plan(r: dict, seed: int, lookup) -> Plan:
     return Plan(template, inputs, {"image": src}, [], "image", sources)
 
 
+def style_tags(prompt: str, params: dict) -> str:
+    """Prompt plus the vocal and tempo chips, the way ACE-Step and MiniMax read their style text."""
+    parts = [prompt.strip().rstrip(",. ")]
+    # no lyrics means instrumental whatever the vocal chip says: a voice with nothing to sing only hums
+    if params.get("vocal") == "none" or not (params.get("lyrics") or "").strip():
+        vocal = "instrumental"
+    else:
+        vocal = VOCALS.get(params.get("vocal") or "")
+    if vocal and vocal not in parts[0].lower():
+        parts.append(vocal)
+    if params.get("bpm"):
+        parts.append(f"{int(params['bpm'])} bpm")
+    return ", ".join(p for p in parts if p)
+
+
+def audio_plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
+    """Audio Studio (contract v14): song / music / sfx on the model the API picked."""
+    m = mc.MODELS.get(params.get("model") or "")
+    if m is None or m.type != "audio":
+        m = mc.audio_default(kind)
+    duration = float(params.get("duration_s") or 30)
+    inputs: dict[str, Any] = {"seed": seed, "duration_s": duration}
+    if params.get("steps"):
+        inputs["steps"] = int(params["steps"])
+    images: dict[str, Path | list[Path]] = {}
+    sources: dict[str, Any] = {"model": m.id}
+    lyrics = (params.get("lyrics") or "").strip()
+
+    if m.template == "ace15_song":
+        lang = str(params.get("language") or "en").lower()
+        lang = "ur" if lang == "ur-latn" else lang
+        inputs.update(tags=style_tags(prompt, params), lyrics=lyrics or "[Instrumental]",
+                      language=lang if lang in ACE_LANGUAGES else "unknown")
+        if params.get("bpm"):
+            inputs["bpm"] = int(params["bpm"])
+        ref = params.get("timbre_ref_id")
+        if ref:
+            images["timbre_audio"] = lookup.generation_file(ref)
+            # Comfy's own advice: the audio-code LM fights a reference clip, so it goes off
+            inputs["audio_codes"] = False
+            sources["timbre_ref_id"] = ref
+    elif m.template == "minimax_music3":
+        inputs.update(caption=style_tags(prompt, params), lyrics=lyrics)
+    else:
+        text = prompt.strip()
+        hint = SA3_HINTS.get(params.get("category") or "")
+        if hint and hint not in text.lower():
+            text = f"{text.rstrip('. ')}, {hint}"
+        if params.get("bpm"):
+            text += f", {int(params['bpm'])} BPM"
+        inputs["prompt"] = text
+        if params.get("negative"):
+            inputs["negative"] = params["negative"]
+    return Plan(m.template, inputs, images, [], "audio", sources)
+
+
 def exec_seconds(entry: dict) -> float | None:
     """GPU time from the history timestamps, so time spent queued behind other jobs isn't billed."""
     start = end = None
@@ -466,6 +535,9 @@ class ComfyDriver:
         return self._generate(prompt, params, seed, out_path, progress_cb)
 
     def generate_video(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
+        return self._generate(prompt, params, seed, out_path, progress_cb)
+
+    def generate_audio(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
         return self._generate(prompt, params, seed, out_path, progress_cb)
 
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
@@ -524,7 +596,13 @@ class ComfyDriver:
         if "view" in plan.inputs:
             record["view"] = plan.inputs["view"]
         meta: dict[str, Any] = {"template": plan.template, "gpu_seconds": gpu_seconds}
-        if plan.media == "video" and "num_frames" in resolved:
+        if plan.media == "audio":
+            from app.reel import probe
+
+            # MiniMax may stop early, so the file says how long it really is
+            meta["duration_s"] = round(probe(out_path).duration, 3) or resolved.get("duration_s")
+            meta["model"] = plan.sources.get("model")
+        elif plan.media == "video" and "num_frames" in resolved:
             fps = float(resolved.get("fps") or 24)
             meta.update(duration_s=round(resolved["num_frames"] / fps, 3), width=resolved["width"], height=resolved["height"])
         elif plan.media == "video":
@@ -532,8 +610,8 @@ class ComfyDriver:
         else:
             meta.update(width=resolved.get("width"), height=resolved.get("height"))
         progress_cb(1.0, "Done")
-        return DriverResult(out_path, "video/mp4" if plan.media == "video" else "image/png", meta,
-                            params_update={"comfy": record})
+        media_type = {"video": "video/mp4", "audio": "audio/flac"}.get(plan.media, "image/png")
+        return DriverResult(out_path, media_type, meta, params_update={"comfy": record})
 
     @staticmethod
     def _pick(outs: list[ComfyOutput], graph: dict, manifest: dict) -> ComfyOutput:

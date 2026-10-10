@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { qk } from './keys'
+import type { TemplateType } from '@/lib/types'
 import { useJobs } from './useJobs'
 
-export function useTemplates(type: 'video' | 'image') {
+export function useTemplates(type: TemplateType) {
   return useQuery({ queryKey: qk.templates(type), queryFn: () => api.templates.list(type), staleTime: 10 * 60_000 })
 }
 

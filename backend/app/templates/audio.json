@@ -1,0 +1,308 @@
+{
+  "version": 1,
+  "categories": [
+    "Song",
+    "Score",
+    "Sound effects",
+    "Ambience"
+  ],
+  "templates": [
+    {
+      "id": "audio-pop-anthem",
+      "category": "Song",
+      "title": "Upbeat pop song",
+      "description": "A bright, radio-friendly pop song with a big singalong chorus.",
+      "thumb": null,
+      "tags": [
+        "pop",
+        "song",
+        "vocals",
+        "upbeat"
+      ],
+      "examples": {
+        "topic": "a summer road trip with old friends",
+        "instruments": "bright synths, punchy drums and clean electric guitar"
+      },
+      "defaults": {
+        "prompt_scaffold": "Upbeat modern pop about [topic], [instruments], catchy hook, polished radio mix, confident lead vocal",
+        "kind": "song",
+        "vocal": "female",
+        "language": "en",
+        "bpm": 118,
+        "duration_s": 150,
+        "lyrics": "[verse]\n\n[chorus]\n\n[verse]\n\n[chorus]\n\n[bridge]\n\n[chorus]\n"
+      }
+    },
+    {
+      "id": "audio-qawwali",
+      "category": "Song",
+      "title": "Qawwali",
+      "description": "Devotional Sufi qawwali with harmonium, tabla, handclaps and a call-and-response chorus.",
+      "thumb": null,
+      "tags": [
+        "qawwali",
+        "sufi",
+        "urdu",
+        "devotional",
+        "south asian"
+      ],
+      "examples": {
+        "theme": "longing for the beloved and the light of the dargah at night",
+        "setting": "mehfil in a shrine courtyard"
+      },
+      "defaults": {
+        "prompt_scaffold": "Sufi qawwali about [theme], harmonium and tabla, rhythmic handclaps, group chorus answering the lead singer, slow build to an ecstatic finale, live [setting] feel",
+        "kind": "song",
+        "vocal": "male",
+        "language": "ur",
+        "bpm": 92,
+        "duration_s": 210,
+        "lyrics": "[intro]\n\n[verse]\n\n[chorus]\n\n[verse]\n\n[chorus]\n\n[outro]\n"
+      }
+    },
+    {
+      "id": "audio-ghazal",
+      "category": "Song",
+      "title": "Ghazal",
+      "description": "An intimate Urdu ghazal: soft harmonium, tabla and a tender, unhurried voice.",
+      "thumb": null,
+      "tags": [
+        "ghazal",
+        "urdu",
+        "poetry",
+        "romantic",
+        "south asian"
+      ],
+      "examples": {
+        "theme": "a lover waiting by the window as the monsoon rain falls",
+        "instrument": "sarangi"
+      },
+      "defaults": {
+        "prompt_scaffold": "Classical Urdu ghazal about [theme], soft harmonium, gentle tabla, [instrument] fills, intimate late-night baithak, expressive unhurried vocal",
+        "kind": "song",
+        "vocal": "male",
+        "language": "ur",
+        "bpm": 72,
+        "duration_s": 180,
+        "lyrics": "[verse]\n\n[chorus]\n\n[verse]\n\n[chorus]\n\n[verse]\n\n[chorus]\n"
+      }
+    },
+    {
+      "id": "audio-bollywood-romance",
+      "category": "Song",
+      "title": "Bollywood-style romance",
+      "description": "A sweeping film-song duet with strings, dholak and a soaring chorus.",
+      "thumb": null,
+      "tags": [
+        "bollywood",
+        "film song",
+        "hindi",
+        "duet",
+        "romantic"
+      ],
+      "examples": {
+        "scene": "two lovers meeting again at a crowded railway station",
+        "era": "1990s"
+      },
+      "defaults": {
+        "prompt_scaffold": "Romantic Bollywood-style film song duet about [scene], lush strings, dholak and tabla groove, flute melody, [era] film-song feel, soaring chorus",
+        "kind": "song",
+        "vocal": "duet",
+        "language": "hi",
+        "bpm": 96,
+        "duration_s": 200,
+        "lyrics": "[intro]\n\n[verse]\n\n[chorus]\n\n[verse]\n\n[chorus]\n\n[bridge]\n\n[chorus]\n"
+      }
+    },
+    {
+      "id": "audio-jingle",
+      "category": "Song",
+      "title": "Brand jingle",
+      "description": "A short, cheerful jingle that sings the brand name and a tagline.",
+      "thumb": null,
+      "tags": [
+        "jingle",
+        "advert",
+        "brand",
+        "short"
+      ],
+      "examples": {
+        "brand": "Sunrise Tea",
+        "tagline": "Wake up warm"
+      },
+      "defaults": {
+        "prompt_scaffold": "Cheerful advertising jingle for [brand], ukulele, handclaps and glockenspiel, bright and friendly, ends on the line [tagline]",
+        "kind": "song",
+        "vocal": "female",
+        "language": "en",
+        "bpm": 124,
+        "duration_s": 20,
+        "lyrics": "[verse]\n\n[chorus]\n"
+      }
+    },
+    {
+      "id": "audio-epic-trailer",
+      "category": "Score",
+      "title": "Epic trailer score",
+      "description": "Orchestral build with taiko hits and a huge final rise for a trailer or finale.",
+      "thumb": null,
+      "tags": [
+        "orchestral",
+        "trailer",
+        "epic",
+        "cinematic"
+      ],
+      "examples": {
+        "story": "a lone rider crossing a frozen mountain pass",
+        "ending": "one huge final hit"
+      },
+      "defaults": {
+        "prompt_scaffold": "Epic cinematic trailer score for [story], low string ostinato, taiko drums, brass stabs, choir rising to [ending], no vocals",
+        "kind": "music",
+        "category": "music",
+        "bpm": 100,
+        "duration_s": 60
+      }
+    },
+    {
+      "id": "audio-lofi-bed",
+      "category": "Score",
+      "title": "Lo-fi background bed",
+      "description": "Calm lo-fi hip-hop to sit under a vlog, tutorial or study video.",
+      "thumb": null,
+      "tags": [
+        "lofi",
+        "background",
+        "chill",
+        "vlog"
+      ],
+      "examples": {
+        "mood": "a rainy afternoon in a small café",
+        "instrument": "mellow electric piano"
+      },
+      "defaults": {
+        "prompt_scaffold": "Lo-fi hip-hop instrumental, [mood], [instrument], dusty drums, warm vinyl crackle, soft bass, relaxed and steady",
+        "kind": "music",
+        "category": "loop",
+        "bpm": 80,
+        "duration_s": 90
+      }
+    },
+    {
+      "id": "audio-sitar-raga",
+      "category": "Score",
+      "title": "Sitar and tabla",
+      "description": "An unhurried South Asian instrumental with sitar, tanpura drone and tabla.",
+      "thumb": null,
+      "tags": [
+        "sitar",
+        "tabla",
+        "south asian",
+        "instrumental",
+        "calm"
+      ],
+      "examples": {
+        "time": "dawn over a river ghat",
+        "mood": "meditative"
+      },
+      "defaults": {
+        "prompt_scaffold": "Indian classical instrumental for [time], sitar melody over a tanpura drone, gentle tabla entering halfway, [mood] and spacious",
+        "kind": "music",
+        "category": "instrument",
+        "duration_s": 75
+      }
+    },
+    {
+      "id": "audio-whoosh-transition",
+      "category": "Sound effects",
+      "title": "Transition whoosh",
+      "description": "A fast whoosh to cut between two shots or titles.",
+      "thumb": null,
+      "tags": [
+        "whoosh",
+        "transition",
+        "swoosh",
+        "edit"
+      ],
+      "examples": {
+        "texture": "airy with a soft metallic shimmer",
+        "speed": "fast"
+      },
+      "defaults": {
+        "prompt_scaffold": "A single [speed] cinematic whoosh transition, [texture], clean tail, no music",
+        "kind": "sfx",
+        "category": "oneshot",
+        "duration_s": 2
+      }
+    },
+    {
+      "id": "audio-footsteps",
+      "category": "Sound effects",
+      "title": "Footsteps",
+      "description": "Footsteps on a surface you choose, at walking pace.",
+      "thumb": null,
+      "tags": [
+        "footsteps",
+        "foley",
+        "walking"
+      ],
+      "examples": {
+        "surface": "a wet cobblestone street",
+        "shoes": "leather boots"
+      },
+      "defaults": {
+        "prompt_scaffold": "Footsteps of [shoes] walking at a steady pace on [surface], close-miked foley, no music",
+        "kind": "sfx",
+        "category": "sfx",
+        "duration_s": 8
+      }
+    },
+    {
+      "id": "audio-city-night",
+      "category": "Ambience",
+      "title": "City at night",
+      "description": "Distant traffic, voices and the hum of a city after dark.",
+      "thumb": null,
+      "tags": [
+        "city",
+        "night",
+        "ambience",
+        "room tone"
+      ],
+      "examples": {
+        "city": "Lahore",
+        "detail": "rickshaws passing and a distant call to prayer"
+      },
+      "defaults": {
+        "prompt_scaffold": "Night-time city ambience in [city], distant traffic, murmuring voices, [detail], wide stereo, no music",
+        "kind": "sfx",
+        "category": "sfx",
+        "duration_s": 60
+      }
+    },
+    {
+      "id": "audio-monsoon-rain",
+      "category": "Ambience",
+      "title": "Monsoon rain",
+      "description": "Steady monsoon rain with rolling thunder, for calm scenes or sleep.",
+      "thumb": null,
+      "tags": [
+        "rain",
+        "monsoon",
+        "thunder",
+        "nature",
+        "ambience"
+      ],
+      "examples": {
+        "place": "a tin-roofed veranda in a village",
+        "extra": "distant rolling thunder"
+      },
+      "defaults": {
+        "prompt_scaffold": "Heavy monsoon rain on [place], water dripping from the eaves, [extra], immersive and steady, no music",
+        "kind": "sfx",
+        "category": "sfx",
+        "duration_s": 60
+      }
+    }
+  ]
+}

@@ -51,6 +51,8 @@ export const FALLBACK_MODELS: Record<ModelType, ModelInfo[]> = {
     { ...base, id: 'esrgan', type: 'upscale', label: 'Real-ESRGAN ×4', badge: 'QUICK', description: 'Fast enlargement' },
     { ...base, id: 'zimage_redraw', type: 'upscale', label: 'Z-Image redraw', badge: 'UPSCALE', description: 'Repaints fine texture' },
   ],
+  // a server without /models?type=audio has no audio route either; the pages say so rather than guess
+  audio: [],
 }
 
 // ?model= values from links made before the catalog existed (bookmarks, the old mega-menu)
@@ -74,7 +76,7 @@ export function pickModel(models: ModelInfo[], wanted?: string | null): ModelInf
 
 export const has = (m: Pick<ModelInfo, 'capabilities'> | undefined, c: ModelCapability) => !!m?.capabilities.includes(c)
 
-export type CapabilityIcon = 'sound' | 'mute' | 'text' | 'refs' | 'long' | 'image' | 'frames' | 'angles' | 'type'
+export type CapabilityIcon = 'sound' | 'mute' | 'text' | 'refs' | 'long' | 'image' | 'frames' | 'angles' | 'type' | 'vocals'
 
 /** Plain-words capability chips. Video always says whether it has sound, since that's the first thing people ask. */
 export function capabilityLabels(m: ModelInfo): { icon: CapabilityIcon; text: string }[] {
@@ -87,6 +89,12 @@ export function capabilityLabels(m: ModelInfo): { icon: CapabilityIcon; text: st
   if (m.max_refs) out.push({ icon: 'refs', text: m.max_refs === 1 ? '1 reference' : `Up to ${m.max_refs} refs` })
   if (has(m, 'longtake')) out.push({ icon: 'long', text: 'Long takes' })
   if (has(m, 'multi_angle')) out.push({ icon: 'angles', text: 'Multi-angle' })
+  if (m.type === 'audio') {
+    if (has(m, 'vocals')) out.push({ icon: 'vocals', text: 'Vocals' })
+    if (has(m, 'lyrics')) out.push({ icon: 'text', text: 'Lyrics' })
+    if (has(m, 'timbre_ref')) out.push({ icon: 'refs', text: 'Voice reference' })
+    if (has(m, 'long')) out.push({ icon: 'long', text: 'Long tracks' })
+  }
   return out
 }
 
@@ -119,6 +127,7 @@ const AUTO_HINT: Record<ModelType, string> = {
   edit: 'Picks the edit model that fits your references',
   video: 'Picks the video model that fits your length and pictures',
   upscale: 'Picks the upscaler for the source',
+  audio: 'Picks the default model for this kind of sound',
 }
 
 /** Auto first and default. `serverAuto` says whether the server will resolve "auto" itself. */
@@ -138,6 +147,8 @@ export function withAuto(models: ModelInfo[], type: ModelType): { models: ModelI
     description: AUTO_HINT[type],
     speeds: undefined,
     default_speed: undefined,
+    // the licence line belongs to the real model, not to Auto
+    extra: undefined,
     ...(server ? { ...server, capabilities: server.capabilities?.length ? server.capabilities : base.capabilities } : {}),
     available: server ? server.available !== false : base.available,
     default: true,

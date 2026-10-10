@@ -28,6 +28,7 @@ export function TileActions({
   const ready = state === 'ready'
   const image = item.kind === 'image'
   const canRegenerate = image && item.origin === 'generated'
+  const audio = item.kind === 'audio'
 
   return (
     <div role="group" aria-label={`Actions for ${name}`} className={cn('flex flex-wrap items-center gap-1', className)}>
@@ -37,7 +38,13 @@ export function TileActions({
           Retry
         </button>
       )}
-      {ready && (
+      {state === 'failed' && audio && h.retry && (
+        <button type="button" className={cn(TILE_BTN, 'w-auto gap-1 px-2 text-small')} onClick={() => h.retry!(item)} aria-label={`Retry ${name}`}>
+          <RefreshCw aria-hidden />
+          Retry
+        </button>
+      )}
+      {ready && !audio && (
         <button type="button" className={TILE_BTN} onClick={() => h.upscale(item)} aria-label={`Upscale ${name}`} title="Upscale">
           {image ? <ImageUpscale aria-hidden /> : <Maximize2 aria-hidden />}
         </button>

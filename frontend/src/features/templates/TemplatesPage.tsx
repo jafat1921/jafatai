@@ -9,7 +9,8 @@ import { EmptyState, ErrorState } from '@/components/studio/states'
 import { useStartTemplate, useTemplates } from '@/hooks/useStudio'
 import { splitPlaceholders } from '@/lib/images'
 import { localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
-import type { Template } from '@/lib/types'
+import { AUDIO_ROUTE, audioKindOf, KIND_NOUN } from '@/lib/audio'
+import type { Template, TemplateStart, TemplateType } from '@/lib/types'
 import { formatRuntime } from '@/lib/utils'
 import { TemplatePreview } from './TemplatePreview'
 
@@ -37,6 +38,7 @@ function meta(t: Template) {
   const aspect = (d.aspect_ratio ?? d.aspect) as string | undefined
   if (aspect) bits.push(aspect)
   if (t.type === 'video') bits.push(d.authoring_mode && d.authoring_mode !== 'quick' ? 'Studio project' : 'Quick video')
+  else if (t.type === 'audio') bits.push(KIND_NOUN[audioKindOf(t)].one)
   else if (typeof d.count === 'number') bits.push(`${d.count} variations`)
   if (d.model === 'qwen_image_2512') bits.push('Qwen text')
   return bits.join(' · ')
@@ -72,7 +74,13 @@ function Card({ t, onStart, starting }: { t: Template; onStart: () => void; star
 }
 
 /** Prompt template cards. Starting one only opens a prefilled form; nothing is generated until the user confirms. */
-export function TemplatesPage({ type }: { type: 'video' | 'image' }) {
+const NOUN: Record<TemplateType, string> = { video: 'Video prompt templates', image: 'Image prompt templates', audio: 'Audio prompt templates' }
+
+// audio templates open the Song, Music or SFX page; the server's target alone can't say which
+const routeFor = (t: Template, s: TemplateStart) =>
+  t.type === 'audio' || s.target === 'audio' ? AUDIO_ROUTE[audioKindOf({ category: t.category, defaults: { ...t.defaults, ...(s.prefill ?? {}) } })] : (TARGET_ROUTE[s.target] ?? TARGET_ROUTE.quick)
+
+export function TemplatesPage({ type }: { type: TemplateType }) {
   const navigate = useNavigate()
   const templates = useTemplates(type)
   const start = useStartTemplate()
@@ -94,11 +102,11 @@ export function TemplatesPage({ type }: { type: 'video' | 'image' }) {
         const s = res ?? (err ? localStart(t) : undefined)
         if (!s) return
         const template: TemplatePrefill = { templateId: t.id, templateTitle: t.title, prefill: { examples: t.examples, ...(s.prefill ?? {}) } }
-        navigate(TARGET_ROUTE[s.target] ?? TARGET_ROUTE.quick, { state: { template } })
+        navigate(routeFor(t, s), { state: { template } })
       },
     })
 
-  const noun = type === 'video' ? 'Video prompt templates' : 'Image prompt templates'
+  const noun = NOUN[type]
   return (
     <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="tpl-title">
       <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-6 md:px-8">
@@ -140,7 +148,7 @@ export function TemplatesPage({ type }: { type: 'video' | 'image' }) {
           <ErrorState title="Couldn't load the prompt templates" error={templates.error} onRetry={() => templates.refetch()} />
         ) : templates.data.length === 0 ? (
           <EmptyState icon={<LayoutTemplate />} title="No prompt templates yet">
-            Prompt templates ship with the server; this one has none for {type}s.
+            Prompt templates ship with the server; this one has none for {type === 'audio' ? 'audio' : `${type}s`}.
           </EmptyState>
         ) : shown.length === 0 ? (
           <EmptyState

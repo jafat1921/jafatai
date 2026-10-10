@@ -120,6 +120,10 @@ export type GenerationKind =
   | 'image'
   | 'video'
   | 'upload'
+  // contract-v14: Audio Studio
+  | 'song'
+  | 'music'
+  | 'sfx'
 export type GenerationStatus = 'queued' | 'generating' | 'ready' | 'approved' | 'rejected' | 'failed'
 
 export interface Generation {
@@ -310,7 +314,7 @@ export interface Job {
   generation_id?: string | null
   gpu?: string | null
   // which GPU worker runs it when the server splits image and video work
-  lane?: 'image' | 'video' | 'general'
+  lane?: 'image' | 'video' | 'audio' | 'general'
   attempts: number
   error?: string | null
   created_at: string
@@ -575,7 +579,9 @@ export interface QuickRecent {
 }
 
 // contract-v5-nav-image.md
-export type MediaKind = 'image' | 'video'
+export type MediaKind = 'image' | 'video' | 'audio'
+// what has pixels: upscaling, compare, looks
+export type VisualKind = Exclude<MediaKind, 'audio'>
 export type MediaOrigin = 'generated' | 'upload' | 'project'
 
 export interface MediaItem {
@@ -651,7 +657,7 @@ export interface MediaQuery {
 }
 
 // contract v8 P4: library organisation
-export type FolderKind = 'any' | 'image' | 'video'
+export type FolderKind = 'any' | MediaKind
 
 export interface Folder {
   id: string
@@ -708,7 +714,7 @@ export interface PromptEnhanceResult {
 }
 
 export interface EstimateQuery {
-  kind: 'image' | 'video' | 'take' | 'upscale'
+  kind: 'image' | 'video' | 'take' | 'upscale' | 'audio'
   model?: string
   speed?: string
   count?: number
@@ -773,11 +779,15 @@ export interface Img2ImgRequest extends MagicFields {
 export interface MediaBatch {
   items: MediaItem[]
   jobs: Job[]
+  // contract v14: what "auto" turned into
+  model_resolved?: string | null
 }
+
+export type TemplateType = 'video' | 'image' | 'audio'
 
 export interface Template {
   id: string
-  type: 'video' | 'image'
+  type: TemplateType
   title: string
   description: string
   thumb?: string | null
@@ -791,7 +801,7 @@ export interface Template {
 }
 
 export interface TemplateStart {
-  target: 'quick' | 'studio' | 'image'
+  target: 'quick' | 'studio' | 'image' | 'audio'
   prefill: Record<string, unknown>
 }
 
@@ -834,9 +844,12 @@ export interface LlmCheck {
 }
 
 // contract-v6-models.md
-export type ModelType = 'image' | 'edit' | 'video' | 'upscale'
+export type ModelType = 'image' | 'edit' | 'video' | 'upscale' | 'audio'
 export type ModelBadgeId = 'FAST' | 'BEST' | 'TEXT' | 'NEW' | 'HQ' | 'QUICK' | 'UPSCALE'
-export type ModelCapability = 't2i' | 'edit' | 'refs' | 't2v' | 'i2v' | 'flf' | 'audio' | 'longtake' | 'text_render' | 'multi_angle' | 'i2i'
+export type ModelCapability =
+  | 't2i' | 'edit' | 'refs' | 't2v' | 'i2v' | 'flf' | 'audio' | 'longtake' | 'text_render' | 'multi_angle' | 'i2i'
+  // contract v14 (audio models)
+  | 'song' | 'music' | 'sfx' | 'lyrics' | 'vocals' | 'instrumental' | 'timbre_ref' | 'long'
 
 export interface ModelSpeed {
   id: string
@@ -865,6 +878,8 @@ export interface ModelInfo {
   default: boolean
   // LTX only: the temporal x2 upscaler, single-pass clips only
   smooth_motion?: { available: boolean; reason?: string | null }
+  // audio models: the licence line, and MiniMax's non-commercial flag
+  extra?: { licence?: string; noncommercial?: boolean } & Record<string, unknown>
 }
 
 export type VideoAspect = '16:9' | '9:16' | '1:1'
@@ -886,6 +901,42 @@ export interface VideoGenerateRequest extends MagicFields {
   camera?: { size?: string; angle?: string; motion?: string; speed?: string }
 }
 
+// contract-v14: Audio Studio
+export type AudioKind = 'song' | 'music' | 'sfx'
+export type AudioVocal = 'male' | 'female' | 'duet' | 'none'
+export type AudioCategory = 'music' | 'instrument' | 'loop' | 'sfx' | 'oneshot'
+
+export interface AudioGenerateRequest {
+  folder_id?: string
+  kind: AudioKind
+  prompt: string
+  lyrics?: string
+  language?: string
+  vocal?: AudioVocal
+  bpm?: number
+  category?: AudioCategory
+  duration_s: number
+  model?: string
+  count?: number
+  seed?: number
+  steps?: number
+  timbre_ref_id?: string
+  title?: string
+}
+
+export interface LyricsRequest {
+  topic: string
+  language: string
+  mood?: string
+  style?: string
+  sections?: string[]
+}
+
+export interface LyricsResponse {
+  lyrics: string
+  tags?: string | string[] | null
+}
+
 // quality and smooth motion come from project.settings; the server drops them for long takes
 export interface TakesRequest {
   count?: number
@@ -897,7 +948,7 @@ export interface UpscaleRow {
   result: Generation
   source?: Generation | null
   title: string
-  kind: MediaKind
+  kind: VisualKind
   media_id?: string | null
   project_id?: string | null
   engine?: string | null

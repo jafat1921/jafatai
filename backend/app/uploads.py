@@ -23,21 +23,30 @@ MB = 1024 * 1024
 IMAGE_MAX = 40 * MB
 PHOTO_MAX = 250 * MB  # camera RAW, HEIC and TIFF (M10): a 100 MP RAW or a layered TIFF is big
 VIDEO_MAX = 2048 * MB
+AUDIO_MAX = 200 * MB
 MAX_PIXELS = 100_000_000  # a 40 MB JPEG can still decode to something silly
 SNIFF_BYTES = 64
 FIELDS = ("title", "album_id", "on_duplicate")
 
 EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
        "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
-       "font/ttf": ".ttf", "font/otf": ".otf", "image/svg+xml": ".svg"}
+       "font/ttf": ".ttf", "font/otf": ".otf", "image/svg+xml": ".svg",
+       "audio/wav": ".wav", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac", "audio/ogg": ".ogg",
+       "audio/flac": ".flac", "audio/webm": ".weba"}
 # what a file name may say for each sniffed type; mp4 and mov are the same container family
 NAME_OK = {"image/png": {".png"}, "image/jpeg": {".jpg", ".jpeg", ".jfif"}, "image/webp": {".webp"},
            "video/mp4": {".mp4", ".m4v", ".mov"}, "video/quicktime": {".mov", ".mp4", ".m4v"},
-           "video/webm": {".webm"}, "font/ttf": {".ttf"}, "font/otf": {".otf"}, "image/svg+xml": {".svg"}}
-# ISO-BMFF brands that are stills or audio, not video
-NOT_VIDEO_BRANDS = (b"avif", b"avis", b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1", b"M4A ", b"M4B ", b"M4P ")
+           "video/webm": {".webm"}, "font/ttf": {".ttf"}, "font/otf": {".otf"}, "image/svg+xml": {".svg"},
+           "audio/wav": {".wav", ".wave"}, "audio/mpeg": {".mp3"}, "audio/mp4": {".m4a", ".m4b", ".mp4", ".aac"},
+           "audio/aac": {".aac"}, "audio/ogg": {".ogg", ".oga", ".opus"}, "audio/flac": {".flac"},
+           "audio/webm": {".weba", ".webm"}}
+# ISO-BMFF brands that are stills, not video
+NOT_VIDEO_BRANDS = (b"avif", b"avis", b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1")
+AUDIO_BRANDS = (b"M4A ", b"M4B ", b"M4P ")
+# names that say "audio" for containers that are mostly video (an .m4a with a generic isom brand)
+AUDIO_NAMES = {".m4a": "audio/mp4", ".m4b": "audio/mp4", ".weba": "audio/webm"}
 ALLOWED = ("PNG, JPEG or WebP images up to 40 MB, camera RAW, HEIC or TIFF photos up to 250 MB, "
-           "or MP4, MOV or WebM videos up to 2 GB")
+           "MP4, MOV or WebM videos up to 2 GB, or WAV, MP3, M4A, AAC, OGG, FLAC or WebM audio up to 200 MB")
 # kept as uploaded and given a JPEG working copy (app.catalogue.convert)
 CONVERTED = ("image/x-raw", "image/heic", "image/tiff")
 
@@ -54,19 +63,39 @@ def sniff(head: bytes, filename: str = "") -> str | None:
         return "image/jpeg"
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return "image/webp"
+    ext = Path(filename).suffix.lower()
     if head[4:8] == b"ftyp":
         brand = head[8:12]
         if brand in NOT_VIDEO_BRANDS:
             return None
+        if brand in AUDIO_BRANDS or AUDIO_NAMES.get(ext) == "audio/mp4":
+            return "audio/mp4"
         return "video/quicktime" if brand == b"qt  " else "video/mp4"
     if head[:4] == b"\x1a\x45\xdf\xa3" and b"webm" in head[:SNIFF_BYTES]:
-        return "video/webm"
+        return AUDIO_NAMES.get(ext) if ext == ".weba" else "video/webm"
+    return sniff_audio(head)
+
+
+def sniff_audio(head: bytes) -> str | None:
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return "audio/wav"
+    if head[:4] == b"fLaC":
+        return "audio/flac"
+    if head[:4] == b"OggS":
+        return "audio/ogg"
+    if head[:3] == b"ID3":
+        return "audio/mpeg"  # AAC can carry ID3 too, but ffmpeg reads either way and it's rare
+    if len(head) >= 2 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0:
+        # an MPEG frame header; layer bits 00 are ADTS (AAC), anything else MP1/2/3
+        return "audio/aac" if head[1] & 0x06 == 0 else "audio/mpeg"
     return None
 
 
 def limit_for(media_type: str) -> int:
     if media_type in CONVERTED:
         return PHOTO_MAX
+    if media_type.startswith("audio/"):
+        return AUDIO_MAX
     return IMAGE_MAX if media_type.startswith("image/") else VIDEO_MAX
 
 
@@ -75,6 +104,8 @@ def _too_big(media_type: str | None) -> HTTPException:
         return HTTPException(413, "RAW, HEIC and TIFF photos can be at most 250 MB")
     if media_type and media_type.startswith("image/"):
         return HTTPException(413, "Images can be at most 40 MB")
+    if media_type and media_type.startswith("audio/"):
+        return HTTPException(413, "Audio files can be at most 200 MB")
     return HTTPException(413, "Videos can be at most 2 GB")
 
 
@@ -244,8 +275,8 @@ async def receive(request: Request, folder: Path, profile: Profile = MEDIA) -> R
 
 @dataclass
 class MediaInfo:
-    width: int
-    height: int
+    width: int | None
+    height: int | None
     duration_s: float | None = None
     fps: float | None = None
     has_audio: bool = False
@@ -281,6 +312,16 @@ def probe_video(path: Path) -> MediaInfo:
                          encoding="utf-8", errors="replace", timeout=60).stderr
     m = _FPS.search(err)
     return MediaInfo(p.width, p.height, round(p.duration, 3) or None, float(m[1]) if m else None, p.has_audio)
+
+
+def probe_audio(path: Path) -> MediaInfo:
+    from app import reel as rl
+
+    # an MP3's cover art shows up as a video stream, so only the audio side is checked
+    p = rl.probe(path)
+    if not p.has_audio or not p.duration:
+        raise HTTPException(415, "This file has no readable audio")
+    return MediaInfo(None, None, round(p.duration, 3), has_audio=True)
 
 
 def video_thumb(src: Path, dest: Path, duration_s: float | None) -> bool:

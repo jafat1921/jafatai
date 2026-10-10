@@ -6,7 +6,8 @@
 # Safe to re-run: an existing .env is never overwritten (the only exception: with GPU lanes on, missing
 # COMFY_IMAGE_URLS / COMFY_VIDEO_URLS are filled in, after a backup), the DB is migrated in place,
 # and services are restarted at the end.
-#   --gpu-lanes / --no-gpu-lanes  one worker per GPU (image, video) plus one for LLM/ffmpeg work.
+#   --gpu-lanes / --no-gpu-lanes  one worker per GPU (image, video) plus one for LLM/ffmpeg work. Both GPU
+#                                 workers also take audio jobs, whichever is free first.
 #                                 Default: on when both lane URLs are in .env or two ComfyUIs are found.
 set -euo pipefail
 
@@ -19,7 +20,10 @@ ADMIN_EMAIL=""
 PUBLIC_URL=""
 INSTALL_SYSTEMD=0
 GPU_LANES=auto
-LANES=(image video general)
+# both GPU workers serve the audio lane (mixai-worker@image-audio, @video-audio)
+LANES=(image-audio video-audio general)
+# instance names from before the audio lane; left running they'd serve image / video twice
+OLD_LANES=(image video)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -174,6 +178,14 @@ if (( INSTALL_SYSTEMD )); then
   sudo systemctl daemon-reload
   lane_units=("${LANES[@]/#/mixai-worker@}")
   lane_units=("${lane_units[@]/%/.service}")
+  old_units=("${OLD_LANES[@]/#/mixai-worker@}")
+  old_units=("${old_units[@]/%/.service}")
+  for u in "${old_units[@]}"; do
+    if systemctl is-enabled --quiet "$u" 2>/dev/null || systemctl is-active --quiet "$u" 2>/dev/null; then
+      sudo systemctl disable --now "$u" >/dev/null 2>&1 || true
+      echo "    stopped and disabled $u (replaced by ${u%.service}-audio.service)"
+    fi
+  done
   if (( GPU_LANES )); then
     # the single all-lanes worker would race the lane workers for jobs; it goes first
     if systemctl is-enabled --quiet mixai-worker 2>/dev/null || systemctl is-active --quiet mixai-worker 2>/dev/null; then
@@ -223,7 +235,7 @@ EOF
 if (( ! INSTALL_SYSTEMD )); then
   echo "      - Run without systemd: cd backend && uv run uvicorn app.main:app --port ${API_PORT}"
   if (( GPU_LANES )); then
-    echo "        and one worker per lane: uv run python -m app.worker --lanes image  (same for video, general)"
+    echo "        and one worker per lane: uv run python -m app.worker --lanes image,audio  (then video,audio and general)"
   else
     echo "        and: uv run python -m app.worker"
   fi

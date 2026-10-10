@@ -8,17 +8,23 @@ const MB = 1024 * 1024
 export const UPLOAD_RULES: Record<MediaKind, { types: string[]; exts: string[]; maxBytes: number; label: string }> = {
   image: { types: ['image/png', 'image/jpeg', 'image/webp'], exts: ['png', 'jpg', 'jpeg', 'webp'], maxBytes: 40 * MB, label: 'PNG, JPG or WebP up to 40 MB' },
   video: { types: ['video/mp4', 'video/quicktime', 'video/webm'], exts: ['mp4', 'mov', 'webm'], maxBytes: 2048 * MB, label: 'MP4, MOV or WebM up to 2 GB' },
+  // contract-v14; .webm stays a video by name, audio/webm is told apart by its type
+  audio: {
+    types: ['audio/wav', 'audio/x-wav', 'audio/wave', 'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/ogg', 'audio/opus', 'audio/flac', 'audio/x-flac', 'audio/webm'],
+    exts: ['wav', 'mp3', 'm4a', 'aac', 'ogg', 'opus', 'flac'],
+    maxBytes: 200 * MB,
+    label: 'WAV, MP3, M4A, OGG or FLAC up to 200 MB',
+  },
 }
 
 export const acceptFor = (kinds: MediaKind[]) => kinds.flatMap((k) => [...UPLOAD_RULES[k].types, ...UPLOAD_RULES[k].exts.map((e) => `.${e}`)]).join(',')
 
+const KINDS = ['image', 'video', 'audio'] as const
+
 export function kindOfFile(file: File): MediaKind | null {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-  for (const kind of ['image', 'video'] as const) {
-    const r = UPLOAD_RULES[kind]
-    if (r.types.includes(file.type) || r.exts.includes(ext)) return kind
-  }
-  return null
+  // the browser's type first: an .m4a is audio/mp4 and a voice note can be audio/webm
+  return KINDS.find((k) => UPLOAD_RULES[k].types.includes(file.type)) ?? KINDS.find((k) => UPLOAD_RULES[k].exts.includes(ext)) ?? null
 }
 
 const sizeText = (bytes: number) => (bytes >= 1024 * MB ? `${(bytes / 1024 / MB).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / MB))} MB`)
@@ -30,13 +36,13 @@ export function checkFile(file: File, allowed: MediaKind[]): string | null {
     return `“${file.name}” isn't a file type we can use. Try ${allowed.map((k) => UPLOAD_RULES[k].label).join(', or ')}.`
   }
   const rule = UPLOAD_RULES[kind]
-  if (file.size > rule.maxBytes) return `“${file.name}” is ${sizeText(file.size)}, bigger than the ${sizeText(rule.maxBytes)} limit for ${kind}s.`
+  if (file.size > rule.maxBytes) return `“${file.name}” is ${sizeText(file.size)}, bigger than the ${sizeText(rule.maxBytes)} limit for ${kind === 'audio' ? 'audio' : `${kind}s`}.`
   return null
 }
 
 export function uploadErrorText(status: number, detail: string | undefined, fileName: string): string {
-  if (status === 413) return `“${fileName}” is too big for the server. Images can be up to 40 MB, videos up to 2 GB.`
-  if (status === 415) return `“${fileName}” isn't a supported image or video, even if its name says so. Try PNG, JPG, WebP, MP4, MOV or WebM.`
+  if (status === 413) return `“${fileName}” is too big for the server. Images can be up to 40 MB, videos up to 2 GB, audio up to 200 MB.`
+  if (status === 415) return `“${fileName}” isn't a supported image, video or audio file, even if its name says so. Try PNG, JPG, WebP, MP4, MOV, WebM, WAV, MP3 or FLAC.`
   if (status === 0) return "Can't reach the studio server. Check your connection and try again."
   if (status === 401) return 'Your session has ended. Sign in again, then retry the upload.'
   if (status >= 500) return 'The server hit a problem while saving the file. Try again in a moment.'

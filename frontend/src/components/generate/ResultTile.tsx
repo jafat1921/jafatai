@@ -11,6 +11,7 @@ import { DRAG_MIME, type Mods } from '@/lib/selection'
 import type { Job, MediaItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useIsFavourite } from '@/stores/favourites'
+import { AudioTile } from '@/features/audio/AudioTile'
 import { TileActions, type TileHandlers } from './TileActions'
 import { useModelLabels } from './useModelLabel'
 
@@ -46,7 +47,13 @@ interface Props {
   className?: string
 }
 
-export function ResultTile({ item, handlers, aspectHint, ratio, showTitle, select, className }: Props) {
+export function ResultTile(props: Props) {
+  // audio has no picture: a waveform you play in place
+  if (props.item.kind === 'audio') return <AudioTile item={props.item} handlers={props.handlers} ratio={props.ratio} select={props.select} className={props.className} />
+  return <PictureTile {...props} />
+}
+
+function PictureTile({ item, handlers, aspectHint, ratio, showTitle, select, className }: Props) {
   const { state, gen, progress, job } = useTileState(item)
   const position = useQueuePosition(job)
   const fav = useIsFavourite(item.id)

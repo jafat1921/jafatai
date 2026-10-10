@@ -10,12 +10,13 @@ export function spread(totalS: number, basis: EstimateResult['basis']): Estimate
   return { low_s: totalS * lo, high_s: totalS * hi, basis }
 }
 
-/** From the catalog alone: per-output time × count; video est_seconds is per 5 s clip. */
+/** From the catalog alone: per-output time × count; video est_seconds is per 5 s clip, audio per 30 s track. */
 export function localEstimate(model: ModelInfo | undefined, opts: { count?: number; durationS?: number; speed?: string } = {}): EstimateResult | null {
   const each = estimateSeconds(model, opts.speed)
   if (!each) return null
   const count = Math.max(1, opts.count ?? 1)
-  const scale = model?.type === 'video' && opts.durationS ? opts.durationS / 5 : 1
+  const per = model?.type === 'video' ? 5 : model?.type === 'audio' ? 30 : 0
+  const scale = per && opts.durationS ? opts.durationS / per : 1
   return spread(each * count * scale, model?.estimate_source === 'measured' ? 'measured' : 'rough')
 }
 

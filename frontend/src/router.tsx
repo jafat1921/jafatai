@@ -86,6 +86,29 @@ export const shellRoutes: RouteObject[] = [
     const { LibraryPage } = await import('@/features/library/LibraryPage')
     return <LibraryPage kind="image" />
   }),
+  // Audio (contract v14)
+  page('audio/song', async () => {
+    const { SongPage } = await import('@/features/audio/SongPage')
+    return <SongPage />
+  }),
+  page('audio/music', async () => {
+    const { MusicPage } = await import('@/features/audio/MusicPage')
+    return <MusicPage />
+  }),
+  page('audio/sfx', async () => {
+    const { SfxPage } = await import('@/features/audio/SfxPage')
+    return <SfxPage />
+  }),
+  page('audio/prompt-templates', async () => {
+    const { TemplatesPage } = await import('@/features/templates/TemplatesPage')
+    return <TemplatesPage type="audio" />
+  }),
+  page('audio/library', async () => {
+    const { LibraryPage } = await import('@/features/library/LibraryPage')
+    return <LibraryPage kind="audio" />
+  }),
+  { path: 'audio', element: <Navigate to="/audio/song" replace /> },
+
   { path: 'image', element: <Navigate to="/image/generate" replace /> },
   { path: 'video', element: <Navigate to="/video/quick" replace /> },
 

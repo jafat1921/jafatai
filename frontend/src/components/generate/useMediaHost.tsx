@@ -11,6 +11,7 @@ import { UpscaleDialog } from '@/features/upscale/UpscaleDialog'
 import { useBatchAction, useFolders } from '@/hooks/useLibraryOrg'
 import { upsertMedia, useDeleteMedia, useMediaItem, useMediaRegenerate } from '@/hooks/useMedia'
 import { api } from '@/lib/api'
+import { AUDIO_ROUTE } from '@/lib/audio'
 import { mediaAlt, mediaGeneration, mediaRef } from '@/lib/media'
 import { modelUsedId } from '@/lib/models'
 import { upscaleInfo } from '@/lib/upscale'
@@ -43,6 +44,7 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
     modelId: modelUsedId(gen?.params, item.params, { model: item.model }),
     seed: gen?.seed ?? item.seed ?? null,
     size: w && h ? `${w}×${h}` : null,
+    durationS: (typeof p.duration_s === 'number' ? p.duration_s : null) ?? item.duration_s ?? null,
     brandKitId: typeof p.brand_kit_id === 'string' ? p.brand_kit_id : null,
     createdAt: gen?.created_at ?? item.created_at,
     projectId: item.project_id,
@@ -55,6 +57,13 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
 
 const viewable = (m: MediaItem) => !!(m.media_url || m.thumb_url)
 
+function reuseRoute(item: MediaItem) {
+  if (item.kind === 'video') return '/video/create'
+  if (item.kind !== 'audio') return '/image/generate'
+  const k = item.params?.kind
+  return k === 'song' || k === 'sfx' ? AUDIO_ROUTE[k] : AUDIO_ROUTE.music
+}
+
 interface Options {
   items: MediaItem[]
   // page-specific: put the picture into this page's own reference slot
@@ -62,13 +71,15 @@ interface Options {
   refLabel?: string
   // page-specific: refill the dock from this result
   reuse?: (item: MediaItem) => void
+  // page-specific: run this item's request again
+  retry?: (item: MediaItem) => void
 }
 
 /**
  * Everything a results grid opens: the lightbox, regenerate / upscale / delete dialogs and the
  * versions sheet. Returns the tile handlers plus the node that hosts those overlays.
  */
-export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference', reuse }: Options) {
+export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference', reuse, retry }: Options) {
   const navigate = useNavigate()
   const [viewing, setViewing] = useState<string | null>(null)
   const [detail, setDetail] = useState<string | null>(null)
@@ -135,8 +146,9 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
       if (item.prompt) q.set('prompt', item.prompt)
       const model = modelUsedId(item.params, { model: item.model })
       if (model) q.set('model', model)
-      navigate(`${item.kind === 'video' ? '/video/create' : '/image/generate'}?${q}`)
+      navigate(`${reuseRoute(item)}?${q}`)
     },
+    retry,
     refLabel,
   }
 
@@ -186,7 +198,7 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
         count={1}
         folders={folders}
         current={moving?.folder_id ?? null}
-        rootLabel={moving?.kind === 'video' ? 'All videos' : 'All images'}
+        rootLabel={moving?.kind === 'video' ? 'All videos' : moving?.kind === 'audio' ? 'All audio' : 'All images'}
         onOpenChange={(o) => !o && setMoving(null)}
         onMove={(folderId) => {
           const item = moving

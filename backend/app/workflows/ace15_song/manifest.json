@@ -1,0 +1,162 @@
+{
+  "name": "ace15_song",
+  "family": "ace-step-1.5",
+  "description": "ACE-Step 1.5 turbo (all-in-one checkpoint) text to song: style tags plus optional lyrics, 8 steps, optional timbre reference clip. From Comfy's audio_ace_step_1_5_checkpoint template.",
+  "inputs": {
+    "tags": {
+      "type": "str",
+      "required": true,
+      "targets": [
+        [
+          "Encode",
+          "tags"
+        ]
+      ]
+    },
+    "lyrics": {
+      "type": "str",
+      "default": "[Instrumental]",
+      "targets": [
+        [
+          "Encode",
+          "lyrics"
+        ]
+      ]
+    },
+    "seed": {
+      "type": "int",
+      "default": 0,
+      "targets": [
+        [
+          "Encode",
+          "seed"
+        ],
+        [
+          "Sampler",
+          "seed"
+        ]
+      ]
+    },
+    "bpm": {
+      "type": "int",
+      "default": 120,
+      "targets": [
+        [
+          "Encode",
+          "bpm"
+        ]
+      ]
+    },
+    "duration_s": {
+      "type": "float",
+      "default": 60.0,
+      "targets": [
+        [
+          "Encode",
+          "duration"
+        ],
+        [
+          "Latent",
+          "seconds"
+        ]
+      ]
+    },
+    "language": {
+      "type": "str",
+      "default": "en",
+      "targets": [
+        [
+          "Encode",
+          "language"
+        ]
+      ]
+    },
+    "keyscale": {
+      "type": "str",
+      "default": "C major",
+      "targets": [
+        [
+          "Encode",
+          "keyscale"
+        ]
+      ]
+    },
+    "timesignature": {
+      "type": "str",
+      "default": "4",
+      "targets": [
+        [
+          "Encode",
+          "timesignature"
+        ]
+      ]
+    },
+    "audio_codes": {
+      "type": "bool",
+      "default": true,
+      "targets": [
+        [
+          "Encode",
+          "generate_audio_codes"
+        ]
+      ]
+    },
+    "steps": {
+      "type": "int",
+      "default": 8,
+      "targets": [
+        [
+          "Sampler",
+          "steps"
+        ]
+      ]
+    },
+    "timbre_audio": {
+      "type": "image",
+      "targets": [
+        [
+          "TimbreAudio",
+          "audio"
+        ]
+      ],
+      "if_missing": {
+        "drop": [
+          "TimbreAudio",
+          "TimbreEncode"
+        ],
+        "bypass": {
+          "Timbre": {
+            "0": "conditioning"
+          }
+        }
+      }
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/ace15",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "audio": {
+      "node": "Save",
+      "kind": "audio"
+    }
+  },
+  "models": {
+    "checkpoints": [
+      "ace_step_1.5_turbo_aio.safetensors"
+    ]
+  },
+  "progress_weights": {
+    "Sampler": 6,
+    "Encode": 4,
+    "Checkpoint": 2,
+    "Decode": 2
+  }
+}

@@ -11,13 +11,13 @@ import { UploadZone } from '@/components/media/UploadZone'
 import { qk } from '@/hooks/keys'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { mediaGeneration } from '@/lib/media'
-import type { Generation, ImageUpscaleEngineId, Job, MediaItem, MediaKind, UpscaleEngineId } from '@/lib/types'
+import type { Generation, ImageUpscaleEngineId, Job, MediaItem, UpscaleEngineId, VisualKind } from '@/lib/types'
 import { ImageUpscaleDialog } from './ImageUpscaleDialog'
 import { UpscaleResults } from './UpscaleResults'
 import { forgetUpscale, loadUpscales, rememberUpscale } from '@/lib/upscaleHistory'
 import { UpscaleDialog } from './UpscaleDialog'
 
-const COPY: Record<MediaKind, { title: string; blurb: string; engines: string[] }> = {
+const COPY: Record<VisualKind, { title: string; blurb: string; engines: string[] }> = {
   image: {
     title: 'Upscale an image',
     blurb: 'Pick an image from your library or upload one. The bigger copy is saved as a new version; the original stays.',
@@ -31,7 +31,7 @@ const COPY: Record<MediaKind, { title: string; blurb: string; engines: string[] 
 }
 
 /** /image/upscale and /video/upscale: choose a source, then the existing upscale dialog takes over. */
-export function UpscalePickPage({ kind }: { kind: MediaKind }) {
+export function UpscalePickPage({ kind }: { kind: VisualKind }) {
   const [params] = useSearchParams()
   const qc = useQueryClient()
   const [source, setSource] = useState<MediaItem | null>(null)

@@ -14,6 +14,8 @@ export interface SessionRow<S = unknown> {
 // a batch is created in one request, so its items land within seconds of each other
 const SAME_BATCH_MS = 2 * 60_000
 
+const NOUNS = { image: 'images', video: 'clips', audio: 'tracks' } as const
+
 const promptOf = (m: MediaItem) => (m.prompt || m.title || '').trim()
 const ms = (iso: string) => new Date(iso).getTime() || 0
 
@@ -52,7 +54,7 @@ export function sessionRows<S>(items: MediaItem[], requests: SessionRequest<S>[]
   for (const r of rows) {
     if (r.request) continue
     const n = r.items.length
-    r.summary = [n > 1 ? `${n} ${r.items[0].kind === 'video' ? 'clips' : 'images'}` : null, sizeSummary(r.items)].filter(Boolean).join(' · ')
+    r.summary = [n > 1 ? `${n} ${NOUNS[r.items[0].kind]}` : null, sizeSummary(r.items)].filter(Boolean).join(' · ')
   }
   return rows.sort((a, b) => ms(b.at) - ms(a.at))
 }

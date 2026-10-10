@@ -1,0 +1,99 @@
+import { useId } from 'react'
+import { Hash, Languages, MicVocal, Shapes, Timer } from 'lucide-react'
+import { ChipGroup } from '@/components/studio/chip'
+import { DurationFields } from '@/components/studio/duration-picker'
+import { DockChip } from '@/components/generate/DockChip'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { audioDurationPresets, KIND_NOUN, MAX_TAKES, maxAudioDuration, MUSIC_CATEGORIES, SONG_LANGUAGES, VOCALS } from '@/lib/audio'
+import { formatDuration } from '@/lib/duration'
+import { rangeText } from '@/lib/estimate'
+import type { AudioCategory, AudioKind, AudioVocal, EstimateResult, ModelInfo } from '@/lib/types'
+
+export function AudioLengthChip({
+  kind,
+  model,
+  value,
+  onChange,
+  estimate,
+}: {
+  kind: AudioKind
+  model: ModelInfo | undefined
+  value: number
+  onChange: (s: number) => void
+  estimate: EstimateResult | null
+}) {
+  const max = maxAudioDuration(kind, model)
+  return (
+    <DockChip name="Length" value={formatDuration(value)} icon={<Timer aria-hidden />}>
+      <DurationFields
+        key={`${model?.id}-${max}`}
+        label="Length"
+        value={value}
+        onChange={onChange}
+        presets={audioDurationPresets(kind, model)}
+        max={max}
+        limitNoun={kind === 'sfx' ? ' for a sound effect' : ` with ${model?.label ?? 'this model'}`}
+        estimateLine={
+          estimate ? (
+            <p aria-live="polite" className="text-small text-studio-muted">
+              <span className="font-mono text-studio-text">{formatDuration(value)}</span> {KIND_NOUN[kind].one} · about {rangeText(estimate.low_s, estimate.high_s).replace(/^~/, '')} to make
+              {estimate.basis === 'measured' ? ' (measured on this server)' : ' (rough)'}
+            </p>
+          ) : null
+        }
+      />
+    </DockChip>
+  )
+}
+
+export function VocalChip({ value, onChange }: { value: AudioVocal | null; onChange: (v: AudioVocal | null) => void }) {
+  const label = VOCALS.find((v) => v.value === value)?.label ?? 'Any'
+  return (
+    <DockChip name="Vocal" showName value={label} icon={<MicVocal aria-hidden />} active={!!value}>
+      <ChipGroup label="Vocal" options={VOCALS} value={value} onChange={onChange} />
+      <p className="text-small text-studio-muted">None makes it instrumental, and the lyrics are set aside. Any lets the model choose.</p>
+    </DockChip>
+  )
+}
+
+export function LanguageChip({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const label = SONG_LANGUAGES.find((l) => l.value === value)?.label ?? value
+  return (
+    <DockChip name="Language" value={label} icon={<Languages aria-hidden />}>
+      <ChipGroup label="Sung in" options={SONG_LANGUAGES} value={value} onChange={(v) => v && onChange(v)} allowEmpty={false} />
+      <p className="text-small text-studio-muted">Write Urdu lyrics in Urdu script or in Roman Urdu; both are sung in Urdu.</p>
+    </DockChip>
+  )
+}
+
+export function CategoryChip({ value, onChange }: { value: AudioCategory | null; onChange: (v: AudioCategory | null) => void }) {
+  const label = MUSIC_CATEGORIES.find((c) => c.value === value)?.label ?? 'Any'
+  return (
+    <DockChip name="Category" showName value={label} icon={<Shapes aria-hidden />} active={!!value}>
+      <ChipGroup label="Category" options={MUSIC_CATEGORIES} value={value} onChange={onChange} />
+      <p className="text-small text-studio-muted">Instrument keeps to one instrument; Loop aims for a clean repeat.</p>
+    </DockChip>
+  )
+}
+
+export function TakesChip({ kind, value, onChange }: { kind: AudioKind; value: number; onChange: (n: number) => void }) {
+  const id = useId()
+  const noun = KIND_NOUN[kind]
+  return (
+    <DockChip name="Count" value={`×${value}`} icon={<Hash aria-hidden />}>
+      <div>
+        <div id={id} className="section-label mb-2">
+          Takes
+        </div>
+        <ToggleGroup type="single" aria-labelledby={id} value={String(value)} onValueChange={(v) => v && onChange(Number(v))}>
+          {Array.from({ length: MAX_TAKES }, (_, i) => (
+            <ToggleGroupItem key={i} value={String(i + 1)} aria-label={`${i + 1} ${i ? noun.many : noun.one}`} className="w-10">
+              {i + 1}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      <p className="text-small text-studio-muted">Each take uses the next seed, so you can pick the best one.</p>
+    </DockChip>
+  )
+}

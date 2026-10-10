@@ -11,6 +11,16 @@ from app.catalogue import convert, exif as ex
 from app.models import Album, AlbumItem, Generation, MediaItem, new_id, utcnow
 
 
+VIDEO_AS_AUDIO = {"video/mp4": "audio/mp4", "video/webm": "audio/webm"}
+
+
+def _audio_only(path: Path) -> bool:
+    from app import reel as rl
+
+    p = rl.probe(path)
+    return p.has_audio and not p.has_video
+
+
 def apply_exif(item: MediaItem, e: ex.Exif) -> None:
     item.captured_at = e.captured_at
     item.camera = e.camera[:120] if e.camera else None
@@ -63,7 +73,10 @@ def store(db: Session, workspace_id: str, user_id: str, got: uploads.Received, f
         return dup, True
 
     name = uuid.uuid4().hex
-    kind = "image" if got.media_type.startswith("image/") else "video"
+    kind = got.media_type.split("/")[0] if got.media_type.startswith(("image/", "audio/")) else "video"
+    if kind == "video" and got.media_type in VIDEO_AS_AUDIO and _audio_only(got.path):
+        # an .mp4 / .webm holding nothing but sound (voice memos, exports) is an audio item
+        got.media_type, kind = VIDEO_AS_AUDIO[got.media_type], "audio"
     meta = ex.read(got.path) if kind == "image" else ex.Exif()
     source_rel = source_type = None
     if got.media_type in uploads.CONVERTED:
@@ -79,7 +92,12 @@ def store(db: Session, workspace_id: str, user_id: str, got: uploads.Received, f
         info = uploads.MediaInfo(w.width, w.height)
         source_rel, source_type = f"{rel_folder}/{source.name}", got.media_type
     else:
-        info = uploads.probe_image(got.path, got.media_type) if kind == "image" else uploads.probe_video(got.path)
+        if kind == "image":
+            info = uploads.probe_image(got.path, got.media_type)
+        elif kind == "audio":
+            info = uploads.probe_audio(got.path)
+        else:
+            info = uploads.probe_video(got.path)
         final = folder / f"{name}{uploads.EXT[got.media_type]}"
         got.path.replace(final)
         media_type = got.media_type
@@ -93,12 +111,15 @@ def store(db: Session, workspace_id: str, user_id: str, got: uploads.Received, f
                      source_path=source_rel, source_type=source_type)
     if kind == "image":
         apply_exif(item, meta)
-    params = {"original_name": got.filename[:300], "bytes": got.size, "size": [info.width, info.height],
-              "created_by": {"user_id": user_id, "flow": "upload"}}
+    params = {"original_name": got.filename[:300], "bytes": got.size, "created_by": {"user_id": user_id, "flow": "upload"}}
+    if kind != "audio":
+        params["size"] = [info.width, info.height]
     if source_rel:
         params.update(source_file=source_rel, source_type=source_type)
     if kind == "video":
         params.update(duration_s=info.duration_s, fps=info.fps, has_audio=info.has_audio)
+    elif kind == "audio":
+        params["duration_s"] = info.duration_s
     g = Generation(workspace_id=workspace_id, project_id=None, target_type="media", target_id=item.id,
                    kind="upload", version=1, status="ready", prompt="", params=params, seed=0,
                    file_path=f"{rel_folder}/{final.name}", media_type=media_type)

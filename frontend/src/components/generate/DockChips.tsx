@@ -104,7 +104,7 @@ export function IntoChip({ kind }: { kind: MediaKind }) {
   return (
     <DockChip name="Into folder" showName value={picked?.name ?? 'Library'} icon={<FolderInput aria-hidden />} active={!!picked}>
       <ChipGroup label="Folder" options={options} value={picked?.id ?? null} onChange={(v) => setInto(kind, v)} />
-      <p className="text-small text-studio-muted">Generate into… New {kind}s are filed here as they're made. Pick the folder again to stop.</p>
+      <p className="text-small text-studio-muted">Generate into… New {kind === 'audio' ? 'audio' : `${kind}s`} {kind === 'audio' ? 'is' : 'are'} filed here as they're made. Pick the folder again to stop.</p>
     </DockChip>
   )
 }

@@ -1,7 +1,7 @@
 """Time estimates for the Generate button (UI polish P1): honest ranges, not single numbers.
 
 Measured: median (low) and p80 (high) GPU seconds per unit from this workspace's finished
-generations, per model and size bucket; a unit is one image, or one output second of video.
+generations, per model and size bucket; a unit is one image, or one output second of video or audio.
 Rough: the catalog's warm guess widened both ways. Either way a model load is added when the
 model isn't the one the GPU ran last.
 """
@@ -21,7 +21,10 @@ ROUGH_LOW, ROUGH_HIGH = 0.75, 1.6
 # first-use load on the GPU box; provisional like the catalog's est_seconds
 # TODO: measure loads from cold-vs-warm pairs in the comfy history instead of guessing
 LOAD_S = {"zimage_turbo": 15, "flux2_klein": 12, "qwen_image_2512": 35, "qwen_image_edit_2511": 35,
-          "flux2_klein_edit": 15, "ltx23_distilled": 45, "ltx23_hq": 60, "wan22_t2v": 60}
+          "flux2_klein_edit": 15, "ltx23_distilled": 45, "ltx23_hq": 60, "wan22_t2v": 60,
+          # audio: guesses until the GPU box has run some (warm rates are the catalog's est_seconds / 30)
+          "ace15_turbo": 8, "sa3_small_music": 5, "sa3_small_sfx": 5, "sa3_medium": 10, "minimax_music3": 20}
+AUDIO_DEFAULT_S = 30.0
 UPSCALE_TEMPLATES = {
     "video": {"seedvr2": "upscale_seedvr2", "best": "upscale_seedvr2", "flashvsr": "upscale_flashvsr",
               "fast": "upscale_flashvsr", "esrgan": "upscale_esrgan", "quick": "upscale_esrgan"},
@@ -91,6 +94,9 @@ def sample(params: dict | None, job_gpu: float | None) -> tuple[str, float, floa
         comfy = p.get("comfy") or {}
         tpl, gpu = comfy.get("template"), comfy.get("gpu_seconds") or job_gpu
     model_id = TEMPLATE_MODEL.get(tpl or "")
+    if model_id and mc.MODELS[model_id].type == "audio":
+        dur = p.get("duration_s")
+        return (model_key(model_id), 0.0, float(gpu) / float(dur)) if gpu and dur else None
     size = _size(p)
     if not model_id or not gpu or size is None:
         return None
@@ -159,6 +165,14 @@ def _plan(kind: str, model: str | None, speed: str | None, duration_s: float | N
         return {"key": key, "load_key": key, "model": tpl, "w": w, "h": h, "rough": rough, "load": load,
                 "video": family == "video"}
 
+    if kind == "audio":
+        m = mc.MODELS.get(model or "") if model and model != mc.AUTO else mc.audio_default("song")
+        if m is None or m.type != "audio":
+            raise HTTPException(422, f"'{model}' isn't an audio model")
+        # no picture size: w/h 0 puts every take of a model in one bucket
+        return {"key": model_key(m.id), "load_key": m.id, "model": m.id, "w": 0, "h": 0,
+                "rough": (m.est_seconds or 6) / 30.0, "load": LOAD_S.get(m.id, 10), "video": True}
+
     if kind in ("video", "take"):
         m = mc.get(model, "video")
         table = {"wan22_t2v": WAN_SIZES, "ltx23_hq": HQ_SIZES}.get(m.id, VIDEO_SIZES)
@@ -188,6 +202,8 @@ def estimate(db: Session, workspace_id: str, *, kind: str, model: str | None = N
              height: int | None = None) -> dict:
     if kind in ("video", "take") and not duration_s:
         duration_s = 5.0
+    if kind == "audio" and not duration_s:
+        duration_s = AUDIO_DEFAULT_S
     plan = _plan(kind, model, speed, duration_s, width, height)
     units = max(1, count) * (float(duration_s) if plan["video"] else 1.0)
     mp = plan["w"] * plan["h"] / 1e6

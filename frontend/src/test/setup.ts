@@ -30,5 +30,5 @@ afterEach(async () => {
   useToasts.setState({ toasts: [] })
   useMyJobs.setState({ jobs: {}, done: [] })
   useFavourites.setState({ ids: [], mode: 'pending' })
-  useGenerateInto.setState({ into: { image: null, video: null } })
+  useGenerateInto.setState({ into: { image: null, video: null, audio: null } })
 })

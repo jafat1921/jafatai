@@ -215,7 +215,7 @@ def test_auto_in_routes_and_catalog(client):
     assert r.json()["model_resolved"] == "zimage_turbo" and "model_requested" not in _gens(r.json())[0].params
 
     autos = [m for m in client.get("/api/models").json() if m["id"] == "auto"]
-    assert [m["type"] for m in autos] == ["image", "edit", "video"]
+    assert [m["type"] for m in autos] == ["image", "edit", "video", "audio"]
     assert all(m["description"] == mc.AUTO_DESCRIPTION and m["available"] for m in autos)
 
 

@@ -55,7 +55,32 @@ export const CATALOG: Record<ModelType, ModelInfo[]> = {
     m({ id: 'esrgan', type: 'upscale', label: 'Real-ESRGAN' }),
     m({ id: 'zimage_redraw', type: 'upscale', label: 'Z-Image redraw' }),
   ],
+  // contract-v14; MiniMax is left out, as on a server without AUDIO_ALLOW_NONCOMMERCIAL
+  audio: [
+    m({
+      id: 'ace15_turbo',
+      type: 'audio',
+      label: 'ACE-Step 1.5',
+      capabilities: ['song', 'lyrics', 'vocals', 'timbre_ref'],
+      max_duration_s: 240,
+      est_seconds: 20,
+      default: true,
+      extra: { licence: 'Apache-2.0' },
+    }),
+    m({ id: 'sa3_small_music', type: 'audio', label: 'Stable Audio 3 Small Music', capabilities: ['music'], max_duration_s: 120, default: true, extra: { licence: 'Stability AI Community License' } }),
+    m({ id: 'sa3_medium', type: 'audio', label: 'Stable Audio 3 Medium', capabilities: ['music', 'long'], max_duration_s: 380, extra: { licence: 'Stability AI Community License' } }),
+    m({ id: 'sa3_small_sfx', type: 'audio', label: 'Stable Audio 3 Small SFX', capabilities: ['sfx'], max_duration_s: 120, default: true }),
+  ],
 }
+
+export const MINIMAX = m({
+  id: 'minimax_music3',
+  type: 'audio',
+  label: 'MiniMax-Music3',
+  capabilities: ['song', 'lyrics', 'vocals'],
+  max_duration_s: 240,
+  extra: { noncommercial: true, licence: 'Non-commercial use only' },
+})
 
 export function seedCatalog(qc: QueryClient, catalog = CATALOG) {
   for (const [type, list] of Object.entries(catalog)) qc.setQueryData(qk.models(type as ModelType), list)

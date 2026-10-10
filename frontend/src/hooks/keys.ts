@@ -1,4 +1,4 @@
-import type { GenerationKind, MediaQuery, ModelType, TargetType } from '@/lib/types'
+import type { GenerationKind, MediaQuery, ModelType, TargetType, TemplateType, VisualKind } from '@/lib/types'
 
 export const qk = {
   me: ['me'] as const,
@@ -28,7 +28,7 @@ export const qk = {
   mediaLists: ['media', 'list'] as const,
   mediaList: (q: Omit<MediaQuery, 'cursor'>) => ['media', 'list', q] as const,
   mediaItem: (id: string) => ['media', 'item', id] as const,
-  templates: (type: 'video' | 'image') => ['templates', type] as const,
+  templates: (type: TemplateType) => ['templates', type] as const,
   dashboard: ['dashboard'] as const,
   comfyCheck: ['comfy-check'] as const,
   llmCheck: (ping: boolean) => ['llm-check', ping] as const,
@@ -42,5 +42,5 @@ export const qk = {
   savedFilters: ['saved-filters'] as const,
   // P5
   upscalesAll: ['upscales'] as const,
-  upscales: (kind: 'image' | 'video') => ['upscales', kind] as const,
+  upscales: (kind: VisualKind) => ['upscales', kind] as const,
 }

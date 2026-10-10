@@ -2,12 +2,12 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { api } from '@/lib/api'
 import { FALLBACK_MODELS } from '@/lib/models'
 import { withInto } from '@/stores/generateInto'
-import type { Job, MediaBatch, MediaItem, ModelInfo, ModelType, Project, ProjectSettings, VideoGenerateRequest } from '@/lib/types'
+import type { AudioGenerateRequest, Job, LyricsRequest, MediaBatch, MediaItem, ModelInfo, ModelType, Project, ProjectSettings, VideoGenerateRequest } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
 import { upsertMedia } from './useMedia'
 
-const TYPES: ModelType[] = ['image', 'edit', 'video', 'upscale']
+const TYPES: ModelType[] = ['image', 'edit', 'video', 'upscale', 'audio']
 
 const modelsQuery = (type: ModelType) => ({
   queryKey: qk.models(type),
@@ -68,4 +68,21 @@ export function useVideoGenerate() {
       qc.invalidateQueries({ queryKey: qk.dashboard })
     },
   })
+}
+
+export function useAudioGenerate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: AudioGenerateRequest) => api.audio.generate(withInto('audio', body)),
+    onSuccess: (res) => {
+      ;(res.items ?? []).forEach((m) => m?.id && upsertMedia(qc, m))
+      ;(res.jobs ?? []).forEach((j) => upsertJob(qc, j))
+      qc.invalidateQueries({ queryKey: qk.jobs })
+      qc.invalidateQueries({ queryKey: qk.dashboard })
+    },
+  })
+}
+
+export function useWriteLyrics() {
+  return useMutation({ mutationFn: (body: LyricsRequest) => api.audio.lyrics(body) })
 }

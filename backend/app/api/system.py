@@ -101,7 +101,9 @@ def _lanes(db: Session, s: Settings, probes: dict) -> dict:
             "comfy": None,
         }
         if lane != "general":
-            lane_urls = s.comfy_urls_for(lane)
+            # audio renders on whichever GPU worker claims it, so it can use either ComfyUI
+            lane_urls = (list(dict.fromkeys(s.comfy_urls_for("image") + s.comfy_urls_for("video")))
+                         if lane == "audio" else s.comfy_urls_for(lane))
             healthy = next((probes[u] for u in lane_urls if probes.get(u, {}).get("ok")), None)
             # the driver takes the first healthy URL, so that's the GPU this lane is really using
             pick = healthy or (probes.get(lane_urls[0]) if lane_urls else None)

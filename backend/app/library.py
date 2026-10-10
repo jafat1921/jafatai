@@ -384,7 +384,7 @@ def delete_item(db: Session, item: MediaItem) -> None:
                            updated_at=utcnow()))
     root = get_settings().data_dir
     own = [g.file_path for g in gens if g.file_path]
-    files = own + [thumbs.thumb_file(Path(f), w).as_posix() for f in own for w in thumbs.SIZES] +         ([item.thumb_path] if item.thumb_path else [])
+    files = own + [t.as_posix() for f in own for t in thumbs.files_for(Path(f))] +         ([item.thumb_path] if item.thumb_path else [])
     for g in gens:
         db.delete(g)
     db.delete(item)
@@ -398,6 +398,10 @@ def delete_item(db: Session, item: MediaItem) -> None:
 
 def _dims_of(g: Generation) -> tuple[int | None, int | None, float | None]:
     p = g.params or {}
+    if (g.media_type or "").startswith("audio/"):
+        from app import reel as rl
+
+        return None, None, round(rl.probe(get_settings().data_dir / g.file_path).duration, 3) or p.get("duration_s")
     if (g.media_type or "").startswith("video/"):
         size = p.get("size") if isinstance(p.get("size"), list) else None
         if size:

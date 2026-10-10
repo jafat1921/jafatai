@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { RadioGroup } from 'radix-ui'
-import { AudioLines, Clock, Film, Images, Layers, Lock, Rotate3d, Type, VolumeX, type LucideIcon } from 'lucide-react'
+import { AudioLines, Clock, Film, Images, Layers, Lock, MicVocal, Rotate3d, Type, VolumeX, type LucideIcon } from 'lucide-react'
 import { ModelBadge } from '@/components/shell/MegaMenu'
 import { capabilityLabels, secondsText, type CapabilityIcon } from '@/lib/models'
 import type { ModelInfo } from '@/lib/types'
@@ -16,6 +16,7 @@ const ICONS: Record<CapabilityIcon, LucideIcon> = {
   image: Images,
   frames: Film,
   angles: Rotate3d,
+  vocals: MicVocal,
 }
 
 export function CapabilityChips({ model, id }: { model: ModelInfo; id?: string }) {
@@ -65,13 +66,14 @@ export function ModelPicker({ label, models, value, onChange, blockedBy, highlig
           const reason = m.available ? (blockedBy?.(m) ?? null) : (m.reason || 'Not installed on the server yet.')
           const est = m.est_seconds ? `about ${secondsText(m.est_seconds)} each` : null
           const ids = `${uid}-${m.id}`
+          const licence = m.extra?.licence
           return (
             <RadioGroup.Item
               key={m.id}
               value={m.id}
               disabled={!!reason}
               aria-label={m.badge ? `${m.label}, ${m.badge}` : m.label}
-              aria-describedby={`${ids}-d ${ids}-c${reason ? ` ${ids}-r` : ''}`}
+              aria-describedby={`${ids}-d ${ids}-c${licence ? ` ${ids}-l` : ''}${reason ? ` ${ids}-r` : ''}`}
               className={cn(
                 'flex flex-col items-stretch gap-1.5 rounded-[6px] border p-2.5 text-left transition-colors duration-150',
                 'border-studio-border-strong bg-studio-raised hover:bg-studio-panel-hover',
@@ -87,7 +89,8 @@ export function ModelPicker({ label, models, value, onChange, blockedBy, highlig
                 >
                   <RadioGroup.Indicator className="size-2 rounded-full bg-studio-accent" />
                 </span>
-                <span className="min-w-0 flex-1 truncate text-body font-medium text-studio-text">{m.label}</span>
+                {/* licensed names (MiniMax-Music3) must show in full, so they wrap instead of truncating */}
+                <span className={cn('min-w-0 flex-1 text-body font-medium text-studio-text', licence ? 'break-words' : 'truncate')}>{m.label}</span>
                 {m.badge && <ModelBadge badge={m.badge} />}
               </span>
               <span id={`${ids}-d`} className="text-small text-studio-muted">
@@ -95,6 +98,11 @@ export function ModelPicker({ label, models, value, onChange, blockedBy, highlig
                 {est && !reason ? ` · ${est}` : ''}
               </span>
               <CapabilityChips model={m} id={`${ids}-c`} />
+              {licence && (
+                <span id={`${ids}-l`} className="text-[12px] leading-4 text-studio-muted">
+                  {licence}
+                </span>
+              )}
               {reason && (
                 <span id={`${ids}-r`} className="flex items-start gap-1 text-small text-studio-warning">
                   <Lock aria-hidden className="mt-0.5 size-3 shrink-0" />

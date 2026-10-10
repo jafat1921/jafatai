@@ -1,0 +1,94 @@
+{
+  "name": "minimax_music3",
+  "family": "minimax-music3",
+  "description": "MiniMax-Music3 text to song (caption plus lyrics). The text encoder settles the real length, up to max_duration; decoded tiled so it fits a 20 GB card. From Comfy's audio_minimax_music_3 template. MiniMax-Music3 Community Licence.",
+  "inputs": {
+    "caption": {
+      "type": "str",
+      "required": true,
+      "targets": [
+        [
+          "Encode",
+          "caption"
+        ]
+      ]
+    },
+    "lyrics": {
+      "type": "str",
+      "default": "",
+      "targets": [
+        [
+          "Encode",
+          "lyrics"
+        ]
+      ]
+    },
+    "seed": {
+      "type": "int",
+      "default": 0,
+      "targets": [
+        [
+          "Encode",
+          "seed"
+        ],
+        [
+          "Sampler",
+          "seed"
+        ]
+      ]
+    },
+    "duration_s": {
+      "type": "float",
+      "default": 120.0,
+      "targets": [
+        [
+          "Encode",
+          "max_duration"
+        ]
+      ]
+    },
+    "steps": {
+      "type": "int",
+      "default": 30,
+      "targets": [
+        [
+          "Sampler",
+          "steps"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/minimax",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "audio": {
+      "node": "Save",
+      "kind": "audio"
+    }
+  },
+  "models": {
+    "diffusion_models": [
+      "minimax_music3_dit_fp16.safetensors"
+    ],
+    "text_encoders": [
+      "minimax_music3_text_encoder_pruned_int8_convrot.safetensors"
+    ],
+    "vae": [
+      "minimax_music3_dav.safetensors"
+    ]
+  },
+  "progress_weights": {
+    "Sampler": 8,
+    "Encode": 4,
+    "UNet": 2,
+    "Decode": 2
+  }
+}

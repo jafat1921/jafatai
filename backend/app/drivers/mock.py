@@ -3,6 +3,7 @@ import random
 import subprocess
 import textwrap
 import time
+import zlib
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -165,6 +166,28 @@ class MockDriver:
         img.save(out_path, "PNG", compress_level=1)
         progress_cb(1.0, "Done")
         return DriverResult(out_path, "image/png", {"width": w, "height": h, "template": r["template"]})
+
+    def generate_audio(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
+        # a tone (songs, music) or pink noise (sfx) at the exact length, so players and waveforms have
+        # something real; the pitch follows prompt and seed so takes sound different
+        self._tick(progress_cb, "Composing", upto=0.8)
+        seconds = max(0.5, float(params.get("duration_s") or 10))
+        if params.get("kind") == "sfx":
+            src = f"anoisesrc=d={seconds:.3f}:c=pink:r=44100:a=0.25"
+        else:
+            h = zlib.crc32(f"{prompt}|{seed}".encode())
+            freq, pulse = 180 + h % 500, 1 + (h >> 9) % 4
+            wave = f"0.3*sin(2*PI*{freq}*t)*(0.6+0.4*sin(2*PI*{pulse}*t))"
+            src = f"aevalsrc={wave}|{wave}:s=44100:d={seconds:.3f}"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [get_settings().ffmpeg_path(), "-y", "-loglevel", "error", "-f", "lavfi", "-i", src,
+               "-t", f"{seconds:.3f}", "-ar", "44100", "-ac", "2", "-c:a", "flac", str(out_path)]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"ffmpeg failed: {e.stderr.decode(errors='replace')[-400:]}") from e
+        progress_cb(1.0, "Done")
+        return DriverResult(out_path, "audio/flac", {"duration_s": round(seconds, 3), "model": params.get("model")})
 
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         self._tick(progress_cb, "Writing")

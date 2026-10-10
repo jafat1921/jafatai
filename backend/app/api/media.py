@@ -12,6 +12,9 @@ from app.security import CurrentUser, get_current_user
 
 router = APIRouter(tags=["media"])
 
+AUDIO_TYPES = {".flac": "audio/flac", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
+               ".aac": "audio/aac", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".weba": "audio/webm"}
+
 
 def resolve_media_path(rel: str, workspace_id: str, data_dir: Path) -> Path | None:
     if not rel or "\x00" in rel:
@@ -43,7 +46,8 @@ def get_thumb(gen_id: str, w: int = Query(thumbs.DEFAULT), db: Session = Depends
     if dest is None or not dest.resolve().is_relative_to(data_dir.resolve() / "workspaces" / cur.workspace_id):
         raise HTTPException(404, "No preview for this file")
     # a generation's file never changes, so neither does its thumb
-    return FileResponse(dest, media_type="image/webp", headers={"Cache-Control": "private, max-age=604800"})
+    kind = "image/png" if dest.suffix == ".png" else "image/webp"  # audio: the waveform
+    return FileResponse(dest, media_type=kind, headers={"Cache-Control": "private, max-age=604800"})
 
 
 @router.get("/media/{path:path}")
@@ -51,4 +55,6 @@ def get_media(path: str, cur: CurrentUser = Depends(get_current_user)):
     target = resolve_media_path(path, cur.workspace_id, get_settings().data_dir)
     if target is None:
         raise HTTPException(404, "Not found")
-    return FileResponse(target, headers={"Cache-Control": "private, max-age=3600"})
+    # mimetypes doesn't know .flac / .m4a everywhere; <audio> wants the real type to start playing
+    return FileResponse(target, media_type=AUDIO_TYPES.get(target.suffix.lower()),
+                        headers={"Cache-Control": "private, max-age=3600"})

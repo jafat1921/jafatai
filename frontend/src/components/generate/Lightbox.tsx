@@ -6,7 +6,11 @@ import { BeforeAfter } from '@/components/media/BeforeAfter'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { useBrandKits } from '@/hooks/useBrandKits'
+import { AudioPlayer, SEEK_STEP_S } from '@/features/audio/AudioPlayer'
+import { seekAudio, togglePlay, usePlayer } from '@/features/audio/sharedAudio'
+import { clock } from '@/lib/audio'
 import { downloadUrl } from '@/lib/media'
+import type { MediaKind } from '@/lib/types'
 import { cn, timeAgo } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { useModelLabels } from './useModelLabel'
@@ -14,7 +18,7 @@ import { useModelLabels } from './useModelLabel'
 /** Anything the lightbox can show: a library item, a project render, a generation. */
 export interface LightboxEntry {
   key: string
-  kind: 'image' | 'video'
+  kind: MediaKind
   src: string | null
   poster?: string | null
   title: string
@@ -22,6 +26,7 @@ export interface LightboxEntry {
   modelId?: string | null
   seed?: number | null
   size?: string | null
+  durationS?: number | null
   brandKitId?: string | null
   createdAt: string
   projectId?: string | null
@@ -80,7 +85,8 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
   const copied = copiedKey === entry.key
   // keyed by entry, so browsing to the next picture leaves compare mode
   const [comparingKey, setComparingKey] = useState<string | null>(null)
-  const canCompare = !!(entry.compare && entry.src)
+  const audio = entry.kind === 'audio'
+  const canCompare = !!(entry.compare && entry.src) && !audio
   const comparing = canCompare && comparingKey === entry.key
   const toggleCompare = () => setComparingKey(comparing ? null : entry.key)
 
@@ -92,14 +98,22 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
   const run = (fn: ((e: LightboxEntry) => void) | undefined) => fn && (() => fn(entry))
   const brand = entry.brandKitId ? (kits.find((k) => k.id === entry.brandKitId)?.name ?? 'A brand kit') : null
 
+  // audio: ←/→ seek and Space plays; the Previous/Next buttons still browse
+  const seekBy = (d: number) => {
+    if (!entry.src) return
+    const p = usePlayer.getState()
+    seekAudio(entry.key, entry.src, (p.id === entry.key ? p.time : 0) + d)
+  }
   const onKey = (e: React.KeyboardEvent) => {
     if (typing(e.target) || e.ctrlKey || e.metaKey || e.altKey) return
     const k = e.key.toLowerCase()
+    const onButton = e.target instanceof HTMLElement && !!e.target.closest('button,a')
     const map: Record<string, (() => void) | undefined> = {
-      arrowleft: () => go(-1),
-      arrowright: () => go(1),
+      arrowleft: audio ? () => seekBy(-SEEK_STEP_S) : () => go(-1),
+      arrowright: audio ? () => seekBy(SEEK_STEP_S) : () => go(1),
+      ' ': audio && entry.src && !onButton ? () => togglePlay(entry.key, entry.src!) : undefined,
       f: run(actions.favourite),
-      u: run(actions.upscale),
+      u: audio ? undefined : run(actions.upscale),
       e: image ? run(actions.edit) : undefined,
       a: image ? run(actions.animate) : undefined,
       c: canCompare ? toggleCompare : undefined,
@@ -134,7 +148,7 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
             {comparing && entry.compare && entry.src ? (
               <BeforeAfter
                 key={entry.key}
-                kind={entry.kind}
+                kind={entry.kind === 'video' ? 'video' : 'image'}
                 before={entry.compare.src}
                 after={entry.src}
                 alt={entry.title}
@@ -144,7 +158,9 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                 className="size-full [&>figcaption]:text-studio-on-dark-muted"
               />
             ) : entry.src ? (
-              image ? (
+              audio ? (
+                <AudioPlayer key={entry.key} id={entry.key} src={entry.src} title={entry.title} wave={entry.poster} durationS={entry.durationS} />
+              ) : image ? (
                 <img key={entry.key} src={entry.src} alt={entry.title} className="max-h-full max-w-full object-contain motion-safe:animate-fade-in" />
               ) : (
                 <video key={entry.key} src={entry.src} poster={entry.poster ?? undefined} controls playsInline aria-label={entry.title} className="max-h-full max-w-full" />
@@ -185,9 +201,15 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
               <Meta label="Seed">
                 <span className="font-mono">{entry.seed ?? '—'}</span>
               </Meta>
-              <Meta label="Size">
-                <span className="font-mono">{entry.size ?? '—'}</span>
-              </Meta>
+              {audio ? (
+                <Meta label="Length">
+                  <span className="font-mono">{entry.durationS ? clock(entry.durationS) : '—'}</span>
+                </Meta>
+              ) : (
+                <Meta label="Size">
+                  <span className="font-mono">{entry.size ?? '—'}</span>
+                </Meta>
+              )}
               <Meta label="Brand">{brand ?? 'None'}</Meta>
               <Meta label="Created">{timeAgo(entry.createdAt)}</Meta>
             </dl>
@@ -228,7 +250,7 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                   Favourite <Kbd>F</Kbd>
                 </Button>
               )}
-              {actions.upscale && entry.src && (
+              {actions.upscale && entry.src && !audio && (
                 <Button type="button" size="sm" variant="ghost" onClick={run(actions.upscale)}>
                   <ImageUpscale aria-hidden />
                   Upscale <Kbd>U</Kbd>
@@ -284,7 +306,15 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
               )}
             </div>
             <p className="mt-auto text-small text-studio-muted max-md:hidden">
-              <Kbd>←</Kbd> <Kbd>→</Kbd> browse · <Kbd>Esc</Kbd> close
+              {audio ? (
+                <>
+                  <Kbd>Space</Kbd> play · <Kbd>←</Kbd> <Kbd>→</Kbd> seek 5 s · <Kbd>Esc</Kbd> close
+                </>
+              ) : (
+                <>
+                  <Kbd>←</Kbd> <Kbd>→</Kbd> browse · <Kbd>Esc</Kbd> close
+                </>
+              )}
             </p>
           </aside>
         </DialogPrimitive.Content>

@@ -1,4 +1,5 @@
 import {
+  AudioWaveform,
   Camera,
   Aperture,
   Boxes,
@@ -12,6 +13,10 @@ import {
   Images,
   LayoutTemplate,
   ListOrdered,
+  Library,
+  Mic,
+  Music,
+  Music4,
   MapPin,
   Maximize2,
   Settings,
@@ -21,6 +26,7 @@ import {
   UserRound,
   Users,
   Video,
+  Volume2,
   Wand2,
   Layers,
   type LucideIcon,
@@ -60,7 +66,7 @@ export interface MenuSection {
   modelsNote?: string
 }
 
-export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'upscale' | 'queue' | 'settings'
+export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'audio' | 'upscale' | 'queue' | 'settings'
 
 export interface RailItem {
   id: RailId
@@ -106,6 +112,21 @@ const VIDEO_MENU: MenuSection = {
   ],
 }
 
+// docs/PLAN-m11-audio.md; Voice and Score a Clip land in A2/A3
+const AUDIO_MENU: MenuSection = {
+  title: 'Audio Tools',
+  features: [
+    { id: 'song', title: 'Song', description: 'Style tags and lyrics, sung', to: '/audio/song', icon: Music },
+    { id: 'music', title: 'Music & Score', description: 'Instrumental beds and cues', to: '/audio/music', icon: Music4 },
+    { id: 'sfx', title: 'Sound Effects', description: 'Foley, ambience, whooshes', to: '/audio/sfx', icon: Volume2 },
+    { id: 'voice', title: 'Voice', description: 'Narration and dialogue · later', to: '/audio/voice', icon: Mic, disabled: true },
+    { id: 'score', title: 'Score a Clip', description: 'Sound to a video’s length · later', to: '/audio/score', icon: AudioWaveform, disabled: true },
+    { id: 'templates', title: 'Prompt templates', description: 'Qawwali, tense score, rain…', to: '/audio/prompt-templates', icon: LayoutTemplate },
+    { id: 'library', title: 'Library', description: 'Every song, cue and effect', to: '/audio/library', icon: Library },
+  ],
+  models: [],
+}
+
 const UPSCALE_MENU: MenuSection = {
   title: 'Upscale',
   features: [
@@ -140,20 +161,27 @@ export const RAIL_ITEMS: RailItem[] = [
   { id: 'photos', label: 'Photos', icon: Camera, to: '/photos' },
   { id: 'image', label: 'Image', icon: ImageIcon, to: '/image/generate', menu: IMAGE_MENU },
   { id: 'video', label: 'Video', icon: Clapperboard, to: '/video/quick', menu: VIDEO_MENU },
+  { id: 'audio', label: 'Audio', icon: Music, to: '/audio/song', menu: AUDIO_MENU },
   { id: 'upscale', label: 'Upscale', icon: ImageUpscale, to: '/image/upscale', menu: UPSCALE_MENU },
   { id: 'queue', label: 'Queue', icon: ListOrdered, to: '/queue' },
 ]
 
 export const SETTINGS_ITEM: RailItem = { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' }
 
-const TOOL_ROUTE: Partial<Record<ModelType, string>> = { image: '/image/generate', edit: '/image/edit', video: '/video/create' }
+const TOOL_ROUTE: Partial<Record<ModelType, string>> = { image: '/image/generate', edit: '/image/edit', video: '/video/create', audio: '/audio/music' }
+
+// one audio catalog serves three pages; the capability says which
+const toolRoute = (m: ModelInfo) => {
+  if (m.type !== 'audio') return TOOL_ROUTE[m.type]
+  return m.capabilities.includes('song') ? '/audio/song' : m.capabilities.includes('sfx') ? '/audio/sfx' : TOOL_ROUTE.audio
+}
 
 const navModel = (m: ModelInfo): Model => ({
   id: m.id,
   name: m.label,
   badge: m.badge,
   description: m.description,
-  to: `${TOOL_ROUTE[m.type]}?model=${encodeURIComponent(m.id)}`,
+  to: `${toolRoute(m)}?model=${encodeURIComponent(m.id)}`,
   mark: m.label.charAt(0).toUpperCase(),
 })
 
@@ -164,7 +192,7 @@ const engineListed = (m: Model, upscale: ModelInfo[]) => {
 }
 
 export type Catalog = Record<ModelType, ModelInfo[]>
-export type MenuId = 'image' | 'video' | 'upscale' | 'assets'
+export type MenuId = 'image' | 'video' | 'audio' | 'upscale' | 'assets'
 
 /** The Models columns, from the catalog: generation models first, then the upscale engines. Available only. */
 export function menusFrom(catalog: Catalog): Record<MenuId, MenuSection> {
@@ -173,6 +201,7 @@ export function menusFrom(catalog: Catalog): Record<MenuId, MenuSection> {
   return {
     image: { ...IMAGE_MENU, models: [...gen('image', 'edit'), ...engines(IMAGE_MENU)] },
     video: { ...VIDEO_MENU, models: [...gen('video'), ...engines(VIDEO_MENU)] },
+    audio: { ...AUDIO_MENU, models: gen('audio') },
     upscale: { ...UPSCALE_MENU, models: engines(UPSCALE_MENU) },
     assets: ASSETS_MENU,
   }
@@ -187,6 +216,7 @@ export function activeRail(pathname: string): RailId | null {
   if (/^\/(image|video)\/upscale/.test(p)) return 'upscale'
   if (p.startsWith('/image')) return 'image'
   if (p.startsWith('/video') || p.startsWith('/projects') || p === '/create' || p.startsWith('/quick')) return 'video'
+  if (p.startsWith('/audio')) return 'audio'
   if (p.startsWith('/assets')) return 'assets'
   if (p.startsWith('/photos')) return 'photos'
   if (p.startsWith('/brand-kits')) return 'brand'
@@ -216,6 +246,11 @@ const TITLES: [RegExp, string][] = [
   [/^\/brand-kits/, 'Brand kits'],
   [/^\/image\/img2img/, 'Image to image'],
   [/^\/video\/img2vid/, 'Image to video'],
+  [/^\/audio\/song/, 'Song'],
+  [/^\/audio\/music/, 'Music & score'],
+  [/^\/audio\/sfx/, 'Sound effects'],
+  [/^\/audio\/(prompt-)?templates/, 'Audio prompt templates'],
+  [/^\/audio\/library/, 'Audio library'],
   [/^\/queue/, 'Queue'],
   [/^\/settings/, 'Settings'],
 ]

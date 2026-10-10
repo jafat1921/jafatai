@@ -1,5 +1,9 @@
 import type {
   AssistAction,
+  AudioGenerateRequest,
+  LyricsRequest,
+  LyricsResponse,
+  TemplateType,
   Character,
   Generation,
   GenerationKind,
@@ -447,6 +451,11 @@ export const api = {
   models: {
     list: (type: ModelType) => get<ModelInfo[]>('/models', { type }),
   },
+  // contract-v14
+  audio: {
+    generate: (body: AudioGenerateRequest) => post<MediaBatch>('/audio/generate', body),
+    lyrics: (body: LyricsRequest) => post<LyricsResponse>('/audio/lyrics', body),
+  },
   videos: {
     // a MediaItem plus its job; tolerate a batch too
     generate: (body: VideoGenerateRequest) => post<(MediaItem & { job?: Job | null }) | MediaBatch>('/videos/generate', body),
@@ -471,7 +480,7 @@ export const api = {
     logoReveal: (id: string, body: LogoRevealRequest) => post<{ item: MediaItem; job: Job }>(`/brand-kits/${id}/logo-reveal`, body),
   },
   templates: {
-    list: (type: 'video' | 'image') => get<Template[]>('/prompt-templates', { type }),
+    list: (type: TemplateType) => get<Template[]>('/prompt-templates', { type }),
     start: (id: string) => post<TemplateStart>(`/prompt-templates/${id}/start`),
   },
   // contract-v9: Photo Studio
@@ -539,7 +548,7 @@ export const api = {
   dashboard: () => get<Dashboard>('/dashboard'),
   // contract-v8 P4: library organisation
   folders: {
-    list: (kind?: 'image' | 'video') => get<Folder[]>('/folders', kind ? { kind } : undefined),
+    list: (kind?: MediaKind) => get<Folder[]>('/folders', kind ? { kind } : undefined),
     create: (body: { name: string; parent_id?: string | null; kind?: FolderKind }) => post<Folder>('/folders', body),
     update: (id: string, body: { name?: string; parent_id?: string; sort?: number }) => patch<Folder>(`/folders/${id}`, body),
     remove: (id: string) => del(`/folders/${id}`),

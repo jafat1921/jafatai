@@ -44,7 +44,7 @@ export function UploadZone({ kinds, onUploaded, multiple = true, compact, classN
       >
         <Upload aria-hidden className={cn('shrink-0 text-studio-accent', compact ? 'size-4' : 'size-6')} />
         <div className={cn('min-w-0', compact && 'flex-1')}>
-          <p className="text-body font-medium">Drop {kinds.length === 1 ? `${kinds[0]}s` : 'files'} here</p>
+          <p className="text-body font-medium">Drop {kinds.length === 1 ? (kinds[0] === 'audio' ? 'audio files' : `${kinds[0]}s`) : 'files'} here</p>
           <p id={`${id}-hint`} className="text-small text-studio-muted">
             {hint}
           </p>

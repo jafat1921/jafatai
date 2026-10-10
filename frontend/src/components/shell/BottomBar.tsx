@@ -56,6 +56,7 @@ function MoreSheet({ onPick }: { onPick: () => void }) {
         <Stamp aria-hidden className="size-4 text-studio-accent" />
         <span className="flex-1 text-body">Brand Kits</span>
       </Link>
+      <SectionList section={menus.audio} onPick={onPick} />
       <SectionList section={menus.upscale} onPick={onPick} />
       <h3 className="section-label px-2 pt-3">System &amp; account</h3>
       <Link to="/settings" onClick={onPick} className="flex items-center gap-3 rounded-[6px] p-2 hover:bg-studio-panel-hover">

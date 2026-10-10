@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     image_upscale_max_mp: float = 8.4  # redraw / faithful image outputs; 3840x2160 is 8.3
     # SUPIR weights are non-commercial only; the owner turns this on for private/research use
     photo_allow_noncommercial: bool = False
+    # MiniMax-Music3 has its own community licence (revenue cap), so it stays hidden until the owner opts in
+    audio_allow_noncommercial: bool = False
 
     @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
     @classmethod
@@ -107,7 +109,8 @@ class Settings(BaseSettings):
     def comfy_urls_for(self, lane: str | None) -> list[str]:
         """ComfyUI instances for a job lane: the lane's own list, then COMFY_URLS, then anything set.
 
-        General jobs don't normally touch ComfyUI; if one ever does it borrows the image GPU."""
+        General jobs don't normally touch ComfyUI; if one ever does it borrows the image GPU. Audio jobs
+        are driven with the claiming worker's own GPU lane (worker.run_job); "audio" here is the fallback."""
         own = self.comfy_video_urls if lane == "video" else self.comfy_image_urls
         return list(own or self.comfy_urls or self.all_comfy_urls())
 

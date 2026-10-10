@@ -1,3 +1,4 @@
+import { audioKindOf } from './audio'
 import { DEFAULT_IMAGE_FORM, IMAGE_ASPECTS, type ImageForm } from './images'
 import { QUICK_ASPECTS, QUICK_STYLES, type QuickForm } from './quick'
 import type { ImageAspect, ProjectCreate, QuickAspect, QuickStyle, Template, TemplateStart } from './types'
@@ -21,18 +22,20 @@ export interface TemplatePrefill {
   prefill: Prefill
 }
 
-export const PROMPT_TEMPLATES_ROUTE = { image: '/image/prompt-templates', video: '/video/prompt-templates' } as const
+export const PROMPT_TEMPLATES_ROUTE = { image: '/image/prompt-templates', video: '/video/prompt-templates', audio: '/audio/prompt-templates' } as const
 
 export const TARGET_ROUTE: Record<TemplateStart['target'], string> = {
   quick: '/video/quick',
   studio: '/video/projects',
   image: '/image/generate',
+  audio: '/audio/song',
 }
 
 // Used when the server can't answer /start: the template's own defaults say the same thing.
 export function localStart(t: Template): TemplateStart {
   const d = t.defaults ?? {}
   if (t.type === 'image') return { target: 'image', prefill: d }
+  if (t.type === 'audio') return { target: 'audio', prefill: { kind: audioKindOf(t), ...d } }
   return { target: d.authoring_mode && d.authoring_mode !== 'quick' ? 'studio' : 'quick', prefill: d }
 }
 

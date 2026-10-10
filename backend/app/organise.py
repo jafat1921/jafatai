@@ -32,7 +32,7 @@ class OrganiseError(ValueError):
 @dataclass
 class Ref:
     ref: str  # canonical
-    kind: str  # image | video
+    kind: str  # image | video | audio
     item: MediaItem | None = None
     gen: Generation | None = None
 
@@ -122,7 +122,7 @@ def item_counts(db: Session, workspace_id: str) -> dict[str, int]:
     counts: dict[str, int] = dict(db.execute(
         select(MediaItem.folder_id, func.count()).where(
             MediaItem.workspace_id == workspace_id, MediaItem.folder_id.is_not(None),
-            MediaItem.kind.in_(("image", "video"))).group_by(MediaItem.folder_id)).all())
+            MediaItem.kind.in_(("image", "video", "audio"))).group_by(MediaItem.folder_id)).all())
     for fid, n in db.execute(select(FolderLink.folder_id, func.count()).where(
             FolderLink.workspace_id == workspace_id).group_by(FolderLink.folder_id)):
         counts[fid] = counts.get(fid, 0) + n
@@ -145,7 +145,7 @@ def delete_folder(db: Session, f: Folder) -> None:
 def move(db: Session, workspace_id: str, refs: list[Ref], folder: Folder | None) -> tuple[list[str], list[dict]]:
     moved, skipped = [], []
     for r in refs:
-        if folder is not None and folder.kind in ("image", "video") and folder.kind != r.kind:
+        if folder is not None and folder.kind != "any" and folder.kind != r.kind:
             skipped.append({"ref": r.ref, "reason": f"“{folder.name}” only holds {folder.kind}s"})
             continue
         if r.item is not None:

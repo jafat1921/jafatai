@@ -69,8 +69,10 @@ def test_catalog_shape_and_defaults(client):
     r = client.get("/api/models")
     assert r.status_code == 200
     rows = r.json()
-    assert {m["type"] for m in rows} == {"image", "edit", "video", "upscale"}
+    assert {m["type"] for m in rows} == {"image", "edit", "video", "upscale", "audio"}
     for t in mc.TYPES:
+        if t == "audio":  # one default per generation kind instead (song, music, sfx)
+            continue
         assert sum(m["default"] for m in rows if m["type"] == t) == 1, t
     for m in rows:
         assert {"id", "type", "label", "badge", "description", "capabilities", "available", "default"} <= set(m)
@@ -92,7 +94,7 @@ def test_catalog_shape_and_defaults(client):
     assert video["ltx23_distilled"]["audio"] and "longtake" in video["ltx23_distilled"]["capabilities"]
     assert video["ltx23_hq"]["max_duration_s"] == pytest.approx(10.67, abs=0.01)
     assert video["ltx23_hq"]["smooth_motion"]["available"] and "smooth_motion" not in video["wan22_t2v"]
-    assert client.get("/api/models?type=audio").status_code == 422
+    assert client.get("/api/models?type=nope").status_code == 422
 
 
 def test_availability_from_object_info(info):

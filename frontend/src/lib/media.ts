@@ -1,4 +1,11 @@
-import type { Generation, MediaItem } from './types'
+import type { Generation, GenerationKind, MediaItem } from './types'
+
+const AUDIO_GEN_KINDS = ['song', 'music', 'sfx'] as const
+
+function audioGenKind(item: MediaItem): GenerationKind {
+  const k = item.params?.kind
+  return AUDIO_GEN_KINDS.find((x) => x === k) ?? 'music'
+}
 
 export const isVideo = (g: Pick<Generation, 'media_type' | 'media_url' | 'kind'>) =>
   g.kind === 'take' || g.kind === 'render' || !!g.media_type?.startsWith('video') || /\.(mp4|webm|mov)(\?|$)/i.test(g.media_url ?? '')
@@ -13,7 +20,7 @@ export function mediaGeneration(item: MediaItem, version?: Generation): Generati
     id: item.generation_id,
     target_type: 'media',
     target_id: item.id,
-    kind: item.origin === 'upload' ? 'upload' : item.kind,
+    kind: item.origin === 'upload' ? 'upload' : item.kind === 'audio' ? audioGenKind(item) : item.kind,
     version: item.versions_count || 1,
     status: item.status ?? 'ready',
     prompt: item.prompt ?? '',
@@ -24,14 +31,16 @@ export function mediaGeneration(item: MediaItem, version?: Generation): Generati
     },
     seed: item.seed ?? null,
     media_url: item.media_url,
-    media_type: item.kind === 'video' ? 'video/mp4' : 'image/png',
+    media_type: item.kind === 'video' ? 'video/mp4' : item.kind === 'audio' ? 'audio/flac' : 'image/png',
     created_at: item.created_at,
   }
 }
 
 export const downloadUrl = (generationId: string) => `/api/generations/${generationId}/download`
 
-export const mediaAlt = (item: Pick<MediaItem, 'title' | 'prompt' | 'kind'>) => item.title || item.prompt || (item.kind === 'video' ? 'Video' : 'Image')
+const KIND_NOUN = { image: 'Image', video: 'Video', audio: 'Audio' } as const
+
+export const mediaAlt = (item: Pick<MediaItem, 'title' | 'prompt' | 'kind'>) => item.title || item.prompt || KIND_NOUN[item.kind]
 
 /** The server's name for a Library row: project results are "gen:<generation id>" (contract v8 P4). */
 export const mediaRef = (item: Pick<MediaItem, 'id' | 'origin'>) => (item.origin === 'project' ? `gen:${item.id}` : item.id)

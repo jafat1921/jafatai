@@ -28,6 +28,8 @@ DOWN_GRACE_S = 90.0
 LOST_MSG = ("ComfyUI no longer has this job: it most likely restarted or crashed "
             "(often out of GPU memory). Check the ComfyUI log, then retry the job.")
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".gif"}
+AUDIO_MIME = {".flac": "audio/flac", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+              ".opus": "audio/ogg", ".m4a": "audio/mp4"}
 
 
 class ComfyError(RuntimeError):
@@ -44,7 +46,7 @@ class ComfyOutput:
     filename: str
     subfolder: str
     type: str
-    kind: str  # image | video
+    kind: str  # image | video | audio
 
     @property
     def query(self) -> dict:
@@ -55,10 +57,10 @@ def parse_outputs(entry: dict) -> list[ComfyOutput]:
     """Flatten one /history/{id} entry into downloadable files.
 
     SaveImage puts files under 'images', core SaveVideo under 'images' too (with
-    animated=True) or 'videos', VHS_VideoCombine under 'gifs'."""
+    animated=True) or 'videos', VHS_VideoCombine under 'gifs', SaveAudio under 'audio'."""
     found: list[ComfyOutput] = []
     for node_id, out in (entry.get("outputs") or {}).items():
-        for key in ("images", "videos", "gifs", "video"):
+        for key in ("images", "videos", "gifs", "video", "audio"):
             items = out.get(key) or []
             if isinstance(items, dict):
                 items = [items]
@@ -68,7 +70,10 @@ def parse_outputs(entry: dict) -> list[ComfyOutput]:
                 if it.get("type") == "temp":
                     continue  # previews
                 ext = Path(it["filename"]).suffix.lower()
-                kind = "video" if key in ("videos", "gifs", "video") or ext in VIDEO_EXT else "image"
+                if key == "audio" or ext in AUDIO_MIME:
+                    kind = "audio"
+                else:
+                    kind = "video" if key in ("videos", "gifs", "video") or ext in VIDEO_EXT else "image"
                 found.append(ComfyOutput(str(node_id), it["filename"], it.get("subfolder", ""), it.get("type", "output"), kind))
     return found
 
@@ -176,9 +181,10 @@ class ComfyClient:
 
     async def upload_image(self, path: Path, name: str | None = None, subfolder: str = "mixai") -> str:
         """Upload and return the value a LoadImage node needs ('sub/name.png').
-        Videos go through the same endpoint; VHS_LoadVideo reads them from the input folder."""
+        Videos and audio go through the same endpoint; VHS_LoadVideo / LoadAudio read them from the input folder."""
         name = name or path.name
-        mime = "video/mp4" if path.suffix.lower() in VIDEO_EXT else "image/png"
+        ext = path.suffix.lower()
+        mime = "video/mp4" if ext in VIDEO_EXT else AUDIO_MIME.get(ext, "image/png")
         with open(path, "rb") as fh:
             files = {"image": (name, fh, mime)}
             data = {"type": "input", "subfolder": subfolder, "overwrite": "true"}

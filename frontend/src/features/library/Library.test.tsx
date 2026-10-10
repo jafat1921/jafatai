@@ -76,7 +76,7 @@ describe('uploads', () => {
 
   it('explains 413 and 415 answers from the server', () => {
     expect(uploadErrorText(413, 'Request Entity Too Large', 'a.png')).toMatch(/too big for the server/)
-    expect(uploadErrorText(415, 'bad', 'a.png')).toMatch(/isn't a supported image or video, even if its name says so/)
+    expect(uploadErrorText(415, 'bad', 'a.png')).toMatch(/isn't a supported image, video or audio file, even if its name says so/)
     expect(uploadErrorText(400, 'Corrupt PNG', 'a.png')).toBe('Corrupt PNG')
   })
 
@@ -110,7 +110,7 @@ describe('uploads', () => {
     fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [file('fake.png', 'image/png', 100)] } })
     const rows = screen.getByRole('list', { name: 'Uploads' })
     expect(within(rows).getByRole('progressbar', { name: 'Uploading fake.png' })).toBeInTheDocument()
-    expect(await within(rows).findByRole('alert')).toHaveTextContent(/“fake.png” isn't a supported image or video/)
+    expect(await within(rows).findByRole('alert')).toHaveTextContent(/“fake.png” isn't a supported image, video or audio file/)
     expect(sent[0].get('file')).toBeInstanceOf(File)
 
     // a local refusal never reaches the network

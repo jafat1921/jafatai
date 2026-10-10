@@ -8,7 +8,7 @@ import { downloadUrl } from '@/lib/media'
 import { plainPrompt } from '@/lib/mentions'
 import { sessionRows, type SessionRow } from '@/lib/sessions'
 import type { MediaItem } from '@/lib/types'
-import { plural, timeAgo } from '@/lib/utils'
+import { cn, plural, timeAgo } from '@/lib/utils'
 import { useSessions, type SessionRequest } from '@/stores/sessions'
 import { announce } from '@/stores/ui'
 import { ResultTile } from './ResultTile'
@@ -73,7 +73,15 @@ export function SessionResults<S>({
   const requests = useSessions((s) => s.requests).filter((r) => r.page === page) as SessionRequest<S>[]
   // recorded requests keep @-mention tokens; rows show the names
   const rows = sessionRows(items, requests).map((r) => ({ ...r, prompt: plainPrompt(r.prompt) }))
-  const { handlers, host, failure } = useMediaHost({ items, onUseAsRef, refLabel, reuse: reuseItem })
+  const requestOf = (m: MediaItem) => requests.find((r) => r.itemIds.includes(m.id))
+  const retryItem = onRetry
+    ? (m: MediaItem) => {
+        const req = requestOf(m)
+        if (req) onRetry(req)
+        else announce('That one was made before this visit. Use Reuse settings to make it again.')
+      }
+    : undefined
+  const { handlers, host, failure } = useMediaHost({ items, onUseAsRef, refLabel, reuse: reuseItem, retry: retryItem })
   const regenerate = useMediaRegenerate()
   const sentinel = useRef<HTMLDivElement>(null)
 
@@ -136,7 +144,13 @@ export function SessionResults<S>({
                   </Button>
                 </div>
               </div>
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+              <ul
+                className={cn(
+                  'grid gap-3',
+                  // waveforms read better wide
+                  row.items[0]?.kind === 'audio' ? 'grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]' : 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]',
+                )}
+              >
                 {row.items.map((item) => (
                   <li key={item.id}>
                     <ResultTile item={item} handlers={handlers} aspectHint={(row.request?.settings as { aspect?: string } | undefined)?.aspect} />

@@ -1,13 +1,13 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { MediaKind, UpscalePage } from '@/lib/types'
+import type { UpscalePage, VisualKind } from '@/lib/types'
 import { qk } from './keys'
 
 const RUNNING = new Set(['queued', 'generating'])
 export const UPSCALE_PAGE = 12
 
 /** The workspace's upscales, newest first; polls while any of them is still being made. */
-export function useUpscaleList(kind: MediaKind) {
+export function useUpscaleList(kind: VisualKind) {
   return useInfiniteQuery({
     queryKey: qk.upscales(kind),
     queryFn: ({ pageParam }) => api.upscales.list({ kind, limit: UPSCALE_PAGE, cursor: pageParam }),

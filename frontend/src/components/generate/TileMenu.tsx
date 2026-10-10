@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import {
   Aperture, Brush, Clapperboard, Download, ExternalLink, FolderInput, Heart, ImageUpscale, Layers, Maximize2, MoreHorizontal, Palette, PanelRightOpen,
-  Pencil, Play, RefreshCw, Trash2,
+  Pencil, Play, RefreshCw, RotateCcw, Trash2,
 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { TileState } from '@/lib/images'
@@ -23,6 +23,8 @@ export interface TileHandlers {
   move: (item: MediaItem) => void
   rename: (item: MediaItem) => void
   reuse: (item: MediaItem) => void
+  // run the request that made this item again (audio; images regenerate instead)
+  retry?: (item: MediaItem) => void
   // the label for "Use as reference" on this page ("Use as start frame"…)
   refLabel: string
 }
@@ -52,6 +54,7 @@ export function TileMenu({
   const image = item.kind === 'image'
   const project = item.origin === 'project'
   const canRegenerate = image && item.origin === 'generated'
+  const audio = item.kind === 'audio'
 
   return (
     <DropdownMenu>
@@ -91,7 +94,22 @@ export function TileMenu({
             </a>
           </DropdownMenuItem>
         )}
-        {ready && (
+        {audio && item.origin === 'generated' && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => h.reuse(item)}>
+              <RotateCcw aria-hidden />
+              Reuse settings
+            </DropdownMenuItem>
+            {h.retry && (
+              <DropdownMenuItem onSelect={() => h.retry!(item)}>
+                <RefreshCw aria-hidden />
+                Retry
+              </DropdownMenuItem>
+            )}
+          </>
+        )}
+        {ready && !audio && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => h.upscale(item)}>

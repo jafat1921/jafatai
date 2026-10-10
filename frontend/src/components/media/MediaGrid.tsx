@@ -105,13 +105,13 @@ export function MediaGrid({ items, label, loading, error, onRetry, empty, hasMor
         empty
       ) : (
         // uniform square cells keep the library scannable; the lightbox shows the real shape
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+        <ul className={cn('grid gap-4', items[0]?.kind === 'audio' ? 'grid-cols-[repeat(auto-fill,minmax(280px,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(200px,1fr))]')}>
           {items.map((item) => (
             <li key={item.id}>
               <ResultTile
                 item={item}
                 handlers={handlers}
-                ratio={item.kind === 'video' ? '16 / 9' : '1 / 1'}
+                ratio={item.kind === 'video' ? '16 / 9' : item.kind === 'audio' ? undefined : '1 / 1'}
                 showTitle
                 select={
                   selection && {

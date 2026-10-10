@@ -1,6 +1,6 @@
 import { useDeferredValue, useId, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { ChevronRight, Download, Film, Heart, Images, Loader2, Search, Wand2 } from 'lucide-react'
+import { ChevronRight, Download, Film, Heart, Images, Loader2, Music, Search, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Chip } from '@/components/studio/chip'
@@ -34,6 +34,42 @@ function resultText(res: BatchResult, verb: string) {
   if (!res.skipped.length) return head
   const reasons = [...new Set(res.skipped.map((s) => s.reason))].slice(0, 2).join('; ')
   return `${head} ${plural(res.skipped.length, 'skipped', 'skipped')}: ${reasons}.`
+}
+
+const COPY: Record<MediaKind, { noun: string; root: string; title: string; label: string; create: string; createLabel: string; blurb: string; empty: string; icon: React.ReactNode }> = {
+  image: {
+    noun: 'images',
+    root: 'All images',
+    title: 'Image library',
+    label: 'Images',
+    create: '/image/generate',
+    createLabel: 'Create image',
+    blurb: 'Everything you created, uploaded or approved in a project.',
+    empty: 'Create an image or upload one, and it lands here.',
+    icon: <Images />,
+  },
+  video: {
+    noun: 'videos',
+    root: 'All videos',
+    title: 'Video library',
+    label: 'Videos',
+    create: '/video/create',
+    createLabel: 'Create video',
+    blurb: 'Finished films from every project, quick videos and uploads.',
+    empty: 'Finish a quick video or a project render, or upload a clip.',
+    icon: <Film />,
+  },
+  audio: {
+    noun: 'audio',
+    root: 'All audio',
+    title: 'Audio library',
+    label: 'Audio',
+    create: '/audio/song',
+    createLabel: 'Create audio',
+    blurb: 'Songs, score and sound effects you made or uploaded.',
+    empty: 'Make a song, a cue or a sound effect, or upload a WAV, MP3 or FLAC.',
+    icon: <Music />,
+  },
 }
 
 const VERB: Record<BatchResult['action'], string> = { delete: 'Deleted', download: 'Zipping', upscale: 'Queued upscales for', move: 'Moved', tag: 'Tagged' }
@@ -74,8 +110,9 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
 
   // TODO: ask the server for the tag list; this only knows tags on pages already loaded
   const tags = [...new Set(items.flatMap((m) => m.tags ?? []))].sort().slice(0, 12)
-  const noun = kind === 'image' ? 'images' : 'videos'
-  const rootLabel = kind === 'image' ? 'All images' : 'All videos'
+  const copy = COPY[kind]
+  const noun = copy.noun
+  const rootLabel = copy.root
   const filtered = !!(query.trim() || tag || origin !== 'all' || fav)
   const path = folderPath(folders, folderId)
   const here = path.at(-1)
@@ -163,9 +200,9 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
     <main data-f6-region tabIndex={-1} onKeyDown={onKeyDown} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby={`${uid}-title`}>
       <TopBarActions>
         <Button asChild size="sm" variant="primary">
-          <Link to={kind === 'image' ? '/image/generate' : '/video/create'} onClick={() => here && setInto(kind, here.id)}>
+          <Link to={copy.create} onClick={() => here && setInto(kind, here.id)}>
             <Wand2 aria-hidden />
-            {here ? `Create ${kind} in “${here.name}”` : kind === 'image' ? 'Create image' : 'Create video'}
+            {here ? `Create ${kind} in “${here.name}”` : copy.createLabel}
           </Link>
         </Button>
       </TopBarActions>
@@ -182,10 +219,10 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
                   <li>
                     {folderId ? (
                       <button type="button" className="hover:text-studio-text hover:underline" onClick={() => openFolder(null)}>
-                        {kind === 'image' ? 'Image library' : 'Video library'}
+                        {copy.title}
                       </button>
                     ) : (
-                      <span>{kind === 'image' ? 'Image library' : 'Video library'}</span>
+                      <span>{copy.title}</span>
                     )}
                   </li>
                   {path.map((f, i) => (
@@ -205,14 +242,12 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
                 </ol>
               </nav>
               <h1 id={`${uid}-title`} className="font-display text-title font-semibold">
-                {here?.name ?? (kind === 'image' ? 'Image library' : 'Video library')}
+                {here?.name ?? copy.title}
               </h1>
               <p className="text-body text-studio-muted">
                 {here
-                  ? 'Drag pictures onto a folder on the left, or select them and press M to move.'
-                  : kind === 'image'
-                    ? 'Everything you created, uploaded or approved in a project.'
-                    : 'Finished films from every project, quick videos and uploads.'}
+                  ? `Drag ${kind === 'audio' ? 'tracks' : 'pictures'} onto a folder on the left, or select them and press M to move.`
+                  : copy.blurb}
               </p>
             </div>
             <div className="relative">
@@ -290,7 +325,7 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
           )}
 
           <MediaGrid
-            label={kind === 'image' ? 'Images' : 'Videos'}
+            label={copy.label}
             items={items}
             loading={list.isPending}
             error={list.isError ? list.error : undefined}
@@ -315,12 +350,12 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
                   Try another word or filter.
                 </EmptyState>
               ) : folderId ? (
-                <EmptyState icon={kind === 'image' ? <Images /> : <Film />} title="This folder is empty">
+                <EmptyState icon={copy.icon} title="This folder is empty">
                   Drag {noun} onto it from {rootLabel.toLowerCase()}, or pick it under “Generate into” on the prompt dock.
                 </EmptyState>
               ) : (
-                <EmptyState icon={kind === 'image' ? <Images /> : <Film />} title={`No ${noun} yet`}>
-                  {kind === 'image' ? 'Create an image or upload one, and it lands here.' : 'Finish a quick video or a project render, or upload a clip.'}
+                <EmptyState icon={copy.icon} title={`No ${noun} yet`}>
+                  {copy.empty}
                 </EmptyState>
               )
             }

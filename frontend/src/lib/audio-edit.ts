@@ -52,6 +52,7 @@ export const EXPORT_FORMATS: { value: AudioExportFormat; label: string; ext: str
   { value: 'mp3_192', label: 'MP3 192 kb/s', ext: 'mp3' },
   { value: 'mp3_320', label: 'MP3 320 kb/s', ext: 'mp3' },
   { value: 'opus', label: 'Opus', ext: 'opus' },
+  { value: 'mp4', label: 'MP4 video (waveform)', ext: 'mp4' },
 ]
 
 export const FLAG_TEXT: Record<AudioFlag, string> = {

@@ -6,6 +6,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { TileState } from '@/lib/images'
 import { downloadUrl, mediaAlt, projectLink } from '@/lib/media'
+import { AudioDownloadItems } from './AudioDownloads'
 import type { MediaItem, RegenerateMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -78,13 +79,19 @@ export function TileMenu({
           <PanelRightOpen aria-hidden />
           Versions
         </DropdownMenuItem>
-        {ready && (
+        {ready && !audio && (
           <DropdownMenuItem asChild>
             <a href={downloadUrl(item.generation_id)} download>
               <Download aria-hidden />
               Download
             </a>
           </DropdownMenuItem>
+        )}
+        {ready && audio && (
+          <>
+            <DropdownMenuSeparator />
+            <AudioDownloadItems mediaId={item.id} version={item.generation_id} />
+          </>
         )}
         {ready && item.original_generation_id && item.original_generation_id !== item.generation_id && (
           <DropdownMenuItem asChild>

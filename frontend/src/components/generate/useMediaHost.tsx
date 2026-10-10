@@ -49,6 +49,7 @@ export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = fal
     createdAt: gen?.created_at ?? item.created_at,
     projectId: item.project_id,
     generationId: item.generation_id,
+    mediaId: item.id,
     favourite: fav,
     compare: source?.media_url ? { src: source.media_url, label: `Original · v${source.version}`, afterLabel: afterLabel.trim() } : null,
     originalId: item.original_generation_id ?? source?.id ?? null,

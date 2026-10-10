@@ -27,7 +27,7 @@ from app.services import generation_file, job_out
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
-ExportFormat = Literal["wav16", "wav24", "wav32f", "flac", "mp3_128", "mp3_192", "mp3_320", "opus"]
+ExportFormat = Literal["wav16", "wav24", "wav32f", "flac", "mp3_128", "mp3_192", "mp3_320", "opus", "mp4"]
 TOO_LONG = "This is over 20 minutes, too long to preview; use Save"
 
 

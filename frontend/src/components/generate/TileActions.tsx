@@ -1,6 +1,7 @@
 import { Brush, Clapperboard, Download, Heart, ImageUpscale, Layers, Maximize2, RefreshCw } from 'lucide-react'
 import type { TileState } from '@/lib/images'
 import { downloadUrl, mediaAlt } from '@/lib/media'
+import { audioDownloadUrl } from '@/lib/audio-download'
 import type { MediaItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { TileMenu, type TileHandlers } from './TileMenu'
@@ -77,7 +78,13 @@ export function TileActions({
         </button>
       )}
       {ready && (
-        <a href={downloadUrl(item.generation_id)} download className={TILE_BTN} aria-label={`Download ${name}`} title="Download">
+        <a
+          href={audio ? audioDownloadUrl(item.id, 'mp3_320', item.generation_id) : downloadUrl(item.generation_id)}
+          download
+          className={TILE_BTN}
+          aria-label={audio ? `Download ${name} as MP3` : `Download ${name}`}
+          title={audio ? 'Download MP3 (WAV, FLAC and MP4 in the ⋯ menu)' : 'Download'}
+        >
           <Download aria-hidden />
         </a>
       )}

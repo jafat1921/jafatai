@@ -11,6 +11,7 @@ import pytest
 from app import audio_analysis as aa
 from app import audio_edit as ae
 from app import mixdown as md
+from app import reel
 from app.config import get_settings
 from app.db import SessionLocal
 from app.lanes import lane_for
@@ -396,6 +397,18 @@ def test_export_every_format(client, tmp_path):
     f.write_bytes(r.content)
     assert aa.measure(f)["lufs_i"] == pytest.approx(-23, abs=1.0)
     assert client.get(f"/api/audio/{item['id']}/export", params={"format": "aiff"}).status_code == 422
+
+
+def test_export_mp4_is_a_waveform_video(client, tmp_path):
+    item = upload_audio(client, tone(tmp_path / "a.wav", 2.0, 440, 0.1), title="Shareable")
+    r = client.get(f"/api/audio/{item['id']}/export", params={"format": "mp4", "loudness": "web"})
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("video/mp4")
+    f = tmp_path / "share.mp4"
+    f.write_bytes(r.content)
+    p = reel.probe(f)
+    assert p.has_video and p.has_audio and p.width == 1280 and p.height == 720
+    assert length(f) == pytest.approx(2.0, abs=0.15)
 
 
 # ------------------------------------------------------------------ Score a Clip

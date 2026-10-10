@@ -72,7 +72,12 @@ FORMATS: dict[str, tuple[list[str], str, str]] = {
     "mp3_192": (["-c:a", "libmp3lame", "-b:a", "192k"], ".mp3", "audio/mpeg"),
     "mp3_320": (["-c:a", "libmp3lame", "-b:a", "320k"], ".mp3", "audio/mpeg"),
     "opus": (["-c:a", "libopus", "-b:a", "160k", "-ar", "48000"], ".opus", "audio/ogg"),
+    # a shareable video: the song under an animated waveform (WhatsApp / YouTube / Instagram take it as is)
+    "mp4": (["-c:a", "aac", "-b:a", "192k"], ".mp4", "video/mp4"),
 }
+
+WAVE_BG = "0x1b1611"
+WAVE_FG = "0xC9A24A"
 
 
 class EditError(ValueError):
@@ -457,8 +462,30 @@ def render(edit: dict, src: Path, dst: Path, out_args: list[str], appends: list[
 def export(src: Path, dst: Path, fmt: str, loudness: str | None = None, timeout: float = 1800) -> None:
     """Convert a version as it is (no edit), optionally brought to a loudness target."""
     args, _, _ = FORMATS[fmt]
+    if fmt == "mp4":
+        return _waveform_video(src, dst, loudness, timeout)
     if not loudness:
         run(["-i", str(src), "-vn", "-map", "0:a:0", "-map_metadata", "-1", *args, str(dst)], timeout=timeout,
             loglevel="error")
         return
     render({"loudness": {"target": loudness}}, src, dst, ["-map_metadata", "-1", *args], timeout=timeout)
+
+
+def _waveform_video(src: Path, dst: Path, loudness: str | None, timeout: float) -> None:
+    audio = src
+    tmp = None
+    if loudness:
+        tmp = dst.with_suffix(".level.wav")
+        render({"loudness": {"target": loudness}}, src, tmp, ["-c:a", "pcm_s16le"], timeout=timeout)
+        audio = tmp
+    graph = (f"[1:a]showwaves=s=1280x320:mode=cline:rate=25:colors={WAVE_FG},format=rgba[w];"
+             "[0:v][w]overlay=0:(H-h)/2:shortest=1,format=yuv420p[v]")
+    try:
+        run(["-f", "lavfi", "-i", f"color=c={WAVE_BG}:s=1280x720:r=25", "-i", str(audio),
+             "-filter_complex", graph, "-map", "[v]", "-map", "1:a:0", "-map_metadata", "-1",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p",
+             *FORMATS["mp4"][0], "-shortest", "-movflags", "+faststart", str(dst)],
+            timeout=timeout, loglevel="error")
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)

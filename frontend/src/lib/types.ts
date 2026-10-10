@@ -1048,7 +1048,7 @@ export interface AudioPreview {
   renderMs: number | null
 }
 
-export type AudioExportFormat = 'wav16' | 'wav24' | 'wav32f' | 'flac' | 'mp3_128' | 'mp3_192' | 'mp3_320' | 'opus'
+export type AudioExportFormat = 'wav16' | 'wav24' | 'wav32f' | 'flac' | 'mp3_128' | 'mp3_192' | 'mp3_320' | 'opus' | 'mp4'
 
 export interface MixTrack {
   media_id: string

@@ -85,9 +85,10 @@ export function AudioWorkspace() {
   )
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-audio-workspace>
+    // everything stays inside the screen: only the page area (and a long sidebar) scroll, never the window
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden" data-audio-workspace>
       <div className="flex min-h-0 flex-1">
-        {!phone && <aside className={`flex shrink-0 flex-col border-r border-studio-border bg-studio-panel ${rail ? 'w-14' : 'w-52'}`}>{sidebar}</aside>}
+        {!phone && <aside className={`flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-studio-border bg-studio-panel ${rail ? 'w-14' : 'w-52'}`}>{sidebar}</aside>}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {phone && (
             <div className="flex h-10 shrink-0 items-center gap-2 border-b border-studio-border bg-studio-panel px-2">
@@ -103,7 +104,7 @@ export function AudioWorkspace() {
               </button>
             </div>
           )}
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <Outlet />
           </div>
         </div>

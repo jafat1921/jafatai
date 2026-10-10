@@ -10,6 +10,7 @@ import { AudioPlayer, SEEK_STEP_S } from '@/features/audio/AudioPlayer'
 import { seekAudio, togglePlay, usePlayer } from '@/features/audio/sharedAudio'
 import { clock } from '@/lib/audio'
 import { downloadUrl } from '@/lib/media'
+import { AudioDownloadButton } from './AudioDownloads'
 import type { MediaKind } from '@/lib/types'
 import { cn, timeAgo } from '@/lib/utils'
 import { announce } from '@/stores/ui'
@@ -31,6 +32,8 @@ export interface LightboxEntry {
   createdAt: string
   projectId?: string | null
   generationId: string
+  // the Library item, for audio downloads in other formats
+  mediaId?: string
   favourite?: boolean
   // P4: the version this one was upscaled from, for the before/after compare (C)
   compare?: { src: string; label: string; afterLabel?: string } | null
@@ -282,7 +285,8 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                   Before / after <Kbd>C</Kbd>
                 </Button>
               )}
-              {entry.src && (
+              {entry.src && audio && entry.mediaId && <AudioDownloadButton mediaId={entry.mediaId} version={entry.generationId} />}
+              {entry.src && !(audio && entry.mediaId) && (
                 <Button asChild size="sm" variant="ghost">
                   <a href={downloadUrl(entry.generationId)} download>
                     <Download aria-hidden />

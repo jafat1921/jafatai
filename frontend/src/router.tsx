@@ -86,28 +86,46 @@ export const shellRoutes: RouteObject[] = [
     const { LibraryPage } = await import('@/features/library/LibraryPage')
     return <LibraryPage kind="image" />
   }),
-  // Audio (contract v14)
-  page('audio/song', async () => {
-    const { SongPage } = await import('@/features/audio/SongPage')
-    return <SongPage />
-  }),
-  page('audio/music', async () => {
-    const { MusicPage } = await import('@/features/audio/MusicPage')
-    return <MusicPage />
-  }),
-  page('audio/sfx', async () => {
-    const { SfxPage } = await import('@/features/audio/SfxPage')
-    return <SfxPage />
-  }),
-  page('audio/prompt-templates', async () => {
-    const { TemplatesPage } = await import('@/features/templates/TemplatesPage')
-    return <TemplatesPage type="audio" />
-  }),
-  page('audio/library', async () => {
-    const { LibraryPage } = await import('@/features/library/LibraryPage')
-    return <LibraryPage kind="audio" />
-  }),
-  { path: 'audio', element: <Navigate to="/audio/song" replace /> },
+  // Audio: one workspace frame (sidebar, status strip, transport) around every page (contract v14, v15)
+  {
+    path: 'audio',
+    lazy: async () => ({ Component: (await import('@/features/audio/shell/AudioWorkspace')).AudioWorkspace }),
+    children: [
+      { index: true, element: <Navigate to="/audio/song" replace /> },
+      page('song', async () => {
+        const { SongPage } = await import('@/features/audio/SongPage')
+        return <SongPage />
+      }),
+      page('music', async () => {
+        const { MusicPage } = await import('@/features/audio/MusicPage')
+        return <MusicPage />
+      }),
+      page('sfx', async () => {
+        const { SfxPage } = await import('@/features/audio/SfxPage')
+        return <SfxPage />
+      }),
+      page('edit', async () => {
+        const { EditPickPage } = await import('@/features/audio/editor/EditPickPage')
+        return <EditPickPage />
+      }),
+      page('edit/:id', async () => {
+        const { EditorPage } = await import('@/features/audio/editor/EditorPage')
+        return <EditorPage />
+      }),
+      page('score', async () => {
+        const { ScorePage } = await import('@/features/audio/score/ScorePage')
+        return <ScorePage />
+      }),
+      page('prompt-templates', async () => {
+        const { TemplatesPage } = await import('@/features/templates/TemplatesPage')
+        return <TemplatesPage type="audio" />
+      }),
+      page('library', async () => {
+        const { LibraryPage } = await import('@/features/library/LibraryPage')
+        return <LibraryPage kind="audio" />
+      }),
+    ],
+  },
 
   { path: 'image', element: <Navigate to="/image/generate" replace /> },
   { path: 'video', element: <Navigate to="/video/quick" replace /> },

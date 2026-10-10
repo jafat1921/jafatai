@@ -8,6 +8,7 @@ import type { TileSelect } from '@/components/generate/ResultTile'
 import { useTileState } from '@/hooks/useMedia'
 import { useModels } from '@/hooks/useModels'
 import { clock } from '@/lib/audio'
+import { FLAG_TEXT, minus } from '@/lib/audio-edit'
 import { mediaAlt } from '@/lib/media'
 import { modelUsedId } from '@/lib/models'
 import { DRAG_MIME } from '@/lib/selection'
@@ -53,7 +54,7 @@ export function AudioTile({ item, handlers, ratio, select, className }: Props) {
 
   const onWave = (e: React.MouseEvent) => {
     if (select && (select.active || e.shiftKey || e.ctrlKey || e.metaKey)) return select.onSelect(e)
-    if (src) togglePlay(item.id, src)
+    if (src) togglePlay(item.id, src, { title: alt, mediaId: item.id })
   }
 
   return (
@@ -188,6 +189,30 @@ export function AudioTile({ item, handlers, ratio, select, className }: Props) {
         )}
         {length ? <span className="ml-auto shrink-0 font-mono">{clock(length)}</span> : null}
       </div>
+      {item.analysis && <QualityBadges analysis={item.analysis} />}
     </div>
+  )
+}
+
+/** Measured loudness and what's wrong with it, if anything; read out as one sentence. */
+function QualityBadges({ analysis }: { analysis: NonNullable<MediaItem['analysis']> }) {
+  const flags = analysis.flags ?? []
+  const lufs = analysis.lufs_i
+  if (lufs == null && !flags.length) return null
+  const said = [lufs != null ? `${minus(lufs, 1)} LUFS integrated` : '', ...flags.map((f) => FLAG_TEXT[f].toLowerCase())].filter(Boolean).join(', ')
+  return (
+    <p className="flex min-w-0 flex-wrap items-center gap-1 px-0.5 text-[10px]">
+      <span className="sr-only">Quality: {said}.</span>
+      {lufs != null && (
+        <span aria-hidden className="rounded-[4px] border border-studio-border px-1 font-mono leading-4 text-studio-muted">
+          {minus(lufs, 1)} LUFS
+        </span>
+      )}
+      {flags.map((f) => (
+        <span key={f} aria-hidden className={cn('rounded-[4px] border px-1 leading-4', f === 'long_silence' ? 'border-studio-border text-studio-muted' : 'border-studio-warning/40 bg-studio-warning/10 text-studio-warning')}>
+          {FLAG_TEXT[f]}
+        </span>
+      ))}
+    </p>
   )
 }

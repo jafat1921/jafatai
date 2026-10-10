@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import {
   Aperture, Brush, Clapperboard, Download, ExternalLink, FolderInput, Heart, ImageUpscale, Layers, Maximize2, MoreHorizontal, Palette, PanelRightOpen,
-  Pencil, Play, RefreshCw, RotateCcw, Trash2,
+  Pencil, Play, RefreshCw, RotateCcw, Scissors, Trash2, AudioWaveform,
 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { TileState } from '@/lib/images'
@@ -92,6 +92,31 @@ export function TileMenu({
               <Download aria-hidden />
               Download original
             </a>
+          </DropdownMenuItem>
+        )}
+        {ready && audio && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to={`/audio/edit/${item.id}`}>
+                <Scissors aria-hidden />
+                Open in Editor
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to={`/audio/score?audio=${item.id}`}>
+                <AudioWaveform aria-hidden />
+                Use in Score a Clip
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
+        {ready && item.kind === 'video' && (
+          <DropdownMenuItem asChild>
+            <Link to={`/audio/score?video=${item.id}`}>
+              <AudioWaveform aria-hidden />
+              Score a Clip…
+            </Link>
           </DropdownMenuItem>
         )}
         {audio && item.origin === 'generated' && (

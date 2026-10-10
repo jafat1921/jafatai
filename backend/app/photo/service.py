@@ -198,7 +198,7 @@ def version_line(db: Session, g: Generation) -> list[Generation]:
 
 def edit_kind(g: Generation) -> str | None:
     p = g.params or {}
-    for k in ("develop", "effect", "look", "upscale", "cutout", "restore"):
+    for k in ("develop", "effect", "look", "upscale", "cutout", "restore", "edit", "mix"):
         if p.get(k):
             return k
     return None

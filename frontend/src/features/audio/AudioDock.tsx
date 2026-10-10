@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Chip } from '@/components/studio/chip'
 import { ErrorState } from '@/components/studio/states'
+import { SwitchRow } from '@/components/studio/switch-row'
 import { ModelChip } from '@/components/generate/DockChips'
 import { GenerateButton } from '@/components/generate/GenerateButton'
 import { PromptDock } from '@/components/generate/PromptDock'
@@ -11,12 +12,14 @@ import { useDockModels } from '@/components/generate/useDockModels'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { useGenEstimate } from '@/hooks/useGenEstimate'
 import {
+  ACE_ID,
   audioBlockedReason,
   audioPayload,
   BPM_MAX,
   BPM_MIN,
   clampAudioDuration,
   instrumental,
+  KEYSCALES,
   KIND_NOUN,
   modelFits,
   PROMPT_MAX,
@@ -34,6 +37,8 @@ import type { AudioGenerateRequest, AudioKind } from '@/lib/types'
 import { announce } from '@/stores/ui'
 import { AudioLengthChip, CategoryChip, LanguageChip, TakesChip, VocalChip } from './AudioChips'
 import { LyricsEditor } from './LyricsEditor'
+
+const ADV_SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body'
 
 export interface AudioRun {
   form: AudioForm
@@ -191,6 +196,57 @@ export function AudioDock({ form, setForm, modelPicked, onRun, pending, error }:
                 className="font-mono"
               />
             </div>
+          )}
+          {kind === 'song' && effective?.id === ACE_ID && (
+            <>
+              <div className="w-36">
+                <Label htmlFor={`${uid}-key`} className="mb-1.5">
+                  Key
+                </Label>
+                <select id={`${uid}-key`} value={form.keyscale} onChange={(e) => set('keyscale', e.target.value)} className={ADV_SELECT}>
+                  <option value="">Model decides</option>
+                  {KEYSCALES.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-28">
+                <Label htmlFor={`${uid}-metre`} className="mb-1.5">
+                  Time signature
+                </Label>
+                <select id={`${uid}-metre`} value={form.timeSignature} onChange={(e) => set('timeSignature', e.target.value as AudioForm['timeSignature'])} className={ADV_SELECT}>
+                  <option value="">Auto</option>
+                  <option value="2">2/4</option>
+                  <option value="3">3/4 (waltz)</option>
+                  <option value="4">4/4</option>
+                  <option value="6">6/8</option>
+                </select>
+              </div>
+              <div className="w-28">
+                <Label htmlFor={`${uid}-guidance`} className="mb-1.5">
+                  Guidance
+                </Label>
+                <Input
+                  id={`${uid}-guidance`}
+                  inputMode="decimal"
+                  value={form.guidance}
+                  onChange={(e) => set('guidance', e.target.value.replace(/[^\d.]/g, '').slice(0, 4))}
+                  placeholder="2.0"
+                  title="How closely the song follows your tags (0–10)"
+                  className="font-mono"
+                />
+              </div>
+              <SwitchRow
+                id={`${uid}-think`}
+                checked={form.think}
+                onChange={(on) => set('think', on)}
+                title="Plan the song first"
+                hint="Better structure, a little slower. Turned off for you when a voice reference is used."
+                className="max-w-xs py-1"
+              />
+            </>
           )}
           {kind === 'song' && <TimbrePicker value={form.timbreId} onChange={(id) => set('timbreId', id)} disabledReason={timbreOk ? null : `${effective?.label ?? 'This model'} can't follow a voice reference.`} />}
         </div>

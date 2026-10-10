@@ -41,6 +41,7 @@ def test_every_registered_job_type_has_a_lane():
         "autopilot": "general", "reel_assemble": "general", "brand_apply": "general", "brand_reveal": "general",
         "media_zip": "general", "ai_beats": "general",
         "photo_render": "general", "look_video": "general",  # numpy / ffmpeg on the CPU
+        "audio_render": "general", "audio_mix": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

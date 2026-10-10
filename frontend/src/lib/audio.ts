@@ -130,6 +130,11 @@ export interface AudioForm {
   language: string
   timbreId: string | null
   aerab: boolean
+  // ACE-Step: '' leaves the choice to the model
+  keyscale: string
+  timeSignature: '' | '2' | '3' | '4' | '6'
+  guidance: string
+  think: boolean
   // music only
   category: AudioCategory | null
 }
@@ -145,6 +150,10 @@ const BASE: Omit<AudioForm, 'kind' | 'durationS'> = {
   language: 'en',
   timbreId: null,
   aerab: true,
+  keyscale: '',
+  timeSignature: '',
+  guidance: '',
+  think: true,
   category: null,
 }
 
@@ -175,6 +184,11 @@ export function audioBlockedReason(f: AudioForm, m: ModelInfo | undefined): stri
   return null
 }
 
+export const ACE_ID = 'ace15_turbo'
+const NOTES = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B']
+// the keys ACE-Step's text encoder accepts, majors first
+export const KEYSCALES = [...NOTES.map((n) => `${n} major`), ...NOTES.map((n) => `${n} minor`)]
+
 const ARABIC_SCRIPT = /[؀-ۿ]/
 
 export const hasUrdu = (text: string) => ARABIC_SCRIPT.test(text)
@@ -202,6 +216,13 @@ export function audioPayload(f: AudioForm, m: ModelInfo): AudioGenerateRequest {
     if (lyrics && !instrumental(f)) body.lyrics = lyrics.slice(0, LYRICS_MAX)
     if (f.timbreId && has(m, 'timbre_ref')) body.timbre_ref_id = f.timbreId
     if (body.language === 'ur') body.aerab = f.aerab
+    if (m.id === ACE_ID) {
+      if (f.keyscale) body.keyscale = f.keyscale
+      if (f.timeSignature) body.time_signature = f.timeSignature
+      const g = Number.parseFloat(f.guidance)
+      if (f.guidance.trim() && Number.isFinite(g) && g >= 0 && g <= 10) body.guidance = g
+      if (!f.think) body.think = false
+    }
   }
   if (f.kind === 'music' && f.category) body.category = f.category
   const bpm = int(f.bpm)

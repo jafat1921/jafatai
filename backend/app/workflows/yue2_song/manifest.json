@@ -1,0 +1,16 @@
+{
+  "name": "yue2_song",
+  "family": "yue2",
+  "description": "YuE2 lyrics to song. A melody-and-chords score (ABC) is written first, then the music follows it; the length settles itself up to max_duration. From Comfy's audio_yue2_text2music template.",
+  "inputs": {
+    "style": {"type": "str", "required": true, "targets": [["Score", "style"], ["Encode", "style"]]},
+    "lyrics": {"type": "str", "default": "", "targets": [["Score", "lyrics"], ["Encode", "lyrics"]]},
+    "seed": {"type": "int", "default": 0, "targets": [["Score", "seed"], ["Encode", "seed"], ["Sampler", "seed"]]},
+    "duration_s": {"type": "float", "default": 120.0, "targets": [["Encode", "max_duration"]]},
+    "steps": {"type": "int", "default": 32, "targets": [["Sampler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/yue2", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"audio": {"node": "Save", "kind": "audio"}},
+  "models": {"checkpoints": ["yue2_3b_int8_convrot.safetensors"]},
+  "progress_weights": {"Score": 5, "Encode": 6, "Sampler": 6, "Decode": 1}
+}

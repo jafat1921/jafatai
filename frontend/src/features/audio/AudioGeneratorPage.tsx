@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useLocation, useSearchParams } from 'react-router'
-import { Music, Music4, Volume2 } from 'lucide-react'
+import { Link, useLocation, useSearchParams } from 'react-router'
+import { ArrowLeft, Music, Music4, Volume2 } from 'lucide-react'
 import { EmptyState } from '@/components/studio/states'
 import { GeneratorPage, ResultsHeading } from '@/components/generate/GeneratorPage'
 import { SessionResults } from '@/components/generate/SessionResults'
@@ -37,8 +37,12 @@ function AudioGenerator({ kind }: { kind: AudioKind }) {
   const model = normalizeModelId(params.get('model')) ?? undefined
   const [form, setForm] = useState<AudioForm>(() => {
     const base = template ? audioFormFrom(kind, template.prefill) : DEFAULT_AUDIO_FORM[kind]
-    return { ...base, prompt: params.get('prompt') ?? base.prompt, model: model ?? base.model }
+    // Score a Clip sends ?duration= so the piece comes out the clip's exact length
+    const asked = Number(params.get('duration'))
+    const durationS = Number.isFinite(asked) && asked > 0 ? Math.round(asked) : base.durationS
+    return { ...base, prompt: params.get('prompt') ?? base.prompt, model: model ?? base.model, durationS }
   })
+  const fromScore = params.get('from') === 'score'
   const results = useMediaList({ kind: 'audio', origin: 'generated' })
   const generate = useAudioGenerate()
   const record = useRecordRun<AudioRun>(page)
@@ -63,6 +67,13 @@ function AudioGenerator({ kind }: { kind: AudioKind }) {
 
   return (
     <GeneratorPage label={LABEL[kind]} targets={[]}>
+      {fromScore && (
+        <Link to="/audio/score" className="-mb-3 inline-flex items-center gap-1 self-start text-small text-studio-muted underline-offset-2 hover:text-studio-text hover:underline">
+          <ArrowLeft aria-hidden className="size-3.5" />
+          Back to Score a Clip
+          <span className="text-studio-faint">· made at the clip’s length, {form.durationS} s</span>
+        </Link>
+      )}
       <AudioDock form={form} setForm={setForm} modelPicked={!!model && form.model === model} onRun={run} pending={generate.isPending} error={generate.error} />
       <ResultsHeading>Your {noun.many}</ResultsHeading>
       <SessionResults<AudioRun>

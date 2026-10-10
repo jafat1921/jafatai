@@ -160,6 +160,7 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
     pids = {i.project_id for i in items if i.project_id}
     ptitles = dict(db.execute(select(Project.id, Project.title).where(Project.id.in_(pids))).all()) if pids else {}
     roots = originals(db, list(gens.values()))
+    from app.audio_analysis import summary as audio_summary
     from app.catalogue.albums import memberships
 
     albums = memberships(db, [i.id for i in items])
@@ -180,6 +181,7 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
             captured_at=i.captured_at, camera=i.camera, lens=i.lens, focal_mm=i.focal_mm, aperture=i.aperture,
             shutter_s=i.shutter_s, iso=i.iso, original_name=i.original_name, bytes=i.bytes,
             source_type=i.source_type, edited=counts.get(i.id, 1) > 1, album_ids=albums.get(i.id, []),
+            analysis=audio_summary(g) if i.kind == "audio" else None,
         ))
     return out
 

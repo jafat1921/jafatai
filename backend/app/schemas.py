@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
 from app.camera import Camera
 
@@ -681,6 +681,8 @@ class MediaItemOut(BaseModel):
     album_ids: list[str] = []
     # upload only: this file was already in the catalogue, so nothing new was stored
     duplicate: bool = False
+    # audio, once analysed (contract v15): {lufs_i, true_peak_db, flags} for the quality badges
+    analysis: dict[str, Any] | None = None
 
 
 class UpscaleRowOut(BaseModel):
@@ -825,6 +827,11 @@ class AudioGenerateIn(BaseModel):
     timbre_ref_id: str | None = None
     # Urdu songs: add zer / zabar / pesh to unmarked lines before singing
     aerab: bool = True
+    # ACE-Step only: musical key, metre, how closely to follow the tags, and the planning LM
+    keyscale: str | None = Field(None, pattern=r"^[A-G][#b]? (major|minor)$")
+    time_signature: Literal["2", "3", "4", "6"] | None = None
+    guidance: float | None = Field(None, ge=0, le=10)
+    think: bool | None = None
     title: str | None = Field(None, max_length=200)
     folder_id: str | None = None
 
@@ -855,6 +862,103 @@ class AerabOut(BaseModel):
     lyrics: str
     marked: int
     kept: int
+
+
+# ---------------------------------------------------------------- audio editor and Score a Clip (contract v15)
+
+FadeCurve = Literal["tri", "qsin", "exp", "log"]
+LoudnessTarget = Literal["web", "podcast", "broadcast", "acx"]
+ChainPreset = Literal["broadcast", "cinematic", "podcast", "warm", "raw", "radio", "telephone", "hall"]
+
+
+class Region(BaseModel):
+    start: float = Field(ge=0, le=86400)
+    end: float = Field(gt=0, le=86400)
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        if self.end <= self.start:
+            raise ValueError("a region's end must come after its start")
+        return self
+
+
+class Fade(BaseModel):
+    s: float = Field(ge=0, le=30)
+    curve: FadeCurve = "tri"
+
+
+class Chain(BaseModel):
+    preset: ChainPreset
+    amount: float = Field(100, ge=0, le=100)
+
+
+class Loudness(BaseModel):
+    target: LoudnessTarget
+
+
+class Marker(BaseModel):
+    t: float = Field(ge=0, le=86400)
+    label: str = Field("", max_length=40)
+
+
+class AudioEdit(BaseModel):
+    version: Literal[1] = 1
+    trim: Region | None = None
+    cuts: list[Region] = Field(default_factory=list, max_length=200)
+    gain_db: float = Field(0, ge=-24, le=24)
+    fade_in: Fade | None = None
+    fade_out: Fade | None = None
+    speed: float = Field(1.0, ge=0.5, le=2.0)
+    pitch: float = Field(0, ge=-12, le=12)
+    silence_trim: bool = False
+    loop_to: float | None = Field(None, gt=0, le=3600)
+    append: list[str] = Field(default_factory=list, max_length=8)
+    chain: Chain | None = None
+    loudness: Loudness | None = None
+    markers: list[Marker] = Field(default_factory=list, max_length=100)
+
+
+class AudioPreviewIn(BaseModel):
+    edit: AudioEdit = Field(default_factory=AudioEdit)
+    version: str | None = None
+
+
+class AudioRenderIn(AudioPreviewIn):
+    note: str | None = Field(None, max_length=500)
+
+
+class MixOriginal(BaseModel):
+    keep: bool = True
+    gain_db: float = Field(0, ge=-24, le=24)
+
+
+class MixTrack(BaseModel):
+    media_id: str
+    offset_s: float = Field(0, ge=0, le=3600)
+    gain_db: float = Field(0, ge=-24, le=24)
+    mute: bool = False
+    fade_in_s: float = Field(0, ge=0, le=30)
+    fade_out_s: float = Field(0, ge=0, le=30)
+    loop: bool = False
+    duck: bool = False
+
+
+class MixDuck(BaseModel):
+    amount_db: float = Field(10, ge=0, le=24)
+    under: Literal["original"] = "original"
+
+
+class MixIn(BaseModel):
+    video_id: str
+    original: MixOriginal = Field(default_factory=MixOriginal)
+    tracks: list[MixTrack] = Field(default_factory=list, max_length=4)
+    duck: MixDuck = Field(default_factory=MixDuck)
+    loudness: Loudness | None = None
+
+
+class MixRenderIn(MixIn):
+    stems: bool = False
+    note: str | None = Field(None, max_length=500)
 
 
 class TemplateOut(BaseModel):

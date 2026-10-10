@@ -23,6 +23,17 @@ No migration. `media_item.kind` (String(10)) gains the value `"audio"`. Plan: [P
 | `sa3_medium` | Stable Audio 3 Medium | `music`, `long` | 380 | |
 | `sa3_small_sfx` | Stable Audio 3 Small SFX | `sfx` | 120 | Default SFX model |
 
+There is also `yue2` (YuE2, badge `SCORED`), with capabilities `song`, `lyrics` and `vocals`, a `max_duration_s` of 360, and the licence note "test use, licence to be confirmed".
+- It writes an ABC melody-and-chords score first and then renders the song.
+- It settles its own length, up to the requested one.
+- Lyric markers are sent as `[Verse]` / `[Chorus]`.
+
+Song generation has extra fields that only ACE-Step 1.5 uses:
+- `keyscale` (e.g. `"D minor"`)
+- `time_signature` (`"2" | "3" | "4" | "6"`)
+- `guidance` (0..10, default 2)
+- `think` (bool): the planning LM, on by default, and always off when a timbre reference is given.
+
 `model: "auto"` (or omitting it) picks the default model for the `kind`.
 
 ## Generate: `POST /api/audio/generate` → 202 `{items: MediaItemOut[], jobs: JobOut[], model_resolved}`

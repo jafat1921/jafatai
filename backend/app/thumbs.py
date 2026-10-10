@@ -33,7 +33,9 @@ def wave_file(src: Path) -> Path:
 
 
 def files_for(src: Path) -> list[Path]:
-    return [thumb_file(src, w) for w in SIZES] + [wave_file(src)]
+    # plus the sidecars other modules keep beside a file (audio peaks / analysis, mix stems), so they go with it
+    extra = [src.with_name(f"{src.stem}.{s}") for s in ("peaks.json", "analysis.json", "stems.zip")]
+    return [thumb_file(src, w) for w in SIZES] + [wave_file(src)] + extra
 
 
 def thumb_file(src: Path, w: int) -> Path:

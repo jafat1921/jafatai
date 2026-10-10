@@ -3,6 +3,7 @@ import asyncio
 import logging
 import math
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -474,6 +475,14 @@ def audio_plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
                       language=lang if lang in ACE_LANGUAGES else "unknown")
         if params.get("bpm"):
             inputs["bpm"] = int(params["bpm"])
+        if params.get("keyscale"):
+            inputs["keyscale"] = params["keyscale"]
+        if params.get("time_signature"):
+            inputs["timesignature"] = str(params["time_signature"])
+        if params.get("guidance") is not None:
+            inputs["guidance"] = float(params["guidance"])
+        if params.get("think") is not None:
+            inputs["audio_codes"] = bool(params["think"])
         ref = params.get("timbre_ref_id")
         if ref:
             images["timbre_audio"] = lookup.generation_file(ref)
@@ -482,6 +491,10 @@ def audio_plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
             sources["timbre_ref_id"] = ref
     elif m.template == "minimax_music3":
         inputs.update(caption=style_tags(prompt, params), lyrics=lyrics)
+    elif m.template == "yue2_song":
+        # YuE2's template writes its markers as [Verse] / [Chorus]
+        inputs.update(style=style_tags(prompt, params),
+                      lyrics=re.sub(r"\[([a-z][a-z-]*)\]", lambda mt: f"[{mt[1].title()}]", lyrics))
     else:
         text = prompt.strip()
         hint = SA3_HINTS.get(params.get("category") or "")

@@ -144,7 +144,7 @@ def test_generate_errors_are_readable(client, db):
     assert "not songs" in detail(kind="song", model="sa3_small_sfx")
     assert "up to 120 s" in detail(kind="music", model="sa3_small_music", duration_s=200)
     assert "turned off" in detail(kind="song", model="minimax_music3")
-    assert "choose one of: ace15_turbo, sa3_small_music" in detail(kind="song", model="zimage_turbo")
+    assert "choose one of: ace15_turbo, yue2, sa3_small_music" in detail(kind="song", model="zimage_turbo")
     assert detail(kind="song", prompt="   ") == "A prompt is required"
     assert gen(client, kind="song", duration_s=400).status_code == 422
     assert gen(client, kind="speech").status_code == 422  # A3
@@ -169,7 +169,7 @@ def test_timbre_reference_is_recorded(client, tmp_path, fast_driver):
 
 def test_minimax_hidden_unless_allowed(client, monkeypatch):
     ids = [m["id"] for m in client.get("/api/models", params={"type": "audio"}).json()]
-    assert ids == ["auto", "ace15_turbo", "sa3_small_music", "sa3_medium", "sa3_small_sfx"]
+    assert ids == ["auto", "ace15_turbo", "yue2", "sa3_small_music", "sa3_medium", "sa3_small_sfx"]
 
     monkeypatch.setattr(get_settings(), "audio_allow_noncommercial", True)
     rows = {m["id"]: m for m in client.get("/api/models", params={"type": "audio"}).json()}
@@ -314,7 +314,7 @@ def node(graph, title):
     return graph[find_node(graph, title)]["inputs"]
 
 
-@pytest.mark.parametrize("name", ["ace15_song", "sa3_music", "sa3_medium", "sa3_sfx", "minimax_music3"])
+@pytest.mark.parametrize("name", ["ace15_song", "sa3_music", "sa3_medium", "sa3_sfx", "minimax_music3", "yue2_song"])
 def test_audio_templates_pass_against_the_audio_object_info(name):
     info = json.loads(AUDIO_INFO.read_text())
     assert check_template(name, info)["ok"], check_template(name, info)
@@ -348,6 +348,10 @@ def test_sa3_and_minimax_graphs():
     g, _ = build("minimax_music3", {"caption": "city pop", "lyrics": "[verse]\nhi", "duration_s": 90, "seed": 5})
     assert node(g, "Encode")["max_duration"] == 90.0 and node(g, "Encode")["caption"] == "city pop"
     assert node(g, "Latent")["seconds"] == [find_node(g, "Encode"), 1]  # the encoder decides the length
+    g, _ = build("yue2_song", {"style": "ghazal", "lyrics": "[Verse]\nhi", "duration_s": 150, "seed": 8})
+    assert node(g, "Score")["style"] == "ghazal" == node(g, "Encode")["style"]
+    assert node(g, "Encode")["abc"] == [find_node(g, "Score"), 0] and node(g, "Encode")["max_duration"] == 150.0
+    assert node(g, "Score")["seed"] == 8 == node(g, "Sampler")["seed"]
 
 
 class Lookup:
@@ -367,6 +371,11 @@ def test_audio_plans(tmp_path):
     assert p.template == "ace15_song" and p.media == "audio"
     assert p.inputs["tags"] == "dreamy synth pop, female vocals, 100 bpm" and p.inputs["language"] == "ur"
     assert p.inputs["bpm"] == 100 and p.inputs["seed"] == 4 and p.inputs["duration_s"] == 60
+    p = audio_plan("song", "waltz", {"keyscale": "D minor", "time_signature": "3", "guidance": 3.5, "think": False}, 1, lk)
+    assert (p.inputs["keyscale"], p.inputs["timesignature"], p.inputs["guidance"], p.inputs["audio_codes"]) == (
+        "D minor", "3", 3.5, False)
+    g, _ = build("ace15_song", {"tags": "x", **p.inputs})
+    assert node(g, "Encode")["keyscale"] == "D minor" and node(g, "Encode")["cfg_scale"] == 3.5
     p = audio_plan("song", "sea shanty", {"language": "gd", "timbre_ref_id": "g1"}, 1, lk)
     assert p.inputs["language"] == "unknown" and p.inputs["lyrics"] == "[Instrumental]"
     assert p.inputs["tags"] == "sea shanty, instrumental" and p.inputs["audio_codes"] is False
@@ -378,6 +387,8 @@ def test_audio_plans(tmp_path):
     p = audio_plan("song", "city pop", {"model": "minimax_music3", "lyrics": "[verse]\nhi", "vocal": "duet"}, 1, lk)
     assert p.inputs["caption"] == "city pop, male and female duet vocals" and p.inputs["lyrics"] == "[verse]\nhi"
     assert style_tags("instrumental jazz", {"vocal": "none"}) == "instrumental jazz"
+    p = audio_plan("song", "ghazal", {"model": "yue2", "lyrics": "[verse]\nhi\n[chorus]\nho"}, 1, lk)
+    assert p.template == "yue2_song" and p.inputs["lyrics"] == "[Verse]\nhi\n[Chorus]\nho"
 
 
 def test_save_audio_history_is_parsed_as_audio():

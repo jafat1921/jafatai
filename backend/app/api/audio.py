@@ -59,7 +59,7 @@ def generate_audio(body: AudioGenerateIn, db: Session = Depends(get_db), cur: Cu
     if body.kind == "song":
         # lyrics, language and voice only mean something to the song models
         params.update(lyrics=body.lyrics.strip(), language=body.language, vocal=body.vocal or "none", aerab=body.aerab)
-    for key in ("bpm", "category", "steps"):
+    for key in ("bpm", "category", "steps", "keyscale", "time_signature", "guidance", "think"):
         if getattr(body, key) is not None:
             params[key] = getattr(body, key)
     if ref is not None:

@@ -632,6 +632,8 @@ export interface MediaItem {
   edited?: boolean
   album_ids?: string[]
   duplicate?: boolean
+  // contract v15: audio, once measured
+  analysis?: AudioAnalysisBrief | null
 }
 
 export interface MediaDetail extends MediaItem {
@@ -923,6 +925,11 @@ export interface AudioGenerateRequest {
   timbre_ref_id?: string
   // Urdu songs: the server adds zer / zabar / pesh to unmarked lines before singing
   aerab?: boolean
+  // ACE-Step only
+  keyscale?: string
+  time_signature?: '2' | '3' | '4' | '6'
+  guidance?: number
+  think?: boolean
   title?: string
 }
 
@@ -976,4 +983,86 @@ export interface UpscaleRow {
 export interface UpscalePage {
   items: UpscaleRow[]
   next_cursor?: string | null
+}
+
+// contract-v15: Audio editor, analysis and Score a Clip
+export type FadeCurve = 'tri' | 'qsin' | 'exp' | 'log'
+export type ChainPreset = 'broadcast' | 'cinematic' | 'podcast' | 'warm' | 'raw' | 'radio' | 'telephone' | 'hall'
+export type LoudnessTarget = 'web' | 'podcast' | 'broadcast' | 'acx'
+export type AudioFlag = 'clipping' | 'too_loud' | 'too_quiet' | 'long_silence'
+
+export interface TimeRegion {
+  start: number
+  end: number
+}
+
+export interface AudioMarker {
+  t: number
+  label: string
+}
+
+export interface AudioEdit {
+  version?: 1
+  trim?: TimeRegion | null
+  cuts?: TimeRegion[]
+  gain_db?: number
+  fade_in?: { s: number; curve: FadeCurve } | null
+  fade_out?: { s: number; curve: FadeCurve } | null
+  speed?: number
+  pitch?: number
+  silence_trim?: boolean
+  loop_to?: number | null
+  append?: string[]
+  chain?: { preset: ChainPreset; amount: number } | null
+  loudness?: { target: LoudnessTarget } | null
+  markers?: AudioMarker[]
+}
+
+export interface Peaks {
+  duration_s: number
+  sample_rate: number
+  channels: number
+  peaks: [number, number][]
+}
+
+export interface AudioAnalysis {
+  lufs_i: number | null
+  lra: number | null
+  true_peak_db: number | null
+  sample_peak_db?: number | null
+  clipped_pct?: number | null
+  silences: TimeRegion[]
+  flags: AudioFlag[]
+}
+
+// what list items carry once the server has measured them
+export type AudioAnalysisBrief = Pick<AudioAnalysis, 'lufs_i' | 'true_peak_db' | 'flags'>
+
+export interface AudioPreview {
+  url: string
+  durationS: number | null
+  lufsI: number | null
+  truePeakDb: number | null
+  renderMs: number | null
+}
+
+export type AudioExportFormat = 'wav16' | 'wav24' | 'wav32f' | 'flac' | 'mp3_128' | 'mp3_192' | 'mp3_320' | 'opus'
+
+export interface MixTrack {
+  media_id: string
+  offset_s: number
+  gain_db: number
+  mute: boolean
+  fade_in_s: number
+  fade_out_s: number
+  loop: boolean
+  duck: boolean
+}
+
+export interface MixIn {
+  video_id: string
+  original: { keep: boolean; gain_db: number }
+  tracks: MixTrack[]
+  duck: { amount_db: number; under: 'original' }
+  loudness?: { target: LoudnessTarget } | null
 }

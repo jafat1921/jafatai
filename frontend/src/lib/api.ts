@@ -1,7 +1,14 @@
 import type {
   AssistAction,
+  AudioAnalysis,
+  AudioEdit,
+  AudioExportFormat,
   AudioGenerateRequest,
+  AudioPreview,
   AerabResponse,
+  LoudnessTarget,
+  MixIn,
+  Peaks,
   LyricsRequest,
   LyricsResponse,
   TemplateType,
@@ -231,6 +238,23 @@ const jsonInit = (body: unknown, signal?: AbortSignal): RequestInit => ({
   signal,
 })
 
+const header = (res: Response, name: string) => {
+  const raw = res.headers.get(name)
+  const n = raw == null || raw === '' ? NaN : Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+// the audio previews answer mp3 with what they measured in headers
+async function audioPreview(res: Response): Promise<AudioPreview> {
+  return {
+    url: URL.createObjectURL(await res.blob()),
+    durationS: header(res, 'X-Duration-S'),
+    lufsI: header(res, 'X-Lufs-I'),
+    truePeakDb: header(res, 'X-True-Peak-Db'),
+    renderMs: header(res, 'X-Render-Ms'),
+  }
+}
+
 export interface GenerationQuery {
   target_type: TargetType
   target_id: string
@@ -457,6 +481,16 @@ export const api = {
     generate: (body: AudioGenerateRequest) => post<MediaBatch>('/audio/generate', body),
     lyrics: (body: LyricsRequest) => post<LyricsResponse>('/audio/lyrics', body),
     aerab: (lyrics: string) => post<AerabResponse>('/audio/lyrics/aerab', { lyrics }),
+    // contract-v15
+    peaks: (id: string, q: { n?: number; version?: string } = {}) => get<Peaks>(`/audio/${id}/peaks`, q),
+    analysis: (id: string, version?: string) => get<AudioAnalysis>(`/audio/${id}/analysis`, { version }),
+    preview: async (id: string, body: { edit: AudioEdit; version?: string }, signal?: AbortSignal) =>
+      audioPreview(await send(`/audio/${id}/preview`, jsonInit(body, signal))),
+    render: (id: string, body: { edit: AudioEdit; version?: string; note?: string }) => post<{ item: MediaItem; job: Job }>(`/audio/${id}/render`, body),
+    exportUrl: (id: string, q: { format: AudioExportFormat; loudness?: LoudnessTarget | null; version?: string }) =>
+      API_BASE + withQuery(`/audio/${id}/export`, q),
+    mixPreview: async (body: MixIn, signal?: AbortSignal) => audioPreview(await send('/audio/mix/preview', jsonInit(body, signal))),
+    mix: (body: MixIn & { stems?: boolean; note?: string }) => post<{ item: MediaItem; job: Job }>('/audio/mix', body),
   },
   videos: {
     // a MediaItem plus its job; tolerate a batch too

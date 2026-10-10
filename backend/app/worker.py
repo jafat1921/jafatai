@@ -374,11 +374,16 @@ from app.photo import looks as photo_looks, restore, service as photo  # noqa: E
 HANDLERS[photo.RENDER_JOB] = photo.handle_render
 FINISHED_HOOKS.append(restore.on_job_finished)
 HANDLERS[photo_looks.VIDEO_JOB] = photo_looks.handle_apply_video
+from app import audio_analysis, audio_jobs  # noqa: E402
+
+HANDLERS[audio_jobs.RENDER_JOB] = audio_jobs.handle_render
+HANDLERS[audio_jobs.MIX_JOB] = audio_jobs.handle_mix
+FINISHED_HOOKS.append(audio_analysis.on_job_finished)
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.
 CPU_JOB_LEDGER = {ASSEMBLE_JOB: "assembly", AUTOPILOT_JOB: "autopilot", brand.BRAND_JOB: "brand",
                   brand.REVEAL_JOB: "brand", organise.ZIP_JOB: "export", photo.RENDER_JOB: "photo",
-                  photo_looks.VIDEO_JOB: "photo"}
+                  photo_looks.VIDEO_JOB: "photo", audio_jobs.RENDER_JOB: "audio_edit", audio_jobs.MIX_JOB: "audio_edit"}
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

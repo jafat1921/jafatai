@@ -43,4 +43,7 @@ export const qk = {
   // P5
   upscalesAll: ['upscales'] as const,
   upscales: (kind: VisualKind) => ['upscales', kind] as const,
+  // contract-v15
+  peaks: (id: string, version: string | null, n: number) => ['audio-peaks', id, version, n] as const,
+  audioAnalysis: (id: string, version: string | null) => ['audio-analysis', id, version] as const,
 }

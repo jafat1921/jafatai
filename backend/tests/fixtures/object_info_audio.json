@@ -965,5 +965,189 @@
   "output": [
    "CLIP"
   ]
+ },
+ "YuE2GenerateABC": {
+  "input": {
+   "required": {
+    "clip": [
+     "CLIP",
+     {}
+    ],
+    "style": [
+     "STRING",
+     {
+      "multiline": true
+     }
+    ],
+    "lyrics": [
+     "STRING",
+     {
+      "multiline": true
+     }
+    ],
+    "seed": [
+     "INT",
+     {
+      "default": 0
+     }
+    ],
+    "mode": [
+     "COMBO",
+     {
+      "options": [
+       "full",
+       "melody"
+      ]
+     }
+    ],
+    "max_abc_tokens": [
+     "INT",
+     {
+      "default": 8192
+     }
+    ],
+    "temperature": [
+     "FLOAT",
+     {
+      "default": 0.7
+     }
+    ],
+    "top_p": [
+     "FLOAT",
+     {
+      "default": 0.9
+     }
+    ],
+    "top_k": [
+     "INT",
+     {
+      "default": 30
+     }
+    ],
+    "repetition_penalty": [
+     "FLOAT",
+     {
+      "default": 1.005
+     }
+    ],
+    "penalty_window": [
+     "INT",
+     {
+      "default": 100
+     }
+    ]
+   }
+  },
+  "output": [
+   "STRING"
+  ]
+ },
+ "YuE2GenerateMusic": {
+  "input": {
+   "required": {
+    "clip": [
+     "CLIP",
+     {}
+    ],
+    "style": [
+     "STRING",
+     {
+      "multiline": true
+     }
+    ],
+    "lyrics": [
+     "STRING",
+     {
+      "multiline": true
+     }
+    ],
+    "abc": [
+     "STRING",
+     {
+      "default": ""
+     }
+    ],
+    "seed": [
+     "INT",
+     {
+      "default": 0
+     }
+    ],
+    "mode": [
+     "COMBO",
+     {
+      "options": [
+       "full",
+       "melody"
+      ]
+     }
+    ],
+    "max_duration": [
+     "FLOAT",
+     {
+      "default": 360.0,
+      "min": 0.04,
+      "max": 900.0
+     }
+    ],
+    "temperature": [
+     "FLOAT",
+     {
+      "default": 1.0
+     }
+    ],
+    "top_p": [
+     "FLOAT",
+     {
+      "default": 0.95
+     }
+    ],
+    "top_k": [
+     "INT",
+     {
+      "default": 100
+     }
+    ],
+    "repetition_penalty": [
+     "FLOAT",
+     {
+      "default": 1.2
+     }
+    ]
+   },
+   "optional": {
+    "cfg_scale": [
+     "FLOAT",
+     {
+      "default": 1.0
+     }
+    ]
+   }
+  },
+  "output": [
+   "CONDITIONING",
+   "FLOAT"
+  ]
+ },
+ "EmptyYuE2LatentAudio": {
+  "input": {
+   "required": {
+    "seconds": [
+     "FLOAT",
+     {
+      "default": 120.0
+     }
+    ],
+    "batch_size": [
+     "INT",
+     {
+      "default": 1
+     }
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ]
  }
 }

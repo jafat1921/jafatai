@@ -306,6 +306,24 @@ describe('Audio Studio', { timeout: 15_000 }, () => {
     expect(screen.getByText('Drop audio files here')).toBeInTheDocument()
   })
 
+  it('a measured track shows its loudness and warnings, and its menu opens the editor and Score a Clip', async () => {
+    api({ items: [track('a1', { analysis: { lufs_i: -8.24, true_peak_db: 0.1, flags: ['too_loud', 'clipping'] } })] })
+    renderAt('/audio/library', [{ path: '/audio/library', element: <LibraryPage kind="audio" /> }], seedCatalog)
+    const user = userEvent.setup()
+    expect(await screen.findByText('Quality: −8.2 LUFS integrated, too loud, clipping.')).toBeInTheDocument()
+    expect(screen.getByText('−8.2 LUFS')).toHaveAttribute('aria-hidden', 'true')
+    await user.click(screen.getByRole('button', { name: 'More for Rain take' }))
+    expect(await screen.findByRole('menuitem', { name: 'Open in Editor' })).toHaveAttribute('href', '/audio/edit/a1')
+    expect(screen.getByRole('menuitem', { name: 'Use in Score a Clip' })).toHaveAttribute('href', '/audio/score?audio=a1')
+  })
+
+  it('Score a Clip sends a generator the clip length and a way back', async () => {
+    api()
+    renderAt('/audio/music?duration=12&from=score', routes, seedCatalog)
+    expect(await screen.findByRole('link', { name: /Back to Score a Clip/ })).toHaveAttribute('href', '/audio/score')
+    expect(screen.getByRole('button', { name: 'Length: 12 s' })).toBeInTheDocument()
+  })
+
   it('an audio prompt template opens the page its category belongs to', async () => {
     const rain: Template = { id: 'rain', type: 'audio', title: 'Monsoon rain', description: 'Heavy rain', category: 'Ambience', defaults: { prompt_scaffold: 'Monsoon rain on [surface]', duration_s: 20 } }
     const calls = mockApi((method, path) => {
@@ -336,6 +354,8 @@ describe('Audio navigation', () => {
       ['Song', '/audio/song'],
       ['Music & Score', '/audio/music'],
       ['Sound Effects', '/audio/sfx'],
+      ['Editor', '/audio/edit'],
+      ['Score a Clip', '/audio/score'],
       ['Prompt templates', '/audio/prompt-templates'],
       ['Library', '/audio/library'],
     ])

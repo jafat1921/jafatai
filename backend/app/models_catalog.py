@@ -109,6 +109,12 @@ MODELS: dict[str, Model] = {m.id: m for m in (
           ("song", "lyrics", "vocals"), "minimax_music3", max_duration_s=240, est_seconds=18,
           licence="MiniMax-Music3 Community Licence: commercial use only under US$20M annual revenue",
           noncommercial=True),
+    Model("yue2", "audio", "YuE2", "SCORED",
+          "Songs with vocals that follow a written melody and chords; strong on long, structured songs. "
+          "Settles its own length, up to the one you ask for.",
+          ("song", "lyrics", "vocals"), "yue2_song", max_duration_s=360, est_seconds=12,
+          # TODO: owner is testing YuE2 first; settle its licence before launch
+          licence="Test use: licence to be confirmed before release"),
     Model("sa3_small_music", "audio", "Stable Audio 3 Small Music", "FAST",
           "Instrumental music, beds and loops up to 2 minutes.", ("music",), "sa3_music", max_duration_s=120,
           est_seconds=3, default=True, licence=SA3_LICENCE),

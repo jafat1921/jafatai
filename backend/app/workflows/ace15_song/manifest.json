@@ -140,6 +140,16 @@
           "filename_prefix"
         ]
       ]
+    },
+    "guidance": {
+      "type": "float",
+      "default": 2.0,
+      "targets": [
+        [
+          "Encode",
+          "cfg_scale"
+        ]
+      ]
     }
   },
   "outputs": {

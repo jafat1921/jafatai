@@ -27,7 +27,7 @@ export function AudioPlayer({ id, src, title, wave, durationS, className }: Prop
     if (e.key in by) seek(time + by[e.key])
     else if (e.key === 'Home') seek(0)
     else if (e.key === 'End' && length) seek(length)
-    else if (e.key === ' ') togglePlay(id, src)
+    else if (e.key === ' ') togglePlay(id, src, { title })
     else return
     // the native range would move by one step as well, and the lightbox would browse
     e.preventDefault()
@@ -43,7 +43,7 @@ export function AudioPlayer({ id, src, title, wave, durationS, className }: Prop
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => togglePlay(id, src)}
+          onClick={() => togglePlay(id, src, { title })}
           aria-label={`${track.playing ? 'Pause' : 'Play'} ${title}`}
           className="flex size-12 shrink-0 items-center justify-center rounded-full bg-studio-gold text-studio-darkroom shadow-card hover:brightness-110"
         >

@@ -18,6 +18,7 @@ import {
   Music,
   Music4,
   MapPin,
+  Scissors,
   Maximize2,
   Settings,
   Shuffle,
@@ -112,15 +113,16 @@ const VIDEO_MENU: MenuSection = {
   ],
 }
 
-// docs/PLAN-m11-audio.md; Voice and Score a Clip land in A2/A3
+// docs/PLAN-m11b-audio-pro.md; Voice lands in B2
 const AUDIO_MENU: MenuSection = {
   title: 'Audio Tools',
   features: [
     { id: 'song', title: 'Song', description: 'Style tags and lyrics, sung', to: '/audio/song', icon: Music },
     { id: 'music', title: 'Music & Score', description: 'Instrumental beds and cues', to: '/audio/music', icon: Music4 },
     { id: 'sfx', title: 'Sound Effects', description: 'Foley, ambience, whooshes', to: '/audio/sfx', icon: Volume2 },
-    { id: 'voice', title: 'Voice', description: 'Narration and dialogue · later', to: '/audio/voice', icon: Mic, disabled: true },
-    { id: 'score', title: 'Score a Clip', description: 'Sound to a video’s length · later', to: '/audio/score', icon: AudioWaveform, disabled: true },
+    { id: 'voice', title: 'Voice', description: 'Narration and dialogue · later', to: '/audio/speak', icon: Mic, disabled: true },
+    { id: 'editor', title: 'Editor', description: 'Trim, fade, effects, loudness', to: '/audio/edit', icon: Scissors },
+    { id: 'score', title: 'Score a Clip', description: 'Mix music and effects under a video', to: '/audio/score', icon: AudioWaveform },
     { id: 'templates', title: 'Prompt templates', description: 'Qawwali, tense score, rain…', to: '/audio/prompt-templates', icon: LayoutTemplate },
     { id: 'library', title: 'Library', description: 'Every song, cue and effect', to: '/audio/library', icon: Library },
   ],
@@ -251,6 +253,8 @@ const TITLES: [RegExp, string][] = [
   [/^\/audio\/sfx/, 'Sound effects'],
   [/^\/audio\/(prompt-)?templates/, 'Audio prompt templates'],
   [/^\/audio\/library/, 'Audio library'],
+  [/^\/audio\/edit/, 'Audio editor'],
+  [/^\/audio\/score/, 'Score a Clip'],
   [/^\/queue/, 'Queue'],
   [/^\/settings/, 'Settings'],
 ]

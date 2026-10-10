@@ -41,6 +41,15 @@ describe('audio payload', () => {
     })
   })
 
+  it('sends key, metre, guidance and planning to ACE-Step only', () => {
+    const f = { ...DEFAULT_AUDIO_FORM.song, prompt: 'waltz', keyscale: 'D minor', timeSignature: '3' as const, guidance: '3.5', think: false }
+    expect(audioPayload(f, ace)).toMatchObject({ keyscale: 'D minor', time_signature: '3', guidance: 3.5, think: false })
+    const other = audioPayload(f, MINIMAX)
+    expect(other.keyscale).toBeUndefined()
+    expect(other.think).toBeUndefined()
+    expect(audioPayload({ ...f, guidance: '11' }, ace).guidance).toBeUndefined()
+  })
+
   it('reports aerab results in plain words', () => {
     expect(aerabNote(12, 0)).toBe('Aerab added to 12 lines.')
     expect(aerabNote(1, 1)).toBe('Aerab added to 1 line. 1 line kept as written: the marking changed their words, so they were left alone.')

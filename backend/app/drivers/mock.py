@@ -167,11 +167,32 @@ class MockDriver:
         progress_cb(1.0, "Done")
         return DriverResult(out_path, "image/png", {"width": w, "height": h, "template": r["template"]})
 
+    def _speech_seconds(self, params) -> float:
+        if params.get("duration_s"):
+            return float(params["duration_s"])
+        from app import voices
+
+        e = voices.ENGINES.get(params.get("engine") or "", voices.ENGINES[voices.DEFAULT_ENGINE])
+        segs = voices.segments(params.get("text") or "", e)
+        words = sum(len(str(v).split()) for k, v in segs if k == "text")
+        pauses = sum(float(v) for k, v in segs if k == "pause")
+        # about 2.5 words a second at speed 1
+        return words / 2.5 / float(params.get("speed") or 1.0) + pauses
+
+    def transcribe(self, path: Path, language, progress_cb) -> dict:
+        self._tick(progress_cb, "Transcribing")
+        text = "This is a mock transcript of the reference clip."
+        return {"text": text, "language": language or "en",
+                "segments": [{"start": 0.0, "end": 2.0, "text": text, "words": []}]}
+
     def generate_audio(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         # a tone (songs, music) or pink noise (sfx) at the exact length, so players and waveforms have
         # something real; the pitch follows prompt and seed so takes sound different
         self._tick(progress_cb, "Composing", upto=0.8)
-        seconds = max(0.5, float(params.get("duration_s") or 10))
+        if params.get("kind") == "speech":
+            seconds = max(0.5, self._speech_seconds(params))
+        else:
+            seconds = max(0.5, float(params.get("duration_s") or 10))
         if params.get("kind") == "sfx":
             src = f"anoisesrc=d={seconds:.3f}:c=pink:r=44100:a=0.25"
         else:

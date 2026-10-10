@@ -1,4 +1,4 @@
-import type { GenerationKind, MediaQuery, ModelType, TargetType, TemplateType, VisualKind } from '@/lib/types'
+import type { GenerationKind, MediaQuery, ModelType, TargetType, TemplateType, VisualKind, VoiceQuery } from '@/lib/types'
 
 export const qk = {
   me: ['me'] as const,
@@ -46,4 +46,8 @@ export const qk = {
   // contract-v15
   peaks: (id: string, version: string | null, n: number) => ['audio-peaks', id, version, n] as const,
   audioAnalysis: (id: string, version: string | null) => ['audio-analysis', id, version] as const,
+  // contract-v16
+  voiceLists: ['voices', 'list'] as const,
+  voices: (q: VoiceQuery) => ['voices', 'list', q] as const,
+  voiceEngines: ['voice-engines'] as const,
 }

@@ -124,6 +124,8 @@ export type GenerationKind =
   | 'song'
   | 'music'
   | 'sfx'
+  // contract-v16
+  | 'speech'
 export type GenerationStatus = 'queued' | 'generating' | 'ready' | 'approved' | 'rejected' | 'failed'
 
 export interface Generation {
@@ -1065,4 +1067,128 @@ export interface MixIn {
   tracks: MixTrack[]
   duck: { amount_db: number; under: 'original' }
   loudness?: { target: LoudnessTarget } | null
+}
+
+// contract-v16: Voice studio
+export type VoiceKind = 'clone' | 'design' | 'preset'
+export type VoiceGender = 'male' | 'female' | 'neutral'
+export type VoiceFeature = 'clone' | 'design' | 'tags' | 'emotion' | 'preset_voices' | 'fast'
+
+export interface VoiceLanguage {
+  code: string
+  name: string
+}
+
+export interface VoiceEngine {
+  id: string
+  label: string
+  features: VoiceFeature[]
+  languages: VoiceLanguage[]
+  licence: string
+  default_for?: string[]
+  presets?: { id: string; name: string; language: string }[]
+}
+
+export interface VoiceRef {
+  media_id: string
+  generation_id: string
+  duration_s: number | null
+  url: string | null
+}
+
+export interface VoiceDesign {
+  description: string
+  seed?: number | null
+  engine?: string | null
+}
+
+export interface VoiceConsent {
+  name: string
+  statement: string
+  at?: string
+  user_id?: string
+}
+
+export type RefWarning = 'short' | 'long'
+
+export interface Voice {
+  id: string
+  name: string
+  language: string
+  notes: string
+  gender_hint: VoiceGender | null
+  kind: VoiceKind
+  ref: VoiceRef | null
+  ref_text: string
+  design: VoiceDesign | null
+  preset: { engine: string; id: string } | null
+  portrait_url: string | null
+  starred: boolean
+  locked: boolean
+  consent: VoiceConsent | null
+  created_at: string
+  updated_at: string
+  uses: number
+  // POST and PATCH only: the reference is usable but outside 5–15 s
+  warnings?: RefWarning[]
+}
+
+export interface VoiceQuery {
+  q?: string
+  language?: string
+  kind?: VoiceKind
+  starred?: boolean
+}
+
+export interface VoiceCreate {
+  name: string
+  language: string
+  kind: VoiceKind
+  ref_media_id?: string
+  ref_text?: string
+  design?: VoiceDesign
+  preset?: { engine: string; id: string }
+  notes?: string
+  gender_hint?: VoiceGender | null
+  consent?: Pick<VoiceConsent, 'name' | 'statement'>
+}
+
+export type VoicePatch = Partial<Pick<Voice, 'name' | 'language' | 'notes' | 'gender_hint' | 'ref_text' | 'starred' | 'locked'>> & {
+  ref_media_id?: string
+  design?: VoiceDesign
+}
+
+export interface SpeakRequest {
+  text: string
+  voice_id?: string
+  design?: { description: string; seed?: number }
+  engine: string
+  language: string
+  aerab?: boolean
+  speed?: number
+  duration_s?: number
+  steps?: number
+  guidance?: number
+  denoise?: boolean
+  exaggeration?: number
+  count?: number
+  seed?: number
+  title?: string
+  folder_id?: string
+}
+
+export interface SpeakResponse extends MediaBatch {
+  engine_resolved?: string | null
+}
+
+export interface DesignPreviewRequest {
+  description: string
+  seed?: number
+  engine?: string
+  language: string
+  text?: string
+}
+
+export interface DesignPreviewResponse extends SpeakResponse {
+  seed: number
 }

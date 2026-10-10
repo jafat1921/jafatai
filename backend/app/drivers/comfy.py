@@ -551,7 +551,17 @@ class ComfyDriver:
         return self._generate(prompt, params, seed, out_path, progress_cb)
 
     def generate_audio(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
+        if params.get("kind") == "speech":
+            # the speech engines aren't ComfyUI nodes; they run in their own venvs on this worker's GPU
+            from app import speech
+
+            return speech.synthesise(params, seed, out_path, progress_cb, lane=self.lane)
         return self._generate(prompt, params, seed, out_path, progress_cb)
+
+    def transcribe(self, path: Path, language: str | None, progress_cb: ProgressCallback) -> dict:
+        from app import speech
+
+        return speech.transcribe(path, language, progress_cb, lane=self.lane)
 
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
         raise ComfyError("Text generations go to the LLM lane, not ComfyUI")

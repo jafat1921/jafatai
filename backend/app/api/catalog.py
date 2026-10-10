@@ -34,10 +34,12 @@ async def list_models(type: Literal["image", "edit", "video", "upscale", "audio"
 
 
 @router.get("/estimate")
-def estimate(kind: Literal["image", "video", "take", "upscale", "audio"] = "image", model: str | None = Query(None, max_length=60),
+def estimate(kind: Literal["image", "video", "take", "upscale", "audio", "speech"] = "image", model: str | None = Query(None, max_length=60),
              speed: str | None = Query(None, max_length=30), count: int = Query(1, ge=1, le=16),
              duration_s: float | None = Query(None, gt=0, le=1200), width: int | None = Query(None, ge=64, le=8192),
-             height: int | None = Query(None, ge=64, le=8192),
+             height: int | None = Query(None, ge=64, le=8192), chars: int | None = Query(None, ge=0, le=20000),
              db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    if kind == "speech":
+        return est.speech_estimate(model=model, count=count, chars=chars, duration_s=duration_s)
     return est.estimate(db, cur.workspace_id, kind=kind, model=model, speed=speed, count=count,
                         duration_s=duration_s, width=width, height=height)

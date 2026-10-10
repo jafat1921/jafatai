@@ -229,3 +229,25 @@ def estimate(db: Session, workspace_id: str, *, kind: str, model: str | None = N
         load = float(plan["load"])
     return {"low_s": int(math.floor(low + load)), "high_s": int(math.ceil(high + load)), "basis": basis,
             "samples": len(vals), "model": plan["model"], "load_s": round(load), "units": round(units, 2)}
+
+
+# speech engines run as a fresh process per take, so every take pays its model load
+SPEECH_CHARS_PER_S = 15.0
+SPEECH_LOAD_S = 10.0
+
+
+def speech_estimate(*, model: str | None = None, count: int = 1, chars: int | None = None,
+                    duration_s: float | None = None) -> dict:
+    from app import voices
+
+    engine = voices.DEFAULT_ENGINE if not model or model == "auto" else model
+    if engine not in voices.ENGINES:
+        raise HTTPException(422, f"'{model}' isn't a speech engine")
+    if chars is None:
+        chars = int((duration_s or 10.0) * SPEECH_CHARS_PER_S)
+    warm = chars / SPEECH_CHARS_PER_S
+    n = max(1, count)
+    low = n * (warm * ROUGH_LOW + SPEECH_LOAD_S)
+    high = n * (warm * ROUGH_HIGH + SPEECH_LOAD_S)
+    return {"low_s": int(math.floor(low)), "high_s": int(math.ceil(high)), "basis": "rough", "samples": 0,
+            "model": engine, "load_s": round(SPEECH_LOAD_S * n), "units": round(n * warm, 2)}

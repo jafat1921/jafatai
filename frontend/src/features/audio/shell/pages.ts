@@ -49,9 +49,9 @@ export const AUDIO_GROUPS: AudioGroup[] = [
     id: 'voice',
     label: 'Voice',
     pages: [
-      { id: 'speak', label: 'Speak', to: '/audio/speak', icon: Mic, soon: true },
-      { id: 'voices', label: 'Voices', to: '/audio/voices', icon: UsersRound, soon: true },
-      { id: 'design', label: 'Design', to: '/audio/design', icon: Sparkles, soon: true },
+      { id: 'speak', label: 'Speak', to: '/audio/speak', icon: Mic },
+      { id: 'voices', label: 'Voices', to: '/audio/voices', icon: UsersRound },
+      { id: 'design', label: 'Design', to: '/audio/design', icon: Sparkles },
     ],
   },
   { id: 'story', label: 'Story', pages: [{ id: 'dialogue', label: 'Dialogue', to: '/audio/dialogue', icon: MessagesSquare, soon: true }] },

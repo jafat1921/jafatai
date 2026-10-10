@@ -42,6 +42,7 @@ def test_every_registered_job_type_has_a_lane():
         "media_zip": "general", "ai_beats": "general",
         "photo_render": "general", "look_video": "general",  # numpy / ffmpeg on the CPU
         "audio_render": "general", "audio_mix": "general",
+        "voice_transcribe": "audio",  # faster-whisper on whichever GPU worker claims it
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

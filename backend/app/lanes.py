@@ -2,7 +2,8 @@
 
 image   -> stills, image edits and image upscales (COMFY_IMAGE_URLS)
 video   -> takes, long takes, renders, video upscales (COMFY_VIDEO_URLS)
-audio   -> songs, music, sound effects; served by both GPU workers, each on its own ComfyUI
+audio   -> songs, music, sound effects, speech and voice transcripts; served by both GPU workers, each on
+           its own ComfyUI / GPU
 general -> LLM work, ffmpeg assembly / branding, exports, autopilot orchestration, Photo Studio renders and
            looks on video (CPU only)
 
@@ -20,11 +21,15 @@ GPU_LANES = ("image", "video")
 # TODO: let an idle lane borrow the other GPU (a night of image batches leaves the video GPU unused)
 # job types that always run on the video GPU whatever their generation says (SeedVR2 / FlashVSR segments)
 VIDEO_JOB_TYPES = frozenset({"upscale"})
+# speech-to-text on a voice's reference clip: a GPU model, but either card will do
+AUDIO_JOB_TYPES = frozenset({"voice_transcribe"})
 
 
 def lane_for(job_type: str, gen_kind: str | None = None) -> str:
     if job_type in VIDEO_JOB_TYPES:
         return "video"
+    if job_type in AUDIO_JOB_TYPES:
+        return "audio"
     if job_type == "generate":
         if gen_kind in IMAGE_KINDS:
             return "image"

@@ -38,6 +38,7 @@ function renderWorkspace(path = '/audio/song') {
           { path: 'song', element: page('Song page') },
           { path: 'music', element: page('Music page') },
           { path: 'sfx', element: page('SFX page') },
+          { path: 'speak', element: page('Speak page') },
           { path: 'edit/:id', element: page('Editor page') },
         ],
       },
@@ -72,12 +73,16 @@ describe('Audio workspace', () => {
     const nav = await screen.findByRole('navigation', { name: 'Audio Studio' })
     expect(within(nav).getAllByRole('list').map((l) => l.getAttribute('aria-label'))).toEqual(['Create', 'Voice', 'Story', 'Edit', 'Tools', 'Library'])
     expect(within(nav).getByRole('link', { name: 'Song' })).toHaveAttribute('aria-current', 'page')
-    for (const soon of ['Speak', 'Voices', 'Design', 'Dialogue', 'Stems', 'Transcribe', 'Dub']) {
+    for (const soon of ['Dialogue', 'Stems', 'Transcribe', 'Dub']) {
       const el = within(nav).getByRole('link', { name: new RegExp(`^${soon}`) })
       expect(el).toHaveAttribute('aria-disabled', 'true')
       expect(el).not.toHaveAttribute('href')
     }
     expect(within(nav).getByRole('link', { name: 'Score a Clip' })).toHaveAttribute('href', '/audio/score')
+    // B2: the Voice group is live
+    expect(within(nav).getByRole('link', { name: 'Speak' })).toHaveAttribute('href', '/audio/speak')
+    expect(within(nav).getByRole('link', { name: 'Voices' })).toHaveAttribute('href', '/audio/voices')
+    expect(within(nav).getByRole('link', { name: 'Design' })).toHaveAttribute('href', '/audio/design')
   })
 
   it('folds a group, and collapses to an icon rail that it remembers', async () => {
@@ -114,6 +119,16 @@ describe('Audio workspace', () => {
     const sheet = await screen.findByRole('dialog', { name: 'Audio shortcuts' })
     expect(within(sheet).getByText('Score a Clip')).toBeInTheDocument()
     expect(within(sheet).getByText('Cut the region')).toBeInTheDocument()
+    expect(within(sheet).getByText('Speak the script (Design: preview)')).toBeInTheDocument()
+  })
+
+  it('numbers the pages in sidebar order, Voice included', async () => {
+    const user = userEvent.setup()
+    const { router } = renderWorkspace()
+    await screen.findByRole('heading', { name: 'Song page' })
+    await user.keyboard('{Control>}4{/Control}')
+    expect(router.state.location.pathname).toBe('/audio/speak')
+    expect(await screen.findByRole('heading', { name: 'Speak page' })).toBeInTheDocument()
   })
 
   it('the transport and status strip follow the shared player and the audio lane', async () => {

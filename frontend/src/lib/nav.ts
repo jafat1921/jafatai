@@ -22,10 +22,12 @@ import {
   Maximize2,
   Settings,
   Shuffle,
+  Sparkles,
   Stamp,
   SwatchBook,
   UserRound,
   Users,
+  UsersRound,
   Video,
   Volume2,
   Wand2,
@@ -113,14 +115,16 @@ const VIDEO_MENU: MenuSection = {
   ],
 }
 
-// docs/PLAN-m11b-audio-pro.md; Voice lands in B2
+// docs/PLAN-m11b-audio-pro.md; Voice is B2 (contract-v16)
 const AUDIO_MENU: MenuSection = {
   title: 'Audio Tools',
   features: [
     { id: 'song', title: 'Song', description: 'Style tags and lyrics, sung', to: '/audio/song', icon: Music },
     { id: 'music', title: 'Music & Score', description: 'Instrumental beds and cues', to: '/audio/music', icon: Music4 },
     { id: 'sfx', title: 'Sound Effects', description: 'Foley, ambience, whooshes', to: '/audio/sfx', icon: Volume2 },
-    { id: 'voice', title: 'Voice', description: 'Narration and dialogue · later', to: '/audio/speak', icon: Mic, disabled: true },
+    { id: 'speak', title: 'Speak', description: 'A line in any voice, with A/B', to: '/audio/speak', icon: Mic },
+    { id: 'voices', title: 'Voices', description: 'Clone from a clip, with consent', to: '/audio/voices', icon: UsersRound },
+    { id: 'design', title: 'Design a voice', description: 'Describe a voice, keep its seed', to: '/audio/design', icon: Sparkles },
     { id: 'editor', title: 'Editor', description: 'Trim, fade, effects, loudness', to: '/audio/edit', icon: Scissors },
     { id: 'score', title: 'Score a Clip', description: 'Mix music and effects under a video', to: '/audio/score', icon: AudioWaveform },
     { id: 'templates', title: 'Prompt templates', description: 'Qawwali, tense score, rain…', to: '/audio/prompt-templates', icon: LayoutTemplate },
@@ -255,6 +259,9 @@ const TITLES: [RegExp, string][] = [
   [/^\/audio\/library/, 'Audio library'],
   [/^\/audio\/edit/, 'Audio editor'],
   [/^\/audio\/score/, 'Score a Clip'],
+  [/^\/audio\/speak/, 'Speak'],
+  [/^\/audio\/voices/, 'Voices'],
+  [/^\/audio\/design/, 'Design a voice'],
   [/^\/queue/, 'Queue'],
   [/^\/settings/, 'Settings'],
 ]

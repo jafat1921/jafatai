@@ -61,6 +61,7 @@ function reuseRoute(item: MediaItem) {
   if (item.kind === 'video') return '/video/create'
   if (item.kind !== 'audio') return '/image/generate'
   const k = item.params?.kind
+  if (k === 'speech') return '/audio/speak'
   return k === 'song' || k === 'sfx' ? AUDIO_ROUTE[k] : AUDIO_ROUTE.music
 }
 

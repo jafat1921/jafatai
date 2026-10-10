@@ -543,6 +543,36 @@ class Look(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class VoiceProfile(Base):
+    """A voice in the Voice studio library (contract v16): a cloned reference clip, a designed recipe
+    (description + seed) or one of an engine's preset voices."""
+
+    __tablename__ = "voice_profile"
+    __table_args__ = (Index("ix_voice_profile_ws_created", "workspace_id", "created_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(10), index=True)  # clone | design | preset
+    language: Mapped[str] = mapped_column(String(12), default="en", server_default="en", index=True)
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    gender_hint: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # the Library item and the version of it the voice was made from; pinned so a later edit of the
+    # item doesn't quietly change the voice
+    ref_media_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    ref_generation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ref_duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ref_text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    design: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {description, seed, engine}
+    preset: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {engine, id}
+    portrait_media_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    starred: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"), index=True)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    consent: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {name, statement, at, user_id}
+    uses: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

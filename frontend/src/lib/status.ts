@@ -101,6 +101,7 @@ const KIND_LABELS: Record<GenerationKind, string> = {
   song: 'Song',
   music: 'Music',
   sfx: 'Sound effect',
+  speech: 'Speech',
   upload: 'Upload',
 }
 

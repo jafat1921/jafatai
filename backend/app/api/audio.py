@@ -7,13 +7,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import aerab
+from app import voices
 from app import library as lib
 from app import models_catalog as mc
 from app.config import get_settings
 from app.db import get_db
 from app.llm import LLMError, chat
 from app.models import Generation, Job, MediaItem, new_id
-from app.schemas import AerabIn, AerabOut, AudioGenerateIn, ImageBatchOut, LyricsIn, LyricsOut
+from app.schemas import AerabIn, AerabOut, AudioGenerateIn, ImageBatchOut, LyricsIn, LyricsOut, SpeakIn, SpeakOut
 from app.security import CurrentUser, require_editor
 from app.services import enqueue_generation, job_out, owned_source
 
@@ -80,6 +81,13 @@ def generate_audio(body: AudioGenerateIn, db: Session = Depends(get_db), cur: Cu
         jobs.append(db.get(Job, g.job_id))
     db.commit()
     return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs], model_resolved=m.id)
+
+
+@router.post("/speak", response_model=SpeakOut, status_code=202)
+def speak(body: SpeakIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    out = voices.queue_speech(db, cur, body)
+    db.commit()
+    return SpeakOut(**out)
 
 
 # ---------------------------------------------------------------- lyrics

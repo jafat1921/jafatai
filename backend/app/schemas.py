@@ -1074,3 +1074,122 @@ class BatchIn(BaseModel):
     refs: list[str] = Field(min_length=1, max_length=500)
     # move: {folder_id}; tag: {add: [], remove: []}; upscale: {image: {engine, target}, video: {engine, target}}
     options: dict[str, Any] = {}
+
+
+# ---------------------------------------------------------------- Voice studio (contract v16)
+
+LangCode = Annotated[str, Field(min_length=2, max_length=12, pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$")]
+
+
+class ConsentIn(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    statement: str = Field(min_length=1, max_length=500)
+
+
+class VoiceDesignIn(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    engine: str | None = Field(None, max_length=20)
+
+
+class VoicePresetIn(BaseModel):
+    engine: str = Field("kokoro", max_length=20)
+    id: str = Field(min_length=1, max_length=40)
+
+
+GenderHint = Literal["male", "female", "neutral"]
+
+
+class VoiceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    language: LangCode = "en"
+    kind: Literal["clone", "design", "preset"]
+    ref_media_id: str | None = None
+    ref_text: str = Field("", max_length=2000)
+    design: VoiceDesignIn | None = None
+    preset: VoicePresetIn | None = None
+    notes: str = Field("", max_length=2000)
+    gender_hint: GenderHint | None = None
+    consent: ConsentIn | None = None
+    portrait_media_id: str | None = None
+    starred: bool = False
+    locked: bool = False
+
+
+class VoicePatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    language: LangCode | None = None
+    kind: Literal["clone", "design", "preset"] | None = None
+    ref_media_id: str | None = None
+    ref_text: str | None = Field(None, max_length=2000)
+    design: VoiceDesignIn | None = None
+    preset: VoicePresetIn | None = None
+    notes: str | None = Field(None, max_length=2000)
+    gender_hint: GenderHint | None = None
+    consent: ConsentIn | None = None
+    portrait_media_id: str | None = None
+    starred: bool | None = None
+    locked: bool | None = None
+
+
+class VoiceOut(BaseModel):
+    id: str
+    name: str
+    language: str
+    notes: str
+    gender_hint: str | None = None
+    kind: str
+    ref: dict[str, Any] | None = None
+    ref_text: str = ""
+    design: dict[str, Any] | None = None
+    preset: dict[str, Any] | None = None
+    portrait_url: str | None = None
+    starred: bool = False
+    locked: bool = False
+    consent: dict[str, Any] | None = None
+    created_at: Utc
+    updated_at: Utc
+    uses: int = 0
+    # "short" (under 5 s) or "long" (over 15 s) reference clip: allowed, but cloning is better at 5-15 s
+    warnings: list[str] = []
+
+
+class SpeakDesignIn(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+
+
+class SpeakIn(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    voice_id: str | None = None
+    design: SpeakDesignIn | None = None
+    engine: str = Field("auto", max_length=20)
+    language: LangCode | None = None
+    aerab: bool = True
+    speed: float = Field(1.0, ge=0.5, le=2.0)
+    duration_s: float | None = Field(None, ge=0.5, le=600)
+    steps: int | None = Field(None, ge=1, le=100)
+    guidance: float | None = Field(None, ge=0, le=10)
+    denoise: bool | None = None
+    exaggeration: float | None = Field(None, ge=0, le=2)
+    count: int = Field(1, ge=1, le=4)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    title: str | None = Field(None, max_length=200)
+    folder_id: str | None = None
+
+
+class DesignPreviewIn(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    engine: str = Field("auto", max_length=20)
+    language: LangCode = "en"
+    text: str | None = Field(None, max_length=500)
+    aerab: bool = True
+    folder_id: str | None = None
+
+
+class SpeakOut(BaseModel):
+    items: list[MediaItemOut]
+    jobs: list[JobOut]
+    engine_resolved: str
+    seed: int | None = None

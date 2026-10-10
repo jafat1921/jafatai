@@ -354,6 +354,9 @@ describe('Audio navigation', () => {
       ['Song', '/audio/song'],
       ['Music & Score', '/audio/music'],
       ['Sound Effects', '/audio/sfx'],
+      ['Speak', '/audio/speak'],
+      ['Voices', '/audio/voices'],
+      ['Design a voice', '/audio/design'],
       ['Editor', '/audio/edit'],
       ['Score a Clip', '/audio/score'],
       ['Prompt templates', '/audio/prompt-templates'],
@@ -368,5 +371,6 @@ describe('Audio navigation', () => {
     expect(activeRail('/audio/sfx')).toBe('audio')
     expect(pageTitle('/audio/library')).toBe('Audio library')
     expect(pageTitle('/audio/song')).toBe('Song')
+    expect(pageTitle('/audio/voices')).toBe('Voices')
   })
 })

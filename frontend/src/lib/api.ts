@@ -76,6 +76,15 @@ import type {
   PromptEnhanceResult,
   MediaKind,
   UpscalePage,
+  DesignPreviewRequest,
+  DesignPreviewResponse,
+  SpeakRequest,
+  SpeakResponse,
+  Voice,
+  VoiceCreate,
+  VoiceEngine,
+  VoicePatch,
+  VoiceQuery,
 } from './types'
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 import type { CameraPreset } from './camera'
@@ -177,6 +186,9 @@ export async function request<T>(method: string, path: string, body?: unknown, q
   }
   return parsed as T
 }
+
+// a bare list, or one wrapped as {items}: both shapes are in use across the API
+const listOf = <T>(res: T[] | { items: T[] } | null | undefined): T[] => (Array.isArray(res) ? res : (res?.items ?? []))
 
 const get = <T>(path: string, query?: Query) => request<T>('GET', path, undefined, query)
 const post = <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {})
@@ -491,6 +503,20 @@ export const api = {
       API_BASE + withQuery(`/audio/${id}/export`, q),
     mixPreview: async (body: MixIn, signal?: AbortSignal) => audioPreview(await send('/audio/mix/preview', jsonInit(body, signal))),
     mix: (body: MixIn & { stems?: boolean; note?: string }) => post<{ item: MediaItem; job: Job }>('/audio/mix', body),
+    // contract-v16
+    speak: (body: SpeakRequest) => post<SpeakResponse>('/audio/speak', body),
+  },
+  voices: {
+    list: async (q: VoiceQuery = {}) => listOf(await get<Voice[] | { items: Voice[] }>('/voices', { ...q, starred: q.starred || undefined })),
+    engines: async () => listOf(await get<VoiceEngine[] | { items: VoiceEngine[] }>('/voices/engines')),
+    create: (body: VoiceCreate) => post<Voice>('/voices', body),
+    update: (id: string, body: VoicePatch) => patch<Voice>(`/voices/${id}`, body),
+    remove: (id: string) => del(`/voices/${id}`),
+    transcribe: async (id: string) => {
+      const res = await post<Job | { job: Job }>(`/voices/${id}/transcribe`)
+      return 'job' in res ? res.job : res
+    },
+    designPreview: (body: DesignPreviewRequest) => post<DesignPreviewResponse>('/voices/design/preview', body),
   },
   videos: {
     // a MediaItem plus its job; tolerate a batch too

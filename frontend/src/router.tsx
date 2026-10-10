@@ -86,7 +86,7 @@ export const shellRoutes: RouteObject[] = [
     const { LibraryPage } = await import('@/features/library/LibraryPage')
     return <LibraryPage kind="image" />
   }),
-  // Audio: one workspace frame (sidebar, status strip, transport) around every page (contract v14, v15)
+  // Audio: one workspace frame (sidebar, status strip, transport) around every page (contract v14, v15, v16)
   {
     path: 'audio',
     lazy: async () => ({ Component: (await import('@/features/audio/shell/AudioWorkspace')).AudioWorkspace }),
@@ -103,6 +103,18 @@ export const shellRoutes: RouteObject[] = [
       page('sfx', async () => {
         const { SfxPage } = await import('@/features/audio/SfxPage')
         return <SfxPage />
+      }),
+      page('speak', async () => {
+        const { SpeakPage } = await import('@/features/audio/voice/SpeakPage')
+        return <SpeakPage />
+      }),
+      page('voices', async () => {
+        const { VoicesPage } = await import('@/features/audio/voice/VoicesPage')
+        return <VoicesPage />
+      }),
+      page('design', async () => {
+        const { DesignPage } = await import('@/features/audio/voice/DesignPage')
+        return <DesignPage />
       }),
       page('edit', async () => {
         const { EditPickPage } = await import('@/features/audio/editor/EditPickPage')

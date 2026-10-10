@@ -19,6 +19,11 @@ const EDITOR: Row[] = [
   [[modKey, 'Shift', 'Z'], 'Redo'],
 ]
 
+const VOICE: Row[] = [
+  [[modKey, 'Enter'], 'Speak the script (Design: preview)'],
+  [['Esc'], 'Close a picker or dialog'],
+]
+
 function Rows({ rows }: { rows: Row[] }) {
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-small">
@@ -51,6 +56,12 @@ export function ShortcutSheet({ open, onOpenChange }: { open: boolean; onOpenCha
               Pages
             </h3>
             <Rows rows={[...pages, [['?'], 'This sheet']]} />
+          </section>
+          <section aria-labelledby="sc-voice" className="sm:col-start-1">
+            <h3 id="sc-voice" className="section-label mb-2">
+              Speak and Design
+            </h3>
+            <Rows rows={VOICE} />
           </section>
           <section aria-labelledby="sc-editor">
             <h3 id="sc-editor" className="section-label mb-2">

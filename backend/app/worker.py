@@ -247,6 +247,17 @@ def _add_aerab(ctx: JobContext, gen: Generation) -> None:
             marked, n, _ = aerab.mark_sync(lyrics, tick=lambda: ctx.progress(0.01, "Adding aerab to the lyrics"))
             if n:
                 gen.params = {**p, "lyrics": marked, "lyrics_written": lyrics}
+        elif gen.kind == "speech":
+            text = p.get("text") or ""
+            if not p.get("aerab", True) or p.get("language") != "ur" or not any(map(aerab.unmarked, text.split("\n"))):
+                return
+            ctx.progress(0.01, "Adding aerab to the script")
+            marked, n, _ = aerab.mark_sync(text, tick=lambda: ctx.progress(0.01, "Adding aerab to the script"))
+            if n:
+                from app import voices
+
+                e = voices.ENGINES.get(p.get("engine") or "", voices.ENGINES[voices.DEFAULT_ENGINE])
+                gen.params = {**p, "text": marked, "text_written": text, "text_spoken": voices.spoken_text(marked, e)}
         elif aerab.quoted_urdu(gen.prompt or ""):
             ctx.progress(0.01, "Adding aerab to the Urdu dialogue")
             marked = aerab.mark_quotes_sync(gen.prompt, tick=lambda: ctx.progress(0.01, "Adding aerab to the Urdu dialogue"))
@@ -289,7 +300,7 @@ def handle_generate(ctx: JobContext) -> dict:
 
         run_in_job(ctx, gen)
 
-    if get_settings().urdu_aerab and (gen.kind in VIDEO_KINDS or gen.kind == "song"):
+    if get_settings().urdu_aerab and (gen.kind in VIDEO_KINDS or gen.kind in ("song", "speech")):
         _add_aerab(ctx, gen)
 
     driver = ctx.driver_factory()
@@ -378,6 +389,9 @@ from app import audio_analysis, audio_jobs  # noqa: E402
 
 HANDLERS[audio_jobs.RENDER_JOB] = audio_jobs.handle_render
 HANDLERS[audio_jobs.MIX_JOB] = audio_jobs.handle_mix
+from app import voices  # noqa: E402
+
+HANDLERS[voices.TRANSCRIBE_JOB] = voices.handle_transcribe
 FINISHED_HOOKS.append(audio_analysis.on_job_finished)
 # CPU-only jobs: no GPU time billed, own ledger kind (wall time stays in job.result).
 # The autopilot only orchestrates; its children bill their own GPU time.

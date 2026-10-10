@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     audio_allow_noncommercial: bool = False
     # Urdu sung lyrics and spoken lines in video prompts get aerab (zer, zabar, pesh) before rendering
     urdu_aerab: bool = True
+    # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
+    audio_venvs_dir: str = "/data/venvs"
+    audio_gpu_image: int = 0
+    audio_gpu_video: int = 1
+    audio_runner_timeout_s: float = 900.0
 
     @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
     @classmethod

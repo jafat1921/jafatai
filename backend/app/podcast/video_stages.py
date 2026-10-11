@@ -259,7 +259,9 @@ class Run:
         for h in hosts:
             waits += self.sheets(h, base[h["id"]])
         if waits:
-            return Wait(waits, "Turning the hosts for the side angles")
+            total = 2 * len(hosts)
+            # these run on the image GPU one by one; a count shows the wait is moving
+            return Wait(waits, f"Turning the hosts for the side angles: {total - len(waits)} of {total} views ready")
         return None if reviewed else Review("Check your hosts, then continue")
 
     def appearance(self, h: dict) -> str:

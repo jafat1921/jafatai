@@ -7,8 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { MediaPicker } from '@/components/media/MediaPicker'
+import { AerabOnNote } from '@/components/text/AerabButton'
 import { useCreateDub, useDubs } from '@/hooks/useDub'
 import { useVoiceEngines } from '@/hooks/useVoices'
+import { isArabicScriptLang } from '@/lib/aerab'
 import { allDone, checkpoint, currentStage, dubBusy, failure, STAGE_LABEL, SUGGESTED_TARGETS, type DubQuality, type DubSummary } from '@/lib/dub'
 import type { MediaItem } from '@/lib/types'
 import { allLanguages, languageName } from '@/lib/voice'
@@ -175,6 +177,7 @@ function NewDub({ name, languages }: { name: (c: string) => string; languages: {
               ))}
           </select>
         </div>
+        {targets.some(isArabicScriptLang) && <AerabOnNote language={targets.find(isArabicScriptLang)} />}
       </fieldset>
 
       <div className="flex flex-wrap items-end gap-3">

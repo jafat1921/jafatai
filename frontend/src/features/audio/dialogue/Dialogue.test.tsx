@@ -80,6 +80,10 @@ function api(initial: Script) {
     if (method === 'POST' && path === '/scripts/s1/mix') return job('m1', { type: 'script_mix', status: 'queued' })
     if (method === 'POST' && path === '/scripts/s1/split') return { ...current, lines: [...current.lines, line('n1', 'Hello.')] }
     if (method === 'POST' && path === '/scripts/s1/import-project') return { ...current, lines: [...current.lines, line('i1', 'One more dive.')] }
+    if (method === 'POST' && path === '/text/aerab') {
+      const text = (b.text as string).replace('هذا سطر', 'هَذَا سَطْرٌ').replace('دل کی', 'دِل کی')
+      return { text, marked: 1, kept: 0, low_coverage: 0, language: (b.language as string) ?? 'ur' }
+    }
     if (path.startsWith('/favourites')) return { refs: [] }
   })
 }
@@ -203,6 +207,29 @@ describe('Dialogue', { timeout: 15_000 }, () => {
     await user.click(within(dialog).getByRole('button', { name: 'Add 2 lines' }))
     await waitFor(() => expect(posts(calls, '/scripts/s1/split')).toEqual([{ text: 'Maya: Run. Now!\nRafi: Wait.', mode: 'lines', speaker_id: 'narrator' }]))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Paste & split' })).not.toBeInTheDocument())
+  })
+
+  it('adds aerab to one line or to all of them, with undo', async () => {
+    const calls = api(script([line('a', 'هذا سطر'), line('b', 'Hello there.'), line('c', 'دل کی بات')], { language: 'ar' }))
+    renderAt('/audio/dialogue/s1', routes)
+    const user = userEvent.setup()
+    // only lines in Arabic letters get the button
+    expect(await screen.findByRole('button', { name: 'Add aerab to line 1' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add aerab to line 2' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add aerab to line 3' }))
+    await waitFor(() => expect(texts()).toEqual(['هذا سطر', 'Hello there.', 'دِل کی بات']))
+    expect(posts(calls, '/text/aerab')[0]).toEqual({ text: 'دل کی بات', language: 'ar' })
+    await user.click(screen.getByRole('button', { name: 'Undo aerab on line 3' }))
+    expect(texts()).toEqual(['هذا سطر', 'Hello there.', 'دل کی بات'])
+
+    await user.click(screen.getByRole('button', { name: /Add aerab to all lines/ }))
+    await waitFor(() => expect(texts()).toEqual(['هَذَا سَطْرٌ', 'Hello there.', 'دِل کی بات']))
+    expect(posts(calls, '/text/aerab')[1]).toEqual({ text: 'هذا سطر\nHello there.\nدل کی بات', language: 'ar' })
+    // the edit is saved like any other
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH' && JSON.stringify(c.body).includes('هَذَا سَطْرٌ'))).toBe(true))
+    await user.click(screen.getAllByRole('button', { name: 'Undo aerab' })[0])
+    expect(texts()).toEqual(['هذا سطر', 'Hello there.', 'دل کی بات'])
   })
 
   it('imports scenes from a film project', async () => {

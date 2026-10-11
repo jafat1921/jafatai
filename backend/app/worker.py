@@ -233,34 +233,41 @@ def _out_path(gen: Generation, media_ext: str) -> tuple[Path, str]:
 
 
 def _add_aerab(ctx: JobContext, gen: Generation) -> None:
-    # without zer / zabar / pesh the models guess Urdu vowels and get many of them wrong
+    # without zer / zabar / pesh (or the tashkeel) the models guess the vowels and get many of them wrong
     from app import aerab
     from app.llm import LLMError
 
     p = dict(gen.params or {})
+
+    def wanted(text: str) -> bool:
+        return p.get("aerab", True) and aerab.applies(p.get("language"), text) and \
+            any(map(aerab.unmarked, text.split("\n")))
+
     try:
         if gen.kind == "song":
             lyrics = p.get("lyrics") or ""
-            if not p.get("aerab", True) or p.get("language") != "ur" or not any(map(aerab.unmarked, lyrics.split("\n"))):
+            if not wanted(lyrics):
                 return
             ctx.progress(0.01, "Adding aerab to the lyrics")
-            marked, n, _ = aerab.mark_sync(lyrics, tick=lambda: ctx.progress(0.01, "Adding aerab to the lyrics"))
-            if n:
-                gen.params = {**p, "lyrics": marked, "lyrics_written": lyrics}
+            r = aerab.mark_sync(lyrics, aerab.target(p.get("language"), lyrics),
+                                tick=lambda: ctx.progress(0.01, "Adding aerab to the lyrics"))
+            if r.marked:
+                gen.params = {**p, "lyrics": r.text, "lyrics_written": lyrics}
         elif gen.kind == "speech":
             text = p.get("text") or ""
-            if not p.get("aerab", True) or p.get("language") != "ur" or not any(map(aerab.unmarked, text.split("\n"))):
+            if not wanted(text):
                 return
             ctx.progress(0.01, "Adding aerab to the script")
-            marked, n, _ = aerab.mark_sync(text, tick=lambda: ctx.progress(0.01, "Adding aerab to the script"))
-            if n:
+            r = aerab.mark_sync(text, aerab.target(p.get("language"), text),
+                                tick=lambda: ctx.progress(0.01, "Adding aerab to the script"))
+            if r.marked:
                 from app import voices
 
                 e = voices.ENGINES.get(p.get("engine") or "", voices.ENGINES[voices.DEFAULT_ENGINE])
-                gen.params = {**p, "text": marked, "text_written": text, "text_spoken": voices.spoken_text(marked, e)}
-        elif aerab.quoted_urdu(gen.prompt or ""):
-            ctx.progress(0.01, "Adding aerab to the Urdu dialogue")
-            marked = aerab.mark_quotes_sync(gen.prompt, tick=lambda: ctx.progress(0.01, "Adding aerab to the Urdu dialogue"))
+                gen.params = {**p, "text": r.text, "text_written": text, "text_spoken": voices.spoken_text(r.text, e)}
+        elif aerab.quoted_spoken(gen.prompt or ""):
+            ctx.progress(0.01, "Adding aerab to the dialogue")
+            marked = aerab.mark_quotes_sync(gen.prompt, tick=lambda: ctx.progress(0.01, "Adding aerab to the dialogue"))
             if marked != gen.prompt:
                 gen.params = {**p, "prompt_written": gen.prompt}
                 gen.prompt = marked

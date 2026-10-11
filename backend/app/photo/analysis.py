@@ -158,7 +158,7 @@ def suggest(a: dict, rgb: np.ndarray) -> tuple[dict, list[str]]:
     if not a["is_grayscale"]:
         out["vibrance"] = 8 if faces else 14
     if a["sharpness"] < 0.7:
-        out["sharpness"] = 10 if faces else 18
+        out["sharpen"] = {k: round(v, 2) for k, v in dv.legacy_sharpen(10 if faces else 18).items()}
         if a["sharpness"] < 0.5:
             out["clarity"] = 6 if faces else 12
         notes.append("Soft: a little sharpening")

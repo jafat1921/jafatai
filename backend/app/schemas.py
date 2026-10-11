@@ -825,7 +825,7 @@ class AudioGenerateIn(BaseModel):
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     steps: int | None = Field(None, ge=1, le=100)
     timbre_ref_id: str | None = None
-    # Urdu songs: add zer / zabar / pesh to unmarked lines before singing
+    # Arabic-script songs (Urdu, Arabic, Persian...): add the vowel marks to unmarked lines before singing
     aerab: bool = True
     # ACE-Step only: musical key, metre, how closely to follow the tags, and the planning LM
     keyscale: str | None = Field(None, pattern=r"^[A-G][#b]? (major|minor)$")
@@ -849,19 +849,38 @@ class LyricsIn(BaseModel):
 class LyricsOut(BaseModel):
     lyrics: str
     tags: str
-    # Urdu only: lines that got aerab, and lines left as written because the marking pass changed their letters
+    # Arabic-script languages only (contract v23): lines that got aerab, lines left as written because the
+    # marking pass changed their letters, and lines still sparsely marked after the strict retry
     marked: int = 0
     kept: int = 0
+    low_coverage: int = 0
 
 
 class AerabIn(BaseModel):
     lyrics: str = Field(min_length=1, max_length=6000)
+    language: str | None = Field(None, max_length=12)
 
 
 class AerabOut(BaseModel):
     lyrics: str
     marked: int
     kept: int
+    low_coverage: int = 0
+    language: str | None = None
+
+
+class TextAerabIn(BaseModel):
+    text: str = Field(min_length=1, max_length=60000)
+    # empty or "auto": the letters decide
+    language: str | None = Field(None, max_length=12)
+
+
+class TextAerabOut(BaseModel):
+    text: str
+    marked: int
+    kept: int
+    low_coverage: int
+    language: str | None
 
 
 # ---------------------------------------------------------------- audio editor and Score a Clip (contract v15)

@@ -6,6 +6,8 @@ import type {
   AudioGenerateRequest,
   AudioPreview,
   AerabResponse,
+  TextAerabRequest,
+  TextAerabResponse,
   LoudnessTarget,
   MixIn,
   Peaks,
@@ -97,7 +99,7 @@ import type { StemsMode, StemsResponse } from './stems'
 import type { Ad, EditOp, Episode, EpisodeCreate, EpisodePatch, EpisodeSummary, InsertBody, PublishBody, Show, ShowCreate, ShowPatch, VideoBody } from './podcast'
 import type {
   AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema, ProfileInfo,
-  PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan, Snapshot,
+  PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan, Snapshot, UprightMode, UprightResult,
 } from './photo/types'
 
 type CameraPresets = Record<'shot_size' | 'angle' | 'motion' | 'speed', (CameraPreset<string> & { phrase: string })[]> & { default_speed: string }
@@ -493,11 +495,15 @@ export const api = {
   models: {
     list: (type: ModelType) => get<ModelInfo[]>('/models', { type }),
   },
+  // contract-v23
+  text: {
+    aerab: (body: TextAerabRequest) => post<TextAerabResponse>('/text/aerab', body),
+  },
   // contract-v14
   audio: {
     generate: (body: AudioGenerateRequest) => post<MediaBatch>('/audio/generate', body),
     lyrics: (body: LyricsRequest) => post<LyricsResponse>('/audio/lyrics', body),
-    aerab: (lyrics: string) => post<AerabResponse>('/audio/lyrics/aerab', { lyrics }),
+    aerab: (lyrics: string, language?: string) => post<AerabResponse>('/audio/lyrics/aerab', { lyrics, ...(language ? { language } : {}) }),
     // contract-v15
     peaks: (id: string, q: { n?: number; version?: string } = {}) => get<Peaks>(`/audio/${id}/peaks`, q),
     analysis: (id: string, version?: string) => get<AudioAnalysis>(`/audio/${id}/analysis`, { version }),
@@ -580,6 +586,8 @@ export const api = {
     get: (id: string) => get<Transcript>(`/transcripts/${id}`),
     remove: (id: string) => del(`/transcripts/${id}`),
     cleanup: (id: string) => post<Job>(`/transcripts/${id}/cleanup`),
+    // contract-v23: the tidied lines, one per segment ("Add aerab" saves through here)
+    setClean: (id: string, lines: string[]) => request<Transcript>('PUT', `/transcripts/${id}/clean`, { lines }),
     video: (id: string, body: { mode: 'soft' | 'burn'; clean?: boolean }) =>
       post<{ job: Job; item_id: string; generation_id: string }>(`/transcripts/${id}/video`, body),
   },
@@ -646,11 +654,14 @@ export const api = {
   // contract-v9: Photo Studio
   photo: {
     schema: () => get<PhotoSchema>('/photo/schema'),
-    preview: async (id: string, params: DevelopParams, maxSide = 1280, signal?: AbortSignal): Promise<PreviewResult> => {
-      const res = await send(`/photo/${id}/preview`, jsonInit({ params, max_side: maxSide }, signal))
+    preview: async (id: string, params: DevelopParams, maxSide = 1280, signal?: AbortSignal, debug?: 'sharpen_mask' | null): Promise<PreviewResult> => {
+      const res = await send(`/photo/${id}/preview`, jsonInit({ params, max_side: maxSide, ...(debug ? { debug } : {}) }, signal))
       const ms = Number(res.headers.get('X-Develop-Ms'))
       return { url: URL.createObjectURL(await res.blob()), ms: Number.isFinite(ms) && ms > 0 ? ms : null, outputSize: res.headers.get('X-Output-Size') }
     },
+    // contract-v22: measured on the picture, not saved
+    upright: (id: string, mode: UprightMode) => post<UprightResult>(`/photo/${id}/upright`, { mode }),
+    lensCa: (id: string) => post<{ caRed: number; caBlue: number; edges: number }>(`/photo/${id}/lens/ca`),
     histogram: (id: string, params: DevelopParams) => post<Histogram>(`/photo/${id}/histogram`, { params }),
     auto: (id: string) => post<AutoResult>(`/photo/${id}/auto`),
     palette: (id: string, k = 8) => get<{ clusters: NonNullable<DevelopParams['palette']> }>(`/photo/${id}/palette`, { k }),

@@ -60,14 +60,15 @@ def test_merge_skips_markers_english_and_bad_lines():
 
 def test_unmarked_leaves_marked_lines_alone():
     assert aerab.unmarked(PLAIN) and not aerab.unmarked("دِلْ کِی بَات") and not aerab.unmarked("hello")
-    assert aerab.quoted_urdu(f'A man says "{PLAIN}" softly, rain. Sign reads "OPEN"') == [PLAIN]
+    assert aerab.quoted_spoken(f'A man says "{PLAIN}" softly, rain. Sign reads "OPEN"') == [PLAIN]
 
 
 def test_add_aerab_endpoint(client, llm):
     fake = llm(lambda x: x.replace("دل", "دِل"))
     r = client.post("/api/audio/lyrics/aerab", json={"lyrics": f"[chorus]\n{PLAIN}\n{PLAIN}"})
     assert r.status_code == 200, r.text
-    assert r.json() == {"lyrics": f"[chorus]\n{MARKED}\n{MARKED}", "marked": 2, "kept": 0}
+    assert r.json() == {"lyrics": f"[chorus]\n{MARKED}\n{MARKED}", "marked": 2, "kept": 0, "low_coverage": 0,
+                        "language": "ur"}
     assert fake.calls == 1
     assert client.post("/api/audio/lyrics/aerab", json={"lyrics": "[verse]\nhello"}).status_code == 422
 

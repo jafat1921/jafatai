@@ -517,6 +517,21 @@ def resolve_beats(ctx, gen: Generation, shot: Shot | None, chunks: list[dict], d
     return [b["prompt"] for b in beats], "ai"
 
 
+def _spoken_with_aerab(ctx, gen: Generation, beats: list[str]) -> list[str]:
+    # the beats are written after the worker's own pass over the take prompt, so quoted Urdu or Arabic
+    # lines in them get their marks here (contract v23)
+    from app import aerab
+
+    if not get_settings().urdu_aerab or not any(aerab.quoted_spoken(b or "") for b in beats):
+        return beats
+    ctx.progress(0.01, "Adding aerab to the dialogue")
+    try:
+        return aerab.mark_quotes_many_sync(beats, tick=lambda: ctx.progress(0.01, "Adding aerab to the dialogue"))
+    except LLMError as e:
+        log.warning("aerab skipped for the beats of %s: %s", gen.id, e)
+        return beats
+
+
 def chunk_prompt(db: Session, shot: Shot | None, beat: str, take_prompt: str) -> str:
     if shot is None or beat.strip() == take_prompt.strip():
         return take_prompt
@@ -541,6 +556,7 @@ def run_take(ctx, gen: Generation, driver) -> dict:
     shot = db.get(Shot, gen.target_id) if gen.target_type == "shot" else None
 
     beats, beat_source = resolve_beats(ctx, gen, shot, chunks, duration)
+    beats = _spoken_with_aerab(ctx, gen, beats)
     for c, b in zip(chunks, beats):
         c["prompt"] = b
     _publish(db, gen, chunks=chunks, beats_source=beat_source)

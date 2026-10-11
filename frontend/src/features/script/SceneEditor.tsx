@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SourceBadge } from '@/components/studio/source-badge'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { StatusPill } from '@/components/studio/status-pill'
+import { AerabButton } from '@/components/text/AerabButton'
 import { useUpdateScene } from '@/hooks/useScenes'
 import { staleStatus } from '@/lib/status'
 import type { Scene } from '@/lib/types'
@@ -194,8 +195,18 @@ export function SceneEditor({ scene, index }: { scene: Scene; index: number }) {
               <label htmlFor="scene-script" className="section-label">
                 Script
               </label>
-              <span className="font-mono text-small text-studio-muted">
-                {draft.script_text.trim() ? draft.script_text.trim().split(/\s+/).length : 0} words
+              <span className="flex items-center gap-2">
+                <AerabButton
+                  text={draft.script_text}
+                  onText={(v) => {
+                    edit('script_text', v)
+                    void autosave.flush()
+                  }}
+                  target="the script"
+                />
+                <span className="font-mono text-small text-studio-muted">
+                  {draft.script_text.trim() ? draft.script_text.trim().split(/\s+/).length : 0} words
+                </span>
               </span>
             </div>
             <Textarea

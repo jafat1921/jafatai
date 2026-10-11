@@ -24,9 +24,13 @@ META = {
     "CameraModelRestriction", "Copyright", "ContactInfo", "Description", "HasSettings", "AlreadyApplied",
     "WhiteBalance", "CameraProfile", "CameraProfileDigest", "Look", "LookTable", "ToneCurveName",
     "ToneCurveName2012", "ToneMapStrength", "OverrideLookVignette", "RawFileName", "title", "internalName",
-    "type", "uuid", "version", "id", "settings", "value", "s", "AutoLateralCA", "LensProfileEnable",
-    "LensProfileSetup", "Amount", "ConvertToGrayscale_set",
+    "type", "uuid", "version", "id", "settings", "value", "s", "LensProfileEnable",
+    "LensProfileSetup", "Amount", "ConvertToGrayscale_set", "UprightVersion", "UprightCenterMode",
+    "UprightCenterNormX", "UprightCenterNormY", "UprightFocalMode", "UprightFocalLength35mm",
+    "UprightPreview", "UprightTransformCount", "UprightFourSegmentsCount", "UprightDependentDigest",
+    "UprightGuidedDependentDigest", "HasCrop",
 }
+UPRIGHT = {0: "off", 1: "auto", 2: "level", 3: "vertical", 4: "full", 5: "auto"}
 HSL = ("Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta")
 
 
@@ -85,8 +89,9 @@ def _clamp(v, lo=-100.0, hi=100.0) -> float:
     return round(max(lo, min(hi, float(v))), 2)
 
 
-def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
-    """Lightroom key map -> (params, mapped keys, unmapped keys with a non-default value)."""
+def to_params(m: dict, size: tuple[int, int] | None = None) -> tuple[dict, list[str], list[str]]:
+    """Lightroom key map -> (params, mapped keys, unmapped keys with a non-default value). With the picture's
+    size a crop box comes across too (ours is in source pixels; Lightroom's is 0..1 of the frame)."""
     # params v2: exposure in EV, like Lightroom itself
     p: dict = {"version": 2}
     used: set[str] = set()
@@ -109,8 +114,59 @@ def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
                      ("Blacks2012", "blacks"), ("Vibrance", "vibrance"), ("Saturation", "saturation")):
         take(lr, ours)
     take("Clarity2012", "clarity") or take("Clarity", "clarity")
-    take("Sharpness", "sharpness", lambda v: _clamp(v, 0, 100))
-    take("LuminanceSmoothing", "noiseReduction", lambda v: _clamp(v, 0, 100))
+    take("Texture", "texture")
+    take("Dehaze", "dehaze")
+
+    def group(dest: str, pairs, lo=0.0, hi=100.0):
+        vals = {}
+        for lr, ours, *lim in pairs:
+            v = num(lr)
+            if v is not None:
+                a, b = lim if lim else (lo, hi)
+                vals[ours] = _clamp(v, a, b)
+                used.add(lr)
+        if vals:
+            p[dest] = {**p.get(dest, {}), **vals}
+
+    group("sharpen", (("Sharpness", "amount", 0, 150), ("SharpenRadius", "radius", 0.5, 3.0),
+                      ("SharpenDetail", "detail"), ("SharpenEdgeMasking", "masking")))
+    group("nr", (("LuminanceSmoothing", "luminance"), ("LuminanceNoiseReductionDetail", "detail"),
+                 ("LuminanceNoiseReductionContrast", "contrast"), ("ColorNoiseReduction", "color"),
+                 ("ColorNoiseReductionDetail", "colorDetail"), ("ColorNoiseReductionSmoothness", "smoothness")))
+    group("lens", (("LensManualDistortionAmount", "distortion", -100, 100), ("VignetteAmount", "vignette", -100, 100),
+                   ("VignetteMidpoint", "vignetteMidpoint"), ("DefringePurpleAmount", "purpleAmount", 0, 20),
+                   ("DefringePurpleHueLo", "purpleHueLo"), ("DefringePurpleHueHi", "purpleHueHi"),
+                   ("DefringeGreenAmount", "greenAmount", 0, 20), ("DefringeGreenHueLo", "greenHueLo"),
+                   ("DefringeGreenHueHi", "greenHueHi")))
+    if num("AutoLateralCA") is not None or isinstance(m.get("AutoLateralCA"), bool):
+        if m["AutoLateralCA"] in (1, 1.0, True):
+            p.setdefault("lens", {})["caAuto"] = True
+        used.add("AutoLateralCA")
+    group("transform", (("PerspectiveVertical", "vertical", -100, 100), ("PerspectiveHorizontal", "horizontal", -100, 100),
+                        ("PerspectiveRotate", "rotate", -10, 10), ("PerspectiveAspect", "aspect", -100, 100),
+                        ("PerspectiveScale", "scale", 50, 150), ("PerspectiveX", "offsetX", -100, 100),
+                        ("PerspectiveY", "offsetY", -100, 100)))
+    up = num("PerspectiveUpright")
+    if up is not None:
+        if int(up) in UPRIGHT and int(up) != 0:
+            # the matrix is measured on each picture it lands on (service.fill_auto)
+            p.setdefault("transform", {})["upright"] = UPRIGHT[int(up)]
+        used.add("PerspectiveUpright")
+    if m.get("CropConstrainToWarp") in (1, 1.0, True):
+        p.setdefault("transform", {})["constrain"] = True
+        used.add("CropConstrainToWarp")
+    elif "CropConstrainToWarp" in m:
+        used.add("CropConstrainToWarp")
+    take("CropAngle", "rotate", lambda v: _clamp(v, -45, 45))
+    box = [num(k) for k in ("CropLeft", "CropTop", "CropRight", "CropBottom")]
+    if all(v is not None for v in box) and size and (box[0] > 0 or box[1] > 0 or box[2] < 1 or box[3] < 1):
+        x0, y0, x1, y1 = (min(1.0, max(0.0, v)) for v in box)
+        if x1 > x0 and y1 > y0:
+            p["crop"] = {"x": round(x0 * size[0]), "y": round(y0 * size[1]),
+                         "width": round((x1 - x0) * size[0]), "height": round((y1 - y0) * size[1])}
+            used.update(("CropLeft", "CropTop", "CropRight", "CropBottom"))
+    elif all(v is not None for v in box) and box[0] <= 0 and box[1] <= 0 and box[2] >= 1 and box[3] >= 1:
+        used.update(("CropLeft", "CropTop", "CropRight", "CropBottom"))
     take("PostCropVignetteAmount", "vignette")
     take("PostCropVignetteMidpoint", "vignetteMidpoint", lambda v: _clamp(v, 0, 100))
     take("PostCropVignetteRoundness", "vignetteRoundness")
@@ -235,7 +291,7 @@ def to_params(m: dict) -> tuple[dict, list[str], list[str]]:
     return p, sorted(used), sorted(unmapped)
 
 
-def parse(filename: str, data: bytes) -> dict:
+def parse(filename: str, data: bytes, size: tuple[int, int] | None = None) -> dict:
     """-> {name, kind, params, mapped, unmapped}. Raises PresetError for anything unreadable."""
     ext = Path(filename).suffix.lower()
     text = data.decode("utf-8-sig", errors="replace")
@@ -259,7 +315,7 @@ def parse(filename: str, data: bytes) -> dict:
             pts = [f"{nums[i]:g},{nums[i + 1]:g}" for i in range(0, len(nums) - 1, 2)]
             if any(pt not in ("0,0", "255,255") for pt in pts):
                 m[key] = pts
-    params, mapped, unmapped = to_params(m)
+    params, mapped, unmapped = to_params(m, size)
     if not mapped:
         raise PresetError("None of this preset's settings can be applied here"
                           + (f" ({', '.join(unmapped[:6])})" if unmapped else ""))

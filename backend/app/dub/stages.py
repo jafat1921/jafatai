@@ -186,8 +186,6 @@ def stage_speakers(ctx, dub: DubProject, run: dict) -> dict:
 # ---------------------------------------------------------------- translate / cast
 
 def stage_translate(ctx, dub: DubProject, run: dict) -> dict:
-    from app.llm import LLMError
-
     segs = _segments(dub)
     names = {s["id"]: s["label"] for s in dub.speakers or []}
     careful = (dub.settings or {}).get("quality") == "careful"
@@ -225,20 +223,27 @@ def stage_translate(ctx, dub: DubProject, run: dict) -> dict:
                 _set_target(segs, x["id"], lang, text=text, fit=prev.get("fit", fit), shortened=False,
                             status="translated" if text else "skipped", verify=None)
                 done += 1
-        if lang == "ur" and get_settings().urdu_aerab:
-            ids = [s["id"] for s in todo if pj.target(next(x for x in segs if x["id"] == s["id"]), lang).get("text")]
-            texts = [pj.target(next(x for x in segs if x["id"] == i), lang)["text"] for i in ids]
-            try:
-                _tick(ctx, "translate", 0.92, "Adding aerab to the Urdu lines")
-                marked, _, _ = aerab.mark_sync("\n".join(texts), tick=lambda: _tick(ctx, "translate", 0.92,
-                                                                                       "Adding aerab"))
-                for i, line in zip(ids, marked.split("\n")):
-                    _set_target(segs, i, lang, text=line)
-            except LLMError as e:
-                log.warning("aerab skipped for dub %s: %s", dub.id, e)
+        _mark_lines(ctx, dub, segs, [s["id"] for s in todo], lang, "translate", 0.92)
         dub.segments = copy.deepcopy(segs)
     dub.segments = segs
     return {"translated": done}
+
+
+def _mark_lines(ctx, dub: DubProject, segs: list[dict], ids: list[str], lang: str, stage: str, frac: float,
+                only_unmarked: bool = False) -> None:
+    """Aerab on the target lines of `ids` (Arabic-script targets only); the TTS reads the marks, the
+    verify stage ignores them. With the LLM away the lines stay as they are."""
+    by_id = {s["id"]: s for s in segs}
+    rows = [(i, pj.target(by_id[i], lang).get("text") or "") for i in ids if i in by_id]
+    rows = [(i, t) for i, t in rows if t and (not only_unmarked or aerab.unmarked(t))]
+    if not rows or not aerab.applies(lang, "\n".join(t for _, t in rows)):
+        return
+    _tick(ctx, stage, frac, f"Adding aerab to the {voices.lang_name(lang)} lines")
+    marked = aerab.finish_lines_sync([t for _, t in rows], lang, what=f"dub {dub.id}",
+                                     tick=lambda: _tick(ctx, stage, frac, "Adding aerab"))
+    for (i, old), new in zip(rows, marked):
+        if new != old:
+            _set_target(segs, i, lang, text=new)
 
 
 def default_design(dub: DubProject, spk: dict) -> dict:
@@ -315,6 +320,8 @@ def stage_render(ctx, dub: DubProject, run: dict) -> dict:
         todo = [s for s in segs if pj.target(s, lang).get("text") and (
             s["id"] in only if only is not None else pj.target(s, lang).get("status") in ("translated", "stale",
                                                                                             "failed"))]
+        # lines typed or pasted in the editor never went through the translate pass
+        _mark_lines(ctx, dub, segs, [x["id"] for x in todo], lang, "render", 0.01, only_unmarked=True)
         groups: dict[tuple, list[dict]] = {}
         for s in todo:
             key = (s.get("speaker_id"), pj.target(s, lang).get("voice_id") or None)
@@ -395,7 +402,8 @@ def stage_fit(ctx, dub: DubProject, run: dict) -> dict:
                 except LLMError as e:
                     log.warning("no shorter line for %s: %s", s["id"], e)
                     shorter = ""
-                if shorter and len(shorter) < len(t["text"]):
+                if shorter and len(aerab.strip(shorter)) < len(aerab.strip(t["text"])):
+                    shorter = aerab.finish_sync(shorter, lang, what=f"dub {dub.id} shorter line").text
                     _set_target(segs, s["id"], lang, text=shorter, text_before=t["text"], shortened=True,
                                 status="stale")
                     rerender.setdefault(lang, []).append(s["id"])

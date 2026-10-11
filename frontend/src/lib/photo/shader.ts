@@ -1,10 +1,10 @@
 import { geometryFor, type Geometry } from './geometry'
-import { gradingActive, pointsFor, prepare, toneTexture } from './maths'
+import { defringeOn, gradingActive, pointsFor, prepare, toneTexture } from './maths'
 import type { DevelopParams } from './types'
 
-// WebGL2 copy of maths.ts → developPixel (+ geometry and Gaussian light points). Spatial steps
-// (clarity, sharpening, noise reduction) and the palette come from the server preview. Profiles and
-// .cube looks are 3D textures, the same tables the server uses.
+// WebGL2 copy of maths.ts → developPixel (+ geometry.ts's warp and Gaussian light points). Spatial
+// steps (texture, clarity, dehaze, sharpening, noise reduction, defringe's edge mask) and the palette come
+// from the server preview. Profiles and .cube looks are 3D textures, the same tables the server uses.
 
 const VERT = `#version 300 es
 in vec2 aPos;
@@ -28,6 +28,14 @@ uniform float uProfN;
 uniform float uLookAmt;
 uniform float uLookN;
 uniform mat3 uGeo;
+uniform mat3 uWarp;
+uniform float uDist;
+uniform vec2 uCa;
+uniform float uSrcAspect;
+uniform vec2 uLensVig;
+uniform bool uFringeOn;
+uniform vec3 uPurple;
+uniform vec3 uGreen;
 uniform bool uBypass;
 uniform bool uCalibOn;
 uniform mat3 uCalib;
@@ -150,10 +158,25 @@ float valueNoise(vec2 f) {
   return mix(mix(a, b, t.x), mix(c, d, t.x), t.y);
 }
 
+bool onPicture(vec2 s) { return s.x >= 0.0 && s.y >= 0.0 && s.x <= 1.0 && s.y <= 1.0; }
+
 void main() {
-  vec2 st = (uGeo * vec3(vUv, 1.0)).xy;
-  if (st.x < 0.0 || st.y < 0.0 || st.x > 1.0 || st.y > 1.0) { outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  vec2 cv = (uGeo * vec3(vUv, 1.0)).xy;
+  vec3 hq = uWarp * vec3(cv, 1.0);
+  if (hq.z <= 0.0) { outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  vec2 st = hq.xy / hq.z;
+  if (uDist != 0.0) {
+    vec2 dd = vec2((st.x - 0.5) * uSrcAspect, st.y - 0.5);
+    st = 0.5 + (st - 0.5) * (1.0 + uDist * dot(dd, dd) / (0.25 * (uSrcAspect * uSrcAspect + 1.0)));
+  }
+  if (!onPicture(st)) { outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
   vec3 p = texture(uSrc, st).rgb;
+  if (uCa != vec2(0.0)) {
+    vec2 sr = 0.5 + (st - 0.5) * (1.0 + uCa.x);
+    vec2 sb = 0.5 + (st - 0.5) * (1.0 + uCa.y);
+    p.r = onPicture(sr) ? texture(uSrc, sr).r : 0.0;
+    p.b = onPicture(sb) ? texture(uSrc, sb).b : 0.0;
+  }
   if (uBypass) { outColor = vec4(p, 1.0); return; }
 
   float stops = 0.0;
@@ -166,6 +189,20 @@ void main() {
   }
 
   vec3 lin = dec3(p);
+  if (uFringeOn) {
+    vec3 c = rgb2hsv(p);
+    float w = 0.0;
+    if (uPurple.z > 0.0025) w += uPurple.z * smoothstep(uPurple.x - 10.0, uPurple.x, c.x) * (1.0 - smoothstep(uPurple.y, uPurple.y + 10.0, c.x));
+    if (uGreen.z > 0.0025) w += uGreen.z * smoothstep(uGreen.x - 10.0, uGreen.x, c.x) * (1.0 - smoothstep(uGreen.y, uGreen.y + 10.0, c.x));
+    w = clamp(w, 0.0, 1.0) * smoothstep(0.05, 0.2, c.y);
+    float yl = luma(lin);
+    lin = yl + (lin - yl) * (1.0 - w);
+  }
+  if (abs(uLensVig.x) > 0.05) {
+    vec2 dd = vec2((st.x - 0.5) * uSrcAspect, st.y - 0.5);
+    float r = length(dd) / (0.5 * sqrt(uSrcAspect * uSrcAspect + 1.0));
+    lin *= exp2(uLensVig.x / 100.0 * smoothstep(0.8 * uLensVig.y / 100.0, 1.0, r));
+  }
   if (uCalibOn) lin = max(uCalib * lin, 0.0);
   lin = clamp(lin * uGains * exp2(stops), 0.0, 1.0);
   p = enc3(lin);
@@ -438,6 +475,14 @@ export function createRenderer(canvas: HTMLCanvasElement): DevelopRenderer | nul
       g.uniform1f(u('uLookAmt'), look)
       g.uniform1f(u('uLookN'), lutSize.look || 2)
       g.uniformMatrix3fv(u('uGeo'), false, geo.matrix)
+      g.uniformMatrix3fv(u('uWarp'), false, geo.warp)
+      g.uniform1f(u('uDist'), geo.k)
+      g.uniform2f(u('uCa'), geo.ca[0], geo.ca[1])
+      g.uniform1f(u('uSrcAspect'), geo.aspect)
+      g.uniform2f(u('uLensVig'), pp.lens.vignette, pp.lens.midpoint)
+      g.uniform1i(u('uFringeOn'), defringeOn(pp.lens) ? 1 : 0)
+      g.uniform3f(u('uPurple'), ...pp.lens.purple)
+      g.uniform3f(u('uGreen'), ...pp.lens.green)
       g.uniform1i(u('uBypass'), opts.before ? 1 : 0)
       g.uniform1i(u('uCalibOn'), pp.calib ? 1 : 0)
       // row-major in maths.ts; the shader multiplies uCalib * lin

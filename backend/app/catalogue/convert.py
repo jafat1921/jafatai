@@ -1,14 +1,15 @@
 """RAW / HEIC / TIFF imports: keep the original, make an sRGB working copy browsers and Photo Studio can use.
 
-Browsers can't show HEIC, TIFF or camera RAW, and develop.py works on 8-bit sRGB, so these get a
-full-resolution JPEG (q97, 4:4:4) beside the untouched original. EXIF that matters is written back into
-the working copy so exports from Photo Studio still say which camera took the picture.
+Browsers can't show HEIC, TIFF or camera RAW, so these get a full-resolution JPEG (q97, 4:4:4) beside the
+untouched original. RAW also keeps a 16-bit linear master (name.master.tif) that Develop prefers. EXIF that
+matters is written back into the working copy so exports from Photo Studio still say which camera took it.
 """
 import io
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageCms, ImageOps
 
 from app.catalogue.exif import Exif
@@ -62,17 +63,31 @@ def _srgb(im: Image.Image) -> Image.Image:
         return im.convert("RGB")
 
 
-def _decode(src: Path, media_type: str) -> Image.Image:
-    if media_type == "image/x-raw":
-        import rawpy
+def decode_raw_linear(src: Path) -> np.ndarray:
+    """16-bit linear sRGB-primaries RGB, highlights reconstructed rather than clipped, no auto brightening
+    (the gain is ours, see auto_gain). LibRaw already applies the orientation."""
+    import rawpy
 
-        try:
-            with rawpy.imread(str(src)) as raw:
-                rgb = raw.postprocess(use_camera_wb=True, output_color=rawpy.ColorSpace.sRGB, output_bps=8,
-                                      no_auto_bright=False)
-        except (rawpy.LibRawError, OSError) as e:
-            raise ConvertError(f"This RAW file couldn't be decoded ({type(e).__name__})") from None
-        return Image.fromarray(rgb)  # LibRaw already applied the orientation
+    try:
+        with rawpy.imread(str(src)) as raw:
+            rgb = raw.postprocess(use_camera_wb=True, output_color=rawpy.ColorSpace.sRGB, output_bps=16,
+                                  gamma=(1, 1), no_auto_bright=True,
+                                  highlight_mode=rawpy.HighlightMode.ReconstructDefault)
+    except (rawpy.LibRawError, OSError) as e:
+        raise ConvertError(f"This RAW file couldn't be decoded ({type(e).__name__})") from None
+    if rgb.dtype != np.uint16:
+        rgb = rgb.astype(np.uint16) * 257
+    return rgb
+
+
+def auto_gain(lin16: np.ndarray) -> float:
+    """LibRaw's auto-bright, done here so the JPEG and the master agree: the brightest 1 % goes to white."""
+    probe = lin16[::4, ::4].max(axis=-1)
+    white = float(np.percentile(probe, 99)) / 65535 if probe.size else 1.0
+    return float(min(8.0, max(1.0, 1.0 / white))) if white > 1e-4 else 1.0
+
+
+def _decode(src: Path, media_type: str) -> Image.Image:
     if media_type == "image/heic":
         import pillow_heif
 
@@ -110,11 +125,32 @@ def _exif_bytes(e: Exif) -> bytes:
 
 
 def working_copy(src: Path, media_type: str, dest: Path, exif: Exif) -> Working:
+    if media_type == "image/x-raw":
+        return _raw_copy(src, dest, exif)
     im = _decode(src, media_type)
     w, h = im.size
     if w * h > MAX_PIXELS:
         raise ConvertError(f"That image is {w}×{h}; the limit is {MAX_PIXELS // 1_000_000} megapixels")
     tmp = dest.with_name(dest.name + ".tmp")
     im.save(tmp, "JPEG", quality=JPEG_Q, subsampling=0, optimize=False, exif=_exif_bytes(exif))
+    tmp.replace(dest)
+    return Working(dest, w, h)
+
+
+def _raw_copy(src: Path, dest: Path, exif: Exif) -> Working:
+    """RAW: a 16-bit linear master for Develop (exposure and highlights can reach what the JPEG clipped)
+    and the JPEG working copy made from the very same pixels, so the two match on screen."""
+    from app.photo import develop as dv
+
+    lin = decode_raw_linear(src)
+    h, w = lin.shape[:2]
+    if w * h > MAX_PIXELS:
+        raise ConvertError(f"That image is {w}×{h}; the limit is {MAX_PIXELS // 1_000_000} megapixels")
+    gain = auto_gain(lin)
+    dv.write_master(dv.master_path(dest), lin, gain)
+    shown = dv.quantise(dv.enc(np.minimum(lin.astype(np.float32) * np.float32(gain / 65535), 1.0)))
+    del lin
+    tmp = dest.with_name(dest.name + ".tmp")
+    Image.fromarray(shown).save(tmp, "JPEG", quality=JPEG_Q, subsampling=0, optimize=False, exif=_exif_bytes(exif))
     tmp.replace(dest)
     return Working(dest, w, h)

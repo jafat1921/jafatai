@@ -3,6 +3,7 @@ import { Scissors } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { Textarea } from '@/components/ui/textarea'
+import { AerabButton } from '@/components/text/AerabButton'
 import { FIT_LABEL, stamp, type DubSegment, type DubSpeaker, type FitMode, type SegmentEdit } from '@/lib/dub'
 import type { Voice } from '@/lib/types'
 import { modKey } from '@/lib/keyboard'
@@ -115,6 +116,9 @@ export const LineEditor = forwardRef<LineEditorHandle, Props>(function LineEdito
             <Textarea ref={target} dir="auto" lang={lang} rows={3} value={draft.text} disabled={disabled} onChange={(e) => set('text', e.target.value)} />
             {t?.text_before && <span className="text-[11px] text-studio-muted">Shortened to fit; it was: {t.text_before}</span>}
           </label>
+        )}
+        {showTarget && (
+          <AerabButton text={draft.text} onText={(v) => set('text', v)} language={lang} target={`the ${langName} line`} disabled={disabled} className="md:col-start-2" />
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-small">

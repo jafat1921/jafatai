@@ -2,24 +2,20 @@ import type { ReactNode } from 'react'
 import { Eye, EyeOff, RotateCcw } from 'lucide-react'
 import { Section } from '@/components/studio/section'
 import { FALLBACK_GROUPS, FALLBACK_RANGES, changedKeys, getValue, rangeFor } from '@/lib/photo/params'
-import type { DevelopParams, HslBand, PhotoSchema, RangeSpec, SchemaGroup } from '@/lib/photo/types'
+import type { DevelopParams, HslBand, PhotoSchema, RangeSpec, SchemaGroup, UprightMode } from '@/lib/photo/types'
 import { SWITCHABLE, toggleGroup } from '@/lib/photo/workflow'
 import { ColourGrading } from './ColourGrading'
 import { ColourMixer } from './ColourMixer'
-import { BasicHeader, CalibrationPanel, EffectsPanel } from './DevelopTools'
+import { BasicHeader, CalibrationPanel, EffectsPanel, SubHead } from './DevelopTools'
 import { DevelopSlider } from './DevelopSlider'
+import { DetailPanel, LensPanel, TransformPanel } from './OpticsPanels'
 import { ToneCurvePanel } from './ToneCurvePanel'
 
-export type Picker = 'wb' | 'pointColor' | null
+export type Picker = 'wb' | 'pointColor' | 'fringe' | null
 
 const TRACKS: Record<string, string> = {
   temperature: 'linear-gradient(90deg, #4a78b8, #d8cdb6, #d39a3a)',
   tint: 'linear-gradient(90deg, #3f8f5c, #d8cdb6, #b85fb8)',
-}
-
-// the server-only groups say so up front instead of on every slider
-const NOTES: Record<string, string> = {
-  detail: 'Detail is worked out on the server: the preview sharpens up a moment after you let go.',
 }
 
 // crop & rotate lives in the tool strip (R), looks in the left panel, as in Lightroom
@@ -39,6 +35,12 @@ interface Props {
   picker?: Picker
   onPicker?: (p: Picker) => void
   onAutoWb?: () => void
+  // D2b: Detail's mask view, auto CA and Upright are measured by the server
+  maskView?: boolean
+  onMaskView?: (on: boolean) => void
+  onAutoCa?: (on: boolean) => void
+  onUpright?: (mode: UprightMode) => void
+  measuring?: { ca?: boolean; upright?: boolean; note?: string | null }
 }
 
 function groupChanges(g: SchemaGroup, changed: string[]) {
@@ -52,10 +54,10 @@ function resetGroup(p: DevelopParams, g: SchemaGroup): DevelopParams {
 }
 
 /** The edit panels in Lightroom's order, each with an on/off eye, a reset and a change count. */
-export function DevelopPanel({ schema, params, open, onOpen, onSet, onUpdate, custom, picker = null, onPicker, onAutoWb }: Props) {
+export function DevelopPanel({ schema, params, open, onOpen, onSet, onUpdate, custom, picker = null, onPicker, onAutoWb, maskView = false, onMaskView, onAutoCa, onUpright, measuring = {} }: Props) {
   const ranges: Record<string, RangeSpec> = schema?.ranges ?? {}
   const groups = schema?.groups ?? FALLBACK_GROUPS
-  const spatial = new Set(schema?.spatial_keys ?? ['clarity', 'sharpness', 'noiseReduction', 'lightPoints'])
+  const spatial = new Set(schema?.spatial_keys ?? ['texture', 'clarity', 'dehaze', 'sharpen', 'nr', 'lightPoints'])
   const changed = changedKeys(params)
   const labels = Object.fromEntries((schema?.hsl_bands ?? []).map((b) => [b.id, b.label])) as Partial<Record<HslBand, string>>
 
@@ -87,11 +89,28 @@ export function DevelopPanel({ schema, params, open, onOpen, onSet, onUpdate, cu
     if (g.id === 'grading') return <ColourGrading params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} />
     if (g.id === 'effects') return <EffectsPanel params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} />
     if (g.id === 'calibration') return <CalibrationPanel params={params} ranges={ranges} onSet={onSet} />
+    if (g.id === 'detail') return <DetailPanel params={params} ranges={ranges} onSet={onSet} maskView={maskView} onMaskView={(on) => onMaskView?.(on)} />
+    if (g.id === 'lens') {
+      return (
+        <LensPanel
+          params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} onAutoCa={onAutoCa} caBusy={measuring.ca}
+          picking={picker === 'fringe'} onPick={onPicker && (() => toggle('fringe'))}
+        />
+      )
+    }
+    if (g.id === 'transform') {
+      return <TransformPanel params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} onUpright={onUpright} busy={measuring.upright} note={measuring.note} />
+    }
     if (g.id === 'basic') {
+      const keys = g.keys.filter((k) => k in ranges || k in FALLBACK_RANGES)
+      // Lightroom's Presence block starts at Texture
+      const at = keys.indexOf('texture')
       return (
         <div className="flex flex-col gap-2.5">
           <BasicHeader params={params} ranges={ranges} onSet={onSet} onUpdate={onUpdate} picking={picker === 'wb'} onPick={() => toggle('wb')} onAutoWb={() => onAutoWb?.()} />
-          {g.keys.filter((k) => k in ranges || k in FALLBACK_RANGES).map(slider)}
+          {(at < 0 ? keys : keys.slice(0, at)).map(slider)}
+          {at >= 0 && <SubHead>Presence</SubHead>}
+          {at >= 0 && keys.slice(at).map(slider)}
         </div>
       )
     }
@@ -100,7 +119,6 @@ export function DevelopPanel({ schema, params, open, onOpen, onSet, onUpdate, cu
     if (!keys.length) return null
     return (
       <div className="flex flex-col gap-2.5">
-        {NOTES[g.id] && <p className="text-[12px] text-studio-muted">{NOTES[g.id]}</p>}
         {keys.map(slider)}
       </div>
     )

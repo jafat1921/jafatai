@@ -7,11 +7,13 @@ import type { DevelopParams } from './types'
 
 // top-level param keys per group; mirrors develop.GROUPS on the server
 export const GROUP_KEYS: Record<string, (keyof DevelopParams)[]> = {
-  basic: ['profile', 'treatment', 'temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'vibrance', 'saturation'],
+  basic: ['profile', 'treatment', 'temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'texture', 'clarity', 'dehaze', 'vibrance', 'saturation'],
   curve: ['curve', 'pcurve', 'points', 'refineSat'],
   hsl: ['hsl', 'pointColor', 'bw'],
   grading: ['grading'],
-  detail: ['clarity', 'sharpness', 'noiseReduction'],
+  detail: ['sharpen', 'nr', 'sharpness', 'noiseReduction'],
+  lens: ['lens'],
+  transform: ['transform'],
   effects: ['vignette', 'vignetteMidpoint', 'vignetteRoundness', 'vignetteFeather', 'vignetteHighlights', 'vignetteStyle', 'grainAmount', 'grainSize', 'grainRoughness'],
   calibration: ['calibration'],
   local: ['lightPoints', 'palette'],
@@ -23,7 +25,9 @@ export const GROUP_LABELS: Record<string, string> = {
   curve: 'Tone curve',
   hsl: 'Colour mixer, point colour & B&W mix',
   grading: 'Colour grading',
-  detail: 'Detail (clarity, sharpening, noise)',
+  detail: 'Detail (sharpening, noise reduction)',
+  lens: 'Lens corrections (CA, distortion, defringe, vignetting)',
+  transform: 'Transform (Upright, perspective)',
   effects: 'Effects (vignette, grain)',
   calibration: 'Calibration',
   local: 'Local light & selective colour',
@@ -31,8 +35,8 @@ export const GROUP_LABELS: Record<string, string> = {
   look: 'Look',
 }
 export const SWITCHABLE = Object.keys(GROUP_KEYS).filter((g) => g !== 'geometry')
-// Lightroom leaves crop and spot-type edits out of Copy by default: they rarely fit another frame
-export const DEFAULT_COPY = Object.keys(GROUP_KEYS).filter((g) => g !== 'geometry' && g !== 'local')
+// Lightroom leaves crop, transform and spot-type edits out of Copy by default: they rarely fit another frame
+export const DEFAULT_COPY = Object.keys(GROUP_KEYS).filter((g) => g !== 'geometry' && g !== 'local' && g !== 'transform')
 
 const clone = <T,>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)))
 
@@ -76,7 +80,17 @@ export function pasteGroups(mine: DevelopParams, copied: DevelopParams, groups: 
   const list = SWITCHABLE.filter((g) => off.has(g))
   if (list.length) out.off = list
   else delete out.off
-  return out as DevelopParams
+  return remeasure(out as DevelopParams, groups)
+}
+
+/** Upright and auto CA were measured on the photo they came from: clear the numbers so this one gets its own. */
+export function remeasure(p: DevelopParams, groups: string[]): DevelopParams {
+  let out = p
+  if (groups.includes('transform') && p.transform?.upright && p.transform.upright !== 'off' && p.transform.uprightMatrix) {
+    out = { ...out, transform: { ...p.transform, uprightMatrix: null } }
+  }
+  if (groups.includes('lens') && p.lens?.caAuto) out = { ...out, lens: { ...p.lens, caRed: 0, caBlue: 0 } }
+  return out
 }
 
 /** Groups that hold something in these params ("Copy modified"). */
@@ -134,7 +148,8 @@ const NAMES: Record<string, string> = {
 
 const NESTED: Record<string, string> = {
   curve: 'Tone curve', pcurve: 'Tone curve', points: 'Point curve', hsl: 'Colour mixer', bw: 'B&W mix',
-  grading: 'Colour grading', calibration: 'Calibration',
+  grading: 'Colour grading', calibration: 'Calibration', sharpen: 'Sharpening', nr: 'Noise reduction',
+  lens: 'Lens corrections', transform: 'Transform',
 }
 
 const sameJSON = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)

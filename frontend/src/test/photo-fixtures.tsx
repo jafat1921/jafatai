@@ -19,7 +19,7 @@ export const schema: PhotoSchema = {
     { id: 'purple', label: 'Purple', hue: 270 },
     { id: 'magenta', label: 'Magenta', hue: 300 },
   ],
-  spatial_keys: ['clarity', 'sharpness', 'noiseReduction', 'lightPoints'],
+  spatial_keys: ['texture', 'clarity', 'dehaze', 'sharpen', 'nr', 'lightPoints'],
   formats: [
     { id: 'jpeg', label: 'JPEG', media_type: 'image/jpeg' },
     { id: 'png', label: 'PNG', media_type: 'image/png' },

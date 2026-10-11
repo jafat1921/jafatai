@@ -17,7 +17,7 @@ from app.photo import service as svc
 from app.photo import restore as rs
 from app.photo import workflow as wf
 from app.photo.schemas import (BackgroundIn, CubeIn, DevelopParams, EffectIn, ParamsIn, PreviewIn, RenderIn,
-                                RestoreIn, SmartRestoreIn, SnapshotIn, SnapshotPatch, SyncIn)
+                                RestoreIn, SmartRestoreIn, SnapshotIn, SnapshotPatch, SyncIn, UprightIn)
 from app.schemas import JobOut
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import job_out, owned_source
@@ -49,7 +49,7 @@ def schema(cur: CurrentUser = Depends(get_current_user)):
 async def preview(gen_id: str, body: PreviewIn, db: Session = Depends(get_db),
                   cur: CurrentUser = Depends(get_current_user)):
     g = _source(db, cur, gen_id)
-    data, info = await run_in_threadpool(svc.preview, db, g, body.params.plain(), body.max_side)
+    data, info = await run_in_threadpool(svc.preview, db, g, body.params.plain(), body.max_side, body.debug)
     return Response(data, media_type="image/jpeg", headers={
         "Cache-Control": "no-store", "X-Develop-Ms": str(info["ms"]),
         "X-Source-Size": "{}x{}".format(*info["source"]), "X-Output-Size": "{}x{}".format(*info["output"]),
@@ -96,6 +96,20 @@ async def palette(gen_id: str, k: int = Query(8, ge=2, le=16), db: Session = Dep
 async def auto(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     g = _source(db, cur, gen_id)
     return await run_in_threadpool(svc.auto, g)
+
+
+@router.post("/{gen_id}/upright")
+async def upright(gen_id: str, body: UprightIn, db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(get_current_user)):
+    """Transform's Upright buttons and Crop's Auto straighten: measured on the source, not saved."""
+    g = _source(db, cur, gen_id)
+    return await run_in_threadpool(svc.upright, g, body.mode)
+
+
+@router.post("/{gen_id}/lens/ca")
+async def lens_ca(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    g = _source(db, cur, gen_id)
+    return await run_in_threadpool(svc.chromatic, g)
 
 
 @router.post("/{gen_id}/render", response_model=JobOut, status_code=202)

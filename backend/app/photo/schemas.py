@@ -146,6 +146,53 @@ class BwMix(_Loose):
     magenta: float = _s()
 
 
+class Sharpen(_Loose):
+    amount: float = Field(0, ge=0, le=150)
+    radius: float = Field(1.0, ge=0.5, le=3.0)
+    detail: float = Field(25, ge=0, le=100)
+    masking: float = Field(0, ge=0, le=100)
+
+
+class NoiseReduction(_Loose):
+    luminance: float = Field(0, ge=0, le=100)
+    detail: float = Field(50, ge=0, le=100)
+    contrast: float = Field(0, ge=0, le=100)
+    color: float = Field(0, ge=0, le=100)
+    colorDetail: float = Field(50, ge=0, le=100)  # noqa: N815
+    smoothness: float = Field(50, ge=0, le=100)
+
+
+class Lens(_Loose):
+    caAuto: bool = False  # noqa: N815
+    caRed: float = _s()  # noqa: N815
+    caBlue: float = _s()  # noqa: N815
+    distortion: float = _s()
+    vignette: float = _s()
+    vignetteMidpoint: float = Field(50, ge=0, le=100)  # noqa: N815
+    purpleAmount: float = Field(0, ge=0, le=20)  # noqa: N815
+    purpleHueLo: float = Field(30, ge=0, le=100)  # noqa: N815
+    purpleHueHi: float = Field(70, ge=0, le=100)  # noqa: N815
+    greenAmount: float = Field(0, ge=0, le=20)  # noqa: N815
+    greenHueLo: float = Field(40, ge=0, le=100)  # noqa: N815
+    greenHueHi: float = Field(60, ge=0, le=100)  # noqa: N815
+
+
+UprightMode = Literal["off", "auto", "level", "vertical", "full"]
+
+
+class Transform(_Loose):
+    upright: UprightMode = "off"
+    uprightMatrix: list[float] | None = Field(None, min_length=9, max_length=9)  # noqa: N815
+    constrain: bool = False
+    vertical: float = _s()
+    horizontal: float = _s()
+    rotate: float = _s(-10, 10)
+    aspect: float = _s()
+    scale: float = Field(100, ge=50, le=150)
+    offsetX: float = _s()  # noqa: N815
+    offsetY: float = _s()  # noqa: N815
+
+
 class DevelopParams(_Loose):
     version: int = 1
     exposure: float = Field(0, ge=-100, le=100)  # v2: EV -5..5; v1 records: -100..100
@@ -190,6 +237,13 @@ class DevelopParams(_Loose):
     grainAmount: float = Field(0, ge=0, le=100)  # noqa: N815
     grainSize: float = Field(25, ge=0, le=100)  # noqa: N815
     grainRoughness: float = Field(50, ge=0, le=100)  # noqa: N815
+    # D2b
+    texture: float = _s()
+    dehaze: float = _s()
+    sharpen: Sharpen = Sharpen()
+    nr: NoiseReduction = NoiseReduction()
+    lens: Lens = Lens()
+    transform: Transform = Transform()
 
     def plain(self) -> dict:
         return self.model_dump(exclude_none=False, by_alias=True)
@@ -202,6 +256,12 @@ EffectName = Literal["deyellow", "pop", "bw", "sepia", "warm", "cool", "soften_s
 class PreviewIn(BaseModel):
     params: DevelopParams = DevelopParams()
     max_side: int = Field(1280, ge=64, le=2560)
+    # Lightroom's Alt-drag view of the sharpening Masking slider
+    debug: Literal["sharpen_mask"] | None = None
+
+
+class UprightIn(BaseModel):
+    mode: UprightMode = "auto"
 
 
 class ParamsIn(BaseModel):

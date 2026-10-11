@@ -42,9 +42,9 @@ function api(opts: Opts = {}) {
       const item = audioItem(`s${n}`, { title: `Take ${n}`, media_url: null, params: { kind: 'speech', engine: b.engine, voice_id: b.voice_id ?? null, text: b.text } })
       return { items: [item], jobs: [job(`j${n}`, { generation_id: item.generation_id })], engine_resolved: 'omnivoice', seed: 777 }
     }
-    if (method === 'POST' && path === '/audio/lyrics/aerab') {
-      const text = (b.lyrics as string).replace('سلام', 'سَلام')
-      return { lyrics: text, marked: 1, kept: 0 }
+    if (method === 'POST' && path === '/text/aerab') {
+      const text = (b.text as string).replace('سلام', 'سَلام')
+      return { text, marked: 1, kept: 0, low_coverage: 0, language: (b.language as string) ?? 'ur' }
     }
     if (path === '/media') return { items: [] }
     if (path === '/jobs') return opts.jobs?.() ?? []
@@ -78,13 +78,24 @@ describe('Speak', { timeout: 15_000 }, () => {
     expect(screen.getByRole('button', { name: 'Voice: Ayesha' })).toBeInTheDocument()
 
     const script = screen.getByRole('textbox', { name: 'Script' })
+    // nothing to mark in Latin letters
     await user.click(script)
+    await user.paste('Hello')
+    expect(screen.queryByRole('button', { name: /Add aerab/ })).not.toBeInTheDocument()
+    await user.clear(script)
     await user.paste('سلام دنیا')
     await user.click(screen.getByRole('button', { name: 'Insert tag' }))
     await user.click(await screen.findByRole('menuitem', { name: /pause 0\.5s/ }))
     expect(script).toHaveValue('سلام دنیا [pause 0.5s] ')
     expect(script).toHaveAccessibleDescription('23 / 5,000 characters')
 
+    await user.click(screen.getByRole('button', { name: /Add aerab/ }))
+    await waitFor(() => expect(script).toHaveValue('سَلام دنیا [pause 0.5s] '))
+    expect(posts(calls, '/text/aerab')[0]).toEqual({ text: 'سلام دنیا [pause 0.5s] ', language: 'ur' })
+    expect(screen.getByText('Aerab added to 1 line.')).toBeInTheDocument()
+    // one step back, and forward again
+    await user.click(screen.getByRole('button', { name: 'Undo aerab' }))
+    expect(script).toHaveValue('سلام دنیا [pause 0.5s] ')
     await user.click(screen.getByRole('button', { name: /Add aerab/ }))
     await waitFor(() => expect(script).toHaveValue('سَلام دنیا [pause 0.5s] '))
     expect(screen.getByRole('switch', { name: /Aerab before speaking/ })).toBeChecked()

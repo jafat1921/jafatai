@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.llm import LLMError, chat_sync
 from app.llm import prompts as P
 from app.llm.client import is_warm, model_for
+from app import aerab
 from app import brand
 from app import brand_moments as bm
 from app import storyboard as sb
@@ -318,6 +319,15 @@ def _new_scene(project: Project, plan: P.OutlineScene) -> Scene:
     )
 
 
+def with_aerab(progress, script: str, frac: float) -> str:
+    """The verified second pass over a scene the LLM just wrote: Urdu, Arabic... lines get their marks
+    checked and filled in. With the LLM away the scene stays as written."""
+    if not aerab.applies(None, script):
+        return script
+    progress(frac, "Adding aerab to the dialogue…")
+    return aerab.finish_sync(script, tick=lambda: progress(frac, "Adding aerab to the dialogue…"), what="scene").text
+
+
 def _draft_into(run: AiRun, db: Session, project: Project, scenes: list[Scene], idx: int, plan: dict, frac: float,
                 action: str) -> dict:
     s = scenes[idx]
@@ -327,9 +337,9 @@ def _draft_into(run: AiRun, db: Session, project: Project, scenes: list[Scene], 
         P.draft_scene_messages(project, _characters(db, project.id), scenes, idx, plan=plan),
         temperature=0.8, max_tokens=_tokens_for(words),
     )
+    script = with_aerab(run.ctx.progress, P.clean_script(res.content, s.heading), frac)
     # outline/continue scenes already carry the planned logline as their summary
-    return write_scene(db, s, {"script_text": P.clean_script(res.content, s.heading)}, action=action,
-                       job_id=run.ctx.job.id, summarize=False)
+    return write_scene(db, s, {"script_text": script}, action=action, job_id=run.ctx.job.id, summarize=False)
 
 
 # ---------------------------------------------------------------- handlers
@@ -436,8 +446,9 @@ def handle_write_missing(ctx) -> dict:
                        "creative", P.draft_json_messages(project, _characters(db, project.id), scenes, idx),
                        schema=P.SceneDraft, temperature=0.8, max_tokens=_tokens_for(P.words_for(45)))
         d: P.SceneDraft = res.data
+        script = with_aerab(ctx.progress, P.clean_script(d.script_text, d.heading), 0.05 + 0.9 * k / len(targets))
         out = write_scene(db, s, {"heading": d.heading.upper(), "logline": d.logline, "time_of_day": d.time_of_day,
-                                  "mood": d.mood, "script_text": P.clean_script(d.script_text, d.heading)},
+                                  "mood": d.mood, "script_text": script},
                           action="write_missing", job_id=job.id)
         suggestions += out["suggestion_ids"]
         drafted.append(s.id)
@@ -512,6 +523,8 @@ def handle_assist(ctx) -> dict:
     else:
         raise RuntimeError(f"Unknown AI Assist action '{action}'")
 
+    if values.get("script_text"):
+        values["script_text"] = with_aerab(ctx.progress, values["script_text"], 0.8)
     out = write_scene(db, scene, values, action=action, job_id=job.id)
     outcome = "suggested" if out["suggestion_ids"] else ("written" if out["written"] else "unchanged")
     return run.result(action=action, outcome=outcome, scene_ids=[scene.id] if out["written"] else [],

@@ -270,9 +270,11 @@ def test_lyrics_in_urdu_script(client, writer):
     assert r.status_code == 200, r.text
     # the fake answers the marking pass with the same reply, which isn't a list of lines: plain lyrics come back
     assert r.json() == {"lyrics": f"[verse]\n{URDU}\n\n[chorus]\n{URDU}", "tags": "ghazal, harmonium, male vocal",
-                        "marked": 0, "kept": 0}
+                        "marked": 0, "kept": 0, "low_coverage": 0}
     system, user = fake.messages[0]["content"], fake.messages[-1]["content"]
     assert "Urdu" in system and "Urdu script" in system and "[verse], [chorus]" in system
+    # the first pass already asks for full aerab (contract v23)
+    assert "WITH FULL aerab" in system
     assert "monsoon longing" in user and "tender" in user
 
 

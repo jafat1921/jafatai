@@ -4,6 +4,7 @@ from typing import Iterable
 
 from pydantic import BaseModel, Field, field_validator
 
+from app import aerab
 from app.schemas import flush_left
 
 TIMES = ("dawn", "morning", "day", "golden_hour", "dusk", "night", "interior")
@@ -158,6 +159,13 @@ WRITER_SYSTEM = (
 )
 
 
+def writer_system(user: str) -> str:
+    """The screenwriter's system prompt; a film in Urdu, Arabic... also gets the aerab rule, the language
+    read from the brief, the idea and the scenes around it."""
+    rule = aerab.writing_rule(None, user)
+    return WRITER_SYSTEM + (f"\n\nDialogue and narration: {rule}" if rule else "")
+
+
 ADVERT_OUTLINE = ("This film is an advert for the brand below. Build the story around a moment where the product "
                   "belongs naturally, keep the brand's tone of voice, and leave room for the product and logo to be "
                   "seen on real things in the scenes (packaging, signage, screens, clothing, vehicles). The film ends on "
@@ -217,7 +225,7 @@ def draft_scene_messages(project, characters, scenes, idx: int, plan: dict | Non
         + f"\n\nWrite this scene in about {words_for(duration)} words. It must flow out of the scene before it "
         "and set up the scene after it."
     )
-    return [{"role": "system", "content": WRITER_SYSTEM}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": writer_system(user)}, {"role": "user", "content": user}]
 
 
 def draft_json_messages(project, characters, scenes, idx: int, idea: str = "") -> list[dict]:
@@ -259,7 +267,7 @@ def assist_messages(project, characters, scenes, idx: int, action: str, tone: st
         f"Scene {idx + 1}: {s.heading or '(no heading)'}\n---\n{s.script_text.strip()}\n---\n\n"
         f"{instr}\nReply with the full new scene text only."
     )
-    return [{"role": "system", "content": WRITER_SYSTEM}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": writer_system(user)}, {"role": "user", "content": user}]
 
 
 def logline_messages(project, scene) -> list[dict]:

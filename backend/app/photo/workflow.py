@@ -42,6 +42,11 @@ def merge_groups(mine: dict, theirs: dict, groups: list[str]) -> dict:
             else:
                 off.discard(gid)
             out["off"] = [x for x in dv.SWITCHABLE if x in off]
+    # Upright and auto CA were measured on the other picture: measure them again on this one
+    if "transform" in groups and out["transform"]["upright"] != "off":
+        out["transform"]["uprightMatrix"] = None
+    if "lens" in groups and out["lens"]["caAuto"]:
+        out["lens"]["caRed"] = out["lens"]["caBlue"] = 0.0
     return out
 
 

@@ -1,5 +1,5 @@
-import { useId, useRef, useState } from 'react'
-import { Mic, MessageSquareQuote, SquareSplitHorizontal, Undo2 } from 'lucide-react'
+import { useId, useRef } from 'react'
+import { Mic, MessageSquareQuote, SquareSplitHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -7,10 +7,9 @@ import { Label } from '@/components/ui/label'
 import { ErrorState } from '@/components/studio/states'
 import { SwitchRow } from '@/components/studio/switch-row'
 import { GenerateButton } from '@/components/generate/GenerateButton'
+import { AerabButton } from '@/components/text/AerabButton'
 import { PromptDock } from '@/components/generate/PromptDock'
-import { useAddAerab } from '@/hooks/useModels'
-import { ApiError } from '@/lib/api'
-import { aerabNote, hasUrdu } from '@/lib/audio'
+import { hasArabicScript, isArabicScriptLang } from '@/lib/aerab'
 import {
   AUTO_ENGINE,
   can,
@@ -52,16 +51,9 @@ interface Props {
   error?: unknown
 }
 
-function aerabError(e: unknown) {
-  if (e instanceof ApiError && e.status === 503) return "Aerab is offline: the studio's language model isn't answering. Try again in a minute."
-  return e instanceof Error ? e.message : "Couldn't add aerab just now."
-}
-
 export function SpeakDock({ form, setForm, voices, engines, onRun, pending, error }: Props) {
   const uid = useId()
   const field = useRef<HTMLTextAreaElement>(null)
-  const [before, setBefore] = useState<string | null>(null)
-  const marking = useAddAerab()
   const set = <K extends keyof SpeakForm>(k: K, v: SpeakForm[K]) => setForm((f) => ({ ...f, [k]: v }))
   const voiceOf = (id: string | null) => (id ? voices.find((v) => v.id === id) : undefined)
   const voice = voiceOf(form.voiceId)
@@ -69,7 +61,7 @@ export function SpeakDock({ form, setForm, voices, engines, onRun, pending, erro
   const voiceB = voiceOf(form.b.voiceId)
   const engineB = resolveEngine(form.b.engine, voiceB, form.language, engines)
   const tagless = [engine, ...(form.compare ? [engineB] : [])].filter((e): e is VoiceEngine => !!e && !can(e, 'tags'))
-  const urdu = hasUrdu(form.text)
+  const arabicScript = hasArabicScript(form.text)
   const blocked = speakBlockedReason(form, voices, engines)
   // OmniVoice's list for the default; each engine's own once one is chosen
   const languages = engine?.languages ?? engines.find((e) => e.id === 'omnivoice')?.languages ?? []
@@ -84,25 +76,12 @@ export function SpeakDock({ form, setForm, voices, engines, onRun, pending, erro
     const el = field.current
     const { text, cursor } = insertTag(form.text, el?.selectionStart ?? form.text.length, tag)
     if (text.length > SCRIPT_MAX) return announce('The script is at the limit.')
-    setBefore(null)
     set('text', text)
     requestAnimationFrame(() => {
       el?.focus()
       el?.setSelectionRange(cursor, cursor)
     })
   }
-
-  const addAerab = () =>
-    marking.mutate(form.text, {
-      onSuccess: (res) => {
-        if (res.lyrics !== form.text) {
-          setBefore(form.text)
-          set('text', res.lyrics.slice(0, SCRIPT_MAX))
-        }
-        announce(aerabNote(res.marked, res.kept))
-      },
-      onError: (e) => announce(aerabError(e)),
-    })
 
   const sideLabel = (v: Voice | undefined, e: VoiceEngine | undefined) => [v?.name ?? 'Engine default', e?.label].filter(Boolean).join(' · ')
 
@@ -148,30 +127,8 @@ export function SpeakDock({ form, setForm, voices, engines, onRun, pending, erro
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        {urdu && (
-          <Button type="button" size="sm" variant="ghost" loading={marking.isPending} onClick={addAerab} title="Add zer, zabar, pesh, jazm and tashdeed so every word is pronounced. Your words are never changed.">
-            <span aria-hidden lang="ur" className="font-[system-ui] text-[15px] leading-none">
-              اَ
-            </span>
-            Add aerab
-          </Button>
-        )}
-        {before !== null && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              set('text', before)
-              setBefore(null)
-              announce('Aerab removed: the script is back as you wrote it.')
-            }}
-          >
-            <Undo2 aria-hidden />
-            Undo aerab
-          </Button>
-        )}
-        {urdu && form.language !== 'ur' && speaks(engine, 'ur') && (
+        <AerabButton text={form.text} onText={(v) => set('text', v)} language={form.language} max={SCRIPT_MAX} />
+        {arabicScript && !isArabicScriptLang(form.language) && speaks(engine, 'ur') && (
           <Button type="button" size="sm" variant="ghost" onClick={() => set('language', 'ur')}>
             Speak it in Urdu
           </Button>
@@ -182,13 +139,13 @@ export function SpeakDock({ form, setForm, voices, engines, onRun, pending, erro
           {tagless.map((e) => e.label).join(' and ')} can't perform expression tags: {TAG_NOTE}.
         </p>
       )}
-      {(urdu || form.language === 'ur') && (
+      {(arabicScript || isArabicScriptLang(form.language)) && (
         <SwitchRow
           id={`${uid}-aerab`}
           checked={form.aerab}
           onChange={(on) => set('aerab', on)}
           title="Aerab before speaking"
-          hint="Lines without zer, zabar and pesh get them just before speaking, so vowels aren't guessed."
+          hint="Urdu, Arabic and other Arabic-script lines without their vowel marks (aerab / tashkeel) get them just before speaking, so vowels aren't guessed."
           className="max-w-md py-1.5"
         />
       )}
@@ -203,10 +160,7 @@ export function SpeakDock({ form, setForm, voices, engines, onRun, pending, erro
       headerExtra={<p className="text-small text-studio-muted max-lg:hidden">Type a line, pick a voice, hear it.</p>}
       promptLabel="Script"
       prompt={form.text}
-      onPrompt={(v) => {
-        setBefore(null)
-        set('text', v)
-      }}
+      onPrompt={(v) => set('text', v)}
       promptRef={field}
       promptHint={
         <span className={cn('font-mono', near && 'text-studio-warning')}>

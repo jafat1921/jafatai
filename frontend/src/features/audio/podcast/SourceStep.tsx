@@ -3,8 +3,10 @@ import { FileText, FileUp, ScrollText, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { AerabOnNote } from '@/components/text/AerabButton'
 import { useAddSource, usePasteScript, usePatchEpisode, useRemoveSource } from '@/hooks/usePodcast'
 import { useVoiceEngines } from '@/hooks/useVoices'
+import { isArabicScriptLang } from '@/lib/aerab'
 import { FORMATS, type Episode, type Format } from '@/lib/podcast'
 import { allLanguages } from '@/lib/voice'
 import { cn } from '@/lib/utils'
@@ -94,7 +96,7 @@ export function SourceStep({ ep, onNext, onScript }: { ep: Episode; onNext: () =
             }}
           />
         </label>
-        {ep.language === 'ur' && <p className="text-[11px] text-studio-muted sm:col-span-3">Urdu scripts are written in Urdu script; aerab is added when the lines are voiced.</p>}
+        {isArabicScriptLang(ep.language) && <AerabOnNote language={ep.language} className="sm:col-span-3" />}
       </fieldset>
 
       <div role="radiogroup" aria-label="Source" className="grid gap-2 sm:grid-cols-4">

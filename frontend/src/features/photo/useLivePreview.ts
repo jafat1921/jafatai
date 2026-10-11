@@ -75,7 +75,7 @@ function clipImage(px: Uint8Array, w: number, h: number): string | null {
   return c.toDataURL('image/png')
 }
 
-export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, clip = false, wantBefore = false }: {
+export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, clip = false, wantBefore = false, debug = null }: {
   sourceUrl: string | null
   previewId: string
   params: DevelopParams
@@ -85,6 +85,8 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
   clip?: boolean
   // a split before/after view needs the unedited frame (crop and straighten applied) as an image
   wantBefore?: boolean
+  // Lightroom's Alt-drag view: the server draws the sharpening mask instead of the picture
+  debug?: 'sharpen_mask' | null
 }) {
   const renderer = useRef<DevelopRenderer | null>(null)
   const [mode, setMode] = useState<PreviewMode>('init')
@@ -97,7 +99,7 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
   const [beforeUrl, setBeforeUrl] = useState<string | null>(null)
   const pixels = useRef<{ data: Uint8Array; w: number; h: number } | null>(null)
   const urls = useRef<string[]>([])
-  const key = paramsKey(params)
+  const key = paramsKey(params) + (debug ? `#${debug}` : '')
   const profileId = params.profile?.id && params.profile.id !== 'color' ? params.profile.id : null
   const lookId = params.lut?.look_id ?? null
   // tables the renderer holds; a change redraws with them
@@ -190,7 +192,7 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
     const body = compact(params)
     const timer = setTimeout(() => {
       api.photo
-        .preview(previewId, body, PREVIEW_SIDE, ctl.signal)
+        .preview(previewId, body, PREVIEW_SIDE, ctl.signal, debug)
         .then((res) => {
           urls.current.push(res.url)
           // keep the one on screen and the new one; older blobs can go
@@ -209,7 +211,7 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
     }
     // params are covered by key
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, previewId, mode])
+  }, [key, previewId, mode, debug])
 
   useEffect(
     () => () => {
@@ -250,7 +252,7 @@ export function useLivePreview({ sourceUrl, previewId, params, before, maxSide, 
     serverError,
     exact,
     // WebGL can't show spatial edits or the palette (nor a look whose table is still loading): say so until the server catches up
-    approximate: mode === 'webgl' && !exact && (needsServer(params) || !lutsLoaded),
+    approximate: mode === 'webgl' && !exact && (needsServer(params) || !lutsLoaded || !!debug),
     histogram,
     snapshot,
     sample,

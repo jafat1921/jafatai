@@ -63,14 +63,16 @@ Errors are 422 with a readable message, for example a wrong kind for the model, 
 - Uses the local LLM (Ollama). Urdu is written in Urdu script unless `language` is `ur-latn` (Roman Urdu).
 - If the LLM is offline: 503 `"The lyrics writer is offline"`.
 
-## Aerab (Urdu diacritics)
-Song models and LTX-2.3 guess the vowels of unmarked Urdu, so zer, zabar, pesh, jazm and tashdeed are added before rendering. The LLM only proposes the marks. They are then moved onto the writer's own letters, and any line whose letters the pass changed is left exactly as written. Lines that already carry marks are not touched. Arabic-form ي/ك/ه swapped in for the Urdu letters are tolerated.
+## Aerab (Arabic-script diacritics)
+Updated by [contract v23](contract-v23-aerab.md), which makes aerab / tashkeel the rule for every AI writer and every Arabic-script language (Urdu, Arabic, Persian, Pashto, Sindhi, Punjabi in Shahmukhi). What this page covers:
 
-- `POST /api/audio/lyrics`: `{…, aerab: true}` (Urdu only) runs a second marking pass and returns `{lyrics, tags, marked, kept}`. `kept` is the number of lines left as written. If the pass fails, the plain lyrics come back.
-- `POST /api/audio/lyrics/aerab` takes `{lyrics}` and returns `{lyrics, marked, kept}`. It returns 422 if there are no Urdu lines and 503 if the LLM is offline.
-- `POST /api/audio/generate`: `aerab` (default true). For an Urdu song (`language: "ur"`), the worker marks unmarked lines before singing. It sets `params.lyrics` to the sung text and keeps the original in `params.lyrics_written`.
-- **Video:** before a clip or take renders, Urdu inside quotes in the prompt (`"…"`, `“…”`, `«…»`, i.e. what LTX speaks) gets aerab. The original prompt is kept in `params.prompt_written`.
-- `URDU_AERAB=false` turns off the automatic passes. If the LLM is down, the render goes ahead unmarked.
+Song models and LTX-2.3 guess the vowels of unmarked text, so the marks (zer, zabar, pesh, jazm, tashdeed for Urdu; full tashkeel for Arabic) are added before rendering. The LLM only proposes the marks. They are then moved onto the writer's own letters, and any line whose letters the pass changed is left exactly as written. Lines that already carry marks are not touched. Look-alike code points the LLM swaps in are tolerated per language (Arabic ي/ك/ه for Urdu ی/ک/ہ; Persian ی/ک for Arabic ي/ك), and the writer's own letters are what stays in the text.
+
+- `POST /api/audio/lyrics`: `{…, aerab: true}` asks the writer for marked lyrics in any Arabic-script `language`, then runs the verified second pass. Returns `{lyrics, tags, marked, kept, low_coverage}`. `kept` is the number of lines left as written; `low_coverage` the lines still sparsely marked after the strict retry. If the pass fails, the plain lyrics come back.
+- `POST /api/audio/lyrics/aerab` takes `{lyrics, language?}` and returns `{lyrics, marked, kept, low_coverage, language}`. Without `language` the letters decide. 422 if there are no Arabic-script lines, 503 if the LLM is offline. Editors call `POST /api/text/aerab` (v23) instead; this path stays for older clients.
+- `POST /api/audio/generate`: `aerab` (default true). For a song in an Arabic-script `language`, the worker marks unmarked lines before singing. It sets `params.lyrics` to the sung text and keeps the original in `params.lyrics_written`.
+- **Video:** before a clip or take renders, Arabic-script lines inside quotes in the prompt (`"…"`, `“…”`, `«…»`, i.e. what LTX speaks) get marked in their own language. The original prompt is kept in `params.prompt_written`. Long takes mark the quoted lines of their beats too.
+- `URDU_AERAB=false` turns off all of it; `AERAB_LANGUAGES` picks the languages. If the LLM is down, the render goes ahead unmarked.
 
 ## Estimate
 `GET /api/estimate?kind=audio&model=&duration_s=&count=` uses the same response as the other kinds.

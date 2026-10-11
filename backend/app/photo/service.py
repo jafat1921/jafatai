@@ -138,21 +138,66 @@ def _fit(im: Image.Image, max_side: int) -> Image.Image:
     return im.resize((max(1, round(im.width * f)), max(1, round(im.height * f))), Image.Resampling.LANCZOS)
 
 
-def render_small(db: Session, g: Generation, params: dict, max_side: int):
+def render_small(db: Session, g: Generation, params: dict, max_side: int, debug: str | None = None):
     """-> (float sRGB array, alpha, info). The same pipeline as the full render, on the proxy."""
     src = load_source(g)
-    p = dv.normalise(params)
+    p = fill_auto(g, dv.normalise(params))
     lut = resolve_lut(db, g.workspace_id, p)
-    im = _fit(dv.apply_geometry(src.proxy, p, src.size), max_side)
-    rgb, alpha = dv.split(im)
+    im = _fit(dv.apply_geometry(src.proxy, p, src.size, max_side), max_side)
+    rgb, alpha, linear = dv.split_frame(im)
     frame = dv.frame_size(*src.size, p)
-    out = dv.develop(rgb, p, scale=rgb.shape[1] / frame[0], frame=frame, lut=lut)
+    out = dv.develop(rgb, p, scale=rgb.shape[1] / frame[0], frame=frame, lut=lut, linear=linear,
+                     warp=dv.warp_for(p, src.size), debug=debug)
     return out, alpha, {"source": src.size, "output": (rgb.shape[1], rgb.shape[0])}
 
 
-def preview(db: Session, g: Generation, params: dict, max_side: int) -> tuple[bytes, dict]:
+# ---------------------------------------------------------------- measured values (Upright, auto CA)
+
+_measured: OrderedDict = OrderedDict()
+
+
+def _measure(g: Generation, what: str, fn):
+    path = generation_file(g)
+    key = (g.id, path.stat().st_mtime_ns if path and path.is_file() else 0, what)
+    with _cache_lock:
+        if key in _measured:
+            return _measured[key]
+    val = fn()
+    with _cache_lock:
+        _measured[key] = val
+        while len(_measured) > 64:
+            _measured.popitem(last=False)
+    return val
+
+
+def upright(g: Generation, mode: str) -> dict:
+    from app.photo import upright as up
+
+    return _measure(g, f"upright:{mode}", lambda: up.upright(source_rgb(g, 1024), mode))
+
+
+def chromatic(g: Generation) -> dict:
+    from app.photo import upright as up
+
+    return _measure(g, "ca", lambda: up.chromatic(source_rgb(g, 2048)))
+
+
+def fill_auto(g: Generation, p: dict) -> dict:
+    """Upright and auto CA given only as a mode (a pasted preset, Sync, an imported .xmp): measured on this
+    picture now, so the render and the stored version carry real numbers."""
+    t, lens = p["transform"], p["lens"]
+    if t["upright"] != "off" and not t["uprightMatrix"]:
+        m = upright(g, t["upright"])["matrix"]
+        p = {**p, "transform": {**t, "uprightMatrix": m}}
+    if lens["caAuto"] and not lens["caRed"] and not lens["caBlue"]:
+        ca = chromatic(g)
+        p = {**p, "lens": {**lens, "caRed": ca["caRed"], "caBlue": ca["caBlue"]}}
+    return p
+
+
+def preview(db: Session, g: Generation, params: dict, max_side: int, debug: str | None = None) -> tuple[bytes, dict]:
     t0 = time.perf_counter()
-    out, _, info = render_small(db, g, params, max_side)
+    out, _, info = render_small(db, g, params, max_side, debug)
     data = dv.encode(out, None, "jpeg", 90)
     info["ms"] = round((time.perf_counter() - t0) * 1000)
     return data, info
@@ -165,8 +210,10 @@ def histogram(db: Session, g: Generation, params: dict) -> dict:
 
 def source_rgb(g: Generation, side: int = 1024) -> np.ndarray:
     src = load_source(g)
-    rgb, _ = dv.split(_fit(src.proxy, side))
-    return rgb
+    im = _fit(src.proxy, side)
+    rgb, _ = dv.split(im)
+    # callers count in 8-bit steps; a RAW master is shown the way its JPEG is
+    return dv.quantise(rgb) if isinstance(im, dv.Pixels) else rgb
 
 
 def analyse(g: Generation) -> dict:
@@ -305,6 +352,7 @@ def queue_render(db: Session, source: Generation, params: dict, fmt: str, qualit
     check_image(source)
     p = dv.normalise(params)
     resolve_lut(db, source.workspace_id, p)  # a bad look is a 422 now, not a failed job later
+    p = fill_auto(source, p)
     base = ((source.params or {}).get("develop") or {}).get("base") or source.id
     develop = {"params": p, "parent": source.id, "base": base, "format": fmt, "quality": quality}
     twin = _running_twin(db, source, "develop", develop)
@@ -375,11 +423,14 @@ def handle_render(ctx) -> dict:
             table = look_table(look)
             lut = (table, p["lut"]["amount"] / 100) if table is not None else None
         im = dv.apply_geometry(im, p, size)
-        rgb, alpha = dv.split(im)
+        rgb, alpha, linear = dv.split_frame(im)
         ctx.progress(0.2, "Developing")
         frame = (rgb.shape[1], rgb.shape[0])
-        out = dv.develop(rgb, p, scale=1.0, frame=frame, lut=lut)
+        out = dv.develop(rgb, p, scale=1.0, frame=frame, lut=lut, linear=linear, warp=dv.warp_for(p, size))
     else:
+        if isinstance(im, dv.Pixels):
+            # effects work on the picture as shown, not the RAW master's light
+            im = Image.fromarray(dv.quantise(dv.split(im)[0]))
         rgb, alpha = dv.split(im)
         ctx.progress(0.2, f"Applying {spec['name']}")
         out = fx.apply(rgb, spec["name"], spec.get("strength", 1.0))

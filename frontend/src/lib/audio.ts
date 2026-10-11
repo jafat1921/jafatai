@@ -1,3 +1,4 @@
+import { isArabicScriptLang } from './aerab'
 import { formatDuration } from './duration'
 import { AUTO_ID, has } from './models'
 import type { AudioCategory, AudioGenerateRequest, AudioKind, AudioVocal, MediaBatch, ModelInfo, Template } from './types'
@@ -33,6 +34,7 @@ export const SONG_LANGUAGES = [
   { value: 'hi', label: 'Hindi' },
   { value: 'pa', label: 'Punjabi' },
   { value: 'ar', label: 'Arabic' },
+  { value: 'fa', label: 'Persian' },
   { value: 'es', label: 'Spanish' },
   { value: 'fr', label: 'French' },
   { value: 'zh', label: 'Chinese' },
@@ -48,6 +50,7 @@ export const LYRICS_LANGUAGES = [
   { value: 'hi', label: 'Hindi' },
   { value: 'pa', label: 'Punjabi' },
   { value: 'ar', label: 'Arabic' },
+  { value: 'fa', label: 'Persian' },
 ] as const
 
 export const songLanguageOf = (lyricsLanguage: string) => (lyricsLanguage === 'ur-latn' ? 'ur' : lyricsLanguage)
@@ -189,17 +192,6 @@ const NOTES = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#'
 // the keys ACE-Step's text encoder accepts, majors first
 export const KEYSCALES = [...NOTES.map((n) => `${n} major`), ...NOTES.map((n) => `${n} minor`)]
 
-const ARABIC_SCRIPT = /[؀-ۿ]/
-
-export const hasUrdu = (text: string) => ARABIC_SCRIPT.test(text)
-
-/** "Aerab added to 12 lines" plus the lines the check left alone, for the live region. */
-export function aerabNote(marked: number, kept: number) {
-  const lines = (n: number) => `${n} line${n === 1 ? '' : 's'}`
-  const head = marked ? `Aerab added to ${lines(marked)}.` : 'No lines needed aerab.'
-  return kept ? `${head} ${lines(kept)} kept as written: the marking changed their words, so they were left alone.` : head
-}
-
 export function audioPayload(f: AudioForm, m: ModelInfo): AudioGenerateRequest {
   const body: AudioGenerateRequest = {
     kind: f.kind,
@@ -215,7 +207,7 @@ export function audioPayload(f: AudioForm, m: ModelInfo): AudioGenerateRequest {
     const lyrics = f.lyrics.trim()
     if (lyrics && !instrumental(f)) body.lyrics = lyrics.slice(0, LYRICS_MAX)
     if (f.timbreId && has(m, 'timbre_ref')) body.timbre_ref_id = f.timbreId
-    if (body.language === 'ur') body.aerab = f.aerab
+    if (isArabicScriptLang(body.language)) body.aerab = f.aerab
     if (m.id === ACE_ID) {
       if (f.keyscale) body.keyscale = f.keyscale
       if (f.timeSignature) body.time_signature = f.timeSignature

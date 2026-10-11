@@ -18,11 +18,31 @@ export function smoothstep(e0: number, e1: number, x: number) {
   return t * t * (3 - 2 * t)
 }
 
-/** v1 params kept exposure on a ±100 slider for ±1.5 EV; v2 speaks EV like Lightroom. */
+/** The old one-slider sharpening as the four Lightroom sliders that render it the same (develop.legacy_sharpen). */
+export function legacySharpen(sharpness: number) {
+  const s = sharpness / 100
+  return { amount: 37.5 + 112.5 * s, radius: 0.7 + s, detail: 100, masking: 0 }
+}
+
+/**
+ * v1 params kept exposure on a ±100 slider for ±1.5 EV; v2 speaks EV like Lightroom. Records from before
+ * D2b hold one sharpening and one noise slider: those move into sharpen / nr whatever the version.
+ */
 export function upgradeParams<T extends DevelopParams>(p: T): T {
-  if ((p.version ?? 1) >= PARAMS_VERSION) return p
-  const out = { ...p, version: PARAMS_VERSION }
-  if (typeof p.exposure === 'number') out.exposure = Math.round(p.exposure * 15) / 1000
+  let out = p
+  if ((p.version ?? 1) < PARAMS_VERSION) {
+    out = { ...out, version: PARAMS_VERSION }
+    if (typeof p.exposure === 'number') out.exposure = Math.round(p.exposure * 15) / 1000
+  }
+  if ((out.sharpness ?? 0) > 0.5 || (out.noiseReduction ?? 0) > 0.5) {
+    const next: T = { ...out }
+    if ((out.sharpness ?? 0) > 0.5 && !((out.sharpen?.amount ?? 0) > 0.5)) next.sharpen = legacySharpen(out.sharpness!)
+    const nrSet = (out.nr?.luminance ?? 0) > 0.5 || (out.nr?.color ?? 0) > 0.5
+    if ((out.noiseReduction ?? 0) > 0.5 && !nrSet) next.nr = { luminance: out.noiseReduction, color: out.noiseReduction }
+    delete next.sharpness
+    delete next.noiseReduction
+    out = next
+  }
   return out
 }
 
@@ -459,6 +479,64 @@ export function grainAt(u: number, v: number, frameLong: number, gp: GrainParams
   return ((0.12 * gp.amount) / 100) * n
 }
 
+// ---------------------------------------------------------------- lens corrections (D2b)
+
+export interface LensPoint {
+  vignette: number
+  midpoint: number
+  // defringe hue spans in degrees and their strengths (0..1)
+  purple: [number, number, number]
+  green: [number, number, number]
+}
+
+export function lensPoint(p: DevelopParams): LensPoint {
+  const l = p.lens ?? {}
+  const span = (lo: number, hi: number, base: number, width: number): [number, number] => {
+    const [a, b] = lo <= hi ? [lo, hi] : [hi, lo]
+    return [base + (width * a) / 100, base + (width * b) / 100]
+  }
+  return {
+    vignette: l.vignette ?? 0,
+    midpoint: l.vignetteMidpoint ?? 50,
+    purple: [...span(l.purpleHueLo ?? 30, l.purpleHueHi ?? 70, 200, 140), (l.purpleAmount ?? 0) / 20],
+    green: [...span(l.greenHueLo ?? 40, l.greenHueHi ?? 60, 60, 120), (l.greenAmount ?? 0) / 20],
+  }
+}
+
+export const defringeOn = (lp: LensPoint) => lp.purple[2] > 0.0025 || lp.green[2] > 0.0025
+
+/** How much colour defringe takes from a pixel (hue in degrees, HSV saturation of its sRGB value). */
+export function defringeWeight(h: number, s: number, lp: LensPoint): number {
+  let w = 0
+  for (const [lo, hi, amt] of [lp.purple, lp.green]) {
+    if (amt > 0.0025) w += amt * smoothstep(lo - 10, lo, h) * (1 - smoothstep(hi, hi + 10, h))
+  }
+  return clamp01(w) * smoothstep(0.05, 0.2, s)
+}
+
+/** Lens vignetting gain at captured uv su, sv (aspect: the source's width / height). */
+export function lensVignetteGain(su: number, sv: number, aspect: number, amount: number, midpoint: number): number {
+  const dx = (su - 0.5) * aspect
+  const dy = sv - 0.5
+  const r = Math.sqrt(dx * dx + dy * dy) / (0.5 * Math.sqrt(aspect * aspect + 1))
+  return Math.pow(2, (amount / 100) * smoothstep((0.8 * midpoint) / 100, 1, r))
+}
+
+/** The defringe band a picked fringe colour belongs to, centred on it (Lightroom's fringe selector). */
+export function fringeBand(hue: number, sat: number) {
+  if (sat < 0.12) return null
+  const around = (pos: number) => ({ lo: Math.max(0, Math.round(pos - 15)), hi: Math.min(100, Math.round(pos + 15)) })
+  if (hue >= 200 && hue <= 340) {
+    const r = around(((hue - 200) / 140) * 100)
+    return { purpleAmount: 8, purpleHueLo: r.lo, purpleHueHi: r.hi }
+  }
+  if (hue >= 60 && hue <= 180) {
+    const r = around(((hue - 60) / 120) * 100)
+    return { greenAmount: 8, greenHueLo: r.lo, greenHueHi: r.hi }
+  }
+  return null
+}
+
 // ---------------------------------------------------------------- light points
 
 /**
@@ -504,6 +582,7 @@ export interface Prepared {
   vignette: number
   vig: VignetteParams
   grain: GrainParams
+  lens: LensPoint
 }
 
 export function prepare(p: DevelopParams): Prepared {
@@ -528,6 +607,7 @@ export function prepare(p: DevelopParams): Prepared {
       highlights: p.vignetteHighlights ?? 0, style: p.vignetteStyle ?? 'highlight',
     },
     grain: { amount: p.grainAmount ?? 0, size: p.grainSize ?? 25, roughness: p.grainRoughness ?? 50 },
+    lens: lensPoint(p),
   }
 }
 
@@ -540,18 +620,32 @@ export interface PixelPlace {
   stops?: number
   profile?: { lut: Lut3; amount: number } | null
   look?: { lut: Lut3; amount: number } | null
+  // where the pixel sat on the lens (captured uv) and the source's aspect; default: the frame's own
+  su?: number
+  sv?: number
+  srcAspect?: number
 }
 
 /**
  * One sRGB pixel (0..1) through the point operations, in the server engine's order:
- * calibration, WB + exposure, profile, tone (+ refine), HSL, Point Color, B&W or vibrance/saturation,
- * look, colour grading, shadow tint, vignette, grain.
+ * defringe, lens vignetting, calibration, WB + exposure, profile, tone (+ refine), HSL, Point Color,
+ * B&W or vibrance/saturation, look, colour grading, shadow tint, vignette, grain.
  */
 export function developPixel(rgb: RGB, pp: Prepared, x = 0.5, y = 0.5, stops = 0, place: PixelPlace = {}): RGB {
   const u = place.u ?? x
   const v = place.v ?? y
   const k = Math.pow(2, place.stops ?? stops)
   let lin = rgb.map(dec) as RGB
+  if (defringeOn(pp.lens)) {
+    const [h, s] = rgbToHsv(rgb[0], rgb[1], rgb[2])
+    const w = defringeWeight(h, s, pp.lens)
+    const yl = luma(lin[0], lin[1], lin[2])
+    lin = lin.map((c) => yl + (c - yl) * (1 - w)) as RGB
+  }
+  if (Math.abs(pp.lens.vignette) > 0.05) {
+    const g = lensVignetteGain(place.su ?? u, place.sv ?? v, place.srcAspect ?? place.aspect ?? 1, pp.lens.vignette, pp.lens.midpoint)
+    lin = lin.map((c) => c * g) as RGB
+  }
   if (pp.calib) {
     const m = pp.calib
     lin = [0, 1, 2].map((r) => Math.max(0, m[r * 3] * lin[0] + m[r * 3 + 1] * lin[1] + m[r * 3 + 2] * lin[2])) as RGB

@@ -110,6 +110,14 @@ export function useCleanupTranscript(id: string) {
   })
 }
 
+export function useSetCleanLines(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (lines: string[]) => api.transcripts.setClean(id, lines),
+    onSuccess: (t) => qc.setQueryData(qk.transcript(id), t),
+  })
+}
+
 export function useSubtitleVideo(id: string) {
   const qc = useQueryClient()
   return useMutation({ mutationFn: (body: { mode: 'soft' | 'burn'; clean?: boolean }) => api.transcripts.video(id, body), onSuccess: (res) => afterJob(qc, res.job) })

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CATALOG, MINIMAX } from '@/test/model-fixtures'
 import {
-  aerabNote,
   audioBlockedReason,
   audioDurationPresets,
   audioFormFrom,
@@ -10,7 +9,6 @@ import {
   clampAudioDuration,
   clock,
   DEFAULT_AUDIO_FORM,
-  hasUrdu,
   insertSection,
   maxAudioDuration,
 } from './audio'
@@ -50,10 +48,12 @@ describe('audio payload', () => {
     expect(audioPayload({ ...f, guidance: '11' }, ace).guidance).toBeUndefined()
   })
 
-  it('reports aerab results in plain words', () => {
-    expect(aerabNote(12, 0)).toBe('Aerab added to 12 lines.')
-    expect(aerabNote(1, 1)).toBe('Aerab added to 1 line. 1 line kept as written: the marking changed their words, so they were left alone.')
-    expect(hasUrdu('دل کی بات') && !hasUrdu('dil ki baat')).toBe(true)
+  it('asks for aerab on every Arabic-script song language, never on Roman Urdu', () => {
+    const f = { ...DEFAULT_AUDIO_FORM.song, prompt: 'oud, slow', aerab: false }
+    expect(audioPayload({ ...f, language: 'ar' }, ace).aerab).toBe(false)
+    expect(audioPayload({ ...f, language: 'fa' }, ace).aerab).toBe(false)
+    expect(audioPayload({ ...f, language: 'ur-latn' }, ace)).not.toHaveProperty('aerab')
+    expect(audioPayload({ ...f, language: 'en' }, ace)).not.toHaveProperty('aerab')
   })
 
   it('drops the lyrics for an instrumental, and the timbre for a model that can’t use it', () => {

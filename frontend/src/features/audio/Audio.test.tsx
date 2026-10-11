@@ -61,7 +61,7 @@ function api(opts: { items?: MediaItem[]; lyrics?: () => unknown; aerab?: (lyric
       return { items: [track('n1', { title: 'New take', media_url: null, params: { kind, model } })], jobs: [job('j1', { generation_id: 'g-n1' })], model_resolved: model }
     }
     if (method === 'POST' && path === '/audio/lyrics') return opts.lyrics?.()
-    if (method === 'POST' && path === '/audio/lyrics/aerab') return opts.aerab?.((body as { lyrics: string }).lyrics)
+    if (method === 'POST' && path === '/text/aerab') return opts.aerab?.((body as { text: string }).text)
     if (path === '/jobs') return []
   })
 }
@@ -149,7 +149,7 @@ describe('Audio Studio', { timeout: 15_000 }, () => {
   })
 
   it('Urdu lyrics: Add aerab marks them, can be undone, and the song asks for aerab', async () => {
-    const calls = api({ aerab: (l) => ({ lyrics: l.replace('دل', 'دِل'), marked: 1, kept: 1 }) })
+    const calls = api({ aerab: (l) => ({ text: l.replace('دل', 'دِل'), marked: 1, kept: 1, low_coverage: 0, language: 'ur' }) })
     renderAt('/audio/song', routes, seedCatalog)
     const user = userEvent.setup()
     const lyrics = screen.getByRole('textbox', { name: 'Lyrics' })
@@ -159,7 +159,8 @@ describe('Audio Studio', { timeout: 15_000 }, () => {
 
     await user.click(screen.getByRole('button', { name: /Add aerab/ }))
     await waitFor(() => expect(lyrics).toHaveValue('[verse]\nدِل کی بات\nآج کی رات'))
-    expect(posted(calls, '/audio/lyrics/aerab')).toEqual({ lyrics: '[verse]\nدل کی بات\nآج کی رات' })
+    // the song is still in English here, so the server reads the language from the letters
+    expect(posted(calls, '/text/aerab')).toEqual({ text: '[verse]\nدل کی بات\nآج کی رات' })
     await user.click(screen.getByRole('button', { name: 'Undo aerab' }))
     expect(lyrics).toHaveValue('[verse]\nدل کی بات\nآج کی رات')
 

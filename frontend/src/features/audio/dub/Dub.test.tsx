@@ -127,6 +127,7 @@ function api(initial: Dub) {
     if (method === 'POST' && path === '/dubs/d1/regen') return { ...current, regen: { lang: 'ur', segment_ids: ['s2'], from: 'render' } }
     if (method === 'POST' && path === '/dubs/d1/segments/merge') return current
     if (method === 'POST' && path === '/dubs/d1/export') return { job: job('x1', { type: 'dub_export', lane: 'general' }), item_id: 'v1', generation_id: 'gx' }
+    if (method === 'POST' && path === '/text/aerab') return { text: (b.text as string).replace('کشتی', 'کَشتی'), marked: 1, kept: 0, low_coverage: 1, language: b.language }
     return undefined
   })
 }
@@ -226,6 +227,29 @@ describe('Dub workspace', () => {
     )
     await user.click(within(bar).getByRole('button', { name: 'Merge' }))
     await waitFor(() => expect(sent(calls, 'POST', '/dubs/d1/segments/merge')).toEqual([{ segment_ids: ['s2', 's3'] }]))
+  })
+
+  it('adds aerab to the target line, undoes it, and saves the marked line', async () => {
+    const calls = api(translated())
+    const user = userEvent.setup()
+    renderAt('/audio/dub/d1', routes)
+    const lines = await screen.findByRole('listbox', { name: 'Lines, Urdu' })
+    lines.focus()
+    await user.keyboard('{Enter}')
+    const target = screen.getByRole('textbox', { name: 'Urdu' })
+    expect(target).toHaveValue('کشتی صبح نکلی۔')
+
+    await user.click(screen.getByRole('button', { name: 'Add aerab to the Urdu line' }))
+    await waitFor(() => expect(target).toHaveValue('کَشتی صبح نکلی۔'))
+    expect(sent(calls, 'POST', '/text/aerab')[0]).toEqual({ text: 'کشتی صبح نکلی۔', language: 'ur' })
+    expect(screen.getByText(/Aerab added to 1 line\. 1 line still lightly marked/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Undo aerab on the Urdu line' }))
+    expect(target).toHaveValue('کشتی صبح نکلی۔')
+
+    await user.click(screen.getByRole('button', { name: 'Add aerab to the Urdu line' }))
+    await waitFor(() => expect(target).toHaveValue('کَشتی صبح نکلی۔'))
+    await user.click(screen.getByRole('button', { name: 'Save line' }))
+    await waitFor(() => expect(sent(calls, 'PATCH', '/dubs/d1')).toEqual([{ segments: [{ id: 's1', target: { ur: { text: 'کَشتی صبح نکلی۔' } } }] }]))
   })
 
   it('A/B keeps the playhead: the dub track takes over at the picture’s time', async () => {

@@ -5,6 +5,7 @@ a local model asked for twenty minutes of dialogue in one go stops early or lose
 """
 from pydantic import BaseModel, Field
 
+from app import aerab
 from app import dialogue as dl
 from app.models import PodcastEpisode, VoiceScript
 from app.podcast import ingest
@@ -80,11 +81,30 @@ def max_tokens(words: int, language: str) -> int:
 
 def language_rule(language: str) -> str:
     if language == "ur":
-        return ("Write every line in Urdu, in Urdu script (نستعلیق / Arabic letters). Never Roman Urdu, never "
+        rule = ("Write every line in Urdu, in Urdu script (نستعلیق / Arabic letters). Never Roman Urdu, never "
                 "Hindi script. English technical words may stay in English where Pakistani speakers say them so.")
-    if language == "hi":
-        return "Write every line in Hindi, in Devanagari script."
-    return f"Write every line in {lang_name(language)}."
+    elif language == "hi":
+        rule = "Write every line in Hindi, in Devanagari script."
+    else:
+        rule = f"Write every line in {lang_name(language)}."
+    marks = aerab.writing_rule(language)
+    return f"{rule} {marks}" if marks else rule
+
+
+def _marked(texts: list[str], language: str, progress) -> list[str]:
+    # the verified second pass over what the LLM wrote; the lines come back as written if it is away
+    if not aerab.applies(language, "\n".join(texts)):
+        return texts
+    progress(0.95, "Adding aerab to the lines")
+    return aerab.finish_lines_sync(texts, language, tick=lambda: progress(0.95, "Adding aerab to the lines"),
+                                   what="podcast lines")
+
+
+def _mark_chapters(chapters: list[dict], language: str, progress) -> list[dict]:
+    lines = [ln for c in chapters for ln in c.get("lines") or []]
+    for ln, text in zip(lines, _marked([ln.get("text") or "" for ln in lines], language, progress)):
+        ln["text"] = text
+    return chapters
 
 
 def hosts_block(hosts: list[dict]) -> str:
@@ -256,6 +276,7 @@ def _write(ctx, ep: PodcastEpisode) -> dict:
     elif not (src.get("topic") or "").strip():
         raise WriteError("Give the episode a topic or some material first")
     title, chapters = write_episode(ep, hosts, text, ctx.progress)
+    chapters = _mark_chapters(chapters, ep.language, ctx.progress)
     chapters_out, lines = sv.lines_from_chapters(chapters, hosts)
     if not lines:
         raise WriteError("The LLM wrote no lines; try again")
@@ -294,12 +315,12 @@ def _edit(ctx, ep: PodcastEpisode, p: dict) -> dict:
     words = sum(len(t.split()) for _, t in rows)
     out = _ask(edit_messages(ep, hosts, op, rows, ch_title, p.get("note") or ""), WLines,
                max_tokens(max(words, 100) * 2, ep.language), lambda: ctx.progress(0.3, "Rewriting the lines"))
+    rows_out = [r for r in out.lines if " ".join(r.text.split())]
+    texts = _marked([r.text for r in rows_out], ep.language, ctx.progress)
     new = []
-    for i, r in enumerate(out.lines):
-        if not " ".join(r.text.split()):
-            continue
+    for i, (r, text) in enumerate(zip(rows_out, texts)):
         h = sv.host_for(r.host, hosts, i) if hosts else None
-        new.append(sv.new_line(h, r.text, cid))
+        new.append(sv.new_line(h, text, cid))
     if not new:
         raise WriteError("The LLM sent back no lines; try again")
     gone = {ln["id"] for ln in picked}
@@ -335,8 +356,10 @@ def make_notes(ep: PodcastEpisode, show: str, mix: dict, tick=None) -> dict:
     chapters = mix.get("chapters") or []
     res = _ask(notes_messages(ep, show, transcript_text(mix.get("timeline") or []), chapters), Notes, 1500, tick,
                temperature=0.5)
-    return {"description": " ".join(res.description.split()),
-            "key_points": [" ".join(k.split()) for k in res.key_points if k.strip()][:10],
+    points = [" ".join(k.split()) for k in res.key_points if k.strip()][:10]
+    marked = aerab.finish_lines_sync([" ".join(res.description.split()), *points], ep.language, tick=tick,
+                                     what="show notes")
+    return {"description": marked[0], "key_points": marked[1:],
             "chapters": [{"title": c["title"], "start": c["start"]} for c in chapters]}
 
 

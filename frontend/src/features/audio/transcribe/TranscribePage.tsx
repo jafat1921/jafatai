@@ -7,9 +7,11 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { MediaPicker } from '@/components/media/MediaPicker'
-import { useCleanupTranscript, useStartTranscribe, useSubtitleVideo, useTranscript, useTranscripts } from '@/hooks/useDub'
+import { AerabButton } from '@/components/text/AerabButton'
+import { useCleanupTranscript, useSetCleanLines, useStartTranscribe, useSubtitleVideo, useTranscript, useTranscripts } from '@/hooks/useDub'
 import { useUploads } from '@/hooks/useUploads'
 import { useVoiceEngines } from '@/hooks/useVoices'
+import { joinLines, splitLines } from '@/lib/aerab'
 import { searchSegments, segmentAt, stamp, subtitlesUrl, transcriptBusy, type Transcript } from '@/lib/dub'
 import type { MediaItem } from '@/lib/types'
 import { acceptFor } from '@/lib/upload'
@@ -200,6 +202,7 @@ function TranscriptBody({ t, name }: { t: Transcript; name: (c: string) => strin
   const [query, setQuery] = useState('')
   const [tidy, setTidy] = useState(!!t.cleanup_text)
   const cleanup = useCleanupTranscript(t.id)
+  const setClean = useSetCleanLines(t.id)
   const burn = useSubtitleVideo(t.id)
   const src = t.media?.media_url ?? null
   const trackId = `transcript:${t.id}`
@@ -207,6 +210,7 @@ function TranscriptBody({ t, name }: { t: Transcript; name: (c: string) => strin
   const playing = usePlayer((s) => s.id === trackId && s.playing)
   const time = usePlayer((s) => (s.id === trackId ? s.time : -1))
   const clean = tidy && !!t.cleanup_text
+  const cleanLines = t.segments.map((s) => s.clean ?? s.text)
   const hits = useMemo(() => searchSegments(t.segments, query, clean), [t.segments, query, clean])
   const now = segmentAt(t.segments, time)
   const busy = transcriptBusy(t)
@@ -250,10 +254,24 @@ function TranscriptBody({ t, name }: { t: Transcript; name: (c: string) => strin
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="h-8 pl-8" />
             </label>
             {t.cleanup_text ? (
-              <label className="flex items-center gap-1.5 text-small">
-                <input type="checkbox" checked={tidy} onChange={(e) => setTidy(e.target.checked)} className="size-4 accent-studio-accent" />
-                Tidied text
-              </label>
+              <>
+                <label className="flex items-center gap-1.5 text-small">
+                  <input type="checkbox" checked={tidy} onChange={(e) => setTidy(e.target.checked)} className="size-4 accent-studio-accent" />
+                  Tidied text
+                </label>
+                {clean && !busy && (
+                  <AerabButton
+                    text={joinLines(cleanLines)}
+                    onText={(marked) => {
+                      const next = splitLines(cleanLines, marked)
+                      if (next) setClean.mutate(next)
+                    }}
+                    language={t.language}
+                    label="Add aerab to the tidied text"
+                    disabled={setClean.isPending}
+                  />
+                )}
+              </>
             ) : (
               <Button type="button" size="sm" variant="ghost" disabled={busy} loading={cleanup.isPending} onClick={() => cleanup.mutate()}>
                 <Sparkles aria-hidden />

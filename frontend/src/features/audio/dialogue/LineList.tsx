@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Circle, Loader2, Pause, Play, RefreshCw, S
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { AerabButton } from '@/components/text/AerabButton'
 import { clock } from '@/lib/audio'
 import { STATUS_LABEL, VIRTUAL_AFTER, needsTts, type CastMember, type LineKind, type LineStatus, type ScriptLine } from '@/lib/dialogue'
 import { clampSpeed, speedText } from '@/lib/voice'
@@ -296,6 +297,9 @@ function LineRow({ line, index, offset, cast, voices, engines, language, selecti
           {overrides.length > 0 && <span className="truncate text-[11px] text-studio-muted">{overrides.join(' · ')}</span>}
           {line.kind && KIND_LABEL[line.kind] && (
             <span className="rounded-[4px] border border-studio-border-strong px-1.5 text-[11px] leading-5 text-studio-muted">{KIND_LABEL[line.kind]}</span>
+          )}
+          {needsTts(line) && (
+            <AerabButton text={line.text} onText={(t) => actions.change(line.id, { text: t })} language={language} target={`line ${n}`} showNote={false} className="[&_button]:h-6" />
           )}
           <span className="ml-auto flex items-center gap-1.5">
             <label className="flex items-center gap-1 text-[11px] text-studio-muted">

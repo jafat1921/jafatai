@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import aerab
 from app import library as lib
 from app.audio_analysis import stream_info
 from app.models import Generation, Job, MediaItem, Transcript, new_id
@@ -303,7 +304,11 @@ def cleanup_messages(lines: list[str], language: str | None) -> list[dict]:
         f"or change the meaning. The language stays {language or 'as it is'}.",
         'Reply as JSON: {"lines": [{"i": line number, "text": "tidied line"}]}, one entry per line.',
     ]
-    user = "\n".join(f"{i}. {line}" for i, line in enumerate(lines, 1))
+    # a tidied Urdu or Arabic transcript is read aloud and dubbed from, so it comes back marked
+    marks = aerab.writing_rule(language, "\n".join(lines))
+    if marks:
+        rules.insert(3, marks)
+    user ="\n".join(f"{i}. {line}" for i, line in enumerate(lines, 1))
     return [{"role": "system", "content": "\n".join(rules)}, {"role": "user", "content": user}]
 
 
@@ -330,6 +335,13 @@ def handle_cleanup(ctx) -> dict:
             for k, s in enumerate(batch, 1):
                 # a line the LLM dropped keeps its words; an empty answer means it was all filler
                 s["clean"] = got.get(k, s["text"])
+        cleaned = [s["clean"] for s in segs]
+        if aerab.applies(t.language, "\n".join(cleaned)):
+            ctx.progress(0.96, "Adding aerab")
+            marked = aerab.finish_lines_sync(cleaned, t.language, tick=lambda: ctx.progress(0.96, "Adding aerab"),
+                                             what=f"transcript {t.id}")
+            for s, text in zip(segs, marked):
+                s["clean"] = text
         db.refresh(t)
         t.segments = segs
         t.cleanup_text = " ".join(s["clean"] for s in segs if s["clean"])

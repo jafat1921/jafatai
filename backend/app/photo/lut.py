@@ -136,7 +136,7 @@ def bake(params: dict | None, size: int = 33, lut=None) -> np.ndarray:
         raise CubeError(f"size must be {MIN_SIZE}..{MAX_SIZE}")
     p = dv.normalise(params)
     for k in dv.NOT_IN_LUT:
-        p[k] = [] if k == "lightPoints" else 0
+        p[k] = dv.defaults()[k]
     p.update(crop=None, rotate=0, flipH=False, flipV=False)
     ident = identity(size)
     img = ident.reshape(size * size, size, 3)

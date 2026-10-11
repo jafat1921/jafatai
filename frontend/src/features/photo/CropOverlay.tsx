@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent, type PointerEvent } from 'react'
-import { clampCrop } from '@/lib/photo/geometry'
+import { clampCrop, straightenAngle } from '@/lib/photo/geometry'
+import { overlayLines, type CropOverlayKind } from '@/lib/photo/cropOverlays'
 import type { Crop } from '@/lib/photo/types'
 
 type Corner = 'nw' | 'ne' | 'sw' | 'se'
@@ -11,6 +12,11 @@ interface Props {
   // width / height to hold, or null for free
   ratio: number | null
   onChange: (crop: Crop, group: string) => void
+  overlay?: CropOverlayKind
+  // Shift+O: 0..3, flips the asymmetric overlays (triangle, spiral) left/right and up/down
+  orient?: number
+  // how dark the area outside the crop is, 0..1
+  opacity?: number
 }
 
 const CORNERS: { id: Corner; label: string; cls: string }[] = [
@@ -20,12 +26,27 @@ const CORNERS: { id: Corner; label: string; cls: string }[] = [
   { id: 'se', label: 'bottom-right', cls: '-bottom-2 -right-2 cursor-nwse-resize' },
 ]
 
+function OverlayArt({ kind, orient, aspect }: { kind: CropOverlayKind; orient: number; aspect: number }) {
+  if (kind === 'none') return null
+  const { lines, path } = overlayLines(kind, aspect)
+  const fx = orient & 1 ? -1 : 1
+  const fy = orient & 2 ? -1 : 1
+  return (
+    <svg aria-hidden className="pointer-events-none absolute inset-0 size-full" viewBox="0 0 1 1" preserveAspectRatio="none">
+      <g transform={`translate(${fx < 0 ? 1 : 0} ${fy < 0 ? 1 : 0}) scale(${fx} ${fy})`} className="stroke-studio-on-dark/45" fill="none" strokeWidth={1} vectorEffect="non-scaling-stroke">
+        {lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} vectorEffect="non-scaling-stroke" />)}
+        {path && <path d={path} vectorEffect="non-scaling-stroke" />}
+      </g>
+    </svg>
+  )
+}
+
 /**
  * Crop box over the uncropped source. Drag inside to move, drag a corner to resize (holding the
  * chosen aspect). Keyboard: focus the box and use the arrows to move, Shift for bigger steps;
  * a focused corner resizes with the arrows.
  */
-export function CropOverlay({ crop, src, box, ratio, onChange }: Props) {
+export function CropOverlay({ crop, src, box, ratio, onChange, overlay = 'thirds', orient = 0, opacity = 0.6 }: Props) {
   const [drag, setDrag] = useState<{ what: Corner | 'move'; x: number; y: number; start: Crop } | null>(null)
   const k = box.width / src.w
   const step = (e: KeyboardEvent) => Math.max(1, Math.round(Math.max(src.w, src.h) * (e.shiftKey ? 0.05 : 0.005)))
@@ -76,8 +97,11 @@ export function CropOverlay({ crop, src, box, ratio, onChange }: Props) {
     <div
       role="group"
       aria-label="Crop"
-      className="absolute touch-none border border-studio-gold shadow-[0_0_0_9999px_rgb(10_7_4/0.6)]"
-      style={{ left: crop.x * k, top: crop.y * k, width: crop.width * k, height: crop.height * k }}
+      className="absolute touch-none border border-studio-gold"
+      style={{
+        left: crop.x * k, top: crop.y * k, width: crop.width * k, height: crop.height * k,
+        boxShadow: `0 0 0 9999px rgb(10 7 4 / ${Math.max(0, Math.min(1, opacity))})`,
+      }}
       onPointerMove={onMove}
       onPointerUp={() => setDrag(null)}
       onPointerCancel={() => setDrag(null)}
@@ -90,12 +114,7 @@ export function CropOverlay({ crop, src, box, ratio, onChange }: Props) {
         onPointerDown={onDown('move')}
         onKeyDown={onKey('move')}
       >
-        {/* rule of thirds */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
-          {Array.from({ length: 9 }, (_, i) => (
-            <span key={i} className="border-[0.5px] border-studio-on-dark/25" />
-          ))}
-        </div>
+        <OverlayArt kind={overlay} orient={orient} aspect={crop.width / Math.max(1, crop.height)} />
       </div>
       {CORNERS.map((c) => (
         <button
@@ -107,6 +126,48 @@ export function CropOverlay({ crop, src, box, ratio, onChange }: Props) {
           onKeyDown={onKey(c.id)}
         />
       ))}
+    </div>
+  )
+}
+
+/** Straighten tool: drag along something that should be level (or plumb); letting go sets the angle. */
+export function StraightenOverlay({ src, box, onAngle }: { src: { w: number; h: number }; box: { width: number; height: number }; onAngle: (deg: number) => void }) {
+  const [line, setLine] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const k = box.width / src.w
+  const at = (e: PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k }
+  }
+  return (
+    <div
+      role="application"
+      aria-label="Straighten: drag along a line that should be level"
+      className="absolute inset-0 cursor-crosshair touch-none"
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        e.currentTarget.setPointerCapture?.(e.pointerId)
+        const p = at(e)
+        setLine({ x0: p.x, y0: p.y, x1: p.x, y1: p.y })
+      }}
+      onPointerMove={(e) => {
+        if (!line) return
+        const p = at(e)
+        setLine({ ...line, x1: p.x, y1: p.y })
+      }}
+      onPointerUp={() => {
+        if (line) {
+          const a = straightenAngle(line.x0, line.y0, line.x1, line.y1)
+          if (a != null) onAngle(a)
+        }
+        setLine(null)
+      }}
+      onPointerCancel={() => setLine(null)}
+    >
+      {line && (
+        <svg aria-hidden className="pointer-events-none absolute inset-0 size-full">
+          <line x1={line.x0 * k} y1={line.y0 * k} x2={line.x1 * k} y2={line.y1 * k} className="stroke-studio-gold" strokeWidth={2} strokeDasharray="6 4" />
+        </svg>
+      )}
     </div>
   )
 }

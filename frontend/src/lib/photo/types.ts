@@ -79,6 +79,52 @@ export interface DevelopParams {
   grainAmount?: number
   grainSize?: number
   grainRoughness?: number
+  // D2b (contract v22)
+  texture?: number
+  dehaze?: number
+  sharpen?: Partial<Record<'amount' | 'radius' | 'detail' | 'masking', number>>
+  nr?: Partial<Record<'luminance' | 'detail' | 'contrast' | 'color' | 'colorDetail' | 'smoothness', number>>
+  lens?: LensParams
+  transform?: TransformParams
+}
+
+export type UprightMode = 'off' | 'auto' | 'level' | 'vertical' | 'full'
+
+export interface LensParams {
+  caAuto?: boolean
+  caRed?: number
+  caBlue?: number
+  distortion?: number
+  vignette?: number
+  vignetteMidpoint?: number
+  purpleAmount?: number
+  purpleHueLo?: number
+  purpleHueHi?: number
+  greenAmount?: number
+  greenHueLo?: number
+  greenHueHi?: number
+}
+
+export interface TransformParams {
+  upright?: UprightMode
+  // forward uv homography (source -> canvas), row-major, measured on the picture by the server
+  uprightMatrix?: number[] | null
+  constrain?: boolean
+  vertical?: number
+  horizontal?: number
+  rotate?: number
+  aspect?: number
+  scale?: number
+  offsetX?: number
+  offsetY?: number
+}
+
+export interface UprightResult {
+  mode: UprightMode
+  matrix: number[] | null
+  angle: number
+  lines: number
+  note: string | null
 }
 
 export interface RangeSpec {

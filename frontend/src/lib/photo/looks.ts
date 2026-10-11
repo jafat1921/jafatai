@@ -2,7 +2,7 @@ import { rangeText } from '@/lib/estimate'
 import { FALLBACK_RANGES, mergeParams, rangeFor, scaleParams } from './params'
 import type { DevelopParams, Look } from './types'
 
-const FIXED = new Set(['version', 'x', 'y', 'falloff', 'hue', 'sat', 'val'])
+const FIXED = new Set(['version', 'x', 'y', 'falloff', 'hue', 'sat', 'val', 'uprightMatrix'])
 
 // sliders stop at their ends however hard a look is pushed (the server refuses anything past them)
 function clampSliders(p: DevelopParams): DevelopParams {
@@ -12,7 +12,7 @@ function clampSliders(p: DevelopParams): DevelopParams {
       const lim = rangeFor(FALLBACK_RANGES, path.replace(/^(lightPoints|palette)\.\d+\./, '$1.').replace(/^pointColor\.\d+\./, 'pointColor.'))
       return Math.max(lim.min, Math.min(lim.max, v))
     }
-    if (Array.isArray(v)) return key === 'points' || path.startsWith('points.') ? v : v.map((x, i) => walk(x, '', `${path}.${i}`))
+    if (Array.isArray(v)) return key === 'points' || key === 'uprightMatrix' || path.startsWith('points.') ? v : v.map((x, i) => walk(x, '', `${path}.${i}`))
     if (v && typeof v === 'object' && key !== 'crop' && key !== 'lut' && key !== 'profile') {
       return Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, walk(vv, kk, path ? `${path}.${kk}` : kk)]))
     }
@@ -41,7 +41,10 @@ export function gradeEstimate(durationS: number | null | undefined, w?: number |
 
 /** Steps a video grade can't carry, from the look or its params. */
 export function skippedOnVideo(look: Look): string[] {
-  const names: Record<string, string> = { vignette: 'vignette', noiseReduction: 'noise reduction', lightPoints: 'light points' }
+  const names: Record<string, string> = {
+    vignette: 'vignette', noiseReduction: 'noise reduction', nr: 'noise reduction', lightPoints: 'light points',
+    texture: 'texture', dehaze: 'dehaze', lens: 'lens corrections', transform: 'transform',
+  }
   const keys = look.spatial ?? []
   return keys.filter((k) => k in names).map((k) => names[k])
 }

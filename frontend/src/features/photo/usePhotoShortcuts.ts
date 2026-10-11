@@ -26,6 +26,9 @@ export interface PhotoKeys {
   // V: colour / black & white; W: white balance picker
   treatment?: () => void
   whiteBalance?: () => void
+  // only while cropping: O cycles the overlay (Shift+O turns it), X swaps the aspect's orientation
+  cropOverlay?: (turn: boolean) => void
+  swapAspect?: () => void
 }
 
 // Lightroom's own Ctrl+Shift+C / Ctrl+Shift+R / Ctrl+N belong to the browser (inspector, hard reload,
@@ -34,7 +37,7 @@ export const SHORTCUTS: [string, string][] = [
   ['Ctrl+S', 'Save as new version'], ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'], ['\\', 'Before only'],
   ['Y · Shift+Y · Alt+Y', 'Before|After · split · top/bottom'], ['Z', 'Fit / 100%'], ['R or C', 'Crop'],
   ['J', 'Show clipping'], ['I', 'Info overlay'], ['L', 'Lights dim / off'], ['Tab · Shift+Tab', 'Hide side panels · all'],
-  ['F', 'Full screen'], ['Ctrl+Alt+O', 'Grid overlay'], [', .', 'Previous / next slider'], ['+ −', 'Nudge the slider'],
+  ['F', 'Full screen'], ['Ctrl+Alt+O', 'Grid overlay'], ['O · Shift+O', 'Crop overlay · turn it'], ['X', 'Swap crop orientation'], [', .', 'Previous / next slider'], ['+ −', 'Nudge the slider'],
   ['Ctrl+1…9', 'Open a panel'], ['V', 'Black & white'], ['W', 'White balance picker'], ['Ctrl+Alt+C / V', 'Copy / paste settings'], ['Ctrl+Alt+P', 'Previous photo’s settings'],
   ['Ctrl+Alt+S', 'Sync to selected'], ['Ctrl+Alt+R', 'Reset'], ['Ctrl+Alt+N', 'New snapshot'], ['Ctrl+← →', 'Previous / next photo'], ['G', 'Back to Library'],
 ]
@@ -95,6 +98,8 @@ export function usePhotoShortcuts(keys: PhotoKeys) {
       if (key === 'y') return act(() => k.compare(e.shiftKey ? 'lr-split' : 'lr'))
       if (key === 'z') return act(k.toggleZoom)
       if (key === 'c' || key === 'r') return act(k.toggleCrop)
+      if (key === 'o' && k.cropOverlay) return act(() => k.cropOverlay!(e.shiftKey))
+      if (key === 'x' && k.swapAspect) return act(k.swapAspect)
       if (key === 'l') return act(k.lights)
       if (key === 'i') return act(k.info)
       if (key === 'j') return act(k.clip)

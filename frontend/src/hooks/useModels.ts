@@ -86,7 +86,3 @@ export function useAudioGenerate() {
 export function useWriteLyrics() {
   return useMutation({ mutationFn: (body: LyricsRequest) => api.audio.lyrics(body) })
 }
-
-export function useAddAerab() {
-  return useMutation({ mutationFn: (lyrics: string) => api.audio.aerab(lyrics) })
-}

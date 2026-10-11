@@ -79,7 +79,7 @@ def test_builtins_and_crud(client):
     assert len(built) == 7 and looks[:7] == built
     assert {x["name"] for x in built} >= {"Natural Portrait", "Teal & Orange", "Classic Mono"}
     mono = next(x for x in built if x["name"] == "Classic Mono")
-    assert mono["params"]["saturation"] == -100 and not mono["editable"] and "sharpness" in mono["spatial"]
+    assert mono["params"]["saturation"] == -100 and not mono["editable"] and "sharpen" in mono["spatial"]
     assert "lightPoints" not in mono["params"]  # stored sparse
     r = client.get(mono["thumb_url"])
     assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
@@ -120,14 +120,15 @@ def test_xmp_mapping():
     assert p["exposure"] == 0.75  # EV, like Lightroom
     assert (p["contrast"], p["highlights"], p["shadows"], p["whites"], p["blacks"]) == (20, -40, 35, 10, -15)
     assert (p["vibrance"], p["saturation"], p["temperature"], p["tint"]) == (12, -5, 8, -3)
-    assert (p["clarity"], p["sharpness"], p["noiseReduction"], p["vignette"]) == (15, 40, 20, -25)
+    assert (p["clarity"], p["sharpen"]["amount"], p["nr"]["luminance"], p["vignette"]) == (15, 40, 20, -25)
+    assert p["texture"] == 10 and p["sharpness"] == 0 and p["sharpen"]["radius"] == 1.0  # D2b: Lightroom's own keys
     # params v2: the parametric curve and the point curve come across one to one
     assert p["pcurve"]["shadows"] == 10 and p["pcurve"]["darks"] == -6 and p["pcurve"]["lights"] == 4 and p["pcurve"]["highlights"] == -20
     assert p["points"]["rgb"] == [[0, 0], [128, 140], [255, 255]]
     assert p["grainAmount"] > 0 and p["grading"]["shadows"]["s"] > 0
     assert p["hsl"]["blue"] == {"h": -10, "s": 25, "l": 0} and p["hsl"]["orange"]["l"] == 8
     assert "Exposure2012" in out["mapped"] and "HueAdjustmentBlue" in out["mapped"]
-    assert set(out["unmapped"]) == {"Texture"}  # Texture comes in D2b; Dehaze=0 isn't a change, metadata never listed
+    assert out["unmapped"] == []  # Dehaze=0 isn't a change, metadata is never listed
 
 
 def test_lrtemplate_mapping():
@@ -144,7 +145,7 @@ def test_preset_errors():
     with pytest.raises(xmp.PresetError):
         xmp.parse("empty.xmp", b"<x:xmpmeta></x:xmpmeta>")
     with pytest.raises(xmp.PresetError):
-        xmp.parse("odd.xmp", b'<rdf:Description crs:Texture="20" crs:Dehaze="10"/>')
+        xmp.parse("odd.xmp", b'<rdf:Description crs:LensProfileName="X" crs:RetouchInfo="1"/>')
 
 
 def test_import_endpoint_reports_per_file(client):
@@ -158,7 +159,7 @@ def test_import_endpoint_reports_per_file(client):
     body = r.json()
     assert [x["name"] for x in body["looks"]] == ["Harbour Dusk", "Quiet Morning", "Plain"]
     reps = {x["file"]: x for x in body["reports"]}
-    assert reps["Harbour.xmp"]["ok"] and "Texture" in reps["Harbour.xmp"]["unmapped"]
+    assert reps["Harbour.xmp"]["ok"] and "Texture" in reps["Harbour.xmp"]["mapped"]
     assert reps["plain.cube"]["kind"] == "cube" and reps["plain.cube"]["cube_size"] == 5
     assert not reps["notes.txt"]["ok"] and "Only .xmp" in reps["notes.txt"]["error"]
     assert not reps["broken.cube"]["ok"] and "Expected 27" in reps["broken.cube"]["error"]

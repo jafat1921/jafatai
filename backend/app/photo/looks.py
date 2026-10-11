@@ -283,9 +283,12 @@ def unsharp_filter(params: dict, intensity: float) -> str:
     c = p["clarity"] / 100 * intensity
     if abs(c) > 0.005:
         parts.append(f"unsharp=13:13:{0.6 * c:.3f}:3:3:0")  # 13x13 is the widest ffmpeg allows
-    s = p["sharpness"] / 100 * intensity
-    if s > 0.005:
-        parts.append(f"unsharp=5:5:{(0.5 + 1.5 * s) * 0.5:.3f}:3:3:0")
+    gain = p["sharpen"]["amount"] / 75
+    # gain = 0.5 + 1.5 s for a v1 sharpness s, and the video amount has always scaled s
+    s = (gain - 0.5) / 1.5 * intensity
+    strength = 0.5 + 1.5 * s if gain >= 0.5 else gain * intensity
+    if (s if gain >= 0.5 else strength) > 0.005:
+        parts.append(f"unsharp=5:5:{strength * 0.5:.3f}:3:3:0")
     return ",".join(parts)
 
 
@@ -314,7 +317,7 @@ def queue_apply_video(db: Session, look: Look, source: Generation, intensity: fl
                 return job
 
     table = lt.mix(bake(look, VIDEO_CUBE_SIZE), intensity)
-    skipped = [k for k in dv.spatial_used(look.params or {}) if k not in ("clarity", "sharpness")]
+    skipped = [k for k in dv.spatial_used(look.params or {}) if k not in ("clarity", "sharpness", "sharpen")]
     spec = {**want, "name": look.name, "unsharp": unsharp_filter(look.params or {}, intensity),
             "spatial_skipped": skipped}
     extra = {"look": spec, "segments": [], "created_by": {"user_id": user_id, "flow": "look_video"}}

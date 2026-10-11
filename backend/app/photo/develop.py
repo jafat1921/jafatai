@@ -42,7 +42,9 @@ SLIDERS = {
     "blacks": (-100, 100, "Blacks", False),
     "vibrance": (-100, 100, "Vibrance", False),
     "saturation": (-100, 100, "Saturation", False),
+    "texture": (-100, 100, "Texture", True),
     "clarity": (-100, 100, "Clarity", True),
+    "dehaze": (-100, 100, "Dehaze", True),
     "sharpness": (0, 100, "Sharpening", True),
     "noiseReduction": (0, 100, "Noise reduction", True),
     "vignette": (-100, 100, "Vignette", False),
@@ -66,9 +68,30 @@ CALIBRATION_KEYS = (("shadowsTint", "Shadows tint"), ("redHue", "Red hue"), ("re
                     ("greenHue", "Green hue"), ("greenSat", "Green saturation"), ("blueHue", "Blue hue"),
                     ("blueSat", "Blue saturation"))
 VIGNETTE_STYLES = ("highlight", "color", "paint")
-SPATIAL_KEYS = ("clarity", "sharpness", "noiseReduction", "lightPoints")
+# D2b nested groups: key -> (min, max, neutral, label, spatial). Booleans and strings are handled apart.
+SHARPEN = {"amount": (0, 150, 0, "Amount", True), "radius": (0.5, 3.0, 1.0, "Radius", True),
+           "detail": (0, 100, 25, "Detail", True), "masking": (0, 100, 0, "Masking", True)}
+NR = {"luminance": (0, 100, 0, "Luminance", True), "detail": (0, 100, 50, "Detail", True),
+      "contrast": (0, 100, 0, "Contrast", True), "color": (0, 100, 0, "Colour", True),
+      "colorDetail": (0, 100, 50, "Colour detail", True), "smoothness": (0, 100, 50, "Smoothness", True)}
+LENS = {"caRed": (-100, 100, 0, "Red / cyan", False), "caBlue": (-100, 100, 0, "Blue / yellow", False),
+        "distortion": (-100, 100, 0, "Distortion", False), "vignette": (-100, 100, 0, "Amount", False),
+        "vignetteMidpoint": (0, 100, 50, "Midpoint", False),
+        # the edge mask that keeps defringe on edges is server-only
+        "purpleAmount": (0, 20, 0, "Purple amount", True), "purpleHueLo": (0, 100, 30, "Purple hue", True),
+        "purpleHueHi": (0, 100, 70, "Purple hue", True), "greenAmount": (0, 20, 0, "Green amount", True),
+        "greenHueLo": (0, 100, 40, "Green hue", True), "greenHueHi": (0, 100, 60, "Green hue", True)}
+TRANSFORM = {"vertical": (-100, 100, 0, "Vertical", False), "horizontal": (-100, 100, 0, "Horizontal", False),
+             "rotate": (-10, 10, 0, "Rotate", False), "aspect": (-100, 100, 0, "Aspect", False),
+             "scale": (50, 150, 100, "Scale", False), "offsetX": (-100, 100, 0, "X offset", False),
+             "offsetY": (-100, 100, 0, "Y offset", False)}
+NESTED = {"sharpen": SHARPEN, "nr": NR, "lens": LENS, "transform": TRANSFORM}
+NESTED_STEPS = {"sharpen.radius": 0.1, "transform.rotate": 0.1}
+UPRIGHT_MODES = ("off", "auto", "level", "vertical", "full")
+SPATIAL_KEYS = ("texture", "clarity", "dehaze", "sharpen", "nr", "lightPoints", "sharpness", "noiseReduction")
 # what a .cube (or a video grade) can't carry: anything that looks at neighbours or at the pixel's position
-NOT_IN_LUT = ("clarity", "sharpness", "noiseReduction", "vignette", "lightPoints", "grainAmount")
+NOT_IN_LUT = ("texture", "clarity", "dehaze", "sharpness", "noiseReduction", "sharpen", "nr", "vignette",
+              "lightPoints", "grainAmount", "lens", "transform")
 MAX_POINTS = 16
 
 DEFAULTS = {
@@ -96,18 +119,28 @@ DEFAULTS = {
     "pointColor": [],
     "grading": {**{z: {"h": 0, "s": 0, "l": 0} for z in GRADE_ZONES}, "blending": 50, "balance": 0},
     "calibration": {k: 0 for k, _ in CALIBRATION_KEYS},
+    # D2b: full Detail, Lens corrections, Transform
+    "sharpen": {k: v[2] for k, v in SHARPEN.items()},
+    "nr": {k: v[2] for k, v in NR.items()},
+    "lens": {"caAuto": False, **{k: v[2] for k, v in LENS.items()}},
+    "transform": {"upright": "off", "uprightMatrix": None, "constrain": False,
+                  **{k: v[2] for k, v in TRANSFORM.items()}},
     # panels switched off with their eye icon: settings kept, effect bypassed (Lightroom's panel switch)
     "off": [],
 }
 
 GROUPS = [
+    # Lightroom keeps Texture, Clarity and Dehaze in Basic's Presence block
     {"id": "basic", "label": "Basic", "keys": ["profile", "treatment", "temperature", "tint", "exposure", "contrast",
-                                               "highlights", "shadows", "whites", "blacks", "vibrance", "saturation"]},
+                                               "highlights", "shadows", "whites", "blacks", "texture", "clarity",
+                                               "dehaze", "vibrance", "saturation"]},
     {"id": "curve", "label": "Tone curve", "keys": [f"curve.{k}" for k, _, _ in CURVE_POINTS]
      + [f"pcurve.{k}" for k, _ in PCURVE_KEYS] + ["points", "refineSat"]},
     {"id": "hsl", "label": "Colour mixer", "keys": ["hsl", "pointColor", "bw"]},
     {"id": "grading", "label": "Colour grading", "keys": ["grading"]},
-    {"id": "detail", "label": "Detail", "keys": ["clarity", "sharpness", "noiseReduction"]},
+    {"id": "detail", "label": "Detail", "keys": ["sharpen", "nr", "sharpness", "noiseReduction"]},
+    {"id": "lens", "label": "Lens corrections", "keys": ["lens"]},
+    {"id": "transform", "label": "Transform", "keys": ["transform"]},
     {"id": "effects", "label": "Effects", "keys": ["vignette", "vignetteMidpoint", "vignetteRoundness", "vignetteFeather",
                                                    "vignetteHighlights", "vignetteStyle", "grainAmount", "grainSize",
                                                    "grainRoughness"]},
@@ -158,6 +191,10 @@ def ranges() -> dict:
     out["palette.h"] = {"min": -100, "max": 100, "step": 1, "default": 0, "label": "Hue", "spatial": False,
                         "max_items": MAX_POINTS}
     out["lut.amount"] = {"min": 0, "max": 100, "step": 1, "default": 100, "label": "Amount", "spatial": False}
+    for group, spec in NESTED.items():
+        for k, (lo, hi, d, label, sp) in spec.items():
+            out[f"{group}.{k}"] = {"min": lo, "max": hi, "step": NESTED_STEPS.get(f"{group}.{k}", 1), "default": d,
+                                   "label": label, "spatial": sp}
     return out
 
 
@@ -263,6 +300,41 @@ def _normalise_v2(p: dict, out: dict) -> None:
     out["grading"]["blending"] = _num(g.get("blending"), 0, 100, 50.0)
     out["grading"]["balance"] = _num(g.get("balance"), -100, 100)
     out["calibration"] = {k: _num(_sub(p, "calibration").get(k), -100, 100) for k, _ in CALIBRATION_KEYS}
+    _normalise_d2b(p, out)
+
+
+def legacy_sharpen(sharpness: float) -> dict:
+    """The v1 / D2a one-slider sharpening as the four Lightroom sliders that render it identically."""
+    s = sharpness / 100
+    return {"amount": 37.5 + 112.5 * s, "radius": 0.7 + s, "detail": 100.0, "masking": 0.0}
+
+
+def legacy_nr(noise: float) -> dict:
+    return {**{k: float(v[2]) for k, v in NR.items()}, "luminance": float(noise), "color": float(noise)}
+
+
+def _normalise_d2b(p: dict, out: dict) -> None:
+    for group, spec in NESTED.items():
+        src = _sub(p, group)
+        for k, (lo, hi, d, _, _) in spec.items():
+            out[group][k] = _num(src.get(k), lo, hi, float(d))
+    # older records keep one sharpening and one noise slider: carried over unless the new group is set
+    if out["sharpness"] > 0.5 and out["sharpen"]["amount"] <= 0.5:
+        out["sharpen"] = legacy_sharpen(out["sharpness"])
+    if out["noiseReduction"] > 0.5 and not (out["nr"]["luminance"] > 0.5 or out["nr"]["color"] > 0.5):
+        out["nr"] = legacy_nr(out["noiseReduction"])
+    out["sharpness"] = 0
+    out["noiseReduction"] = 0
+    lens, t = _sub(p, "lens"), _sub(p, "transform")
+    out["lens"]["caAuto"] = bool(lens.get("caAuto"))
+    out["transform"]["constrain"] = bool(t.get("constrain"))
+    mode = t.get("upright")
+    out["transform"]["upright"] = mode if mode in UPRIGHT_MODES else "off"
+    m = t.get("uprightMatrix")
+    if out["transform"]["upright"] != "off" and isinstance(m, (list, tuple)) and len(m) == 9:
+        vals = [_num(x, -1e4, 1e4) for x in m]
+        if abs(vals[8]) > 1e-9 and abs(np.linalg.det(np.array(vals).reshape(3, 3))) > 1e-9:
+            out["transform"]["uprightMatrix"] = [round(v / vals[8], 8) for v in vals]
 
 
 def bypass(p: dict) -> dict:
@@ -286,7 +358,7 @@ def sparse(p: dict | None) -> dict:
             continue
         if k in ("curve", "bw", "calibration"):
             v = {c: x for c, x in v.items() if x}
-        elif k == "pcurve":
+        elif k == "pcurve" or k in NESTED:
             v = {c: x for c, x in v.items() if x != base[k][c]}
         elif k == "points":
             v = {c: x for c, x in v.items() if x}
@@ -307,9 +379,17 @@ def is_identity(p: dict) -> bool:
 def spatial_used(p: dict) -> list[str]:
     """Non-zero params a .cube can't carry."""
     p = normalise(p)
-    out = [k for k in NOT_IN_LUT if k != "lightPoints" and abs(p[k]) > 0.5]
-    if any(abs(pt["exposure"]) > 0.5 for pt in p["lightPoints"]):
-        out.append("lightPoints")
+    out = []
+    for k in NOT_IN_LUT:
+        v = p[k]
+        if k == "lightPoints":
+            if any(abs(pt["exposure"]) > 0.5 for pt in v):
+                out.append(k)
+        elif isinstance(v, dict):
+            if v != DEFAULTS[k]:
+                out.append(k)
+        elif abs(v) > 0.5:
+            out.append(k)
     return out
 
 
@@ -638,22 +718,6 @@ def denoise(p: np.ndarray, amount: float, scale: float) -> np.ndarray:
     return by_strips(run, p, 2 * r + 2 * cr + 2)
 
 
-def detail(p: np.ndarray, clarity: float, sharpness: float, scale: float) -> np.ndarray:
-    """Clarity (big-radius, midtones only) and sharpening (unsharp mask) on luma; one delta for R, G and B."""
-    y = luma(p)
-    delta = np.zeros_like(y)
-    if abs(clarity) > 0.005:
-        big = gaussian(y, max(1.0, 0.01 * max(p.shape[0], p.shape[1])))
-        mask = np.clip(1 - (2 * y - 1) ** 2, 0, 1)
-        delta += np.float32(0.8 * clarity) * (y - big) * mask
-    sigma = (0.7 + sharpness) * scale
-    if sharpness > 0.005 and sigma >= 0.25:
-        hf = by_strips(lambda part: part - gaussian(part, sigma), y, int(math.ceil(3 * sigma)) + 1)
-        delta += np.float32(0.5 + 1.5 * sharpness) * hf
-    out = p + delta[..., None]
-    return np.clip(out, 0, 1, out=out)
-
-
 # ---------------------------------------------------------------- geometry
 
 def _quarter(rotate: float) -> tuple[int, float]:
@@ -692,9 +756,72 @@ def _crop_box(c: dict, w: int, h: int, scale: float):
     return x0, y0, max(x0 + 1, x1), max(y0 + 1, y1)
 
 
-def apply_geometry(im: Image.Image, p: dict, src_size: tuple[int, int]) -> Image.Image:
-    """Crop (source px), rotate (clockwise, straightened with an inscribed crop), flip. `im` may be a scaled
-    proxy of a src_size image; crop coordinates are scaled to it."""
+class Pixels:
+    """Pixels PIL has no mode for: float RGB, either linear light (a RAW master) or sRGB (a warped frame).
+    Quacks enough like an Image (size, resize, info) for the preview cache and the render job."""
+
+    def __init__(self, rgb: np.ndarray, *, linear: bool, alpha: np.ndarray | None = None, info: dict | None = None):
+        self.rgb = rgb
+        self.linear = linear
+        self.alpha = alpha
+        self.info = info or {}
+
+    @property
+    def size(self) -> tuple[int, int]:
+        return self.rgb.shape[1], self.rgb.shape[0]
+
+    @property
+    def width(self) -> int:
+        return self.rgb.shape[1]
+
+    @property
+    def height(self) -> int:
+        return self.rgb.shape[0]
+
+    def resize(self, size: tuple[int, int], resample=Image.Resampling.LANCZOS) -> "Pixels":
+        rgb = np.stack([_resize_f(self.rgb[..., c], size, resample) for c in range(3)], axis=2)
+        alpha = None
+        if self.alpha is not None:
+            alpha = np.asarray(Image.fromarray(self.alpha).resize(size, resample))
+        return Pixels(rgb, linear=self.linear, alpha=alpha, info=self.info)
+
+    def convert(self, mode: str) -> Image.Image:
+        """8-bit PIL copy of what the picture looks like (for tools that only read pixels)."""
+        shown = enc(np.clip(self.rgb, 0, 1)) if self.linear else self.rgb
+        return Image.fromarray(quantise(shown)).convert(mode)
+
+
+def _as_array(im) -> tuple[np.ndarray, bool]:
+    """(H x W x C array, linear) for remapping; alpha stays as a fourth channel."""
+    if isinstance(im, Pixels):
+        a = im.rgb if im.alpha is None else np.dstack([im.rgb, im.alpha.astype(np.float32) / 255])
+        return a, im.linear
+    if im.mode == "F":
+        return np.asarray(im, dtype=np.float32)[..., None].repeat(3, axis=2), False
+    return np.asarray(im), False
+
+
+def apply_geometry(im, p: dict, src_size: tuple[int, int], max_side: int | None = None):
+    """Crop (source px), rotate (clockwise, straightened with an inscribed crop), flip; and since D2b the
+    lens and Transform warps. `im` may be a scaled proxy of a src_size image; crop coordinates are scaled
+    to it. Crop, rotate and flip alone keep the exact PIL path old renders were made with; anything that
+    warps (or a float master) goes through one bilinear remap straight to the output size."""
+    from app.photo import geometry as gm
+
+    p = normalise(p) if "lens" not in p else p
+    warp = gm.Warp(p, *src_size)
+    if isinstance(im, Pixels) or warp.active:
+        fw, fh = frame_size(*src_size, p)
+        k = im.width / src_size[0]
+        if max_side:
+            k = min(k, max_side / max(fw, fh))
+        ow, oh = max(1, int(round(fw * k))), max(1, int(round(fh * k)))
+        arr, linear = _as_array(im)
+        out = gm.remap(arr, warp, ow, oh, _pool() if ow * oh > (1 << 19) else None)
+        alpha = None
+        if out.shape[2] == 4:
+            alpha = (np.clip(out[..., 3], 0, 1) * 255 + 0.5).astype(np.uint8)
+        return Pixels(out[..., :3], linear=linear, alpha=alpha, info=getattr(im, "info", {}))
     scale = im.width / src_size[0]
     if p.get("crop"):
         im = im.crop(_crop_box(p["crop"], src_size[0], src_size[1], scale))
@@ -713,7 +840,16 @@ def apply_geometry(im: Image.Image, p: dict, src_size: tuple[int, int]) -> Image
         im = im.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
     if p.get("flipV"):
         im = im.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    if max_side and max(im.size) > max_side:
+        f = max_side / max(im.size)
+        im = im.resize((max(1, round(im.width * f)), max(1, round(im.height * f))), Image.Resampling.LANCZOS)
     return im
+
+
+def warp_for(p: dict, src_size: tuple[int, int]):
+    from app.photo import geometry as gm
+
+    return gm.Warp(p, *src_size)
 
 
 # ---------------------------------------------------------------- the pipeline
@@ -721,9 +857,18 @@ def apply_geometry(im: Image.Image, p: dict, src_size: tuple[int, int]) -> Image
 class _Plan:
     """Everything that is per-call rather than per-pixel, worked out once."""
 
-    def __init__(self, p: dict, src: np.ndarray, scale: float, frame: tuple[int, int], lut, profile=None):
+    def __init__(self, p: dict, src: np.ndarray, scale: float, frame: tuple[int, int], lut, profile=None, *,
+                 linear: bool = False, warp=None, fringe: np.ndarray | None = None):
         self.p = p
         self.h, self.w = src.shape[:2]
+        self.linear = linear
+        self.warp = warp
+        lens = p["lens"]
+        self.defringe = lens if cl.defringe_active(lens) else None
+        self.fringe = fringe
+        self.lens_vig = (lens["vignette"], lens["vignetteMidpoint"]) if abs(lens["vignette"]) > 0.05 else None
+        # only a RAW master has values past white for Highlights to pull back
+        self.shoulder = -p["highlights"] / 100 if linear and p["highlights"] < -0.5 else 0.0
         self.gains = wb_gains(p) * np.float32(2.0 ** p["exposure"])
         self.calib = cl.calibration_matrix(p["calibration"])
         self.profile = profile
@@ -762,7 +907,7 @@ class _Plan:
         fw, fh = frame
         # tonal sigma from the image's own contrast (sparse grid, after WB/exposure like the pixels it weighs)
         step_y, step_x = max(1, self.h // 48), max(1, self.w // 48)
-        sample = to_linear(src[::step_y, ::step_x, :3]) * self.gains
+        sample = self._lin(src[::step_y, ::step_x, :3]) * self.gains
         ys = enc(luma(np.clip(sample, 0, 1)))
         sig = float(np.clip(0.6 * ys.std(), 12 / 255, 30 / 255))
         out = []
@@ -772,7 +917,7 @@ class _Plan:
             x, y = pt["x"] * sx, pt["y"] * sy
             fall = (pt.get("falloff") or 0.25 * max(fw, fh)) * sx
             px, py = int(min(self.w - 1, max(0, round(x)))), int(min(self.h - 1, max(0, round(y))))
-            anchor = float(enc(np.clip(luma(to_linear(src[py:py + 1, px:px + 1, :3])[0, 0] * self.gains), 0, 1)))
+            anchor = float(enc(np.clip(luma(self._lin(src[py:py + 1, px:px + 1, :3])[0, 0] * self.gains), 0, 1)))
             out.append((x, y, 1.0 / (2 * fall * fall), 1.5 * pt["exposure"] / 100, anchor))
         return out, 1.0 / (2 * sig * sig)
 
@@ -794,15 +939,47 @@ class _Plan:
         yp = enc(np.clip(lin @ LUMA, 0, 1))
         return cl.apply_vignette(lin, alpha, self.p, yp)
 
+    def _lin(self, x: np.ndarray) -> np.ndarray:
+        return np.array(x, dtype=np.float32) if self.linear else to_linear(x)
+
+    def lens_stage(self, block: np.ndarray, lin: np.ndarray, y0: int) -> np.ndarray:
+        """Defringe (desaturate fringe hues, on edges only) and lens vignetting, before anything else."""
+        rows = lin.shape[0]
+        if self.defringe is not None:
+            srgb = enc(np.clip(lin, 0, 1)) if self.linear else to_unit(block)
+            h, s, _ = rgb_to_hsv(srgb.reshape(-1, 3))
+            w = cl.defringe_weight(h, s, self.defringe)
+            if self.fringe is not None:
+                w = w * self.fringe[y0:y0 + rows].ravel()
+            flat = lin.reshape(-1, 3)
+            y = (flat @ LUMA)[:, None]
+            lin = (y + (flat - y) * (1 - w)[:, None]).reshape(lin.shape)
+        if self.lens_vig is not None:
+            u, v = self._uv(rows, y0)
+            if self.warp is not None:
+                su, sv = self.warp.source_uv(u, v)
+                aspect = self.warp.aspect
+            else:
+                su, sv, aspect = u, v, self.w / max(1, self.h)
+            lin = lin * cl.lens_vignette_gain(su, sv, aspect, *self.lens_vig)[..., None]
+        return lin
+
     def run(self, block: np.ndarray, y0: int) -> np.ndarray:
-        """block: rows x W x 3 of sRGB values (uint8/uint16 or float 0..1). Returns float32 sRGB."""
-        lin = to_linear(block)
+        """block: rows x W x 3 of sRGB values (uint8/uint16 or float 0..1), or linear floats for a RAW master.
+        Returns float32 sRGB."""
+        lin = self._lin(block)
+        if self.defringe is not None or self.lens_vig is not None:
+            lin = self.lens_stage(block, lin, y0)
         if self.calib is not None:
             lin = np.clip(lin @ self.calib.T, 0, None)
         if self.gain_on:
             lin = lin * self.gains
         if self.points is not None:
             lin = self.light(lin, y0)
+        if self.shoulder > 0:
+            knee = np.float32(1 - 0.5 * self.shoulder)
+            over = np.maximum(lin - knee, 0)
+            lin = np.minimum(lin, knee) + over / (1 + over / (1 - knee))
         np.clip(lin, 0, 1, out=lin)
         rows = lin.shape[0]
         bw_done = False
@@ -891,13 +1068,19 @@ def _pool() -> ThreadPoolExecutor:
 
 
 def develop(src: np.ndarray, params: dict | None, *, scale: float = 1.0, frame: tuple[int, int] | None = None,
-            lut=None) -> np.ndarray:
+            lut=None, linear: bool = False, warp=None, debug: str | None = None, edges: bool = True) -> np.ndarray:
     """Run the pipeline on an already geometry-corrected HxWx3 sRGB image (uint8, uint16 or float 0..1).
 
     scale: working size / full-resolution developed size (radii are defined at full resolution).
     frame: the full-resolution developed size (light point coordinates default to it).
     lut:   (table, amount 0..1) when params.lut is set; the caller resolves the look.
+    linear: src is linear-light float (a RAW master), possibly above 1.
+    warp:  the geometry.Warp the frame came through (lens vignetting is measured on the lens's frame).
+    debug: "sharpen_mask" returns Lightroom's Alt-drag Masking view instead of the picture.
+    edges: False drops defringe's edge mask, leaving the pure point formula the preview runs.
     Returns float32 sRGB 0..1, HxWx3."""
+    from app.photo import spatial as sp
+
     p = normalise(params)
     if "look" in p["off"]:
         lut = None
@@ -912,9 +1095,18 @@ def develop(src: np.ndarray, params: dict | None, *, scale: float = 1.0, frame: 
     h, w = src.shape[:2]
     src = src[..., :3]
     frame = frame or (max(1, int(round(w / scale))), max(1, int(round(h / scale))))
-    if p["noiseReduction"] > 0.5:
-        src = denoise(to_unit(src), p["noiseReduction"] / 100, scale)
-    plan = _Plan(p, src, scale, frame, lut, profile)
+    nr_on, haze = sp.nr_active(p["nr"]), abs(p["dehaze"]) > 0.5
+    if nr_on or haze:
+        work = sp.to_work(src, linear)
+        if nr_on:
+            work = sp.reduce_noise(work, p["nr"], scale, clip=not linear)
+        if haze:
+            work = sp.dehaze(work, p["dehaze"] / 100, clip=not linear)
+        src = sp.from_work(work, linear)
+    fringe = None
+    if edges and cl.defringe_active(p["lens"]):
+        fringe = sp.fringe_edges(enc(np.clip(src, 0, 1)) if linear else src, scale)
+    plan = _Plan(p, src, scale, frame, lut, profile, linear=linear, warp=warp, fringe=fringe)
     out = np.empty((h, w, 3), dtype=np.float32)
     step = max(1, BLOCK_PIXELS // max(1, w))
 
@@ -928,8 +1120,8 @@ def develop(src: np.ndarray, params: dict | None, *, scale: float = 1.0, frame: 
     else:
         for y0 in starts:
             one(y0)
-    if abs(p["clarity"]) > 0.5 or p["sharpness"] > 0.5:
-        out = detail(out, p["clarity"] / 100, p["sharpness"] / 100, scale)
+    if sp.detail_active(p) or debug == "sharpen_mask":
+        out = sp.detail(out, p, scale, debug)
     return out
 
 
@@ -972,6 +1164,14 @@ def open_image(path: Path | str, max_side: int | None = None) -> tuple[Image.Ima
     the result is shrunk to fit; the size returned is still the full one."""
     # TODO: Pillow reads 48-bit PNG/TIFF as 8-bit RGB, so re-editing a png16/tiff16 version loses its depth;
     # decode those ourselves (zlib + unfilter) when people start round-tripping 16-bit files
+    master = master_path(path)
+    if master.is_file():
+        try:
+            return open_master(master, path, max_side)
+        except (OSError, ValueError) as e:
+            import logging
+
+            logging.getLogger("mixai.photo").warning("RAW master %s unreadable, using the JPEG: %s", master, e)
     im = Image.open(path)
     w, h = im.size
     try:
@@ -1003,8 +1203,85 @@ def open_image(path: Path | str, max_side: int | None = None) -> tuple[Image.Ima
     return im, (w, h)
 
 
-def split(im: Image.Image) -> tuple[np.ndarray, np.ndarray | None]:
-    """PIL image -> (HxWx3 uint8 or float32, alpha uint8 or None)."""
+def master_path(path: Path | str) -> Path:
+    """Where a RAW import keeps its 16-bit linear master, beside the JPEG working copy."""
+    path = Path(path)
+    return path.with_name(path.stem + ".master.tif")
+
+
+MASTER_TAG = "mixai-master v1"
+
+
+def write_master(path: Path, lin16: np.ndarray, gain: float) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(tiff16(lin16, description=f"{MASTER_TAG} gain={gain:.6f}"))
+    tmp.replace(path)
+
+
+def read_tiff16(path: Path) -> tuple[np.ndarray, str]:
+    """The baseline TIFFs tiff16() writes (one uncompressed strip): (memory-mapped uint16 HxWxC, description)."""
+    with open(path, "rb") as f:
+        head = f.read(8)
+        if head[:4] != b"II*\x00":
+            raise ValueError("not a little-endian TIFF")
+        ifd = struct.unpack("<I", head[4:8])[0]
+        f.seek(ifd)
+        n = struct.unpack("<H", f.read(2))[0]
+        tags = {}
+        for _ in range(n):
+            tag, typ, count, value = struct.unpack("<HHII", f.read(12))
+            if typ == 3 and count == 1:
+                value &= 0xFFFF
+            tags[tag] = (typ, count, value)
+        desc = ""
+        if 270 in tags:
+            _, count, at = tags[270]
+            f.seek(at)
+            desc = f.read(count).rstrip(b"\x00").decode("ascii", "replace")
+    w, h = tags[256][2], tags[257][2]
+    c = tags.get(277, (3, 1, 1))[2]
+    if tags.get(259, (3, 1, 1))[2] != 1 or tags.get(273) is None:
+        raise ValueError("compressed or tiled TIFF")
+    arr = np.memmap(path, dtype="<u2", mode="r", offset=tags[273][2], shape=(h, w, c))
+    return arr, desc
+
+
+def open_master(master: Path, working: Path | str, max_side: int | None = None) -> tuple["Pixels", tuple[int, int]]:
+    """A RAW master as linear float RGB, brightened by the gain the JPEG working copy was made with, so the
+    two agree on screen and everything above 1.0 is highlight detail the JPEG had to clip."""
+    arr, desc = read_tiff16(master)
+    if not desc.startswith(MASTER_TAG):
+        raise ValueError("not a develop master")
+    gain = float(desc.split("gain=", 1)[1]) if "gain=" in desc else 1.0
+    h, w = arr.shape[:2]
+    f = int(math.ceil(max(w, h) / max_side)) if max_side and max(w, h) > max_side else 1
+    if f > 1:
+        hh, ww = h // f * f, w // f * f
+        lin = arr[:hh, :ww, :3].astype(np.float32).reshape(hh // f, f, ww // f, f, 3).mean(axis=(1, 3))
+    else:
+        lin = np.array(arr[..., :3], dtype=np.float32)
+    lin *= np.float32(gain / 65535)
+    try:
+        with Image.open(working) as jp:
+            info = {"exif": jp.info["exif"]} if jp.info.get("exif") else {}
+    except OSError:
+        info = {}
+    return Pixels(lin, linear=True, info=info), (w, h)
+
+
+def split_frame(im) -> tuple[np.ndarray, np.ndarray | None, bool]:
+    """(pixels, alpha, linear) for the develop pipeline."""
+    if isinstance(im, Pixels):
+        return im.rgb, im.alpha, im.linear
+    rgb, alpha = split(im)
+    return rgb, alpha, False
+
+
+def split(im) -> tuple[np.ndarray, np.ndarray | None]:
+    """PIL image -> (HxWx3 uint8 or float32, alpha uint8 or None). A linear master comes back as display
+    sRGB (analysis, Auto and the palette read pictures, not light)."""
+    if isinstance(im, Pixels):
+        return (enc(np.clip(im.rgb, 0, 1)) if im.linear else im.rgb), im.alpha
     if im.mode == "F":
         g = np.asarray(im, dtype=np.float32)
         return np.repeat(g[..., None], 3, axis=2), None
@@ -1095,13 +1372,16 @@ def png16(arr: np.ndarray) -> bytes:
     return b"".join(out)
 
 
-def tiff16(arr: np.ndarray) -> bytes:
+def tiff16(arr: np.ndarray, description: str | None = None) -> bytes:
     """Baseline little-endian TIFF, one uncompressed strip, 16 bits per sample."""
     h, w, c = arr.shape
     pixels = arr.astype("<u2").tobytes()
+    desc = (description.encode("ascii", "replace") + b"\x00") if description else b""
     tags = [(256, 4, 1, w), (257, 4, 1, h), (258, 3, c, None), (259, 3, 1, 1), (262, 3, 1, 2),
             (273, 4, 1, None), (277, 3, 1, c), (278, 4, 1, h), (279, 4, 1, len(pixels)),
             (282, 5, 1, None), (283, 5, 1, None), (284, 3, 1, 1), (296, 3, 1, 2)]
+    if desc:
+        tags.insert(5, (270, 2, len(desc), None))
     if c == 4:
         tags.append((338, 3, 1, 2))  # unassociated alpha
     ifd_size = 2 + 12 * len(tags) + 4
@@ -1110,7 +1390,8 @@ def tiff16(arr: np.ndarray) -> bytes:
     res = struct.pack("<II", 72, 1)
     x_at = extra_at + len(bps)
     y_at = x_at + 8
-    data_at = y_at + 8
+    desc_at = y_at + 8
+    data_at = desc_at + len(desc) + (len(desc) & 1)
     ifd = [struct.pack("<H", len(tags))]
     for tag, typ, count, value in tags:
         if tag == 258:
@@ -1121,9 +1402,12 @@ def tiff16(arr: np.ndarray) -> bytes:
             value = x_at
         elif tag == 283:
             value = y_at
+        elif tag == 270:
+            value = desc_at
         if typ == 3 and count == 1:
             ifd.append(struct.pack("<HHIHH", tag, typ, count, value, 0))
         else:
             ifd.append(struct.pack("<HHII", tag, typ, count, value))
     ifd.append(struct.pack("<I", 0))
-    return b"II*\x00" + struct.pack("<I", 8) + b"".join(ifd) + bps + res + res + pixels
+    pad = b"\x00" if len(desc) & 1 else b""
+    return b"II*\x00" + struct.pack("<I", 8) + b"".join(ifd) + bps + res + res + desc + pad + pixels

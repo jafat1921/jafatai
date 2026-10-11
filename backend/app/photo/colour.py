@@ -227,6 +227,43 @@ def apply_vignette(lin: np.ndarray, alpha: np.ndarray, p: dict, yp: np.ndarray) 
     return lin + (1 - lin) * a
 
 
+# ---------------------------------------------------------------- lens corrections (D2b)
+
+def fringe_hues(lens: dict) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Defringe hue sliders (0..100, Lightroom's) as degrees: purple spans 200..340°, green 60..180°."""
+    def span(lo, hi, base, width):
+        a, b = sorted((lo, hi))
+        return base + width * a / 100, base + width * b / 100
+
+    return (span(lens["purpleHueLo"], lens["purpleHueHi"], 200.0, 140.0),
+            span(lens["greenHueLo"], lens["greenHueHi"], 60.0, 120.0))
+
+
+def defringe_active(lens: dict) -> bool:
+    return lens["purpleAmount"] > 0.05 or lens["greenAmount"] > 0.05
+
+
+def defringe_weight(h: np.ndarray, s: np.ndarray, lens: dict) -> np.ndarray:
+    """How much of a pixel's colour defringe takes away (0..1), from the hue and saturation of its sRGB
+    value. The server multiplies this by an edge mask; the preview can't, so it shows it everywhere."""
+    purple, green = fringe_hues(lens)
+    w = np.zeros(h.shape, np.float32)
+    for (lo, hi), amt in ((purple, lens["purpleAmount"]), (green, lens["greenAmount"])):
+        if amt > 0.05:
+            band = smoothstep(lo - 10, lo, h) * (1 - smoothstep(hi, hi + 10, h))
+            w = w + amt / 20 * band
+    return np.clip(w, 0, 1) * smoothstep(0.05, 0.2, s)
+
+
+def lens_vignette_gain(su: np.ndarray, sv: np.ndarray, aspect: float, amount: float, midpoint: float) -> np.ndarray:
+    """Lens vignetting in linear light, measured on the lens's own frame (not the crop): +100 lifts the
+    corners by a stop, -100 darkens them by one. Midpoint moves where the falloff starts."""
+    dx, dy = (su - 0.5) * aspect, sv - 0.5
+    r = np.sqrt(dx * dx + dy * dy) / (0.5 * math.sqrt(aspect * aspect + 1))
+    t = smoothstep(0.8 * midpoint / 100, 1.0, r)
+    return np.exp2(amount / 100 * t).astype(np.float32)
+
+
 # ---------------------------------------------------------------- grain
 
 def _hash(x: np.ndarray, y: np.ndarray) -> np.ndarray:

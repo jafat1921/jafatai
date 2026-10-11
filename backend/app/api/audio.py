@@ -14,7 +14,8 @@ from app.config import get_settings
 from app.db import get_db
 from app.llm import LLMError, chat
 from app.models import Generation, Job, MediaItem, new_id
-from app.schemas import AerabIn, AerabOut, AudioGenerateIn, ImageBatchOut, LyricsIn, LyricsOut, SpeakIn, SpeakOut
+from app.schemas import (AerabIn, AerabOut, AudioGenerateIn, ImageBatchOut, LyricsIn, LyricsOut, SpeakIn, SpeakOut,
+                         TextAerabIn, TextAerabOut)
 from app.security import CurrentUser, require_editor
 from app.services import enqueue_generation, job_out, owned_source
 
@@ -25,12 +26,13 @@ router = APIRouter(prefix="/audio", tags=["audio"])
 LANGUAGES = {"en": "English", "ur": "Urdu", "ur-latn": "Roman Urdu", "hi": "Hindi", "ar": "Arabic", "pa": "Punjabi",
              "bn": "Bengali", "fa": "Persian", "tr": "Turkish", "es": "Spanish", "fr": "French", "de": "German",
              "pt": "Portuguese", "it": "Italian", "ru": "Russian", "zh": "Mandarin Chinese", "ja": "Japanese",
-             "ko": "Korean"}
+             "ko": "Korean", "ps": "Pashto", "sd": "Sindhi", "pnb": "Punjabi (Shahmukhi)"}
 # the alphabet each language must stay in; models (and people) reading lyrics trip over mixed scripts
 SCRIPTS = {"ur": "Urdu script (Nastaliq / Perso-Arabic letters), never Roman letters",
            "ur-latn": "Roman Urdu: Urdu words spelt in Latin letters, the way people text, no Urdu script",
            "hi": "Devanagari", "pa": "Gurmukhi", "ar": "Arabic script", "fa": "Perso-Arabic script",
-           "bn": "Bengali script"}
+           "bn": "Bengali script", "ps": "Pashto script (Perso-Arabic letters)", "sd": "Sindhi script (Perso-Arabic letters)",
+           "pnb": "Shahmukhi (Perso-Arabic letters)"}
 OFFLINE = "The lyrics writer is offline"
 
 
@@ -122,6 +124,9 @@ def lyrics_messages(body: LyricsIn) -> list[dict]:
         "comma separated, at most 25 words.",
         'Reply as JSON: {"lyrics": the lyrics with section markers and newlines, "tags": the style tags}.',
     ]
+    rule = aerab.writing_rule(lang) if body.aerab else ""
+    if rule:
+        rules.insert(2, rule)
     user = [f"Topic: {body.topic.strip()}"]
     if body.mood:
         user.append(f"Mood: {body.mood.strip()}")
@@ -142,23 +147,35 @@ async def write_lyrics(body: LyricsIn, cur: CurrentUser = Depends(require_editor
     if not lyrics:
         raise HTTPException(502, "The lyrics writer came back empty; try again")
     tags = " ".join(res.data.tags.split())[:300]
-    marked = kept = 0
-    # a second, narrow pass: writing and marking in one go gives worse lyrics and patchier aerab
-    if body.aerab and body.language.lower() == "ur":
-        try:
-            lyrics, marked, kept = await aerab.mark(lyrics)
-        except LLMError as e:
-            log.warning("aerab pass failed, returning plain lyrics: %s", e)
-    return LyricsOut(lyrics=lyrics, tags=tags, marked=marked, kept=kept)
+    stats = {}
+    # the first pass asked for marks; a second, narrow pass verifies them and fills what it missed
+    if body.aerab:
+        r = await aerab.finish(lyrics, body.language, "lyrics")
+        lyrics, stats = r.text, r.stats()
+    return LyricsOut(lyrics=lyrics, tags=tags, **stats)
+
+
+async def _mark_or_503(text: str, language: str | None) -> aerab.Result:
+    if not aerab.lines_to_mark(text):
+        raise HTTPException(422, "There are no Arabic-script lines to mark")
+    try:
+        return await aerab.mark(text, language)
+    except LLMError as e:
+        log.warning("aerab unavailable: %s", e)
+        raise HTTPException(503, "The aerab writer is offline") from None
 
 
 @router.post("/lyrics/aerab", response_model=AerabOut)
 async def add_aerab(body: AerabIn, cur: CurrentUser = Depends(require_editor)):
-    if not aerab.lines_to_mark(body.lyrics):
-        raise HTTPException(422, "There are no Urdu lines to mark")
-    try:
-        lyrics, marked, kept = await aerab.mark(body.lyrics)
-    except LLMError as e:
-        log.warning("aerab unavailable: %s", e)
-        raise HTTPException(503, OFFLINE) from None
-    return AerabOut(lyrics=lyrics, marked=marked, kept=kept)
+    r = await _mark_or_503(body.lyrics, body.language)
+    return AerabOut(lyrics=r.text, language=r.language, **r.stats())
+
+
+# mounted at /api/text by app.api (contract v23): the one "Add aerab" every editor calls
+text_router = APIRouter(prefix="/text", tags=["text"])
+
+
+@text_router.post("/aerab", response_model=TextAerabOut)
+async def text_aerab(body: TextAerabIn, cur: CurrentUser = Depends(require_editor)):
+    r = await _mark_or_503(body.text, body.language)
+    return TextAerabOut(text=r.text, language=r.language, **r.stats())

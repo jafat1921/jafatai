@@ -14,10 +14,10 @@ describe('develop workflow', () => {
     const src = { exposure: 30, temperature: 10, vignette: -20, crop: { x: 0, y: 0, width: 5, height: 5 }, off: ['effects'] }
     const copied = pickGroups(src, ['basic', 'effects'])
     expect(copied).toEqual({ exposure: 30, temperature: 10, vignette: -20, off: ['effects'] })
-    const mine = { exposure: -5, contrast: 40, clarity: 12, crop: { x: 1, y: 1, width: 2, height: 2 } }
+    const mine = { exposure: -5, contrast: 40, nr: { luminance: 12 }, crop: { x: 1, y: 1, width: 2, height: 2 } }
     const out = pasteGroups(mine, copied, ['basic', 'effects'])
     // contrast was mine but Basic was pasted whole: it goes back to default
-    expect(out).toEqual({ exposure: 30, temperature: 10, vignette: -20, clarity: 12, crop: { x: 1, y: 1, width: 2, height: 2 }, off: ['effects'] })
+    expect(out).toEqual({ exposure: 30, temperature: 10, vignette: -20, nr: { luminance: 12 }, crop: { x: 1, y: 1, width: 2, height: 2 }, off: ['effects'] })
     expect(modifiedGroups(src).sort()).toEqual(['basic', 'effects', 'geometry'])
   })
 

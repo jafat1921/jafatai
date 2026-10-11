@@ -391,6 +391,8 @@ def delete_item(db: Session, item: MediaItem) -> None:
                            updated_at=utcnow()))
     root = get_settings().data_dir
     own = [g.file_path for g in gens if g.file_path]
+    # a RAW import's 16-bit master sits beside its working copy
+    own += [(Path(f).parent / (Path(f).stem + ".master.tif")).as_posix() for f in own]
     files = own + [t.as_posix() for f in own for t in thumbs.files_for(Path(f))] +         ([item.thumb_path] if item.thumb_path else [])
     for g in gens:
         db.delete(g)

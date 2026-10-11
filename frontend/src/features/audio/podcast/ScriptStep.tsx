@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/studio/states'
+import { AerabButton } from '@/components/text/AerabButton'
 import { useScript } from '@/hooks/useDialogue'
 import { useVoiceChoices } from '@/hooks/useGallery'
 import { useEditLines, useRenderEpisode, useWriteEpisode } from '@/hooks/usePodcast'
 import { useVoiceEngines } from '@/hooks/useVoices'
+import { joinLines, splitLines } from '@/lib/aerab'
 import { blankLine, moveLine, type Script } from '@/lib/dialogue'
 import { WPM, busy, byChapter, minutesFor, wordCount, writeBlockedReason, type EditOp, type Episode } from '@/lib/podcast'
 import { announce } from '@/stores/ui'
@@ -155,6 +157,13 @@ function Editor({ ep, script, locked }: { ep: Episode; script: Script; locked: b
     },
   })
 
+  const setAllTexts = (marked: string) => {
+    const next = splitLines(lines.map((l) => l.text), marked)
+    if (!next) return
+    const byId = new Map(lines.map((l, i) => [l.id, next[i]]))
+    draft.edit((d) => ({ ...d, lines: d.lines.map((x) => (byId.has(x.id) && byId.get(x.id) !== x.text ? { ...x, text: byId.get(x.id)! } : x)) }))
+  }
+
   const problem = editLines.error ?? render.error ?? draft.error
   return (
     <div className="flex flex-col gap-3">
@@ -167,6 +176,7 @@ function Editor({ ep, script, locked }: { ep: Episode; script: Script; locked: b
         </span>
         <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Note for the writer (optional)" aria-label="Note for the writer" className="h-7 w-56" />
         <div className="ml-auto flex flex-wrap gap-1.5">
+          <AerabButton text={joinLines(lines.map((l) => l.text))} onText={setAllTexts} language={ep.language} label="Add aerab to all lines" showNote={false} disabled={locked} />
           <Button type="button" size="sm" disabled={locked || !oneChapter} title={oneChapter ? undefined : 'Tick lines in one chapter'} onClick={() => run('rewrite_chapter', { chapter_id: chapterOfPick! })}>
             <PenLine aria-hidden />
             Rewrite chapter

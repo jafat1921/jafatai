@@ -132,6 +132,7 @@ export function AudioDock({ form, setForm, modelPicked, onRun, pending, error }:
         instrumental={instrumental(form)}
         onInstrumental={setInstrumental}
         onLanguage={(l) => set('language', songLanguageOf(l))}
+        language={form.language}
         aerab={form.aerab}
         onAerab={(on) => set('aerab', on)}
       />

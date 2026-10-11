@@ -39,6 +39,25 @@ CASES = {
                        "vignetteFeather": 20, "vignetteHighlights": 60},
     "vignette_round_white": {"version": 2, "vignette": 50, "vignetteRoundness": 80},
     "grain": {"version": 2, "grainAmount": 70, "grainSize": 60, "grainRoughness": 80},
+    # D2b point operations
+    "lens_vignette": {"version": 2, "lens": {"vignette": 70, "vignetteMidpoint": 30}, "exposure": -0.3},
+    "lens_vignette_dark": {"version": 2, "lens": {"vignette": -90, "vignetteMidpoint": 70}},
+    "defringe": {"version": 2, "lens": {"purpleAmount": 18, "purpleHueLo": 10, "purpleHueHi": 90,
+                                        "greenAmount": 15, "greenHueLo": 0, "greenHueHi": 100}},
+}
+
+# output uv -> captured uv for the WebGL warp (lib/photo/geometry.ts must land on the same points)
+GEOMETRY = {
+    "crop_rotate_flip": ({"crop": {"x": 40, "y": 30, "width": 200, "height": 150}, "rotate": 97.5, "flipH": True}, (400, 300)),
+    "straighten_45": ({"rotate": 45}, (400, 300)),
+    "transform": ({"transform": {"vertical": -35, "horizontal": 20, "rotate": 4, "aspect": -30, "scale": 115,
+                                 "offsetX": 12, "offsetY": -8}}, (400, 300)),
+    "transform_constrain": ({"transform": {"vertical": 50, "rotate": -6, "constrain": True}, "rotate": 3}, (300, 400)),
+    "upright_and_lens": ({"transform": {"upright": "vertical", "horizontal": 10,
+                                        "uprightMatrix": [1.02, 0.01, -0.015, 0.0, 1.05, -0.03, 0.0, 0.08, 1.0]},
+                          "lens": {"distortion": 40, "caRed": 50, "caBlue": -30}, "crop": {"x": 10, "y": 0, "width": 380, "height": 290}},
+                         (400, 300)),
+    "pincushion_constrain": ({"lens": {"distortion": -60}, "transform": {"constrain": True}}, (400, 300)),
 }
 
 
@@ -50,22 +69,36 @@ def pixels(seed: int = 7) -> np.ndarray:
 
 
 def build() -> dict:
+    from app.photo import geometry as gm
+
     src = pixels()
-    out = {"w": W, "h": H, "src": (src / 255.0).round(6).reshape(-1, 3).tolist(), "cases": {}}
+    out = {"w": W, "h": H, "src": (src / 255.0).round(6).reshape(-1, 3).tolist(), "cases": {}, "geometry": {}}
     for name, p in CASES.items():
-        res = dv.develop(src, p)
+        # defringe's edge mask is server-only (the preview shows the point formula): leave it out here
+        res = dv.develop(src, p, edges=False)
         out["cases"][name] = {"params": p, "out": res.reshape(-1, 3).round(5).tolist()}
+    uv = [(u, v) for v in (0.0, 0.3, 0.5, 0.85, 1.0) for u in (0.0, 0.25, 0.5, 0.9, 1.0)]
+    for name, (p, (w, h)) in GEOMETRY.items():
+        warp = gm.Warp(dv.normalise(p), w, h)
+        su, sv = warp.source_uv(np.array([a for a, _ in uv]), np.array([b for _, b in uv]))
+        fw, fh = dv.frame_size(w, h, dv.normalise(p))
+        out["geometry"][name] = {"params": p, "w": w, "h": h, "zoom": round(warp.zoom, 6), "frame": [fw, fh],
+                                 "points": [[a, b, round(float(x), 6), round(float(y), 6)]
+                                            for (a, b), x, y in zip(uv, su, sv)]}
     return out
 
 
 def test_parity_fixture_is_current():
     data = build()
     if os.environ.get("UPDATE_PARITY") or not FIXTURE.exists():
-        FIXTURE.write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
+        FIXTURE.write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8", newline="\n")
     saved = json.loads(FIXTURE.read_text(encoding="utf-8"))
     assert saved["cases"].keys() == data["cases"].keys(), "run with UPDATE_PARITY=1"
     for name, case in data["cases"].items():
         assert np.allclose(saved["cases"][name]["out"], case["out"], atol=1e-4), f"{name} changed: UPDATE_PARITY=1"
+    assert saved.get("geometry", {}).keys() == data["geometry"].keys(), "run with UPDATE_PARITY=1"
+    for name, g in data["geometry"].items():
+        assert np.allclose(saved["geometry"][name]["points"], g["points"], atol=1e-5), f"{name} changed: UPDATE_PARITY=1"
 
 
 def test_every_v2_tool_does_something_and_stays_in_range():
@@ -74,7 +107,7 @@ def test_every_v2_tool_does_something_and_stays_in_range():
     for name, p in CASES.items():
         if name in ("identity",):
             continue
-        out = dv.develop(src, p)
+        out = dv.develop(src, p, edges=False)
         assert out.min() >= 0 and out.max() <= 1, name
         assert np.abs(out - base).mean() > 1e-3, name
 

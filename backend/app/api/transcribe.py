@@ -1,5 +1,8 @@
 """Transcribe (contract v18): timed transcripts, subtitles, LLM cleanup and subtitles onto a video."""
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -90,6 +93,27 @@ def cleanup(tid: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(
     t.status = "cleaning"
     db.commit()
     return job_out(job)
+
+
+class CleanLinesIn(BaseModel):
+    lines: list[Annotated[str, Field(max_length=5000)]] = Field(max_length=20000)
+
+
+@router.put("/transcripts/{tid}/clean")
+def set_clean_lines(tid: str, body: CleanLinesIn, db: Session = Depends(get_db),
+                    cur: CurrentUser = Depends(require_editor)):
+    # the tidied text, one entry per segment: "Add aerab" on the transcript page saves through here
+    t = _owned(db, cur, tid)
+    _ready(t)
+    if t.status == "cleaning":
+        raise HTTPException(409, "The transcript is being tidied; try again when it's done")
+    if len(body.lines) != len(t.segments):
+        raise HTTPException(422, f"Expected {len(t.segments)} lines, got {len(body.lines)}")
+    segs = [{**s, "clean": " ".join(text.split())} for s, text in zip(t.segments, body.lines)]
+    t.segments = segs
+    t.cleanup_text = " ".join(s["clean"] for s in segs if s["clean"])
+    db.commit()
+    return _out(db, t)
 
 
 @router.post("/transcripts/{tid}/video", status_code=202)

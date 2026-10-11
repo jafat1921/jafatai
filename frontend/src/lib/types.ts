@@ -925,7 +925,7 @@ export interface AudioGenerateRequest {
   seed?: number
   steps?: number
   timbre_ref_id?: string
-  // Urdu songs: the server adds zer / zabar / pesh to unmarked lines before singing
+  // Arabic-script songs (Urdu, Arabic, Persian...): the server adds the vowel marks to unmarked lines before singing
   aerab?: boolean
   // ACE-Step only
   keyscale?: string
@@ -949,6 +949,7 @@ export interface LyricsResponse {
   tags?: string | string[] | null
   marked?: number
   kept?: number
+  low_coverage?: number
 }
 
 export interface AerabResponse {
@@ -956,6 +957,24 @@ export interface AerabResponse {
   marked: number
   // lines left as written: the marking pass changed their letters
   kept: number
+  low_coverage?: number
+  language?: string | null
+}
+
+// contract-v23: POST /text/aerab, the one "Add aerab" every editor calls
+export interface TextAerabRequest {
+  text: string
+  // empty: the server reads the language from the letters
+  language?: string
+}
+
+export interface TextAerabResponse {
+  text: string
+  marked: number
+  kept: number
+  // lines still sparsely marked after the strict retry
+  low_coverage: number
+  language: string | null
 }
 
 // quality and smooth motion come from project.settings; the server drops them for long takes

@@ -7,9 +7,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { ErrorState } from '@/components/studio/states'
+import { AerabButton } from '@/components/text/AerabButton'
 import { useImportProject, useMixScript, usePatchScript, useRenderLines, useScript, useSplitScript, useStemsScript } from '@/hooks/useDialogue'
 import { useVoiceChoices } from '@/hooks/useGallery'
 import { useVoiceEngines } from '@/hooks/useVoices'
+import { isArabicScriptLang, joinLines, splitLines } from '@/lib/aerab'
 import { clock } from '@/lib/audio'
 import {
   LOUDNESS_LABEL,
@@ -163,6 +165,13 @@ function Editor({ script }: { script: Script }) {
     announce('Line restored.')
   }
   const addLine = () => setFocusText(actions.insertAfter(lines.length - 1))
+  // every line in one marking pass; the result goes back line by line
+  const setAllTexts = (marked: string) => {
+    const next = splitLines(lines.map((l) => l.text), marked)
+    if (!next) return
+    const byId = new Map(lines.map((l, i) => [l.id, next[i]]))
+    edit((l) => ({ ...l, lines: l.lines.map((x) => (byId.has(x.id) && byId.get(x.id) !== x.text ? { ...x, text: byId.get(x.id)! } : x)) }))
+  }
 
   const changed = changedLines(lines)
   const blocked = mixBlockedReason(lines, dirty)
@@ -202,6 +211,7 @@ function Editor({ script }: { script: Script }) {
             <FileInput aria-hidden />
             Import from project
           </Button>
+          <AerabButton text={joinLines(lines.map((l) => l.text))} onText={setAllTexts} language={script.language} label="Add aerab to all lines" showNote={false} />
           <SettingsPopover script={script} engines={engines} onSave={(patch) => save.mutate(patch)} />
           <Button type="button" size="sm" variant="primary" disabled={changed.length === 0} loading={render.isPending} onClick={() => renderIds(changed.map((l) => l.id))}>
             <Wand2 aria-hidden />
@@ -442,9 +452,9 @@ function SettingsPopover({ script, engines, onSave }: { script: Script; engines:
         </label>
         <div className="flex items-start gap-2">
           <Switch id={`${uid}-aerab`} checked={s.aerab} onCheckedChange={(v) => set({ aerab: v })} className="mt-0.5" />
-          <label htmlFor={`${uid}-aerab`} className={cn('text-small', script.language !== 'ur' && 'text-studio-muted')}>
-            Aerab for Urdu lines
-            <span className="block text-[11px] text-studio-muted">Adds zer, zabar and pesh before speaking, so the vowels come out right.</span>
+          <label htmlFor={`${uid}-aerab`} className={cn('text-small', !isArabicScriptLang(script.language) && 'text-studio-muted')}>
+            Aerab for Urdu, Arabic and other Arabic-script lines
+            <span className="block text-[11px] text-studio-muted">Adds the vowel marks (zer, zabar, pesh; tashkeel for Arabic) before speaking, so the vowels come out right.</span>
           </label>
         </div>
       </PopoverContent>

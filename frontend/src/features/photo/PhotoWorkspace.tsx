@@ -10,10 +10,10 @@ import { usePhotoSchema } from '@/hooks/usePhoto'
 import { api } from '@/lib/api'
 import { exposureLine } from '@/lib/catalogue'
 import { downloadUrl } from '@/lib/media'
-import { ASPECTS } from '@/lib/photo/geometry'
-import { rgbToHsv } from '@/lib/photo/maths'
+import { aspectRatio, reshapeCrop } from '@/lib/photo/geometry'
+import { fringeBand, rgbToHsv } from '@/lib/photo/maths'
 import { compact, isIdentity, paramsKey } from '@/lib/photo/params'
-import type { DevelopParams, HistoryVersion, PhotoHistory } from '@/lib/photo/types'
+import type { DevelopParams, HistoryVersion, PhotoHistory, UprightMode } from '@/lib/photo/types'
 import { DEFAULT_COPY, bypass, pasteGroups, pickGroups, readClipboard, readPrevious, writeClipboard, writePrevious } from '@/lib/photo/workflow'
 import { neutralWb } from '@/lib/photo/wb'
 import type { MediaItem } from '@/lib/types'
@@ -23,12 +23,13 @@ import { announce } from '@/stores/ui'
 import { CanvasToolbar, GridOverlay, InfoOverlay, SplitOverlay } from './CanvasToolbar'
 import { ratioZoom, type CompareMode } from '@/lib/photo/view'
 import { CopySettingsDialog } from './CopySettingsDialog'
-import { CropOverlay } from './CropOverlay'
+import { CROP_OVERLAYS, nextOverlay } from '@/lib/photo/cropOverlays'
+import { CropOverlay, StraightenOverlay } from './CropOverlay'
 import { CutoutTab } from './CutoutTab'
 import { DarkroomCanvas, type CanvasView, type Zoom } from './DarkroomCanvas'
 import { DevelopPanel, type Picker } from './DevelopPanel'
 import { CompareDialog, Filmstrip } from './Filmstrip'
-import { GeometryControls } from './GeometryControls'
+import { GeometryControls, type CropUi } from './GeometryControls'
 import { HistogramPanel } from './HistogramPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { LeftPanel, Navigator } from './LeftPanel'
@@ -76,7 +77,7 @@ function store(key: string, v: unknown) {
 }
 
 // the edit panels in Lightroom's order; Ctrl+1…9 opens them in this order
-const PANEL_ORDER = ['basic', 'curve', 'hsl', 'grading', 'detail', 'effects', 'calibration', 'local']
+const PANEL_ORDER = ['basic', 'curve', 'hsl', 'grading', 'detail', 'lens', 'transform', 'effects', 'calibration']
 
 /**
  * Develop, laid out like Lightroom's: Navigator, Presets, Snapshots and History on the left; the photo
@@ -100,7 +101,21 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
     setCropping(t === 'crop')
   }
   const [cropping, setCropping] = useState(tab === 'crop')
-  const [aspect, setAspect] = useState('free')
+  const [cropUi, setCropUi] = useState<CropUi>(() => ({
+    aspect: 'free', portrait: false, custom: [3, 2], straightening: false,
+    overlay: stored('mixai.develop.cropOverlay', 'thirds'), orient: 0, opacity: stored('mixai.develop.cropOpacity', 0.6),
+  }))
+  const patchCropUi = (patch: Partial<CropUi>) =>
+    setCropUi((u) => {
+      const next = { ...u, ...patch }
+      if (patch.overlay) store('mixai.develop.cropOverlay', patch.overlay)
+      if (patch.opacity != null) store('mixai.develop.cropOpacity', patch.opacity)
+      return next
+    })
+  const [maskView, setMaskView] = useState(false)
+  const [measuring, setMeasuring] = useState<{ ca?: boolean; upright?: boolean; straighten?: boolean; note?: string | null }>({})
+  // Upright / auto CA values the server measured for params that only named a mode (a paste, a preset)
+  const [measured, setMeasured] = useState<{ upright: Record<string, number[] | null>; ca: { caRed: number; caBlue: number } | null }>({ upright: {}, ca: null })
   const [placing, setPlacing] = useState(false)
   const [picker, setPicker] = useState<Picker>(null)
   const [point, setPoint] = useState<number | null>(null)
@@ -148,9 +163,33 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
 
   // crop works on the whole, unturned source; so do cut-out clicks, which SAM reads in source pixels
   // TODO: draw the crop box on the turned frame so straightening and cropping can happen together
-  const working = preset ?? params
+  const working = withMeasured(preset ?? params, measured)
   const shown = cropping || selecting ? { ...working, crop: null, rotate: 0, flipH: false, flipV: false } : working
-  const preview = useLivePreview({ sourceUrl, previewId: baseId, params: bypass(shown), before, maxSide, clip, wantBefore: compare !== 'off' })
+  const preview = useLivePreview({
+    sourceUrl, previewId: baseId, params: bypass(shown), before, maxSide, clip, wantBefore: compare !== 'off', debug: maskView ? 'sharpen_mask' : null,
+  })
+  const wantUpright = (preset ?? params).transform?.upright
+  const needUpright = !!wantUpright && wantUpright !== 'off' && !(preset ?? params).transform?.uprightMatrix?.length && !(wantUpright in measured.upright)
+  const needCa = !!(preset ?? params).lens?.caAuto && !(preset ?? params).lens?.caRed && !(preset ?? params).lens?.caBlue && !measured.ca
+  useEffect(() => {
+    if (!needUpright || !wantUpright) return
+    let gone = false
+    api.photo.upright(baseId, wantUpright).then(
+      (r) => !gone && setMeasured((m) => ({ ...m, upright: { ...m.upright, [wantUpright]: r.matrix } })),
+      () => {},
+    )
+    return () => {
+      gone = true
+    }
+  }, [needUpright, wantUpright, baseId])
+  useEffect(() => {
+    if (!needCa) return
+    let gone = false
+    api.photo.lensCa(baseId).then((r) => !gone && setMeasured((m) => ({ ...m, ca: { caRed: r.caRed, caBlue: r.caBlue } })), () => {})
+    return () => {
+      gone = true
+    }
+  }, [needCa, baseId])
   const dirty = paramsKey(params) !== paramsKey(initial) && !isIdentity(params)
   const src = preview.source
 
@@ -213,8 +252,18 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
       }
     },
     toggleCrop: () => setTab(tab === 'crop' ? 'develop' : 'crop'),
+    // O / Shift+O and X belong to the crop tool, as in Lightroom
+    cropOverlay: cropping
+      ? (turn) => {
+          if (turn) patchCropUi({ orient: (cropUi.orient + 1) % 4 })
+          else patchCropUi({ overlay: nextOverlay(cropUi.overlay) })
+          if (!turn) announce(`Crop overlay: ${CROP_OVERLAYS.find((o) => o.id === nextOverlay(cropUi.overlay))?.label}.`)
+        }
+      : undefined,
+    swapAspect: cropping ? () => swapAspect() : undefined,
     escape: () => {
       setPicker(null)
+      patchCropUi({ straightening: false })
       if (tab === 'crop') setTab('develop')
       setPlacing(false)
       setLights(0)
@@ -267,11 +316,65 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
     },
   })
 
-  const ratio = (() => {
-    const a = ASPECTS.find((x) => x.id === aspect)
-    if (!a || a.ratio == null) return null
-    return a.ratio || (src ? src.w / src.h : null)
-  })()
+  const ratio = aspectRatio(cropUi.aspect, src, cropUi.portrait, cropUi.custom)
+  function swapAspect() {
+    const portrait = !cropUi.portrait
+    patchCropUi({ portrait })
+    const r = aspectRatio(cropUi.aspect, src, portrait, cropUi.custom)
+    if (src && r != null) develop.update((p) => ({ ...p, crop: reshapeCrop(p.crop ?? { x: 0, y: 0, width: src.w, height: src.h }, r, src.w, src.h) }), null)
+    announce(portrait ? 'Crop turned to portrait.' : 'Crop turned to landscape.')
+  }
+
+  const rotateRest = (angle: number) =>
+    develop.update((p) => {
+      const q = Math.round((p.rotate ?? 0) / 90)
+      return { ...p, rotate: Math.round((q * 90 + angle) * 10) / 10 }
+    }, null)
+  const autoStraighten = () => {
+    setMeasuring((m) => ({ ...m, straighten: true }))
+    api.photo.upright(baseId, 'level').then(
+      (r) => {
+        setMeasuring((m) => ({ ...m, straighten: false }))
+        if (!r.matrix) return announce(r.note ?? 'No straight lines to level by.')
+        rotateRest(Math.max(-45, Math.min(45, r.angle)))
+        announce(`Straightened by ${r.angle}°.`)
+      },
+      () => {
+        setMeasuring((m) => ({ ...m, straighten: false }))
+        announce('Auto straighten couldn’t run. Try again in a moment.')
+      },
+    )
+  }
+  const runUpright = (mode: UprightMode) => {
+    if (mode === 'off') {
+      develop.update((p) => ({ ...p, transform: { ...p.transform, upright: 'off', uprightMatrix: null } }), null)
+      setMeasuring((m) => ({ ...m, note: null }))
+      return
+    }
+    setMeasuring((m) => ({ ...m, upright: true, note: null }))
+    api.photo.upright(baseId, mode).then(
+      (r) => {
+        develop.update((p) => ({ ...p, transform: { ...p.transform, upright: mode, uprightMatrix: r.matrix } }), null)
+        setMeasuring((m) => ({ ...m, upright: false, note: r.note ?? `${r.lines} straight lines found.` }))
+      },
+      () => setMeasuring((m) => ({ ...m, upright: false, note: 'Upright couldn’t run. Try again in a moment.' })),
+    )
+  }
+  const autoCa = (on: boolean) => {
+    if (!on) return develop.update((p) => ({ ...p, lens: { ...p.lens, caAuto: false, caRed: 0, caBlue: 0 } }), null)
+    setMeasuring((m) => ({ ...m, ca: true }))
+    api.photo.lensCa(baseId).then(
+      (r) => {
+        develop.update((p) => ({ ...p, lens: { ...p.lens, caAuto: true, caRed: r.caRed, caBlue: r.caBlue } }), null)
+        setMeasuring((m) => ({ ...m, ca: false }))
+        announce(r.edges < 50 ? 'Too few edges to measure colour fringing.' : 'Chromatic aberration removed.')
+      },
+      () => {
+        setMeasuring((m) => ({ ...m, ca: false }))
+        announce('Couldn’t measure chromatic aberration. Try again in a moment.')
+      },
+    )
+  }
 
   const infoLines = [
     `${title}${opened.generation.version ? ` · v${opened.generation.version}` : ''}`,
@@ -297,6 +400,14 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
       const [h, s, v] = rgbToHsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
       develop.update((p) => ({ ...p, pointColor: [...(p.pointColor ?? []), { hue: Math.round(h), sat: Math.round(s * 1000) / 1000, val: Math.round(v * 1000) / 1000 }] }), null)
       announce('Colour picked. Use the sliders to shift it.')
+    } else if (kind === 'fringe') {
+      const [h, s] = rgbToHsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
+      const band = fringeBand(h, s)
+      if (!band) announce('That isn’t a purple or green fringe. Zoom in and click the coloured edge itself.')
+      else {
+        develop.update((p) => ({ ...p, lens: { ...p.lens, ...band } }), null)
+        announce('Fringe colour picked. Adjust Amount if the edge still shows colour.')
+      }
     }
   }
 
@@ -320,7 +431,8 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
     }
     if (before) return layers
     if (picker) {
-      layers.push(<PickOverlay key="pick" label={picker === 'wb' ? 'Click something that should be neutral grey' : 'Click the colour to adjust'} onPick={pickAt} />)
+      const label = picker === 'wb' ? 'Click something that should be neutral grey' : picker === 'fringe' ? 'Click a purple or green fringe' : 'Click the colour to adjust'
+      layers.push(<PickOverlay key="pick" label={label} onPick={pickAt} />)
       return layers
     }
     if (selecting && clickMode) layers.push(<SelectPointsOverlay key="sel" points={selectPts} mode={clickMode} box={box} onChange={setSelectPts} />)
@@ -333,8 +445,25 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
           box={box}
           ratio={ratio}
           onChange={(crop, group) => develop.update((p) => ({ ...p, crop }), group)}
+          overlay={cropUi.overlay}
+          orient={cropUi.orient}
+          opacity={cropUi.opacity}
         />,
       )
+      if (cropUi.straightening) {
+        layers.push(
+          <StraightenOverlay
+            key="straighten"
+            src={src}
+            box={box}
+            onAngle={(a) => {
+              rotateRest(a)
+              patchCropUi({ straightening: false })
+              announce(`Straightened by ${a}°.`)
+            }}
+          />,
+        )
+      }
     } else if (preview.frame && (placing || params.lightPoints?.length)) {
       layers.push(
         <LightPointsOverlay
@@ -362,9 +491,11 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
         setCropping(on)
         if (on) setPlacing(false)
       }}
-      aspect={aspect}
-      onAspect={setAspect}
+      ui={cropUi}
+      onUi={patchCropUi}
       onChange={develop.update}
+      onAutoStraighten={autoStraighten}
+      straightenBusy={!!measuring.straighten}
     />
   )
   const exif = item ? [item.camera, exposureLine(item)].filter(Boolean).join(' · ') || null : null
@@ -412,6 +543,11 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
               }
             }}
             onAutoWb={autoWb}
+            maskView={maskView}
+            onMaskView={setMaskView}
+            onAutoCa={autoCa}
+            onUpright={runUpright}
+            measuring={measuring}
             custom={{
               local: (
                 <LocalPanel
@@ -726,3 +862,15 @@ export function PhotoWorkspace({ routeId, history, opened, baseId, sourceUrl, in
     </main>
   )
 }
+
+/** Fill in what the server measured for a mode that came without its numbers (preview only). */
+function withMeasured(p: DevelopParams, m: { upright: Record<string, number[] | null>; ca: { caRed: number; caBlue: number } | null }): DevelopParams {
+  let out = p
+  const mode = p.transform?.upright
+  if (mode && mode !== 'off' && !p.transform?.uprightMatrix?.length && m.upright[mode]) {
+    out = { ...out, transform: { ...p.transform, uprightMatrix: m.upright[mode] } }
+  }
+  if (p.lens?.caAuto && !p.lens.caRed && !p.lens.caBlue && m.ca) out = { ...out, lens: { ...p.lens, ...m.ca } }
+  return out
+}
+

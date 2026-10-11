@@ -691,8 +691,8 @@ class Autopilot:
                                temperature=0.8, max_tokens=ai_jobs._tokens_for(P.words_for(int(seconds))))
             except LLMError as e:
                 raise StageFailed(f"The AI writer isn't available: {e}") from e
-            ai_jobs.write_scene(db, sc, {"script_text": P.clean_script(res.content, sc.heading)}, action="quick",
-                                job_id=self.job.id, summarize=False)
+            script = ai_jobs.with_aerab(lambda _f, m: self.tick(message=m), P.clean_script(res.content, sc.heading), 0)
+            ai_jobs.write_scene(db, sc, {"script_text": script}, action="quick", job_id=self.job.id, summarize=False)
             self.tick(0.15 + 0.7 * (k + 1) / len(scenes))
 
         if o.get("roles") and not o.get("looks_done"):

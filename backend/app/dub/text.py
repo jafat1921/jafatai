@@ -46,8 +46,11 @@ def glossary_rules(glossary: list[dict], lang: str) -> list[str]:
 
 def _script_rule(lang: str) -> str:
     if lang == "ur":
-        return "Write Urdu in Urdu script (not Roman Urdu, not Hindi), the way people actually speak it."
-    return f"Write {lang_name(lang)} in its usual script, the way people actually speak it."
+        rule = "Write Urdu in Urdu script (not Roman Urdu, not Hindi), the way people actually speak it."
+    else:
+        rule = f"Write {lang_name(lang)} in its usual script, the way people actually speak it."
+    marks = aerab.writing_rule(lang)
+    return f"{rule} {marks}" if marks else rule
 
 
 def _budget(item: dict, lang: str) -> str:

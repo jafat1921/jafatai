@@ -1,3 +1,4 @@
+import { isArabicScriptLang } from './aerab'
 import { MAX_TAKES } from './audio'
 import type { DesignPreviewRequest, RefWarning, SpeakRequest, Voice, VoiceCreate, VoiceEngine, VoiceGender, VoiceKind, VoiceLanguage } from './types'
 
@@ -184,7 +185,7 @@ export function speakPayload(f: SpeakForm, voices: Voice[], engines: VoiceEngine
     denoise: f.denoise,
   }
   if (side.voiceId) body.voice_id = side.voiceId
-  if (f.language === 'ur') body.aerab = f.aerab
+  if (isArabicScriptLang(f.language)) body.aerab = f.aerab
   const steps = int(f.steps)
   if (steps !== null && steps > 0) body.steps = steps
   const guidance = num(f.guidance)

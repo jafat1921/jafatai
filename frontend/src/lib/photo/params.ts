@@ -4,7 +4,9 @@ import { HSL_BANDS, type DevelopParams, type RangeSpec } from './types'
 
 // Flat slider keys use dotted paths the schema also uses: "exposure", "curve.mids", "hsl.red.s".
 
-export const SPATIAL_KEYS = ['clarity', 'sharpness', 'noiseReduction', 'lightPoints'] as const
+export const SPATIAL_KEYS = ['texture', 'clarity', 'dehaze', 'sharpen', 'nr', 'sharpness', 'noiseReduction', 'lightPoints'] as const
+// defringe is a point formula in the preview, but the server keeps it to edges
+const SPATIAL_PREFIX = ['lens.purple', 'lens.green']
 
 const r = (min: number, max: number, label: string, extra: Partial<RangeSpec> = {}): RangeSpec => ({ min, max, step: 1, default: 0, label, ...extra })
 
@@ -20,7 +22,9 @@ export const FALLBACK_RANGES: Record<string, RangeSpec> = {
   blacks: r(-100, 100, 'Blacks'),
   vibrance: r(-100, 100, 'Vibrance'),
   saturation: r(-100, 100, 'Saturation'),
+  texture: r(-100, 100, 'Texture', { spatial: true }),
   clarity: r(-100, 100, 'Clarity', { spatial: true }),
+  dehaze: r(-100, 100, 'Dehaze', { spatial: true }),
   sharpness: r(0, 100, 'Sharpening', { spatial: true }),
   noiseReduction: r(0, 100, 'Noise reduction', { spatial: true }),
   vignette: r(-100, 100, 'Vignette'),
@@ -70,14 +74,45 @@ export const FALLBACK_RANGES: Record<string, RangeSpec> = {
   rotate: r(-180, 180, 'Rotate', { step: 0.1 }),
   'lightPoints.exposure': r(-100, 100, 'Exposure'),
   'lut.amount': r(0, 100, 'Amount', { default: 100 }),
+  // D2b
+  'sharpen.amount': r(0, 150, 'Amount', { spatial: true }),
+  'sharpen.radius': r(0.5, 3, 'Radius', { step: 0.1, default: 1, spatial: true }),
+  'sharpen.detail': r(0, 100, 'Detail', { default: 25, spatial: true }),
+  'sharpen.masking': r(0, 100, 'Masking', { spatial: true }),
+  'nr.luminance': r(0, 100, 'Luminance', { spatial: true }),
+  'nr.detail': r(0, 100, 'Detail', { default: 50, spatial: true }),
+  'nr.contrast': r(0, 100, 'Contrast', { spatial: true }),
+  'nr.color': r(0, 100, 'Colour', { spatial: true }),
+  'nr.colorDetail': r(0, 100, 'Colour detail', { default: 50, spatial: true }),
+  'nr.smoothness': r(0, 100, 'Smoothness', { default: 50, spatial: true }),
+  'lens.caRed': r(-100, 100, 'Red / cyan'),
+  'lens.caBlue': r(-100, 100, 'Blue / yellow'),
+  'lens.distortion': r(-100, 100, 'Distortion'),
+  'lens.vignette': r(-100, 100, 'Amount'),
+  'lens.vignetteMidpoint': r(0, 100, 'Midpoint', { default: 50 }),
+  'lens.purpleAmount': r(0, 20, 'Purple amount', { spatial: true }),
+  'lens.purpleHueLo': r(0, 100, 'Purple hue', { default: 30, spatial: true }),
+  'lens.purpleHueHi': r(0, 100, 'Purple hue', { default: 70, spatial: true }),
+  'lens.greenAmount': r(0, 20, 'Green amount', { spatial: true }),
+  'lens.greenHueLo': r(0, 100, 'Green hue', { default: 40, spatial: true }),
+  'lens.greenHueHi': r(0, 100, 'Green hue', { default: 60, spatial: true }),
+  'transform.vertical': r(-100, 100, 'Vertical'),
+  'transform.horizontal': r(-100, 100, 'Horizontal'),
+  'transform.rotate': r(-10, 10, 'Rotate', { step: 0.1 }),
+  'transform.aspect': r(-100, 100, 'Aspect'),
+  'transform.scale': r(50, 150, 'Scale', { default: 100 }),
+  'transform.offsetX': r(-100, 100, 'X offset'),
+  'transform.offsetY': r(-100, 100, 'Y offset'),
 }
 
 export const FALLBACK_GROUPS = [
-  { id: 'basic', label: 'Basic', keys: ['profile', 'treatment', 'temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'vibrance', 'saturation'] },
+  { id: 'basic', label: 'Basic', keys: ['profile', 'treatment', 'temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'texture', 'clarity', 'dehaze', 'vibrance', 'saturation'] },
   { id: 'curve', label: 'Tone curve', keys: ['curve.blacks', 'curve.shadows', 'curve.mids', 'curve.highlights', 'curve.whites', 'pcurve.highlights', 'pcurve.lights', 'pcurve.darks', 'pcurve.shadows', 'points', 'refineSat'] },
   { id: 'hsl', label: 'Colour mixer', keys: ['hsl', 'pointColor', 'bw'] },
   { id: 'grading', label: 'Colour grading', keys: ['grading'] },
-  { id: 'detail', label: 'Detail', keys: ['clarity', 'sharpness', 'noiseReduction'] },
+  { id: 'detail', label: 'Detail', keys: ['sharpen', 'nr', 'sharpness', 'noiseReduction'] },
+  { id: 'lens', label: 'Lens corrections', keys: ['lens'] },
+  { id: 'transform', label: 'Transform', keys: ['transform'] },
   { id: 'effects', label: 'Effects', keys: ['vignette', 'vignetteMidpoint', 'vignetteRoundness', 'vignetteFeather', 'vignetteHighlights', 'vignetteStyle', 'grainAmount', 'grainSize', 'grainRoughness'] },
   { id: 'calibration', label: 'Calibration', keys: ['calibration'] },
   { id: 'local', label: 'Local light · Selective colour', keys: ['lightPoints', 'palette'] },
@@ -94,8 +129,11 @@ export function rangeFor(ranges: Record<string, RangeSpec>, key: string): RangeS
 const NEUTRAL: Record<string, number> = {
   vignetteMidpoint: 50, vignetteFeather: 50, grainSize: 25, grainRoughness: 50, refineSat: 100,
   'pcurve.s1': 25, 'pcurve.s2': 50, 'pcurve.s3': 75, 'grading.blending': 50,
+  'sharpen.radius': 1, 'sharpen.detail': 25, 'nr.detail': 50, 'nr.colorDetail': 50, 'nr.smoothness': 50,
+  'lens.vignetteMidpoint': 50, 'lens.purpleHueLo': 30, 'lens.purpleHueHi': 70, 'lens.greenHueLo': 40, 'lens.greenHueHi': 60,
+  'transform.scale': 100,
 }
-const NEUTRAL_TEXT: Record<string, string> = { treatment: 'color', vignetteStyle: 'highlight' }
+const NEUTRAL_TEXT: Record<string, string> = { treatment: 'color', vignetteStyle: 'highlight', 'transform.upright': 'off' }
 export const neutralOf = (key: string) => NEUTRAL[key] ?? 0
 
 export function getValue(p: DevelopParams, key: string): number {
@@ -139,7 +177,7 @@ const SLIDER_KEYS = [
   ...HSL_BANDS.map((b) => `bw.${b}`),
   // a zone's hue does nothing on its own, so it never counts as a change
   ...ZONES.flatMap((z) => [`grading.${z}.s`, `grading.${z}.l`]), 'grading.blending', 'grading.balance',
-  ...Object.keys(FALLBACK_RANGES).filter((k) => k.startsWith('calibration.')),
+  ...Object.keys(FALLBACK_RANGES).filter((k) => /^(calibration|sharpen|nr|lens|transform)\./.test(k)),
 ]
 
 const straight = (pts: [number, number][] | undefined) => !pts || pts.every(([x, y]) => Math.abs(x - y) < 0.5)
@@ -158,6 +196,9 @@ export function changedKeys(p: DevelopParams): string[] {
   if (p.lightPoints?.some((l) => l.exposure)) out.push('lightPoints')
   if (p.palette?.some((c) => !c.enabled || c.h || c.s || c.l)) out.push('palette')
   if (p.lut && p.lut.amount > 0) out.push('lut')
+  if (p.lens?.caAuto) out.push('lens.caAuto')
+  if (p.transform?.upright && p.transform.upright !== 'off') out.push('transform.upright')
+  if (p.transform?.constrain) out.push('transform.constrain')
   return out
 }
 
@@ -165,7 +206,11 @@ export const isIdentity = (p: DevelopParams) => changedKeys(p).length === 0
 
 /** Spatial edits the instant preview can't show exactly: wait for the server's render. */
 export function needsServer(p: DevelopParams): boolean {
-  return changedKeys(p).some((k) => (SPATIAL_KEYS as readonly string[]).includes(k) || k === 'palette')
+  const spatial = (k: string) => (SPATIAL_KEYS as readonly string[]).includes(k.split('.')[0]) || SPATIAL_PREFIX.some((s) => k.startsWith(s))
+  // a mode the server still has to measure on this picture (a pasted preset, an imported .xmp)
+  const unmeasured = (p.transform?.upright ?? 'off') !== 'off' && !p.transform?.uprightMatrix?.length
+  const autoCa = !!p.lens?.caAuto && !p.lens.caRed && !p.lens.caBlue
+  return unmeasured || autoCa || changedKeys(p).some((k) => spatial(k) || k === 'palette')
 }
 
 // whole values: their insides mean nothing apart (a crop box, a LUT or profile reference)
@@ -198,7 +243,8 @@ export function compact(p: DevelopParams): DevelopParams {
 }
 
 // numbers a look's Amount must not touch: positions, hues and split points
-const FIXED = new Set(['version', 'h', 's1', 's2', 's3', 'hue', 'sat', 'val', 'hueRange', 'satRange', 'lumRange'])
+const FIXED = new Set(['version', 'h', 's1', 's2', 's3', 'hue', 'sat', 'val', 'hueRange', 'satRange', 'lumRange',
+  'purpleHueLo', 'purpleHueHi', 'greenHueLo', 'greenHueHi', 'caRed', 'caBlue'])
 
 /** Scale a look's numbers by its intensity (0..1) around their neutral values before putting it over the current params. */
 export function scaleParams(p: DevelopParams, k: number): DevelopParams {
@@ -215,7 +261,11 @@ export function scaleParams(p: DevelopParams, k: number): DevelopParams {
   return walk(p, '', '') as DevelopParams
 }
 
-const WHOLE: Record<string, string> = { profile: 'Profile', treatment: 'Black & white', points: 'Point curve', pointColor: 'Point colour' }
+const WHOLE: Record<string, string> = {
+  profile: 'Profile', treatment: 'Black & white', points: 'Point curve', pointColor: 'Point colour',
+  'lens.caAuto': 'Remove chromatic aberration', 'transform.upright': 'Upright', 'transform.constrain': 'Constrain crop',
+}
+const NESTED_NAME: Record<string, string> = { sharpen: 'Sharpening', nr: 'Noise', lens: 'Lens', transform: 'Transform' }
 
 /** "Red hue", "Curve lights", "Shadows grade sat": a human name for a dotted slider key. */
 export function keyLabel(k: string): string {
@@ -228,6 +278,12 @@ export function keyLabel(k: string): string {
   if (k.startsWith('curve.') || /^pcurve\.[a-z]+$/.test(k)) return `Curve ${k.split('.')[1]}`
   if (k.startsWith('pcurve.')) return 'Curve split'
   if (k.startsWith('grading.')) return `Grading ${k.slice(8)}`
+  const nest = /^(sharpen|nr|lens|transform)\.(\w+)$/.exec(k)
+  if (nest) {
+    const label = FALLBACK_RANGES[k]?.label ?? humanize(nest[2])
+    // "Purple amount" already says what it is; "Amount" needs its panel's name
+    return /purple|green|distortion|red|blue|vertical|horizontal|offset/i.test(label) ? label : `${NESTED_NAME[nest[1]]} ${label.toLowerCase()}`
+  }
   return FALLBACK_RANGES[k]?.label ?? k
 }
 

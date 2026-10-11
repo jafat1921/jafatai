@@ -30,7 +30,7 @@ AGE_LABELS = {"child": "Child", "young": "Young", "adult": "Adult", "elder": "El
 LOUDNESS = "podcast"
 SAMPLE_FORMAT = "mp3_128"
 
-# one natural line per language; Urdu stays in Urdu script and gets aerab like any speech
+# one natural line per language; the Arabic-script ones get aerab like any speech
 SAMPLE_LINES = {
     "en": "Hello, this is my voice. Let me tell you a story worth hearing.",
     "ur": "السلام علیکم، یہ میری آواز ہے۔ آئیے، آپ کو ایک دلچسپ کہانی سناتا ہوں۔",
@@ -271,17 +271,12 @@ def speech_params(v: dict) -> tuple[dict, int | None]:
 
 
 def with_aerab(params: dict) -> dict:
-    if params.get("language") != "ur" or not get_settings().urdu_aerab:
-        return params
     from app import aerab
-    from app.llm import LLMError
 
-    try:
-        marked, n, _ = aerab.mark_sync(params["text"])
-    except LLMError as e:
-        log.warning("aerab skipped for a gallery sample: %s", e)
+    if not aerab.applies(params.get("language"), params["text"]):
         return params
-    return {**params, "text": marked} if n else params
+    r = aerab.finish_sync(params["text"], params.get("language"), what="gallery sample")
+    return {**params, "text": r.text} if r.marked else params
 
 
 def level(src: Path, gallery_id: str) -> Path:

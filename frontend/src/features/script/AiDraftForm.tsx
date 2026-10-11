@@ -3,7 +3,9 @@ import { Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ErrorState } from '@/components/studio/states'
+import { AerabOnNote } from '@/components/text/AerabButton'
 import { useAiJob } from '@/hooks/useAi'
+import { hasArabicScript } from '@/lib/aerab'
 import { api } from '@/lib/api'
 
 // "Let AI draft" on an empty scene: one line in, a full scene back (written straight in, the scene is empty).
@@ -31,7 +33,9 @@ export function AiDraftForm({ sceneId, onCancel }: { sceneId: string; onCancel: 
         onKeyDown={(e) => e.key === 'Escape' && !draft.working && onCancel()}
         placeholder="The keeper climbs the stairs one last time"
         maxLength={2000}
+        dir="auto"
       />
+      {hasArabicScript(idea) && <AerabOnNote />}
       {draft.working ? (
         <p role="status" className="inline-flex items-center gap-1.5 text-small text-studio-muted">
           <Loader2 aria-hidden className="size-3.5 animate-spin text-studio-accent" />

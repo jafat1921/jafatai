@@ -12,12 +12,12 @@ import { formatEstimate } from '@/lib/shots'
 import type { VideoPodcast } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { CamerasPanel } from './CamerasPanel'
 import { HostsPanel } from './HostsPanel'
 import { LookPanel } from './LookPanel'
 import { RenderPanel } from './RenderPanel'
 import { ResultPanel } from './ResultPanel'
 import { SetPanel } from './SetPanel'
-import { ShotsPanel } from './ShotsPanel'
 import { VP_STEPS, blockingStep, initialStep, stepStates, timelineStages, type VPStepState } from './vp'
 
 export function VideoPodcastPage() {
@@ -113,7 +113,7 @@ function Workspace({ ep, seed }: { ep: Episode; seed: VideoPodcast }) {
           {current.id === 'hosts' && <HostsPanel vp={vp} />}
           {current.id === 'set' && <SetPanel vp={vp} />}
           {current.id === 'look' && <LookPanel vp={vp} />}
-          {current.id === 'shots' && <ShotsPanel vp={vp} />}
+          {current.id === 'cameras' && <CamerasPanel vp={vp} />}
           {current.id === 'render' && <RenderPanel vp={vp} />}
           {current.id === 'result' && <ResultPanel vp={vp} onRender={() => go(5)} />}
         </div>
@@ -188,7 +188,7 @@ const NOUN: Record<string, { name: string; plural: boolean }> = {
   cast: { name: 'host portraits', plural: true },
   set: { name: 'set', plural: false },
   keyframes: { name: 'camera angles', plural: true },
-  plan: { name: 'shot plan', plural: false },
+  plan: { name: 'cameras and the cut', plural: true },
   render: { name: 'render', plural: false },
   assemble: { name: 'final cut', plural: false },
 }
@@ -206,7 +206,7 @@ function StepGate({ vp, stepIndex, onGo }: { vp: VideoPodcast; stepIndex: number
     <section aria-label="What this step is waiting for" className="flex flex-wrap items-center gap-3 rounded-[6px] border border-studio-border-strong bg-studio-raised p-3">
       <p className="mr-auto text-small">
         {running
-          ? `Working on the ${what} first; the ${here} follows on its own.`
+          ? `Working on the ${what} first; the ${here} ${NOUN[VP_STEPS[stepIndex].stage].plural ? 'follow on their own' : 'follows on its own'}.`
           : block.status === 'review'
             ? `The ${what} ${be} waiting for your OK. Approve ${plural ? 'them' : 'it'} and the ${here} ${NOUN[VP_STEPS[stepIndex].stage].plural ? 'are' : 'is'} made next.`
             : block.status === 'failed'
@@ -242,7 +242,7 @@ function ReviewBanner({ vp, onGo }: { vp: VideoPodcast; onGo: (n: number) => voi
       <p className="mr-auto text-small">
         {hosts
           ? 'Have a look at the host portraits. Regenerate any you don’t like, then continue to the set.'
-          : 'Check the camera angles. Regenerate any that look wrong, then continue to the shot plan.'}{' '}
+          : 'Check the camera angles. Regenerate any that look wrong, then continue to the cameras and the cut.'}{' '}
         <span className="text-studio-muted">Anything not approved yet is approved as it is.</span>
       </p>
       <Button type="button" size="sm" variant="ghost" onClick={() => onGo(hosts ? 1 : 3)}>

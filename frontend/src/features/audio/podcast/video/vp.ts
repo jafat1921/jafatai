@@ -1,16 +1,16 @@
-import type { Generation, QuickStage, QuickStageKey, VideoPodcast, VPAngle, VPAspect, VPSetPreset, VPShot, VPShotType, VPStageKey } from '@/lib/types'
+import type { Generation, QuickStage, QuickStageKey, VideoPodcast, VPAspect, VPProgress, VPQuality, VPSetPreset, VPStageKey, VPTrack } from '@/lib/types'
 
 // the server refuses anything that isn't word for word this (contract-v24)
 export const LIKENESS_STATEMENT = "I have the right to use this person's likeness, and they agreed to it being animated."
 
-export type VPStepId = 'hosts' | 'set' | 'look' | 'shots' | 'render' | 'result'
+export type VPStepId = 'hosts' | 'set' | 'look' | 'cameras' | 'render' | 'result'
 export type VPStepState = 'done' | 'todo' | 'busy' | 'review'
 
 export const VP_STEPS: { id: VPStepId; label: string; stage: VPStageKey }[] = [
   { id: 'hosts', label: 'Hosts', stage: 'cast' },
   { id: 'set', label: 'Set', stage: 'set' },
   { id: 'look', label: 'Look', stage: 'keyframes' },
-  { id: 'shots', label: 'Shots', stage: 'plan' },
+  { id: 'cameras', label: 'Cameras & cut', stage: 'plan' },
   { id: 'render', label: 'Render', stage: 'render' },
   { id: 'result', label: 'Result', stage: 'assemble' },
 ]
@@ -29,15 +29,66 @@ export const ASPECTS: { value: VPAspect; label: string }[] = [
   { value: '1:1', label: '1:1 (square)' },
 ]
 
-export const SHOT_TYPES: { value: VPShotType; label: string; swatch: string }[] = [
-  { value: 'lipsync', label: 'Close-up (speaking)', swatch: 'bg-studio-accent' },
-  { value: 'medium', label: 'Two-shot (speaking)', swatch: 'bg-studio-accent/50' },
-  { value: 'reaction', label: 'Reaction', swatch: 'bg-studio-success/70' },
-  { value: 'wide', label: 'Wide', swatch: 'bg-studio-border-strong' },
-  { value: 'cover', label: 'Cover', swatch: 'bg-studio-darkroom' },
+// host cameras take these in host order; colour is never the only cue, every block also carries its name
+const HOST_SWATCHES = [
+  { swatch: 'bg-studio-accent', ink: 'text-studio-accent-fg' },
+  { swatch: 'bg-studio-gold', ink: 'text-studio-text' },
+  { swatch: 'bg-studio-success/70', ink: 'text-studio-text' },
+  { swatch: 'bg-studio-warning/60', ink: 'text-studio-text' },
 ]
+const WIDE = { swatch: 'bg-studio-border-strong', ink: 'text-studio-text' }
+const COVER = { swatch: 'bg-studio-darkroom', ink: 'text-studio-on-dark' }
 
-export const typeOf = (t: VPShotType) => SHOT_TYPES.find((s) => s.value === t) ?? SHOT_TYPES[0]
+export type CameraLook = { key: string; label: string; swatch: string; ink: string; thumb: string | null }
+
+export function cameraLooks(vp: VideoPodcast): CameraLook[] {
+  const cams = vp.plan.cameras.length
+    ? vp.plan.cameras
+    : [
+        ...vp.hosts.map((h) => ({ key: h.host_id, label: h.name, kind: 'host' as const, host_id: h.host_id, thumb_url: null })),
+        { key: 'wide', label: 'Wide', kind: 'wide' as const, host_id: null, thumb_url: null },
+      ]
+  let h = 0
+  return cams.map((c) => {
+    const look = c.kind === 'wide' ? WIDE : c.kind === 'cover' ? COVER : HOST_SWATCHES[h++ % HOST_SWATCHES.length]
+    return { key: c.key, label: c.label, thumb: c.thumb_url, ...look }
+  })
+}
+
+export const cameraLook = (looks: CameraLook[], key: string): CameraLook =>
+  looks.find((c) => c.key === key) ?? { key, label: key === 'wide' ? 'Wide' : key === 'cover' ? 'Cover' : key, thumb: null, ...(key === 'cover' ? COVER : WIDE) }
+
+export const hostName = (vp: VideoPodcast, hostId: string | null | undefined) => vp.hosts.find((h) => h.host_id === hostId)?.name ?? null
+
+export const trackName = (vp: VideoPodcast, t: VPTrack) => (t.kind === 'wide' ? 'Wide' : (hostName(vp, t.host_id) ?? 'Host'))
+
+export const takeReady = (t: VPTrack, q: VPQuality) => {
+  const g = t.takes[q]
+  return !!g?.media_url && (g.status === 'ready' || g.status === 'approved')
+}
+
+export function progressText(p: VPProgress | null | undefined, pieces: number) {
+  if (!p) return null
+  if (p.failed) return `piece ${p.failed} of ${p.pieces} failed`
+  if (p.current) return `piece ${p.current} of ${p.pieces}`
+  if (p.done >= p.pieces && p.pieces > 0) return `${p.pieces} of ${p.pieces} pieces done`
+  return p.done ? `${p.done} of ${p.pieces || pieces} pieces done` : null
+}
+
+/** "75", "75.5", "1:15" or "01:15.5" → seconds; null when it isn't a time. */
+export function parseTime(raw: string): number | null {
+  const v = raw.trim()
+  if (!v) return null
+  const m = /^(\d+):(\d{1,2}(?:\.\d+)?)$/.exec(v)
+  if (m) return Number(m[2]) >= 60 ? null : Number(m[1]) * 60 + Number(m[2])
+  return /^\d+(\.\d+)?$/.test(v) ? Number(v) : null
+}
+
+export function nearestSnap(snaps: number[], at: number): number | null {
+  let best: number | null = null
+  for (const s of snaps) if (best === null || Math.abs(s - at) < Math.abs(best - at)) best = s
+  return best
+}
 
 export const aspectClass = (a: VPAspect | undefined) => (a === '9:16' ? 'aspect-[9/16]' : a === '1:1' ? 'aspect-square' : 'aspect-video')
 
@@ -51,16 +102,6 @@ export function clock(s: number) {
   const m = Math.floor(t / 60)
   const sec = (t - m * 60).toFixed(1).padStart(4, '0')
   return `${String(m).padStart(2, '0')}:${sec}`
-}
-
-// which angles a shot of this type can use; lip-sync close-ups prefer the speaker's own
-export function anglesFor(type: VPShotType, angles: VPAngle[], speakerId: string | null): VPAngle[] {
-  if (type === 'cover') return []
-  if (type === 'wide' || type === 'medium') return angles.filter((a) => a.key === type)
-  if (type === 'reaction') return angles.filter((a) => a.key.endsWith(':listen'))
-  const talking = angles.filter((a) => a.key.endsWith(':close') || a.key.endsWith(':three_quarter'))
-  const own = talking.filter((a) => a.host_id === speakerId)
-  return own.length ? own : talking
 }
 
 export function stepStates(vp: VideoPodcast): Record<VPStepId, VPStepState> {
@@ -79,7 +120,7 @@ export function blockingStep(vp: VideoPodcast, stepIndex: number): { step: (type
   const by = new Map(vp.stages.map((s) => [s.key, s.status]))
   for (let i = 0; i < stepIndex; i++) {
     const status = by.get(VP_STEPS[i].stage) ?? 'pending'
-    // render and the cut are started from their own steps, so they never hold up the shot plan
+    // render and the cut are started from their own steps, so they never hold up the cut
     if (VP_STEPS[i].stage === 'render' || VP_STEPS[i].stage === 'assemble') continue
     if (status !== 'done' && status !== 'skipped') return { step: VP_STEPS[i], index: i, status }
   }
@@ -105,5 +146,3 @@ export function timelineStages(vp: VideoPodcast): QuickStage[] {
     detail: s.detail,
   }))
 }
-
-export const speakerName = (vp: VideoPodcast, shot: VPShot) => vp.hosts.find((h) => h.host_id === shot.speaker_id)?.name ?? (shot.type === 'cover' ? 'Cover' : 'Music')

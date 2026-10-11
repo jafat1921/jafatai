@@ -2,7 +2,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Episode } from '@/lib/podcast'
-import type { Generation, VideoPodcast, VPShot, VPStageKey, VPStageStatus } from '@/lib/types'
+import type { Generation, VideoPodcast, VPPlan, VPStageKey, VPStageStatus, VPTrack } from '@/lib/types'
 import { T, job, media, mockApi, renderAt } from '@/test/media-fixtures'
 import { EpisodePage } from './EpisodePage'
 import { VideoPodcastPage } from './video/VideoPodcastPage'
@@ -77,30 +77,47 @@ const gen = (id: string, extra: Partial<Generation> = {}): Generation => ({
   ...extra,
 })
 
-const shot = (id: string, start: number, end: number, extra: Partial<VPShot> = {}): VPShot => ({
+const track = (id: string, camera: string, start: number, end: number, extra: Partial<VPTrack> = {}): VPTrack => ({
   id,
-  type: 'lipsync',
-  angle: 'h1:close',
-  speaker_id: 'h1',
-  line_id: 'l1',
+  kind: camera === 'wide' ? 'wide' : 'host',
+  camera,
+  host_id: camera === 'wide' ? null : camera,
+  segment_id: 'g1',
+  angle_key: camera === 'wide' ? 'wide' : `${camera}:close`,
   start,
   end,
   duration: end - start,
-  chapter_id: 'c1',
-  text: 'Welcome to the show.',
-  lipsync: true,
-  marked: false,
+  pieces: camera === 'wide' ? 1 : 2,
+  lines: ['l1'],
+  used: true,
+  thumb_url: `/m/${id}.png`,
   takes: { draft: null, final: null },
+  progress: { draft: null, final: null },
   needs: { draft: true, final: true },
-  thumb_url: '/m/a1.png',
   ...extra,
+})
+
+const plan = (tracks: VPTrack[] = [track('t1', 'h1', 0, 12), track('t2', 'h2', 0, 12), track('t3', 'wide', 0, 3)]): VPPlan => ({
+  segments: [{ id: 'g1', index: 0, chapter_id: 'c1', title: 'Hello', start: 0, end: 12, duration: 12 }],
+  tracks,
+  cuts: [
+    { id: 'k1', camera: 'wide', start: 0, end: 3, duration: 3, speaker_id: null, text: '', segment_id: 'g1' },
+    { id: 'k2', camera: 'h1', start: 3, end: 8, duration: 5, speaker_id: 'h1', text: 'Welcome to the show.', segment_id: 'g1' },
+    { id: 'k3', camera: 'h2', start: 8, end: 12, duration: 4, speaker_id: 'h2', text: 'Glad to be here.', segment_id: 'g1' },
+  ],
+  cameras: [
+    { key: 'h1', label: 'Ali', kind: 'host', host_id: 'h1', thumb_url: '/m/a1.png' },
+    { key: 'h2', label: 'Sara', kind: 'host', host_id: 'h2', thumb_url: '/m/a3.png' },
+    { key: 'wide', label: 'Wide', kind: 'wide', host_id: null, thumb_url: '/m/a4.png' },
+  ],
+  snaps: [3, 5.5, 8],
 })
 
 const STAGES: [VPStageKey, string][] = [
   ['cast', 'Hosts'],
   ['set', 'Set'],
   ['keyframes', 'Look'],
-  ['plan', 'Shots'],
+  ['plan', 'Cameras & cut'],
   ['render', 'Render'],
   ['assemble', 'Assemble'],
 ]
@@ -137,8 +154,8 @@ const vpOf = (stage: VPStageKey, extra: Partial<VideoPodcast> = {}): VideoPodcas
       { key: 'wide', label: 'Wide', host_id: null, shot_id: 'k4', frame: gen('a4') },
       { key: 'medium', label: 'Two-shot', host_id: null, shot_id: 'k5', frame: gen('a5') },
     ],
-    plan: [shot('s1', 0, 2, { type: 'wide', angle: 'wide', speaker_id: null, line_id: null, text: '' }), shot('s2', 2, 8), shot('s3', 8, 12, { angle: 'h1:three_quarter' })],
-    plan_stats: { shots: 3, lipsync: 2, reaction: 0, wide: 1, medium: 0, cover: 0, seconds: 12 },
+    plan: plan(),
+    plan_stats: { segments: 1, tracks: 3, host_tracks: 2, wide_tracks: 1, cuts: 3, pieces: 5, seconds: 12 },
     duration_s: 12,
     mix_stale: false,
     outputs: { draft: null, final: null },
@@ -164,7 +181,7 @@ function api(vp: VideoPodcast | null, ep: Episode = episode()) {
     }
     if (path === '/podcast/ai-video/v1') return vp
     if (path === '/podcast/ai-video/v1/characters') return [{ id: 'x1', name: 'Inspector Rafi', description: 'tall, grey moustache', project_id: 'pp', project_title: 'Harbour', portrait_url: '/m/x1.png' }]
-    if (path === '/podcast/ai-video/v1/estimate') return { quality: 'draft', shots: 3, seconds: 12, low_s: 1800, high_s: 3600, basis: 'measured', label: '≈ 0.8 h on the video GPU' }
+    if (path === '/podcast/ai-video/v1/estimate') return { quality: 'draft', tracks: 3, takes: 3, pieces: 5, seconds: 27, generated_s: 31, low_s: 1800, high_s: 3600, basis: 'measured', label: '≈ 0.8 h on the video GPU' }
     if (path === '/podcast/ai-video/v1/continue') return job('j1', { type: 'video_podcast' })
     if (path === '/podcast/ai-video/v1/regenerate') return gen('gp2', { status: 'queued' })
     if (path.startsWith('/generations/')) return gen('gp1', { status: 'approved' })
@@ -307,50 +324,76 @@ describe('AI video podcast', { timeout: 20_000 }, () => {
     expect(screen.getByText('Not made yet: press Build the set above.')).toBeInTheDocument()
   })
 
-  it('edits the plan: type, split, merge, and replan after a confirm', async () => {
+  it('shows the camera tracks per segment and edits the cut on the timeline', async () => {
     const calls = api(vpOf('render'))
     renderAt('/audio/podcast/e1/video', routes)
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('tab', { name: /Shots/ }))
-    expect(screen.getByText(/3 shots · 2 lip-sync/)).toBeInTheDocument()
+    await user.click(await screen.findByRole('tab', { name: /Cameras & cut/ }))
+    expect(screen.getByRole('heading', { name: 'Cameras & cut', level: 2 })).toBeInTheDocument()
+    expect(screen.getByText(/1 segment · 2 host tracks · 1 wide · 5 pieces to render · 3 cuts/)).toBeInTheDocument()
+    const cards = within(screen.getByRole('list', { name: 'Cameras in segment 1' })).getAllByRole('listitem')
+    expect(cards).toHaveLength(3)
+    expect(cards[0]).toHaveTextContent('Ali')
+    expect(cards[0]).toHaveTextContent('2 pieces · needs render')
+    expect(cards[1]).toHaveTextContent('Sara')
+    expect(cards[2]).toHaveTextContent('Wide')
 
-    const timeline = screen.getByRole('group', { name: 'Shot timeline' })
-    const first = within(timeline).getByRole('button', { name: /Shot 1: Wide/ })
-    first.focus()
+    const timeline = screen.getByRole('group', { name: 'Cut timeline' })
+    within(timeline).getByRole('button', { name: 'Cut 1: Wide, 00:00.0 to 00:03.0' }).focus()
     await user.keyboard('{ArrowRight}')
-    expect(within(timeline).getByRole('button', { name: /Shot 2:/ })).toHaveFocus()
+    const second = within(timeline).getByRole('button', { name: /Cut 2: Ali/ })
+    expect(second).toHaveFocus()
     await user.keyboard('{Enter}')
-    expect(screen.getByRole('combobox', { name: 'Shot 2 type' })).toHaveFocus()
+    expect(second).toHaveAttribute('aria-pressed', 'true')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Camera for cut 2' }), 'h2')
+    await waitFor(() => expect(sent(calls, 'PATCH', '/podcast/ai-video/v1/cuts/k2')).toEqual([{ camera: 'h2' }]))
+    await user.click(screen.getByRole('button', { name: 'Remove this switch' }))
+    await waitFor(() => expect(calls.filter((c) => c.method === 'DELETE' && c.path === '/podcast/ai-video/v1/cuts/k2')).toHaveLength(1))
 
-    // a reaction can only use a listening angle
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Shot 2 type' }), 'reaction')
-    await waitFor(() => expect(sent(calls, 'PATCH', '/podcast/ai-video/v1/shots/s2')).toEqual([{ type: 'reaction', angle: 'h2:listen' }]))
-    await user.click(screen.getByRole('button', { name: 'Split shot 3' }))
-    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/shots/s3/split')).toEqual([{}]))
-    await user.click(screen.getByRole('button', { name: 'Merge shot 1 with the next' }))
-    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/shots/merge')).toEqual([{ shot_ids: ['s1', 's2'] }]))
-    expect(screen.getByRole('button', { name: 'Merge shot 3 with the next' })).toBeDisabled()
-    await user.click(screen.getByRole('checkbox', { name: 'Render shot 2 again next time' }))
-    await waitFor(() => expect(sent(calls, 'PATCH', '/podcast/ai-video/v1/shots/s2')).toContainEqual({ marked: true }))
+    // where the switch lands shows before it is sent
+    await user.type(screen.getByRole('textbox', { name: 'Time (seconds or mm:ss)' }), '0:05')
+    expect(screen.getByText(/Snaps to 00:05.5/)).toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Camera' }), 'h2')
+    await user.click(screen.getByRole('button', { name: 'Switch' }))
+    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/cuts/switch')).toEqual([{ at: 5, camera: 'h2' }]))
 
-    await user.click(screen.getByRole('button', { name: 'Replan' }))
+    await user.click(screen.getByRole('button', { name: 'Rebuild cut list' }))
     expect(sent(calls, 'POST', '/podcast/ai-video/v1/replan')).toEqual([])
-    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Replan' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Rebuild' }))
     await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/replan')).toHaveLength(1))
   })
 
-  it('shows the estimate before rendering, then renders and re-renders one shot', async () => {
+  it('shows the estimate before rendering, then renders and re-renders one track', async () => {
     const calls = api(vpOf('render'))
     renderAt('/audio/podcast/e1/video', routes)
     const user = userEvent.setup()
     expect(await screen.findByText('≈ 0.8 h on the video GPU')).toBeInTheDocument()
-    expect(screen.getByText(/3 shots to render/)).toBeInTheDocument()
+    expect(screen.getByText(/3 takes in 5 pieces/)).toBeInTheDocument()
     expect(calls.find((c) => c.path === '/podcast/ai-video/v1/estimate')?.query).toEqual({ quality: 'draft' })
     expect(sent(calls, 'POST', '/podcast/ai-video/v1/render')).toEqual([])
     await user.click(screen.getByRole('button', { name: 'Render draft' }))
     await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/render')).toEqual([{ quality: 'draft' }]))
-    await user.click(screen.getByRole('button', { name: 'Re-render shot 2' }))
-    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/render')).toContainEqual({ quality: 'draft', shot_ids: ['s2'] }))
+    await user.click(screen.getByRole('button', { name: 'Re-render Sara, segment 1' }))
+    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/render')).toContainEqual({ quality: 'draft', track_ids: ['t2'] }))
+    // no draft take of Ali's track yet, so there is nothing to resume from
+    expect(screen.getByRole('button', { name: /Re-render Ali, segment 1 from piece/ })).toBeDisabled()
+  })
+
+  it('shows the pieces of a long take and re-renders it from a piece', async () => {
+    const t1 = track('t1', 'h1', 0, 12, {
+      pieces: 5,
+      takes: { draft: gen('tk1', { status: 'failed', media_url: null }), final: null },
+      progress: { draft: { pieces: 5, done: 1, current: 2, failed: null, status: 'generating' }, final: null },
+    })
+    const calls = api(vpOf('render', { plan: plan([t1, track('t2', 'h2', 0, 12), track('t3', 'wide', 0, 3)]) }))
+    renderAt('/audio/podcast/e1/video', routes)
+    const user = userEvent.setup()
+    expect(await screen.findByText('piece 2 of 5')).toBeInTheDocument()
+    const from = screen.getByRole('spinbutton', { name: 'Ali, segment 1: re-render from piece' })
+    await user.clear(from)
+    await user.type(from, '3')
+    await user.click(screen.getByRole('button', { name: 'Re-render Ali, segment 1 from piece 3' }))
+    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/render')).toEqual([{ quality: 'draft', track_ids: ['t1'], from_piece: 3 }]))
   })
 
   it('locks the actions while a job runs', async () => {
@@ -358,7 +401,7 @@ describe('AI video podcast', { timeout: 20_000 }, () => {
     renderAt('/audio/podcast/e1/video', routes)
     expect(await screen.findByText('Rendering shot 2 of 3')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Render draft' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Re-render shot 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Re-render Ali, segment 1' })).toBeDisabled()
   })
 
   it('plays the result and cuts again with burned subtitles', async () => {

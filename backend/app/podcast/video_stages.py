@@ -95,7 +95,9 @@ class Run:
         self.project = self.db.get(Project, self.vp.project_id)
         self.mode = p.get("run") or "continue"
         self.quality = p.get("quality") if p.get("quality") in vd.QUALITIES else "draft"
-        self.shot_ids = list(p.get("shot_ids") or []) or None
+        self.track_ids = list(p.get("track_ids") or []) or None
+        self.from_piece = int(p["from_piece"]) if p.get("from_piece") else None
+        vd.upgrade(self.db, self.vp, self.ep)
         self.r = copy.deepcopy(self.job.result or {})
         self.current: str | None = None
         self.message = ""
@@ -370,14 +372,14 @@ class Run:
         if mix is None:
             raise StageFailed("Mix the episode first: the video follows the mix")
         rec = self.st()
-        if not vp.plan or rec.get("basis") != mix["generation_id"]:
+        if vd.plan_of(vp) is None or rec.get("basis") != mix["generation_id"]:
             vd.set_plan(db, vp, vd.build_plan(db, vp, self.ep))
             rec["basis"] = mix["generation_id"]
             self.put(rec)
         else:
             vd.sync_plan_shots(db, vp)
-        n = len(vp.plan)
-        self.tick(1.0, f"{n} shot{'s' if n != 1 else ''} planned")
+        n = len(vd.tracks_of(vp))
+        self.tick(1.0, f"{n} camera track{'s' if n != 1 else ''} planned")
         return None
 
     def stage_render(self, _reviewed: bool):
@@ -385,21 +387,19 @@ class Run:
         rec = self.st()
         run = rec.get("run") or {}
         if run.get("job") != self.job.id:
-            todo = vd.targets(db, vp, self.ep, self.quality, self.shot_ids)
-            run = {"job": self.job.id, "quality": self.quality, "targets": [sh["id"] for sh in todo], "gens": {}}
-            marked = set(run["targets"])
-            vp.plan = [{**sh, "marked": False} if sh["id"] in marked else sh for sh in vp.plan or []]
-            flag_modified(vp, "plan")
-        by_id = {sh["id"]: sh for sh in vp.plan or []}
-        ids = [sid for sid in run["targets"] if sid in by_id]
+            todo = vd.targets(db, vp, self.ep, self.quality, self.track_ids)
+            run = {"job": self.job.id, "quality": self.quality, "targets": [t["id"] for t in todo], "gens": {}}
+        by_id = {t["id"]: t for t in vd.tracks_of(vp)}
+        ids = [tid for tid in run["targets"] if tid in by_id]
         if not ids:
             rec["run"] = run
             self.put(rec)
-            return Skip("Every shot is up to date")
-        frames, takes = vd.angle_frames(db, vp), vd.line_takes(db, self.ep)
+            return Skip("Every camera is up to date")
+        inp = vd.Inputs(db, vp, self.ep)
+        have = vd.takes_for(db, ids)
         waits, failed, done = [], [], 0
-        for sid in ids:
-            tries = run["gens"].setdefault(sid, [])
+        for tid in ids:
+            tries = run["gens"].setdefault(tid, [])
             g = db.get(Generation, tries[-1]) if tries else None
             if g is not None and g.status in vd.LIVE:
                 waits.append(g.job_id)
@@ -408,27 +408,48 @@ class Run:
                 done += 1
                 continue
             if g is not None and len(tries) >= ATTEMPTS:
-                failed.append(sid)
+                failed.append(tid)
                 continue
+            base, idx = None, 0
+            if g is not None and vd.first_unfinished(g) is not None:
+                # the pieces already made stay; the retry picks up at the one that broke
+                base, idx = g, vd.first_unfinished(g)
+            elif g is None:
+                newest = next(iter(have[tid][self.quality]), None)
+                if self.from_piece and self.from_piece > 1 and newest is not None:
+                    base, idx = newest, self.from_piece - 1
+                elif newest is not None and newest.status == "failed" and vd.first_unfinished(newest) is not None \
+                        and (newest.params or {}).get("sig") == inp.sig(by_id[tid], self.quality):
+                    # a track that broke in an earlier run (or a restart) resumes too
+                    base, idx = newest, vd.first_unfinished(newest)
             try:
-                g = vd.enqueue_take(db, vp, self.ep, by_id[sid], self.quality, frames, takes, self.job.id)
+                g = vd.enqueue_track(db, vp, self.ep, by_id[tid], self.quality, inp, self.job.id, base=base,
+                                     from_idx=idx)
             except vd.VideoPodcastError as e:
                 raise StageFailed(str(e)) from e
-            g.params = {**(g.params or {}), "vp": vp.id}
             db.flush()
             tries.append(g.id)
             waits.append(g.job_id)
         rec["run"] = run
         self.put(rec)
         if waits:
-            return Wait(waits, f"{done} of {len(ids)} shots rendered")
+            return Wait(waits, self.render_message(ids, run, done))
         if failed:
-            order = {sh["id"]: n for n, sh in enumerate(vp.plan, 1)}
+            order = {t["id"]: n for n, t in enumerate(vd.tracks_of(vp), 1)}
             last = db.get(Generation, run["gens"][failed[0]][-1])
             job = db.get(Job, last.job_id or "") if last else None
-            raise StageFailed(f"Shot{'s' if len(failed) > 1 else ''} {', '.join(str(order[s]) for s in failed[:8])} "
-                              f"wouldn't render: {(job.error if job else None) or 'no result'}")
+            raise StageFailed(f"Camera track{'s' if len(failed) > 1 else ''} "
+                              f"{', '.join(str(order[t]) for t in failed[:8])} wouldn't render: "
+                              f"{(job.error if job else None) or 'no result'}")
         return None
+
+    def render_message(self, ids: list[str], run: dict, done: int) -> str:
+        pieces = made = 0
+        for tid in ids:
+            g = self.db.get(Generation, run["gens"][tid][-1])
+            p = vd.progress(g) or {"pieces": 0, "done": 0}
+            pieces, made = pieces + p["pieces"], made + p["done"]
+        return f"{done} of {len(ids)} camera tracks rendered · piece {made} of {pieces}"
 
     def stage_assemble(self, _reviewed: bool):
         db, vp = self.db, self.vp
@@ -452,8 +473,8 @@ class Run:
             raise StageFailed(f"Cutting the video failed: {(child.error if child else None) or 'the job disappeared'}")
         missing = self.missing_takes()
         if missing:
-            raise StageFailed(f"Shot{'s' if len(missing) > 1 else ''} {', '.join(map(str, missing[:8]))} "
-                              "have no take yet; render first")
+            raise StageFailed(f"Cut{'s' if len(missing) > 1 else ''} {', '.join(map(str, missing[:8]))} "
+                              "show a camera that hasn't been rendered yet; render first")
         item, g = vd.library_version(db, vp, self.ep, self.quality)
         child = Job(workspace_id=vp.workspace_id, type=vd.ASSEMBLE_JOB, generation_id=g.id, project_id=None,
                     message="Waiting for a worker",
@@ -467,10 +488,14 @@ class Run:
         return Wait([child.id], "Cutting the episode")
 
     def missing_takes(self) -> list[int]:
-        plan = self.vp.plan or []
-        have = vd.takes_for(self.db, [sh["id"] for sh in plan])
-        return [n for n, sh in enumerate(plan, 1)
-                if sh["type"] != "cover" and vd.take_to_cut(have[sh["id"]], self.quality)[0] is None]
+        have = vd.takes_for(self.db, [t["id"] for t in vd.tracks_of(self.vp)])
+        out = []
+        for n, c in enumerate(vd.cuts_of(self.vp), 1):
+            for t, _a, _b in sources(self.vp, c):
+                if t is not None and vd.take_to_cut(have[t["id"]], self.quality)[0] is None:
+                    out.append(n)
+                    break
+        return out
 
 
 def handle(ctx) -> dict:
@@ -537,6 +562,25 @@ def cover_card(db, vp: VideoPodcast, ep, size: tuple[int, int], dst: Path) -> Pa
     return dst
 
 
+def sources(vp: VideoPodcast, cut: dict) -> list[tuple[dict | None, float, float]]:
+    """Where a cut's picture comes from: (track, start, end) on the mix clock, None for the cover. A host cut
+    that crosses a segment edge takes each part from that segment's own track."""
+    a, b = cut["start"], cut["end"]
+    if cut["camera"] == vplan.COVER:
+        return [(None, a, b)]
+    tracks = [t for t in vd.tracks_of(vp) if t["camera"] == cut["camera"]]
+    if cut["camera"] == vplan.WIDE:
+        t = next((t for t in tracks if t["start"] - 0.05 <= a and b <= t["end"] + 0.05), None) or             next((t for t in tracks if t["start"] < b and t["end"] > a), None)
+        if t is None:
+            raise vd.VideoPodcastError(f"No wide take rolls at {a:.1f} s; rebuild the cut list")
+        return [(t, a, b)]
+    out = [(t, max(a, t["start"]), min(b, t["end"])) for t in sorted(tracks, key=lambda t: t["start"])
+           if t["start"] < b - 1e-6 and t["end"] > a + 1e-6]
+    if not out:
+        raise vd.VideoPodcastError(f"No camera track for the cut at {a:.1f} s; rebuild the cut list")
+    return out
+
+
 def cues_for(timeline: list[dict]) -> list[tuple[float, float, str]]:
     segs = [{"start": t["start"], "end": t["end"], "text": t["text"]} for t in timeline
             if (t.get("text") or "").strip() and t.get("kind") in vplan.TALK_KINDS]
@@ -562,8 +606,8 @@ def handle_assemble(ctx) -> dict:
     db.commit()
     st = vd.settings_of(vp)
     w, h = out_size(st["aspect"], quality)
-    plan = vp.plan or []
-    have = vd.takes_for(db, [sh["id"] for sh in plan])
+    cuts = vd.cuts_of(vp)
+    have = vd.takes_for(db, [t["id"] for t in vd.tracks_of(vp)])
     total = aa.stream_info(audio).duration
     folder, rel_folder = lib.media_dir(gen.workspace_id)
     folder.mkdir(parents=True, exist_ok=True)
@@ -574,23 +618,29 @@ def handle_assemble(ctx) -> dict:
     try:
         clips = []
         card = None
-        for n, sh in enumerate(plan, 1):
-            ctx.progress(0.05 + 0.6 * n / max(1, len(plan)), f"Cutting shot {n} of {len(plan)}")
-            dur = round(sh["end"] - sh["start"], 4)
-            if sh["type"] == "cover":
-                card = card or cover_card(db, vp, ep, (w, h), work / "cover.png")
-                src = card
-            else:
-                g, fb = vd.take_to_cut(have[sh["id"]], quality)
-                src = generation_file(g) if g is not None else None
-                if src is None or not src.is_file():
-                    raise vd.VideoPodcastError(f"Shot {n} has no take; render it first")
-                if fb:
-                    fallback.append(n)
-            out = work / f"c{n:04d}.mp4"
-            # muted on purpose: the episode mix is the soundtrack, not the takes' own audio
-            rl.run_ff(rl.normalise_cmd(src, out, size=(w, h), trim_in=0.0, duration=dur, has_audio=False))
-            clips.append((out, dur))
+        for n, cut in enumerate(cuts, 1):
+            ctx.progress(0.05 + 0.6 * n / max(1, len(cuts)), f"Cutting {n} of {len(cuts)}")
+            for k, (track, a, b) in enumerate(sources(vp, cut)):
+                dur = round(b - a, 4)
+                if dur <= 0:
+                    continue
+                trim = 0.0
+                if track is None:
+                    card = card or cover_card(db, vp, ep, (w, h), work / "cover.png")
+                    src = card
+                else:
+                    g, fb = vd.take_to_cut(have[track["id"]], quality)
+                    src = generation_file(g) if g is not None else None
+                    if src is None or not src.is_file():
+                        raise vd.VideoPodcastError(f"Cut {n} shows a camera that hasn't been rendered; render first")
+                    if fb and n not in fallback:
+                        fallback.append(n)
+                    # every track runs on the mix clock from its own start, so this is the same moment
+                    trim = max(0.0, a - track["start"])
+                out = work / f"c{n:04d}_{k}.mp4"
+                # muted on purpose: the episode mix is the soundtrack, not the takes' own audio
+                rl.run_ff(rl.normalise_cmd(src, out, size=(w, h), trim_in=trim, duration=dur, has_audio=False))
+                clips.append((out, dur))
         lst = rl.write_concat_list(work, [rl.Entry(c) for c, _ in clips])
         joined = work / "joined.mp4"
         want = sum(d for _, d in clips)
@@ -642,16 +692,19 @@ def handle_assemble(ctx) -> dict:
     gen.file_path, gen.media_type, gen.status = rel, "video/mp4", "ready"
     return {"file_path": rel, "media_type": "video/mp4", "duration_s": dur, "width": w, "height": h,
             "subtitles": subs_done, "renderer": renderer, "fonts_missing": missing, "fallback_shots": fallback,
-            "shots": len(plan), "seconds": round(time.monotonic() - t0, 3)}
+            "cuts": len(cuts), "seconds": round(time.monotonic() - t0, 3)}
 
 
-def queue(db, vp: VideoPodcast, run: str, *, quality: str | None = None, shot_ids: list[str] | None = None) -> Job:
+def queue(db, vp: VideoPodcast, run: str, *, quality: str | None = None, track_ids: list[str] | None = None,
+          from_piece: int | None = None) -> Job:
     vd.ensure_idle(db, vp)
     payload = {"video_podcast_id": vp.id, "run": run}
     if quality:
         payload["quality"] = quality
-    if shot_ids:
-        payload["shot_ids"] = shot_ids
+    if track_ids:
+        payload["track_ids"] = track_ids
+    if from_piece:
+        payload["from_piece"] = from_piece
     label = {"continue": "AI video", "render": f"AI video {quality} render",
              "assemble": f"AI video {quality} cut"}[run]
     job = Job(workspace_id=vp.workspace_id, type=vd.JOB, project_id=vp.project_id,

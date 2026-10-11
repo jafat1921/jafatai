@@ -1,4 +1,4 @@
-"""AI video podcast (contract v24): an episode cut as a multi-camera, lip-synced video."""
+"""AI video podcast (contract v24): an episode cut between continuous, lip-synced host cameras."""
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -47,19 +47,17 @@ class SettingsIn(BaseModel):
     cover_media_id: str | None = None
 
 
-class PlanRow(BaseModel):
+class CutRow(BaseModel):
     id: str | None = None
-    type: Literal["lipsync", "medium", "reaction", "wide", "cover"]
-    angle: str = ""
+    camera: str = Field(min_length=1, max_length=64)
     start: float = Field(ge=0)
     end: float = Field(gt=0)
-    marked: bool = False
 
 
 class PatchIn(BaseModel):
     hosts: dict[str, HostChoice] | None = None
     settings: SettingsIn | None = None
-    plan: list[PlanRow] | None = Field(None, max_length=5000)
+    cuts: list[CutRow] | None = Field(None, max_length=5000)
 
 
 class RegenerateIn(BaseModel):
@@ -68,23 +66,19 @@ class RegenerateIn(BaseModel):
     note: str | None = Field(None, max_length=1000)
 
 
-class ShotPatch(BaseModel):
-    type: Literal["lipsync", "medium", "reaction", "wide", "cover"] | None = None
-    angle: str | None = None
-    marked: bool | None = None
+class SwitchIn(BaseModel):
+    at: float = Field(ge=0)
+    camera: str = Field(min_length=1, max_length=64)
 
 
-class SplitIn(BaseModel):
-    at: float | None = None
-
-
-class MergeIn(BaseModel):
-    shot_ids: list[str] = Field(min_length=2, max_length=20)
+class CutPatch(BaseModel):
+    camera: str = Field(min_length=1, max_length=64)
 
 
 class RenderIn(BaseModel):
     quality: Quality = "draft"
-    shot_ids: list[str] | None = Field(None, max_length=5000)
+    track_ids: list[str] | None = Field(None, max_length=5000)
+    from_piece: int | None = Field(None, ge=1)
 
 
 class AssembleIn(BaseModel):
@@ -92,7 +86,9 @@ class AssembleIn(BaseModel):
 
 
 def _vp(db: Session, cur: CurrentUser, vp_id: str) -> VideoPodcast:
-    return get_owned(db, VideoPodcast, vp_id, cur.workspace_id, "AI video")
+    vp = get_owned(db, VideoPodcast, vp_id, cur.workspace_id, "AI video")
+    vd.upgrade(db, vp, vd.episode_of(db, vp))
+    return vp
 
 
 def _out(db: Session, vp: VideoPodcast) -> dict[str, Any]:
@@ -132,7 +128,7 @@ def patch_ai_video(vp_id: str, body: PatchIn, db: Session = Depends(get_db), cur
     ep = vd.episode_of(db, vp)
     data = body.model_dump(exclude_unset=True)
     resets = []
-    if body.hosts or data.get("settings") or body.plan is not None:
+    if body.hosts or data.get("settings") or body.cuts is not None:
         vd.ensure_idle(db, vp)
     if body.hosts:
         vd.sync_hosts(db, vp, ep)
@@ -151,10 +147,11 @@ def patch_ai_video(vp_id: str, body: PatchIn, db: Session = Depends(get_db), cur
         if new["aspect"] != st["aspect"]:
             db.get(Project, vp.project_id).aspect_ratio = new["aspect"]
         vp.settings = new
-        if vp.plan and (new["cover_intro"], new["cover_outro"]) != (st["cover_intro"], st["cover_outro"]):
-            vd.set_plan(db, vp, vd.apply_cover(vp.plan, new["cover_intro"], new["cover_outro"]))
-    if body.plan is not None:
-        vd.set_plan(db, vp, vd.fill_plan(db, vp, ep, [r.model_dump() for r in body.plan]))
+        plan = vd.plan_of(vp)
+        if plan and (new["cover_intro"], new["cover_outro"]) != (st["cover_intro"], st["cover_outro"]):
+            vd.put_cuts(vp, vd.checked(vp, ep, vplan.apply_cover(plan, new["cover_intro"], new["cover_outro"])))
+    if body.cuts is not None:
+        vd.put_cuts(vp, vd.fill_cuts(db, vp, ep, [r.model_dump() for r in body.cuts]))
     keys = [k for k, _ in vd.STAGES]
     if resets:
         vd.reset_from(vp, min(resets, key=keys.index))
@@ -189,7 +186,7 @@ def continue_ai_video(vp_id: str, db: Session = Depends(get_db), cur: CurrentUse
     if all(vd.stage(vp, k).get("status") == "done" for k in vd.CONTINUE_STAGES):
         key = vd.stale_from(db, vp, ep)
         if key is None:
-            raise HTTPException(409, "The hosts, set, look and shots are up to date: render next")
+            raise HTTPException(409, "The hosts, set, look and cameras are up to date: render next")
         vd.reset_from(vp, key)
     if vd.stage(vp, "plan").get("status") != "done" and vd.mix_of(ep) is None and \
             all(vd.stage(vp, k).get("status") == "done" for k in ("cast", "set", "keyframes")):
@@ -254,82 +251,87 @@ def replan(vp_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends
     return _out(db, vp)
 
 
-def _rows(vp: VideoPodcast) -> list[dict]:
-    return [{k: sh.get(k) for k in ("id", "type", "angle", "start", "end", "marked")} for sh in vp.plan or []]
-
-
-def _index(vp: VideoPodcast, shot_id: str) -> int:
-    i = next((i for i, sh in enumerate(vp.plan or []) if sh["id"] == shot_id), None)
+def _cut_index(vp: VideoPodcast, cut_id: str) -> int:
+    i = next((i for i, c in enumerate(vd.cuts_of(vp)) if c["id"] == cut_id), None)
     if i is None:
-        raise HTTPException(404, "That shot isn't in the plan")
+        raise HTTPException(404, "That cut isn't in the cut list")
     return i
 
 
-def _save_rows(db: Session, vp: VideoPodcast, rows: list[dict]) -> dict:
-    vd.ensure_idle(db, vp)
-    vd.set_plan(db, vp, vd.fill_plan(db, vp, vd.episode_of(db, vp), rows))
+def _save_cuts(db: Session, vp: VideoPodcast, cuts: list[dict]) -> dict:
+    vd.put_cuts(vp, vd.checked(vp, vd.episode_of(db, vp), vplan.merge_same(cuts)))
     db.commit()
     return _out(db, vp)
 
 
-@router.patch("/ai-video/{vp_id}/shots/{shot_id}")
-def patch_shot(vp_id: str, shot_id: str, body: ShotPatch, db: Session = Depends(get_db),
-               cur: CurrentUser = Depends(require_editor)):
+def _editable(db: Session, vp: VideoPodcast) -> list[dict]:
+    vd.ensure_idle(db, vp)
+    if vd.plan_of(vp) is None:
+        raise HTTPException(409, "Plan the cameras first: continue through the hosts, set and look")
+    return [dict(c) for c in vd.cuts_of(vp)]
+
+
+@router.post("/ai-video/{vp_id}/cuts/switch")
+def switch_camera(vp_id: str, body: SwitchIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     vp = _vp(db, cur, vp_id)
-    rows = _rows(vp)
-    row = rows[_index(vp, shot_id)]
-    data = body.model_dump(exclude_unset=True)
-    if "type" in data and data["type"] != row["type"]:
-        row["type"] = data["type"]
-        row["angle"] = data.get("angle") or ""
-    elif "angle" in data:
-        row["angle"] = data["angle"] or ""
-    if "marked" in data:
-        row["marked"] = bool(data["marked"])
-    return _save_rows(db, vp, rows)
+    cuts = _editable(db, vp)
+    if not cuts or body.at >= cuts[-1]["end"]:
+        raise HTTPException(422, "That time is past the end of the episode")
+    return _save_cuts(db, vp, vplan.switch(cuts, body.at, body.camera, (vd.plan_of(vp) or {}).get("snaps") or []))
 
 
-@router.post("/ai-video/{vp_id}/shots/{shot_id}/split")
-def split_shot(vp_id: str, shot_id: str, body: SplitIn, db: Session = Depends(get_db),
-               cur: CurrentUser = Depends(require_editor)):
+@router.patch("/ai-video/{vp_id}/cuts/{cut_id}")
+def patch_cut(vp_id: str, cut_id: str, body: CutPatch, db: Session = Depends(get_db),
+              cur: CurrentUser = Depends(require_editor)):
     vp = _vp(db, cur, vp_id)
-    rows = _rows(vp)
-    i = _index(vp, shot_id)
-    row = rows[i]
-    at = vplan.snap(body.at if body.at is not None else (row["start"] + row["end"]) / 2)
-    if at - row["start"] < vplan.MIN_SHOT_S or row["end"] - at < vplan.MIN_SHOT_S:
-        raise HTTPException(422, f"Both halves need at least {vplan.MIN_SHOT_S:g} s")
-    rows[i:i + 1] = [{**row, "end": at}, {**row, "id": None, "start": at, "marked": False}]
-    return _save_rows(db, vp, rows)
+    cuts = _editable(db, vp)
+    cuts[_cut_index(vp, cut_id)]["camera"] = body.camera
+    return _save_cuts(db, vp, cuts)
 
 
-@router.post("/ai-video/{vp_id}/shots/merge")
-def merge_shots(vp_id: str, body: MergeIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+@router.delete("/ai-video/{vp_id}/cuts/{cut_id}")
+def delete_cut(vp_id: str, cut_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     vp = _vp(db, cur, vp_id)
-    rows = _rows(vp)
-    idx = sorted(_index(vp, sid) for sid in dict.fromkeys(body.shot_ids))
-    if idx != list(range(idx[0], idx[0] + len(idx))):
-        raise HTTPException(422, "Only neighbouring shots can be merged")
-    first, last = rows[idx[0]], rows[idx[-1]]
-    rows[idx[0]:idx[-1] + 1] = [{**first, "end": last["end"]}]
-    return _save_rows(db, vp, rows)
+    cuts = _editable(db, vp)
+    i = _cut_index(vp, cut_id)
+    if len(cuts) < 2:
+        raise HTTPException(422, "The episode needs at least one cut")
+    # the switch at this cut's start goes: the cut before runs on (the first one hands over to the next)
+    if i > 0:
+        cuts[i - 1]["end"] = cuts[i]["end"]
+    else:
+        cuts[1]["start"] = 0.0
+    del cuts[i]
+    return _save_cuts(db, vp, cuts)
 
 
 @router.get("/ai-video/{vp_id}/estimate")
-def estimate(vp_id: str, quality: Quality = "draft", shot_ids: str | None = Query(None),
+def estimate(vp_id: str, quality: Quality = "draft", track_ids: str | None = Query(None),
              db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     vp = _vp(db, cur, vp_id)
-    ids = [s for s in (shot_ids or "").split(",") if s] or None
+    ids = [s for s in (track_ids or "").split(",") if s] or None
     return vd.estimate(db, vp, vd.episode_of(db, vp), quality, ids)
 
 
 def _ready_to_render(db: Session, vp: VideoPodcast) -> None:
-    if vd.stage(vp, "plan").get("status") != "done" or not vp.plan:
-        raise HTTPException(409, "Plan the shots first: continue through the hosts, set and look")
+    if vd.stage(vp, "plan").get("status") != "done" or not vd.tracks_of(vp):
+        raise HTTPException(409, "Plan the cameras first: continue through the hosts, set and look")
     frames = vd.angle_frames(db, vp)
-    missing = {sh["angle"] for sh in vp.plan if sh["type"] != "cover" and sh["angle"] not in frames}
+    missing = {t["angle_key"] for t in vd.used_tracks(vp) if t["angle_key"] not in frames}
     if missing:
         raise HTTPException(409, f"Some camera angles have no frame yet ({', '.join(sorted(missing)[:4])})")
+
+
+def _check_from_piece(db: Session, vp: VideoPodcast, body: RenderIn) -> None:
+    if not body.track_ids or len(body.track_ids) != 1:
+        raise HTTPException(422, "Re-rendering from a piece works on one camera track at a time")
+    track = next(t for t in vd.tracks_of(vp) if t["id"] == body.track_ids[0])
+    if body.from_piece > int(track.get("pieces") or 1):
+        raise HTTPException(422, f"This track has {track.get('pieces') or 1} pieces")
+    newest = next(iter(vd.takes_for(db, [track["id"]])[track["id"]][body.quality]), None)
+    sig = vd.Inputs(db, vp, vd.episode_of(db, vp)).sig(track, body.quality)
+    if newest is None or (newest.params or {}).get("sig") != sig or not (newest.params or {}).get("chunks"):
+        raise HTTPException(409, "This track's inputs changed since its last take; render it from the start")
 
 
 @router.post("/ai-video/{vp_id}/render", response_model=JobOut, status_code=202)
@@ -337,12 +339,14 @@ def render(vp_id: str, body: RenderIn, db: Session = Depends(get_db), cur: Curre
     vp = _vp(db, cur, vp_id)
     vd.ensure_idle(db, vp)
     _ready_to_render(db, vp)
-    known = {sh["id"] for sh in vp.plan}
-    if body.shot_ids and not set(body.shot_ids) <= known:
-        raise HTTPException(404, "Some of those shots aren't in the plan")
+    known = {t["id"] for t in vd.tracks_of(vp)}
+    if body.track_ids and not set(body.track_ids) <= known:
+        raise HTTPException(404, "Some of those camera tracks aren't in the plan")
+    if body.from_piece and body.from_piece > 1:
+        _check_from_piece(db, vp, body)
     for k in ("render", "assemble"):
         vd.put_stage(vp, k, {"status": "pending"})
-    job = vs.queue(db, vp, "render", quality=body.quality, shot_ids=body.shot_ids)
+    job = vs.queue(db, vp, "render", quality=body.quality, track_ids=body.track_ids, from_piece=body.from_piece)
     db.commit()
     return job_out(job)
 

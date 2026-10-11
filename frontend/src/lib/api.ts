@@ -93,7 +93,6 @@ import type {
   VPEstimate,
   VPQuality,
   VPRegenerate,
-  VPShotType,
 } from './types'
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 import type { CameraPreset } from './camera'
@@ -642,13 +641,12 @@ export const api = {
     regenerateAiVideo: (id: string, body: VPRegenerate) => post<Generation>(`/podcast/ai-video/${id}/regenerate`, body),
     aiVideoCharacters: (id: string) => get<VPCharacterOption[]>(`/podcast/ai-video/${id}/characters`),
     replanAiVideo: (id: string) => post<VideoPodcast>(`/podcast/ai-video/${id}/replan`),
-    patchAiVideoShot: (id: string, shotId: string, body: { type?: VPShotType; angle?: string; marked?: boolean }) =>
-      patch<VideoPodcast>(`/podcast/ai-video/${id}/shots/${shotId}`, body),
-    splitAiVideoShot: (id: string, shotId: string, at?: number) => post<VideoPodcast>(`/podcast/ai-video/${id}/shots/${shotId}/split`, at == null ? {} : { at }),
-    mergeAiVideoShots: (id: string, shotIds: string[]) => post<VideoPodcast>(`/podcast/ai-video/${id}/shots/merge`, { shot_ids: shotIds }),
-    aiVideoEstimate: (id: string, quality: VPQuality, shotIds?: string[]) =>
-      get<VPEstimate>(`/podcast/ai-video/${id}/estimate`, { quality, shot_ids: shotIds?.length ? shotIds.join(',') : undefined }),
-    renderAiVideo: (id: string, body: { quality: VPQuality; shot_ids?: string[] }) => post<Job>(`/podcast/ai-video/${id}/render`, body),
+    switchAiVideoCut: (id: string, body: { at: number; camera: string }) => post<VideoPodcast>(`/podcast/ai-video/${id}/cuts/switch`, body),
+    patchAiVideoCut: (id: string, cutId: string, body: { camera: string }) => patch<VideoPodcast>(`/podcast/ai-video/${id}/cuts/${cutId}`, body),
+    deleteAiVideoCut: (id: string, cutId: string) => request<VideoPodcast>('DELETE', `/podcast/ai-video/${id}/cuts/${cutId}`),
+    aiVideoEstimate: (id: string, quality: VPQuality, trackIds?: string[]) =>
+      get<VPEstimate>(`/podcast/ai-video/${id}/estimate`, { quality, track_ids: trackIds?.length ? trackIds.join(',') : undefined }),
+    renderAiVideo: (id: string, body: { quality: VPQuality; track_ids?: string[]; from_piece?: number }) => post<Job>(`/podcast/ai-video/${id}/render`, body),
     assembleAiVideo: (id: string, quality: VPQuality) => post<Job>(`/podcast/ai-video/${id}/assemble`, { quality }),
   },
   videos: {

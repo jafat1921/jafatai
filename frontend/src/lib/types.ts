@@ -1222,7 +1222,6 @@ export type VPStatus = 'idle' | 'running' | 'review' | 'failed'
 export type VPAspect = '16:9' | '9:16' | '1:1'
 export type VPSubtitles = 'none' | 'soft' | 'burn'
 export type VPSetPreset = 'modern_studio' | 'cosy_room' | 'news_desk' | 'rooftop' | 'desi_baithak'
-export type VPShotType = 'lipsync' | 'medium' | 'reaction' | 'wide' | 'cover'
 export type VPQuality = 'draft' | 'final'
 export type VPHostSource = 'persona' | 'photo' | 'existing'
 
@@ -1284,31 +1283,83 @@ export interface VPAngle {
   frame: Generation | null
 }
 
-export interface VPShot {
+export interface VPSegment {
   id: string
-  type: VPShotType
-  angle: string
-  speaker_id: string | null
-  line_id: string | null
+  index: number
+  chapter_id: string | null
+  title: string
   start: number
   end: number
   duration: number
-  chapter_id: string | null
-  text: string
-  lipsync: boolean
-  marked: boolean
+}
+
+// current / failed are 1-based piece numbers
+export interface VPProgress {
+  pieces: number
+  done: number
+  current: number | null
+  failed: number | null
+  status: string
+}
+
+export interface VPTrack {
+  id: string
+  kind: 'host' | 'wide'
+  // a host id, or "wide"
+  camera: string
+  host_id: string | null
+  segment_id: string
+  angle_key: string
+  start: number
+  end: number
+  duration: number
+  pieces: number
+  // the host's line ids in this segment
+  lines: string[]
+  // a cut shows it (host cameras always roll)
+  used: boolean
+  thumb_url: string | null
   takes: { draft: Generation | null; final: Generation | null }
+  progress: { draft: VPProgress | null; final: VPProgress | null }
   needs: { draft: boolean; final: boolean }
+}
+
+export interface VPCut {
+  id: string
+  // a host id, "wide" or "cover"
+  camera: string
+  start: number
+  end: number
+  duration: number
+  speaker_id: string | null
+  text: string
+  segment_id: string | null
+}
+
+export interface VPCamera {
+  key: string
+  label: string
+  kind: 'host' | 'wide' | 'cover'
+  host_id: string | null
   thumb_url: string | null
 }
 
+export interface VPPlan {
+  segments: VPSegment[]
+  tracks: VPTrack[]
+  cuts: VPCut[]
+  cameras: VPCamera[]
+  // the voice gaps a cut snaps to
+  snaps: number[]
+}
+
 export interface VPPlanStats {
-  shots: number
-  lipsync: number
-  reaction: number
-  wide: number
-  medium: number
-  cover: number
+  segments: number
+  tracks: number
+  host_tracks: number
+  wide_tracks: number
+  cuts: number
+  pieces: number
   seconds: number
 }
 
@@ -1341,7 +1392,7 @@ export interface VideoPodcast {
   hosts: VPHost[]
   set: VPSet
   angles: VPAngle[]
-  plan: VPShot[]
+  plan: VPPlan
   plan_stats: VPPlanStats
   duration_s: number | null
   mix_stale: boolean
@@ -1357,19 +1408,17 @@ export type VPHostChoice =
   | { source: 'photo'; media_id: string; consent: { name: string; statement: string } }
   | { source: 'existing'; character_id: string }
 
-export interface VPPlanEdit {
-  id?: string
-  type: VPShotType
-  angle: string
+export interface VPCutEdit {
+  id?: string | null
+  camera: string
   start: number
   end: number
-  marked?: boolean
 }
 
 export interface VideoPodcastPatch {
   hosts?: Record<string, VPHostChoice>
   settings?: Partial<VPSettings>
-  plan?: VPPlanEdit[]
+  cuts?: VPCutEdit[]
 }
 
 export interface VPRegenerate {
@@ -1389,8 +1438,12 @@ export interface VPCharacterOption {
 
 export interface VPEstimate {
   quality: VPQuality
-  shots: number
+  tracks: number
+  takes: number
+  pieces: number
+  // footage the render makes; generated_s counts the overlaps too
   seconds: number
+  generated_s: number
   low_s: number
   high_s: number
   basis: string

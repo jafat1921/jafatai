@@ -71,5 +71,5 @@ export const qk = {
   episodeAiVideo: (episodeId: string) => ['podcast', 'episode-ai-video', episodeId] as const,
   aiVideo: (id: string) => ['podcast', 'ai-video', id] as const,
   aiVideoCharacters: (id: string) => ['podcast', 'ai-video', id, 'characters'] as const,
-  aiVideoEstimate: (id: string, quality: string, shots: string) => ['podcast', 'ai-video', id, 'estimate', quality, shots] as const,
+  aiVideoEstimate: (id: string, quality: string, tracks: string) => ['podcast', 'ai-video', id, 'estimate', quality, tracks] as const,
 }

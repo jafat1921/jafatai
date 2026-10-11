@@ -99,7 +99,7 @@ export function ResultPanel({ vp, onRender }: { vp: VideoPodcast; onRender: () =
       )}
       {out.fallback_shots.length > 0 && (
         <p role="status" className="text-small text-studio-warning">
-          {out.fallback_shots.length === 1 ? 'One shot uses its draft take' : `${out.fallback_shots.length} shots use their draft takes`}: render the final again to replace them.
+          {out.fallback_shots.length === 1 ? `Cut ${out.fallback_shots[0]} uses draft footage` : `Cuts ${out.fallback_shots.join(', ')} use draft footage`}: render the final again to replace it.
         </p>
       )}
 
@@ -130,7 +130,7 @@ export function ResultPanel({ vp, onRender }: { vp: VideoPodcast; onRender: () =
           <Scissors aria-hidden />
           Cut the {out.quality} again
         </Button>
-        <p className="text-[11px] text-studio-muted">Uses the takes already made: no GPU time.</p>
+        <p className="text-[11px] text-studio-muted">Uses the camera tracks already made: no GPU time.</p>
         {(patch.error || assemble.error) && (
           <p role="alert" className="text-small text-studio-danger">
             {(patch.error ?? assemble.error)?.message}

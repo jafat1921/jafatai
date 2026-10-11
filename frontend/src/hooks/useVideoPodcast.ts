@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
 import { busy } from '@/lib/podcast'
-import type { Generation, Job, VideoPodcast, VideoPodcastPatch, VPQuality, VPRegenerate, VPShotType } from '@/lib/types'
+import type { Generation, Job, VideoPodcast, VideoPodcastPatch, VPQuality, VPRegenerate } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
 
@@ -9,13 +9,13 @@ const POLL_MS = 2000
 
 const making = (g: Generation | null | undefined) => g?.status === 'queued' || g?.status === 'generating'
 
-// the orchestrator job, or any portrait / frame / take still on its way (regenerate starts plain generate jobs)
+// the orchestrator job, or any portrait / frame / track take still on its way (regenerate starts plain generate jobs)
 export function aiVideoBusy(vp: VideoPodcast | null | undefined) {
   if (!vp) return false
   if (vp.status === 'running' || busy(vp.job)) return true
   if (vp.hosts.some((h) => making(h.portrait))) return true
   if (making(vp.set.establishing) || vp.angles.some((a) => making(a.frame))) return true
-  return vp.plan.some((s) => making(s.takes.draft) || making(s.takes.final))
+  return vp.plan.tracks.some((t) => making(t.takes.draft) || making(t.takes.final))
 }
 
 // the pipeline job itself: actions that change the record wait for it (the server answers 409)
@@ -103,35 +103,34 @@ export function useReplanAiVideo(id: string) {
   return useMutation({ mutationFn: () => api.aiVideo.replanAiVideo(id), onSuccess: (r) => refresh(qc, id, r) })
 }
 
-export function usePatchAiVideoShot(id: string) {
+export function useSwitchAiVideoCut(id: string) {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (body: { at: number; camera: string }) => api.aiVideo.switchAiVideoCut(id, body), onSuccess: (r) => refresh(qc, id, r) })
+}
+
+export function usePatchAiVideoCut(id: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ shotId, ...body }: { shotId: string; type?: VPShotType; angle?: string; marked?: boolean }) => api.aiVideo.patchAiVideoShot(id, shotId, body),
+    mutationFn: ({ cutId, camera }: { cutId: string; camera: string }) => api.aiVideo.patchAiVideoCut(id, cutId, { camera }),
     onSuccess: (r) => refresh(qc, id, r),
   })
 }
 
-export function useSplitAiVideoShot(id: string) {
+export function useDeleteAiVideoCut(id: string) {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: ({ shotId, at }: { shotId: string; at?: number }) => api.aiVideo.splitAiVideoShot(id, shotId, at), onSuccess: (r) => refresh(qc, id, r) })
+  return useMutation({ mutationFn: (cutId: string) => api.aiVideo.deleteAiVideoCut(id, cutId), onSuccess: (r) => refresh(qc, id, r) })
 }
 
-export function useMergeAiVideoShots(id: string) {
-  const qc = useQueryClient()
-  return useMutation({ mutationFn: (shotIds: string[]) => api.aiVideo.mergeAiVideoShots(id, shotIds), onSuccess: (r) => refresh(qc, id, r) })
+export function useAiVideoEstimate(id: string, quality: VPQuality, trackIds?: string[]) {
+  const tracks = trackIds?.join(',') ?? ''
+  return useQuery({ queryKey: qk.aiVideoEstimate(id, quality, tracks), queryFn: () => api.aiVideo.aiVideoEstimate(id, quality, trackIds) })
 }
 
-export function useAiVideoEstimate(id: string, quality: VPQuality, shotIds?: string[]) {
-  const shots = shotIds?.join(',') ?? ''
-  return useQuery({ queryKey: qk.aiVideoEstimate(id, quality, shots), queryFn: () => api.aiVideo.aiVideoEstimate(id, quality, shotIds) })
-}
+export type VPRenderBody = { quality: VPQuality; track_ids?: string[]; from_piece?: number }
 
 export function useRenderAiVideo(id: string) {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: { quality: VPQuality; shot_ids?: string[] }) => api.aiVideo.renderAiVideo(id, body),
-    onSuccess: (job) => afterJob(qc, id, job),
-  })
+  return useMutation({ mutationFn: (body: VPRenderBody) => api.aiVideo.renderAiVideo(id, body), onSuccess: (job) => afterJob(qc, id, job) })
 }
 
 export function useAssembleAiVideo(id: string) {

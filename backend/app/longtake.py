@@ -594,6 +594,13 @@ def run_take(ctx, gen: Generation, driver) -> dict:
                 # unique per take/chunk: the upload lands in a shared ComfyUI input folder
                 tail = extract_tail(prev_file, prev["frames"], overlap, folder / f"{gen.id[:8]}_tail_{k - 1}.mp4", fps)
                 cparams.update(context_video=str(tail), context_frames=overlap)
+        if params.get("speech_audio"):
+            # a lip-synced camera track (AI video podcast): each piece hears its own window of the track audio,
+            # context frames included, and later pieces are pulled back towards the angle keyframe
+            cparams.update(speech_audio=params["speech_audio"], audio_start_s=round(c["start_frame"] / fps, 4),
+                           quality=params.get("quality"), guide_strength=params.get("guide_strength"))
+            if k:
+                cparams["guide_frame_id"] = params.get("first_frame_id")
         seed = int(c.get("seed") or (gen.seed + 7919 * k) % (2**31 - 1))
         c.update(status="generating", seed=seed)
         c.pop("error", None)

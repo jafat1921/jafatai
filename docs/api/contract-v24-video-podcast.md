@@ -193,3 +193,108 @@ so a server without the upscaler still runs drafts.
   muted in the cut anyway.
 - Frontend: `/audio/podcast/:id/video` (`features/audio/podcast/video/`), opened from the Publish step's
   "AI video podcast" card. Hooks are `useAiVideo*` (`hooks/useVideoPodcast.ts`).
+
+## Update: continuous cameras (M11d-2)
+
+Plan: `docs/PLAN-m11d2-continuous-cameras.md`. No migration: the new plan lives in the existing `plan` JSON
+column as an object; the old per-line shot list is rebuilt into it on read (its takes are not reused).
+
+The edit is no longer one short take per line. Each host has **one camera that rolls continuously** through
+each episode segment, as a long take lip-synced to that host's own dry voice laid on the segment timeline
+(silence where the others speak, so the host listens and nods). A wide camera adds short takes at the intro,
+chapter openings and outro. The edit is a **cut list** that switches between these always-in-sync tracks,
+so changing a cut never needs a render.
+
+Stage 4 is now labelled **Cameras & cut** (key `plan` unchanged).
+
+### Shapes
+
+`plan` (was an array of shots):
+```
+{segments: [{id, index, chapter_id, title, start, end, duration}],
+                        // the episode split at chapters, and chapters longer than 120 s split again at a gap
+                        // between lines; together they cover 0 … duration_s
+ tracks: [Track],       // host tracks (one per host per segment), then the wide takes
+ cuts: [Cut],           // time order, covering 0 … duration_s with no gaps
+ cameras: [{key, label, kind: "host" | "wide" | "cover", host_id, thumb_url}],
+ snaps: [seconds]}      // the voice gaps a cut snaps to (between lines, and pauses inside them)
+```
+`Track`:
+```
+{id,                    // also the Shot row its takes belong to
+ kind: "host" | "wide", camera,          // camera: a host id, or "wide"
+ host_id, segment_id, angle_key,         // angle_key: "<host_id>:close" or "wide"
+ start, end, duration,  // seconds on the mix
+ pieces,                // LTX pieces this track renders in (about 10 s each, overlapped)
+ lines,                 // the host's line ids in the segment ([] for wide)
+ used,                  // a cut shows it; host tracks always count, a wide take only when a cut uses it
+ thumb_url,             // the angle keyframe
+ takes: {draft: GenerationOut | null, final: GenerationOut | null},
+ progress: {draft: Progress | null, final: Progress | null},
+ needs: {draft: bool, final: bool}}
+Progress = {pieces, done, current: int | null, failed: int | null, status}
+                        // current / failed are 1-based piece numbers
+```
+`Cut`: `{id, camera, start, end, duration, speaker_id, text, segment_id}`; `camera` is a host id, `"wide"`
+or `"cover"`.
+
+`plan_stats`: `{segments, tracks, host_tracks, wide_tracks, cuts, pieces, seconds}`.
+
+Estimate: `{quality, tracks, takes, pieces, seconds, generated_s, low_s, high_s, basis, label}`; `seconds` is
+the footage the render makes, `generated_s` counts the overlaps too.
+
+### Endpoints (changed)
+
+| Method | Path | Notes |
+|---|---|---|
+| PATCH | `/podcast/ai-video/{id}` | `cuts: [{id?, camera, start, end}]` replaces the cut list (`plan` is no longer accepted). Checked like before: 0 … `duration_s`, no gaps, every cut at least 2.5 s (a lone episode shorter than that is one cut), `wide` only where a wide take rolls, `cover` anywhere |
+| POST | `/podcast/ai-video/{id}/cuts/switch` | `{at, camera}`: the cut under `at` is split at the nearest voice gap (or pause) and the part from there to the next switch shows `camera`. 422 if a side ends up under 2.5 s |
+| PATCH | `/podcast/ai-video/{id}/cuts/{cut_id}` | `{camera}` |
+| DELETE | `/podcast/ai-video/{id}/cuts/{cut_id}` | Removes the switch at the cut's start: it joins the cut before (the first one joins the next). Returns the record |
+| POST | `/podcast/ai-video/{id}/replan` | Rebuilds segments, tracks and the automatic cut list |
+| GET | `/podcast/ai-video/{id}/estimate?quality=&track_ids=a,b` | |
+| POST | `/podcast/ai-video/{id}/render` | `{quality, track_ids?, from_piece?}`. `track_ids` re-renders exactly those tracks; `from_piece` (1-based, one track only) keeps that track's pieces before it and renders from there on (its newest take of that quality must still match the track's inputs, else 409) |
+
+The `/shots/...` endpoints are gone.
+
+### Rules
+
+- **Segments**: the mix chapters (one segment when there are none); a chapter longer than 120 s is split at
+  the gap between two lines nearest an even split, preferring a gap where the speaker changes, so the camera
+  changes there anyway. Segment edges sit in the middle of the gap between lines.
+- **Host track audio**: per host per segment, built with ffmpeg from that host's line takes placed at their
+  mix offsets, silence elsewhere, exactly the segment's length (48 kHz mono WAV, kept beside the hidden
+  project as `podcast/tracks/<track id>_<audio hash>.wav`).
+- **Cuts**: the speaker's camera while they talk (each line runs from the gap before it to the gap after
+  it); a 2.5–4 s cutaway to the listener (the host who spoke last) about every 3–4 lines, and inside a turn
+  longer than 15 s; the wide take at the intro (or the cover), at every chapter opening (about 3 s) and at the
+  outro (or the cover); no cut under 2.5 s (shorter ones fold into the cut before); every cut point snaps to
+  a voice gap, else to a pause inside a line found in the host track audio (silencedetect), else stays on its
+  frame.
+- **Wide takes** are single LTX pieces of at most 10 s (`ltx23_i2v` draft, `ltx23_two_stage` final), no audio.
+- **Host tracks** are long takes (`app.longtake`): pieces of about 10 s from `plan_chunks`, overlapped by the
+  context frames and joined with the crossfade and colour match. Piece 1 is `ltx23_ia2v` from the angle
+  keyframe; every later piece is `ltx23_ia2v_extend`: the previous piece's tail as context frames, the
+  track audio for the whole window (context + new frames) encoded and frozen, and the angle keyframe as a
+  light guide on the last frame against face drift. Draft is 832×480 single stage, final 1280×704 two
+  stage. Pieces are kept on disk: a failed or cancelled track resumes from its first unfinished piece.
+- A track **needs** a render when its signature (camera, times, angle keyframe, track audio hash, aspect,
+  quality) differs from its newest take of that quality, or that take failed. A final render therefore
+  only re-renders the tracks whose keyframe, voice or segment changed since the last final.
+- **Assemble** cuts each camera's track at the cut list's times (a cut that crosses a segment edge takes each
+  part from its own segment's track), mutes them, and lays the mix, subtitles, chapters and cover as before.
+  `fallback_shots` lists the cut numbers that used a draft track in a final cut.
+- **Estimate**: (host tracks' generated seconds × ia2v factor + wide seconds) × the per-second rate
+  (`longtake.measured_rate`, else `GPU_S_PER_OUTPUT_S`) × the quality factor (final 2.5), plus a per-piece
+  overhead and one model load.
+
+### Workflow `ltx23_ia2v_extend`
+
+`ltx23_extend`'s context-frame continuation (`VHS_LoadVideo` → `ImageScale` → `LTXVImgToVideoInplace` over
+the empty latent) with `ltx23_ia2v`'s frozen speech (`LoadAudio` → `TrimAudioDuration` →
+`LTXVAudioVAEEncode` → `SetLatentNoiseMask` with a 0 `SolidMask`) and the angle keyframe as an
+`LTXVAddGuide` on the last frame (`guide_strength`, default 0.2), cropped off again with `LTXVCropGuides`.
+Models as `ltx23_ia2v` (dev fp8 + distilled LoRA). Inputs: `prompt`, `negative`, `context_video`,
+`guide_image`, `speech_audio`, `audio_start_s`, `duration_s`, `width` / `height`, `latent_width` /
+`latent_height`, `num_frames`, `fps`, `seed`, `context_strength`, `guide_strength`, `single_stage`. The
+context video's own audio is not used: the frozen window already holds the same speech.

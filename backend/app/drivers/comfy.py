@@ -43,11 +43,12 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "photo_cutout_mask": 300.0, "photo_sam_mask": 300.0,
             "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0,
             "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
-            "ltx23_two_stage": 3600.0, "ltx23_ia2v": 3600.0, "wan22_t2v": 2400.0,
+            "ltx23_two_stage": 3600.0, "ltx23_ia2v": 3600.0, "ltx23_ia2v_extend": 3600.0, "wan22_t2v": 2400.0,
             "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0,
             "ace15_song": 900.0, "sa3_music": 600.0, "sa3_sfx": 600.0, "sa3_medium": 1200.0, "minimax_music3": 1800.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
-LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend", "ltx23_ia2v"}
+LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend", "ltx23_ia2v",
+                 "ltx23_ia2v_extend"}
 RESTORE_TEMPLATES = {"photo_model_1x", "photo_face_restore", "photo_colourise", "photo_supir", "photo_cutout_mask",
                      "photo_sam_mask", "image_upscale_seedvr2"}
 IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
@@ -294,6 +295,12 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
             sources["smooth_motion"] = True
         return Plan("ltx23_i2v", inputs, images, loras, "video", sources)
 
+    if kind == "take_chunk" and params.get("speech_audio"):
+        # a piece of a continuous camera track: the first starts from the angle keyframe, the rest continue
+        if params.get("context_video"):
+            return lipsync_extend_plan(prompt, params, seed, lookup, negative, loras)
+        return lipsync_plan(prompt, params, seed, lookup, negative, loras)
+
     if kind == "take_chunk":
         return chunk_plan(prompt, params, seed, lookup, negative, loras)
 
@@ -353,6 +360,35 @@ def lipsync_plan(prompt: str, params: dict, seed: int, lookup, negative: str, lo
                                             "speech_audio": Path(params["speech_audio"])}
     sources = {"first_frame_id": first, "lipsync": True, "quality": "hq" if final else "draft"}
     return Plan("ltx23_ia2v", inputs, images, _family("ltx23_ia2v", loras), "video", sources)
+
+
+def lipsync_extend_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:
+    """A later piece of a continuous camera track: the previous piece's tail as context frames, the track
+    audio for the whole window frozen (audio_start_s is where the window starts, context included), and
+    the angle keyframe as a light guide on the last frame."""
+    aspect = params.get("aspect_ratio") or lookup.project_aspect(params.get("project_id")) or "16:9"
+    final = params.get("quality") == "hq"
+    w, h = (HQ_SIZES if final else VIDEO_SIZES).get(aspect, (HQ_SIZES if final else VIDEO_SIZES)["16:9"])
+    fps = float(params.get("fps") or 24)
+    frames = min(int(params["num_frames"]), MAX_FRAMES)
+    inputs: dict[str, Any] = {
+        "prompt": prompt, "width": w, "height": h, "latent_width": w // 2 if final else w,
+        "latent_height": h // 2 if final else h, "num_frames": frames, "fps": fps, "seed": seed,
+        "audio_start_s": round(float(params.get("audio_start_s") or 0.0), 4), "duration_s": round((frames - 1) / fps, 4),
+        "single_stage": not final,
+    }
+    if params.get("guide_strength") is not None:
+        inputs["guide_strength"] = float(params["guide_strength"])
+    if negative:
+        inputs["negative"] = negative
+    images: dict[str, Path | list[Path]] = {"context_video": Path(params["context_video"]),
+                                            "speech_audio": Path(params["speech_audio"])}
+    guide = params.get("guide_frame_id")
+    if guide:
+        images["guide_image"] = lookup.generation_file(guide)
+    sources = {"chunk": params.get("chunk_idx"), "guide_frame_id": guide, "lipsync": True,
+               "quality": "hq" if final else "draft"}
+    return Plan("ltx23_ia2v_extend", inputs, images, _family("ltx23_ia2v_extend", loras), "video", sources)
 
 
 def clip_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:

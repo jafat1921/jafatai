@@ -1,8 +1,9 @@
 """AI video podcast (contract v24): the record, its hidden project (hosts as Characters, the set as a Location,
-the angle library and one Shot per planned shot), take signatures and the shapes the API returns. The stage
-machine that fills it in is app.podcast.video_stages."""
+the angle library and one Shot per camera track), the tracks' audio and signatures, and the shapes the API
+returns. The stage machine that fills it in is app.podcast.video_stages."""
 import hashlib
 import json
+import logging
 import math
 import shutil
 from pathlib import Path
@@ -16,6 +17,7 @@ from app import audio_analysis as aa
 from app import dialogue as dl
 from app import estimate as est
 from app import library as lib
+from app import longtake
 from app import reel as rl
 from app import storyboard as sb
 from app.config import get_settings
@@ -24,12 +26,15 @@ from app.models import (Character, Generation, Job, Location, MediaItem, Podcast
                         VideoPodcast, new_id, utcnow)
 from app.podcast import service as sv
 from app.podcast import vplan
-from app.services import approve, gen_out, generation_file, job_out, media_url, new_seed, next_version
+from app.services import (approve, enqueue_generation, gen_out, generation_file, job_out, media_url, new_seed,
+                          next_version)
 from app.workflows import frames_for
+
+log = logging.getLogger("mixai.video_podcast")
 
 JOB = "video_podcast"
 ASSEMBLE_JOB = "video_podcast_assemble"
-STAGES = (("cast", "Hosts"), ("set", "Set"), ("keyframes", "Look"), ("plan", "Shots"), ("render", "Render"),
+STAGES = (("cast", "Hosts"), ("set", "Set"), ("keyframes", "Look"), ("plan", "Cameras & cut"), ("render", "Render"),
           ("assemble", "Assemble"))
 CONTINUE_STAGES = ("cast", "set", "keyframes", "plan")
 QUALITIES = ("draft", "final")
@@ -58,10 +63,13 @@ DEFAULT_SETTINGS = {"aspect": "16:9", "style": "realistic studio", "subtitles": 
                     "set_prompt": "", "cover_intro": False, "cover_outro": False, "cover_media_id": None}
 ANGLE_LABELS = {"close": "Close-up", "three_quarter": "3/4 close-up", "listen": "Listening", "wide": "Wide",
                 "medium": "Two-shot"}
-SHOT_TYPES = {"lipsync": "close_up", "medium": "medium", "reaction": "close_up", "wide": "wide", "cover": "insert"}
-# rough extra GPU time per take on top of the per-second rate: text encode, audio encode, VAE decode
+# rough extra GPU time per piece on top of the per-second rate: text encode, audio encode, VAE decode
 TAKE_OVERHEAD_S = 8.0
 IA2V_FACTOR = 1.15
+QUALITY_FACTOR = {"draft": 1.0, "final": 2.5}  # 720p and a second pass against the 480p single pass
+PIECE_S = 10.0  # about the most LTX-2.3 does at 720p in one pass on the 20 GB cards
+SEGMENT_MAX_S = vplan.SEGMENT_MAX_S
+GUIDE_STRENGTH = 0.2  # enough to hold the face over a long take without freezing the pose
 
 
 class VideoPodcastError(RuntimeError):
@@ -470,102 +478,121 @@ def line_takes(db: Session, ep: PodcastEpisode) -> dict[str, str]:
     return {ln["id"]: ln.get("take_id") for ln in (dl.refresh(db, s) if s else []) if ln.get("take_id")}
 
 
-def build_plan(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> list[dict]:
-    mix = mix_of(ep)
-    if mix is None:
-        raise HTTPException(409, "Mix the episode first: the video follows the mix")
-    st = settings_of(vp)
-    host_ids = [h["id"] for h in hosts_in_order(vp, ep)]
-    plan = vplan.build(mix["timeline"], float(mix["duration_s"]), host_ids, cover_intro=bool(st["cover_intro"]),
-                       cover_outro=bool(st["cover_outro"]))
-    # an unchanged shot keeps its id, so its takes survive a replan
-    old = {(s["type"], s["angle"], s["start"], s["end"]): s["id"] for s in vp.plan or []}
-    used = set()
-    for sh in plan:
-        sid = old.get((sh["type"], sh["angle"], sh["start"], sh["end"]))
-        if sid and sid not in used:
-            sh["id"] = sid
-            used.add(sid)
+def plan_of(vp: VideoPodcast) -> dict | None:
+    """The continuous-camera plan, or None (nothing planned yet, or an old per-line shot list)."""
+    p = vp.plan
+    return p if isinstance(p, dict) and isinstance(p.get("tracks"), list) else None
+
+
+def tracks_of(vp: VideoPodcast) -> list[dict]:
+    return (plan_of(vp) or {}).get("tracks") or []
+
+
+def cuts_of(vp: VideoPodcast) -> list[dict]:
+    return (plan_of(vp) or {}).get("cuts") or []
+
+
+def pieces_for(track: dict) -> list[dict]:
+    if track["kind"] != "host":
+        return [{"idx": 0, "frames": min(frames_for(track["duration"], 24.0), MAX_FRAMES)}]
+    return longtake.plan_chunks(track["duration"], chunk_s=PIECE_S, overlap=longtake.context_frames("extend"))
+
+
+def _finish(plan: dict) -> dict:
+    for t in plan["tracks"]:
+        t["pieces"] = len(pieces_for(t))
     return plan
 
 
-def set_plan(db: Session, vp: VideoPodcast, plan: list[dict]) -> None:
+def _build(vp: VideoPodcast, ep: PodcastEpisode, mix: dict, found: list[float] | None = None) -> dict:
+    st = settings_of(vp)
+    host_ids = [h["id"] for h in hosts_in_order(vp, ep)]
+    return vplan.build(mix["timeline"], mix.get("chapters") or [], float(mix["duration_s"]), host_ids,
+                       cover_intro=bool(st["cover_intro"]), cover_outro=bool(st["cover_outro"]),
+                       max_s=SEGMENT_MAX_S, pauses=found, salt=vp.id)
+
+
+def build_plan(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> dict:
+    mix = mix_of(ep)
+    if mix is None:
+        raise HTTPException(409, "Mix the episode first: the video follows the mix")
+    plan = _build(vp, ep, mix)
+    found = pauses(db, vp, ep, plan)
+    if found:
+        # pauses only move cut points; the segments and tracks come out the same
+        plan = _build(vp, ep, mix, found)
+    return _finish(plan)
+
+
+def upgrade(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> None:
+    """A record planned before continuous cameras gets the new plan shape; its per-line takes don't carry over."""
+    if not vp.plan or plan_of(vp) is not None:
+        return
+    mix = mix_of(ep)
+    if mix is None:
+        vp.plan = {}
+        flag_modified(vp, "plan")
+        return
+    set_plan(db, vp, _finish(_build(vp, ep, mix)))
+
+
+def set_plan(db: Session, vp: VideoPodcast, plan: dict) -> None:
     vp.plan = plan
     flag_modified(vp, "plan")
     sync_plan_shots(db, vp)
 
 
+def put_cuts(vp: VideoPodcast, cuts: list[dict]) -> None:
+    vp.plan = {**(plan_of(vp) or {}), "cuts": cuts}
+    flag_modified(vp, "plan")
+
+
 def sync_plan_shots(db: Session, vp: VideoPodcast) -> None:
-    """One Shot row per planned shot (same id), in the hidden project's EPISODE scene."""
+    """One Shot row per camera track (same id), in the hidden project's EPISODE scene; the takes hang off it."""
     r = ensure_scenes(db, vp)
     have = {s.id: s for s in sb.scene_shots(db, r["episode_scene"])}
     chars = {hid: e["character_id"] for hid, e in (vp.hosts or {}).items()}
-    for n, sh in enumerate(vp.plan or [], start=1):
-        shot = have.pop(sh["id"], None) or db.get(Shot, sh["id"])
+    for n, t in enumerate(tracks_of(vp), start=1):
+        shot = have.pop(t["id"], None) or db.get(Shot, t["id"])
         if shot is None:
-            shot = Shot(id=sh["id"], workspace_id=vp.workspace_id, project_id=vp.project_id,
+            shot = Shot(id=t["id"], workspace_id=vp.workspace_id, project_id=vp.project_id,
                         scene_id=r["episode_scene"], source="podcast", locked=True)
             db.add(shot)
-        host = vplan.angle_host(sh.get("angle") or "") or sh.get("speaker_id")
         shot.order = n
-        shot.shot_type = SHOT_TYPES.get(sh["type"], "medium")
-        shot.duration_s = round(sh["end"] - sh["start"], 4)
-        shot.description = (sh.get("text") or ANGLE_LABELS.get(sh["type"], sh["type"]))[:2000]
-        shot.character_ids = [chars[host]] if host in chars else list(chars.values())
+        shot.shot_type = "close_up" if t["kind"] == "host" else "wide"
+        shot.duration_s = t["duration"]
+        shot.description = f"{'Host camera' if t['kind'] == 'host' else 'Wide'} {t['start']:.1f}–{t['end']:.1f} s"
+        shot.character_ids = [chars[t["host_id"]]] if t.get("host_id") in chars else list(chars.values())
         shot.location_id = vp.set_location_id
     db.flush()
     sb.delete_shots(db, list(have.values()))
 
 
-def fill_plan(db: Session, vp: VideoPodcast, ep: PodcastEpisode, rows: list[dict]) -> list[dict]:
-    """An edited plan from the client: normalised, checked and re-linked to the mix's lines."""
+def cameras(vp: VideoPodcast, ep: PodcastEpisode) -> set[str]:
+    return {h["id"] for h in hosts_in_order(vp, ep)} | {vplan.WIDE, vplan.COVER}
+
+
+def fill_cuts(db: Session, vp: VideoPodcast, ep: PodcastEpisode, rows: list[dict]) -> list[dict]:
+    """An edited cut list from the client: normalised, checked and re-linked to the mix's lines."""
+    if mix_of(ep) is None or plan_of(vp) is None:
+        raise HTTPException(409, "Plan the cameras first: the cut list follows the mix")
+    old = {c["id"] for c in cuts_of(vp)}
+    cuts = [{"id": row.get("id") if row.get("id") in old else vplan.new_id(), "camera": row.get("camera"),
+             "start": vplan.snap(row["start"]), "end": vplan.snap(row["end"])}
+            for row in sorted(rows, key=lambda r: float(r.get("start") or 0))]
+    return checked(vp, ep, cuts)
+
+
+def checked(vp: VideoPodcast, ep: PodcastEpisode, cuts: list[dict]) -> list[dict]:
     mix = mix_of(ep)
+    plan = plan_of(vp) or {}
     if mix is None:
         raise HTTPException(409, "Mix the episode first: the video follows the mix")
-    host_ids = [h["id"] for h in hosts_in_order(vp, ep)]
-    keys = {k for k, _, _ in angle_keys(vp, ep)}
-    old = {s["id"]: s for s in vp.plan or []}
-    out = []
-    for row in sorted(rows, key=lambda r: float(r.get("start") or 0)):
-        kind = row.get("type")
-        if kind not in vplan.TYPES:
-            raise HTTPException(422, f"Unknown shot type '{kind}'")
-        sid = row.get("id") if row.get("id") in old else vplan.new_id()
-        angle = row.get("angle") or ""
-        sh = {**old.get(sid, {}), "id": sid, "type": kind, "start": vplan.snap(row["start"]),
-              "end": vplan.snap(row["end"]), "marked": bool(row.get("marked", old.get(sid, {}).get("marked")))}
-        sh = vplan.refill(sh, mix["timeline"], host_ids)
-        sh["angle"] = fit_angle(sh, angle, keys)
-        out.append(sh)
-    why = vplan.check(out, float(mix["duration_s"]))
+    why = vplan.check(cuts, float(mix["duration_s"]), cameras(vp, ep), vplan.wide_spans(plan))
     if why:
         raise HTTPException(422, why)
-    return out
-
-
-def fit_angle(sh: dict, angle: str, keys: set[str]) -> str:
-    kind = sh["type"]
-    if kind == "cover":
-        return ""
-    if kind in vplan.SHARED_ANGLES:
-        return kind
-    host = vplan.angle_host(angle)
-    _, _, a = angle.rpartition(":")
-    if angle in keys and host and (kind == "reaction") == (a == "listen"):
-        return angle
-    return vplan.default_angle(kind, sh.get("speaker_id") if kind == "lipsync" else host or sh.get("speaker_id"))
-
-
-def apply_cover(plan: list[dict], cover_intro: bool, cover_outro: bool) -> list[dict]:
-    """The intro / outro shots (no line) switch between the wide shot and the cover in place."""
-    out = [dict(sh) for sh in plan]
-    for seq, on in ((out, cover_intro), (out[::-1], cover_outro)):
-        for sh in seq:
-            if sh.get("line_id"):
-                break
-            if sh["type"] in ("wide", "cover"):
-                sh["type"], sh["angle"] = ("cover", "") if on else ("wide", "wide")
-    return out
+    host_ids = [h["id"] for h in hosts_in_order(vp, ep)]
+    return vplan.annotate(cuts, mix["timeline"], plan.get("segments") or [], host_ids)
 
 
 def stale_from(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> str | None:
@@ -587,15 +614,94 @@ def stale_from(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> str | None:
         if f is None or (f.params or {}).get("vp_refs") != angle_tag(ids, angle_prompt(db, vp, ep, host_id, angle)):
             return "keyframes"
     mix = mix_of(ep)
-    if mix is not None and stage(vp, "plan").get("basis") != mix["generation_id"]:
+    if mix is not None and (plan_of(vp) is None or stage(vp, "plan").get("basis") != mix["generation_id"]):
         return "plan"
     return None
+
+
+# ---------------------------------------------------------------- track audio
+
+def track_folder(vp: VideoPodcast) -> Path:
+    return get_settings().data_dir / "workspaces" / vp.workspace_id / "projects" / vp.project_id / "podcast" / "tracks"
+
+
+def track_lines(track: dict, timeline: list[dict]) -> list[dict]:
+    want = set(track.get("lines") or [])
+    return sorted((it for it in timeline if it.get("line_id") in want), key=lambda it: float(it["start"]))
+
+
+def audio_key(track: dict, timeline: list[dict], takes: dict[str, str]) -> str:
+    rows = [[it["line_id"], takes.get(it["line_id"]), round(float(it["start"]), 3), round(float(it["end"]), 3)]
+            for it in track_lines(track, timeline)]
+    return hashlib.sha1(json.dumps([track["start"], track["end"], rows]).encode()).hexdigest()[:16]
+
+
+def track_audio(db: Session, vp: VideoPodcast, track: dict, timeline: list[dict], takes: dict[str, str]) -> Path:
+    """The host's dry voice on the segment's own clock: each of their line takes at its offset in the mix,
+    silence everywhere else, exactly the track's length. Named by its content, so a new take makes a new file."""
+    dst = track_folder(vp) / f"{track['id']}_{audio_key(track, timeline, takes)}.wav"
+    if dst.is_file():
+        return dst
+    length = float(track["duration"])
+    args: list[str] = []
+    parts: list[str] = []
+    for it in track_lines(track, timeline):
+        g = db.get(Generation, takes.get(it["line_id"]) or "")
+        src = generation_file(g) if g is not None else None
+        if src is None or not src.is_file():
+            raise VideoPodcastError("A line's voice take is gone; render the episode's lines and mix again")
+        span = float(it["end"]) - float(it["start"])
+        off = float(it["start"]) - track["start"]
+        skip = max(0.0, -off)
+        if span - skip <= 0 or off >= length:
+            continue
+        n = len(parts)
+        args += ["-i", str(src)]
+        parts.append(f"[{n}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=mono,"
+                     f"atrim=start={skip:.4f}:end={span:.4f},asetpts=PTS-STARTPTS,"
+                     f"adelay=delays={round(max(0.0, off) * 1000)}:all=1[l{n}]")
+    fit = f"apad=whole_dur={length:.4f},atrim=end={length:.4f}"
+    if not parts:
+        args += ["-f", "lavfi", "-t", f"{length:.4f}", "-i", "anullsrc=r=48000:cl=mono"]
+        graph = f"[0:a]{fit}[out]"
+    elif len(parts) == 1:
+        graph = f"{parts[0]};[l0]{fit}[out]"
+    else:
+        lanes = "".join(f"[l{k}]" for k in range(len(parts)))
+        graph = ";".join(parts) + f";{lanes}amix=inputs={len(parts)}:duration=longest:normalize=0,{fit}[out]"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    part = dst.with_suffix(".part.wav")
+    rl.run_ff([*args, "-filter_complex", graph, "-map", "[out]", "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le",
+               str(part)])
+    part.replace(dst)
+    return dst
+
+
+def pauses(db: Session, vp: VideoPodcast, ep: PodcastEpisode, plan: dict) -> list[float]:
+    """Breaths inside a host's own lines (silencedetect on their track audio): more places a cut may land."""
+    timeline = (mix_of(ep) or {}).get("timeline") or []
+    takes = line_takes(db, ep)
+    out: list[float] = []
+    for t in plan["tracks"]:
+        if t["kind"] != "host" or not t.get("lines"):
+            continue
+        try:
+            silences = aa.analyse(track_audio(db, vp, t, timeline, takes)).get("silences") or []
+        except (VideoPodcastError, rl.FFmpegError, aa.AnalysisError) as e:
+            log.warning("no pauses for track %s: %s", t["id"], e)
+            continue
+        lines = track_lines(t, timeline)
+        for s in silences:
+            mid = t["start"] + (s["start"] + s["end"]) / 2
+            if any(float(it["start"]) + 0.15 < mid < float(it["end"]) - 0.15 for it in lines):
+                out.append(round(mid, 4))
+    return out
 
 
 # ---------------------------------------------------------------- takes
 
 def takes_for(db: Session, shot_ids: list[str]) -> dict[str, dict[str, list[Generation]]]:
-    """shot id -> quality -> takes, newest first."""
+    """track id -> quality -> takes, newest first."""
     out: dict[str, dict[str, list[Generation]]] = {sid: {q: [] for q in QUALITIES} for sid in shot_ids}
     if not shot_ids:
         return out
@@ -609,101 +715,104 @@ def takes_for(db: Session, shot_ids: list[str]) -> dict[str, dict[str, list[Gene
     return out
 
 
-def signature(sh: dict, quality: str, aspect: str, frames: dict[str, Generation], takes: dict[str, str]) -> str:
-    lip = sh["type"] in vplan.LIPSYNC_TYPES
-    frame = frames.get(sh.get("angle") or "")
-    blob = [sh["type"], sh.get("angle"), sh["start"], sh["end"], frame.id if frame else None,
-            takes.get(sh.get("line_id") or "") if lip else None, sh.get("line_start") if lip else None, aspect, quality]
+def signature(track: dict, quality: str, aspect: str, frames: dict[str, Generation], audio: str | None) -> str:
+    frame = frames.get(track["angle_key"])
+    blob = [track["kind"], track["camera"], track["start"], track["end"], frame.id if frame else None,
+            audio if track["kind"] == "host" else None, aspect, quality, PIECE_S]
     return hashlib.sha1(json.dumps(blob).encode()).hexdigest()[:16]
 
 
-def needs(sh: dict, newest: Generation | None, sig: str) -> bool:
-    if sh["type"] == "cover":
-        return False
+def needs(newest: Generation | None, sig: str) -> bool:
     if newest is None or newest.status in ("failed", "rejected"):
         return True
     if newest.status in LIVE:
         return False
-    return bool(sh.get("marked")) or (newest.params or {}).get("sig") != sig
+    return (newest.params or {}).get("sig") != sig
+
+
+class Inputs:
+    """What the tracks' signatures are made of, read once per request."""
+
+    def __init__(self, db: Session, vp: VideoPodcast, ep: PodcastEpisode):
+        self.frames = angle_frames(db, vp)
+        self.takes = line_takes(db, ep)
+        self.timeline = (mix_of(ep) or {}).get("timeline") or []
+        self.aspect = settings_of(vp)["aspect"]
+
+    def sig(self, track: dict, quality: str) -> str:
+        audio = audio_key(track, self.timeline, self.takes) if track["kind"] == "host" else None
+        return signature(track, quality, self.aspect, self.frames, audio)
+
+
+def used_tracks(vp: VideoPodcast) -> list[dict]:
+    """Every host camera rolls (a cut may switch to it later); a wide take only when a cut shows it."""
+    wides = [c for c in cuts_of(vp) if c["camera"] == vplan.WIDE]
+    return [t for t in tracks_of(vp) if t["kind"] == "host" or any(
+        c["start"] < t["end"] - 1e-6 and c["end"] > t["start"] + 1e-6 for c in wides)]
 
 
 def targets(db: Session, vp: VideoPodcast, ep: PodcastEpisode, quality: str,
-            shot_ids: list[str] | None = None) -> list[dict]:
-    plan = [sh for sh in vp.plan or [] if sh["type"] != "cover"]
-    if shot_ids:
-        wanted = set(shot_ids)
-        return [sh for sh in plan if sh["id"] in wanted]
-    frames, takes = angle_frames(db, vp), line_takes(db, ep)
-    aspect = settings_of(vp)["aspect"]
-    have = takes_for(db, [sh["id"] for sh in plan])
-    return [sh for sh in plan if needs(sh, next(iter(have[sh["id"]][quality]), None),
-                                       signature(sh, quality, aspect, frames, takes))]
+            track_ids: list[str] | None = None) -> list[dict]:
+    if track_ids:
+        wanted = set(track_ids)
+        return [t for t in tracks_of(vp) if t["id"] in wanted]
+    tracks = used_tracks(vp)
+    inp = Inputs(db, vp, ep)
+    have = takes_for(db, [t["id"] for t in tracks])
+    return [t for t in tracks if needs(next(iter(have[t["id"]][quality]), None), inp.sig(t, quality))]
 
 
-def take_prompt(db: Session, vp: VideoPodcast, ep: PodcastEpisode, sh: dict) -> str:
+def take_prompt(db: Session, vp: VideoPodcast, ep: PodcastEpisode, track: dict) -> str:
     names = host_names(db, vp, ep)
-    who = names.get(sh.get("speaker_id") or "", "The host")
-    others = [n for hid, n in names.items() if hid != sh.get("speaker_id")]
-    to = f"to {' and '.join(others)}" if others else "to camera"
+    place = SET_PRESETS.get(settings_of(vp)["set_preset"], SET_PRESETS["modern_studio"])[0].lower()
     still = "Static camera, realistic podcast studio, natural light."
-    if sh["type"] == "lipsync":
-        return f"{who} talking {to}, natural hand gestures, small head movements, blinking. {still}"
-    if sh["type"] == "medium":
-        return f"{who} talking {to}, the others listening and reacting, natural gestures. {still}"
-    if sh["type"] == "reaction":
-        listener = names.get(vplan.angle_host(sh.get("angle") or "") or "", "The co-host")
-        return (f"{listener} listening, nodding slightly, attentive, small smile, mouth closed, not speaking. "
-                f"{still}")
+    if track["kind"] == "host":
+        who = names.get(track["host_id"] or "", "The host")
+        return (f"{who} in conversation at the {place}, natural gestures, small head movements, blinking; when "
+                f"silent, listening attentively, small nods and reactions, mouth closed. {still}")
     together = " and ".join(names.values()) or "The hosts"
     return f"{together} in conversation at their microphones, natural gestures. Slow, steady camera. {still}"
 
 
-def speech_file(db: Session, vp: VideoPodcast, take_id: str, need_s: float, lead_ms: int = 0) -> Path:
-    """The line's dry voice padded with silence past its end: a shot runs on into the gap before the next
-    line, and the ia2v graph trims [audio_start_s, +duration] out of this file."""
-    g = db.get(Generation, take_id or "")
-    src = generation_file(g) if g is not None else None
-    if src is None or not src.is_file():
-        raise VideoPodcastError("A line's voice take is gone; render the episode's lines and mix again")
-    pad = int(math.ceil(max(0.0, need_s - aa.stream_info(src).duration) + 1.0))
-    folder = get_settings().data_dir / "workspaces" / vp.workspace_id / "projects" / vp.project_id / "podcast"
-    dst = folder / f"speech_{take_id}_{pad}_{lead_ms}.wav"
-    if not dst.is_file():
-        folder.mkdir(parents=True, exist_ok=True)
-        part = dst.with_suffix(".part.wav")
-        lead = f"adelay=delays={lead_ms}:all=1," if lead_ms else ""
-        rl.run_ff(["-i", str(src), "-af", f"aresample=48000,{lead}apad=pad_dur={pad}", "-c:a", "pcm_s16le", str(part)])
-        part.replace(dst)
-    return dst
+def first_unfinished(g: Generation) -> int | None:
+    """The piece a failed or cancelled track picks up from, when some of its pieces are already on disk."""
+    chunks = (g.params or {}).get("chunks") or []
+    if not any(c.get("status") == "done" and c.get("file") for c in chunks):
+        return None
+    return next((c["idx"] for c in chunks if c.get("status") != "done"), None)
 
 
-def enqueue_take(db: Session, vp: VideoPodcast, ep: PodcastEpisode, sh: dict, quality: str,
-                 frames: dict[str, Generation], takes: dict[str, str], parent_job_id: str | None) -> Generation:
-    from app.services import enqueue_generation
-
-    frame = frames.get(sh.get("angle") or "")
+def enqueue_track(db: Session, vp: VideoPodcast, ep: PodcastEpisode, track: dict, quality: str, inp: Inputs,
+                  parent_job_id: str | None, *, base: Generation | None = None, from_idx: int = 0) -> Generation:
+    """One take of a camera track. With `base`, its pieces before `from_idx` are kept and the rest rendered."""
+    frame = inp.frames.get(track["angle_key"])
     if frame is None:
-        raise VideoPodcastError(f"The {sh.get('angle') or sh['type']} angle has no frame yet")
-    aspect = settings_of(vp)["aspect"]
-    dur = round(sh["end"] - sh["start"], 4)
-    params = {"aspect_ratio": aspect, "duration_s": dur, "fps": 24.0,
-              "num_frames": min(frames_for(dur, 24.0), MAX_FRAMES), "first_frame_id": frame.id,
-              "vp": vp.id, "vp_shot": sh["id"], "vp_quality": quality,
-              "sig": signature(sh, quality, aspect, frames, takes), "created_by": {"flow": "video_podcast"}}
+        raise VideoPodcastError(f"The {track['angle_key']} angle has no frame yet")
+    dur = float(track["duration"])
+    sig = inp.sig(track, quality)
+    common = {"aspect_ratio": inp.aspect, "duration_s": dur, "fps": 24.0, "first_frame_id": frame.id, "vp": vp.id,
+              "vp_track": track["id"], "vp_quality": quality, "sig": sig, "created_by": {"flow": "video_podcast"}}
+    prompt = take_prompt(db, vp, ep, track)
+    if track["kind"] != "host":
+        params = {**common, "num_frames": min(frames_for(dur, 24.0), MAX_FRAMES)}
+    elif base is not None:
+        params = {**longtake.reroll_params(base, from_idx, None, None), "sig": sig}
+    else:
+        audio = track_audio(db, vp, track, inp.timeline, inp.takes)
+        chunks = pieces_for(track)
+        for c in chunks:
+            c["prompt"] = prompt  # given, so the long-take runner doesn't ask the LLM for beats
+        params = {**common, "num_frames": frames_for(dur, 24.0), "longtake": True, "continuity": "extend",
+                  "context_frames": longtake.context_frames("extend"), "chunks": chunks,
+                  "assembly": {"status": "pending"}, "lipsync": True, "speech_audio": str(audio),
+                  "guide_strength": GUIDE_STRENGTH}
     if quality == "final":
         params["quality"] = "hq"
-    if sh["type"] in vplan.LIPSYNC_TYPES:
-        take_id = takes.get(sh.get("line_id") or "")
-        if not take_id:
-            raise VideoPodcastError("A spoken line has no voice take; render the episode's lines first")
-        line_start = float(sh.get("line_start") or sh["start"])
-        # a shot that opens a hair before its line (frame snapping, the first shot pulled to 0) gets silence
-        # in front rather than a voice that starts early
-        lead_ms = int(math.ceil(max(0.0, line_start - sh["start"]) * 1000))
-        params.update(lipsync=True, take_id=take_id, audio_start_s=round(sh["start"] - line_start + lead_ms / 1000, 4),
-                      speech_audio=str(speech_file(db, vp, take_id, sh["end"] - line_start, lead_ms)))
     g = enqueue_generation(db, workspace_id=vp.workspace_id, project_id=vp.project_id, target_type="shot",
-                           target_id=sh["id"], kind="take", prompt=take_prompt(db, vp, ep, sh), params=params)
+                           target_id=track["id"], kind="take", prompt=prompt, params=params,
+                           parent_id=base.id if base is not None else None)
+    if base is not None:
+        longtake.copy_kept_chunks(base, g)
     if parent_job_id:
         job = db.get(Job, g.job_id)
         job.payload = {**(job.payload or {}), "parent_job_id": parent_job_id}
@@ -719,29 +828,40 @@ def take_to_cut(gens: dict[str, list[Generation]], quality: str) -> tuple[Genera
     return draft, draft is not None
 
 
+def progress(g: Generation | None) -> dict | None:
+    if g is None:
+        return None
+    chunks = (g.params or {}).get("chunks") or []
+    if not chunks:
+        return {"pieces": 1, "done": 1 if g.status in FINISHED else 0,
+                "current": 1 if g.status == "generating" else None,
+                "failed": 1 if g.status == "failed" else None, "status": g.status}
+    return {"pieces": len(chunks), "done": sum(1 for c in chunks if c.get("status") == "done"),
+            "current": next((c["idx"] + 1 for c in chunks if c.get("status") == "generating"), None),
+            "failed": next((c["idx"] + 1 for c in chunks if c.get("status") == "failed"), None), "status": g.status}
+
+
 # ---------------------------------------------------------------- estimate
 
 def estimate(db: Session, vp: VideoPodcast, ep: PodcastEpisode, quality: str,
-             shot_ids: list[str] | None = None) -> dict:
-    todo = targets(db, vp, ep, quality, shot_ids)
-    aspect = settings_of(vp)["aspect"]
-    model = "ltx23_hq" if quality == "final" else "ltx23_distilled"
-    w, h = (HQ_SIZES if quality == "final" else VIDEO_SIZES).get(aspect, (1280, 704))
-    low = high = 0.0
-    basis = "rough"
-    for lip in (True, False):
-        secs = sum(sh["end"] - sh["start"] for sh in todo if (sh["type"] in vplan.LIPSYNC_TYPES) == lip)
-        if secs <= 0:
-            continue
-        e = est.estimate(db, vp.workspace_id, kind="take", model=model, duration_s=secs, width=w, height=h)
-        k = IA2V_FACTOR if lip else 1.0
-        low, high = low + e["low_s"] * k, high + e["high_s"] * k
-        if e["basis"] == "measured":
-            basis = "measured"
-    over = TAKE_OVERHEAD_S * len(todo)
-    low, high = int(low + over), int(math.ceil(high + over))
-    return {"quality": quality, "shots": len(todo), "seconds": round(sum(sh["end"] - sh["start"] for sh in todo), 2),
-            "low_s": low, "high_s": high, "basis": basis, "label": gpu_label(low, high)}
+             track_ids: list[str] | None = None) -> dict:
+    todo = targets(db, vp, ep, quality, track_ids)
+    measured = longtake.measured_rate(db, vp.workspace_id)
+    gpu = generated = 0.0
+    pieces = 0
+    for t in todo:
+        chunks = pieces_for(t)
+        secs = sum(c["frames"] for c in chunks) / 24.0
+        generated += secs
+        gpu += secs * (IA2V_FACTOR if t["kind"] == "host" else 1.0)
+        pieces += len(chunks)
+    gpu = gpu * (measured or longtake.GPU_S_PER_OUTPUT_S) * QUALITY_FACTOR[quality] + TAKE_OVERHEAD_S * pieces
+    if todo:
+        gpu += longtake.MODEL_LOAD_S
+    low, high = int(gpu * 0.8), int(math.ceil(gpu * 1.25))
+    return {"quality": quality, "tracks": len(todo), "takes": len(todo), "pieces": pieces,
+            "seconds": round(sum(t["duration"] for t in todo), 2), "generated_s": round(generated, 2),
+            "low_s": low, "high_s": high, "basis": "measured" if measured else "rough", "label": gpu_label(low, high)}
 
 
 def gpu_label(low: float, high: float) -> str:
@@ -814,24 +934,30 @@ def hosts_out(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> list[dict]:
     return out
 
 
-def plan_out(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> list[dict]:
-    plan = vp.plan or []
-    frames, takes = angle_frames(db, vp), line_takes(db, ep)
-    aspect = settings_of(vp)["aspect"]
-    have = takes_for(db, [sh["id"] for sh in plan])
-    out = []
-    for sh in plan:
-        gens = have.get(sh["id"]) or {q: [] for q in QUALITIES}
+def plan_out(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> dict:
+    plan = plan_of(vp) or {}
+    tracks = plan.get("tracks") or []
+    inp = Inputs(db, vp, ep)
+    have = takes_for(db, [t["id"] for t in tracks])
+    used = {t["id"] for t in used_tracks(vp)}
+    thumb = {k: gen_out(g).thumb_url for k, g in inp.frames.items()}
+    out_tracks = []
+    for t in tracks:
+        gens = have.get(t["id"]) or {q: [] for q in QUALITIES}
         newest = {q: next(iter(gens[q]), None) for q in QUALITIES}
-        frame = frames.get(sh.get("angle") or "")
-        out.append({**{k: sh.get(k) for k in ("id", "type", "angle", "speaker_id", "line_id", "start", "end",
-                                               "chapter_id", "text")},
-                    "duration": round(sh["end"] - sh["start"], 3), "marked": bool(sh.get("marked")),
-                    "lipsync": sh["type"] in vplan.LIPSYNC_TYPES,
-                    "takes": {q: _gen(newest[q]) for q in QUALITIES},
-                    "needs": {q: needs(sh, newest[q], signature(sh, q, aspect, frames, takes)) for q in QUALITIES},
-                    "thumb_url": gen_out(frame).thumb_url if frame is not None else None})
-    return out
+        out_tracks.append({**{k: t.get(k) for k in ("id", "kind", "camera", "host_id", "segment_id", "angle_key",
+                                                    "start", "end", "duration", "pieces", "lines")},
+                           "used": t["id"] in used, "thumb_url": thumb.get(t["angle_key"]),
+                           "takes": {q: _gen(newest[q]) for q in QUALITIES},
+                           "progress": {q: progress(newest[q]) for q in QUALITIES},
+                           "needs": {q: t["id"] in used and needs(newest[q], inp.sig(t, q)) for q in QUALITIES}})
+    names = host_names(db, vp, ep)
+    cams = [{"key": hid, "label": name, "kind": "host", "host_id": hid,
+             "thumb_url": thumb.get(vplan.angle_key(hid, vplan.TRACK_ANGLE))} for hid, name in names.items()]
+    cams += [{"key": vplan.WIDE, "label": "Wide", "kind": "wide", "host_id": None, "thumb_url": thumb.get(vplan.WIDE)},
+             {"key": vplan.COVER, "label": "Cover", "kind": "cover", "host_id": None, "thumb_url": None}]
+    return {"segments": plan.get("segments") or [], "tracks": out_tracks, "cuts": plan.get("cuts") or [],
+            "cameras": cams, "snaps": plan.get("snaps") or []}
 
 
 def output_out(db: Session, rec: dict | None) -> dict | None:
@@ -868,9 +994,9 @@ def vp_out(db: Session, vp: VideoPodcast) -> dict:
         "set": {"location_id": vp.set_location_id, "preset": st["set_preset"], "prompt": st["set_prompt"],
                 "description": loc.description if loc else set_description(vp),
                 "establishing": _gen(establishing(db, vp, fresh_only=False))},
-        "angles": angles, "plan": plan_out(db, vp, ep), "plan_stats": vplan.stats(vp.plan or []),
+        "angles": angles, "plan": plan_out(db, vp, ep), "plan_stats": vplan.stats(plan_of(vp) or {}),
         "duration_s": mix["duration_s"] if mix else None,
-        "mix_stale": bool(mix and vp.plan and stage(vp, "plan").get("basis") not in (None, mix["generation_id"])),
+        "mix_stale": bool(mix and plan_of(vp) and stage(vp, "plan").get("basis") not in (None, mix["generation_id"])),
         "outputs": {q: output_out(db, (vp.outputs or {}).get(q)) for q in QUALITIES},
         "job": job_out(job).model_dump(mode="json") if job is not None else None,
         "eta_s": ((job.result or {}).get("eta_s") if job is not None and job.status in ("queued", "running") else None),

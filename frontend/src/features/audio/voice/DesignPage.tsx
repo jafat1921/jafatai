@@ -16,6 +16,7 @@ import { useCreateVoice, useDesignPreview, useVoiceEngines } from '@/hooks/useVo
 import {
   DEFAULT_DESIGN_FORM,
   DESIGN_PRESETS,
+  OMNIVOICE_WORDS,
   designBlockedReason,
   designEngines,
   designPayload,
@@ -42,6 +43,7 @@ export function DesignPage() {
   const [form, setForm] = useState<DesignForm>(DEFAULT_DESIGN_FORM)
   const [takes, setTakes] = useState<Take[]>([])
   const [saving, setSaving] = useState<Take | null>(null)
+  const [heard, setHeard] = useState<{ understood: string[]; ignored: string[] } | null>(null)
   const { engines } = useVoiceEngines()
   const able = designEngines(engines)
   const engine = able.find((e) => e.id === form.engine) ?? able[0]
@@ -72,6 +74,7 @@ export function DesignPage() {
         setTakes((t) => [take, ...t])
         // the seed comes back either way, so "Keep this voice" can hold on to it
         setForm((f) => ({ ...f, seed: String(res.seed) }))
+        setHeard(res.understood || res.ignored ? { understood: res.understood ?? [], ignored: res.ignored ?? [] } : null)
         announce(`Preview ${take.n} is on its way, seed ${res.seed}. It appears below; press play to hear it.`)
       },
     })
@@ -88,9 +91,21 @@ export function DesignPage() {
         onPrompt={(v) => set('description', v)}
         maxLength={500}
         mentions={false}
-        placeholder="e.g. warm elderly Lahori narrator, slow, deep, a smile in the voice"
+        placeholder="e.g. male, elderly, low pitch, indian accent, slow"
         belowPrompt={
           <div className="flex flex-col gap-3">
+            {effective.engine === 'omnivoice' && (
+              <p className="text-small text-studio-muted">
+                OmniVoice understands: {OMNIVOICE_WORDS}. Other words are left out; the seed gives each voice its own character.
+              </p>
+            )}
+            {heard && (
+              <p role="status" className="text-small">
+                <span className="text-studio-muted">Last preview used </span>
+                {heard.understood.length ? heard.understood.join(', ') : 'no attributes (a voice of its own choosing)'}
+                {heard.ignored.length > 0 && <span className="text-studio-muted"> · left out: {heard.ignored.join(', ')}</span>}
+              </p>
+            )}
             <div role="group" aria-label="Start from a preset" className="flex flex-wrap gap-1">
               {DESIGN_PRESETS.map((p) => (
                 <Chip key={p.id} selected={form.description === p.description} onClick={() => set('description', p.description)}>

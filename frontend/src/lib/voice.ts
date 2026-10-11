@@ -287,16 +287,21 @@ export function clonePayload(f: CloneForm): VoiceCreate {
 
 // designing a voice
 
+// OmniVoice designs from a fixed list of attributes only, so the presets speak its language
 export const DESIGN_PRESETS = [
-  { id: 'narrator', label: 'Narrator', description: 'Warm, measured adult narrator, clear diction, steady unhurried pace, close to the microphone' },
-  { id: 'anchor', label: 'News anchor', description: 'Confident news anchor, crisp and neutral, even pace, broadcast clarity' },
-  { id: 'whisper', label: 'Whisper', description: 'Soft breathy whisper, intimate and very close to the microphone' },
-  { id: 'elder', label: 'Elder', description: 'Elderly voice, slow and deep, a little gravel, gentle and wise' },
-  { id: 'child', label: 'Child', description: 'Bright young child, playful, light and quick' },
-  { id: 'radio', label: 'Radio host', description: 'Smooth late-night radio host, friendly, rich low end' },
-  { id: 'storyteller', label: 'Storyteller', description: 'Expressive storyteller, animated, varied pitch, long dramatic pauses' },
-  { id: 'villain', label: 'Villain', description: 'Cold, menacing villain, low and controlled, slow deliberate delivery' },
+  { id: 'narrator', label: 'Narrator', description: 'male, middle-aged, low pitch, slow' },
+  { id: 'urdu-narrator', label: 'Urdu narrator', description: 'male, middle-aged, low pitch, indian accent, slow' },
+  { id: 'anchor', label: 'News anchor', description: 'female, young adult, moderate pitch, british accent' },
+  { id: 'whisper', label: 'Whisper', description: 'female, young adult, whisper' },
+  { id: 'elder', label: 'Elder', description: 'male, elderly, low pitch, slow' },
+  { id: 'child', label: 'Child', description: 'female, child, high pitch' },
+  { id: 'radio', label: 'Radio host', description: 'male, young adult, low pitch, american accent' },
+  { id: 'storyteller', label: 'Storyteller', description: 'female, middle-aged, moderate pitch, indian accent, slow' },
+  { id: 'villain', label: 'Villain', description: 'male, middle-aged, very low pitch, slow' },
 ] as const
+
+// what OmniVoice understands in a description (its own list); anything else is dropped
+export const OMNIVOICE_WORDS = 'male or female · child, teenager, young adult, middle-aged, elderly · very low to very high pitch · whisper · American, British, Australian, Canadian, Indian (closest to Pakistani), Chinese, Japanese, Korean, Portuguese or Russian accent · slow or fast'
 
 // a line with most of the sounds in it; other languages get the server's own sample
 const SAMPLES: Record<string, string> = {

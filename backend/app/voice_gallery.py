@@ -12,6 +12,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import voice_instruct
 from app.config import get_settings
 from app.models import Job, VoiceProfile, new_id
 
@@ -95,6 +96,10 @@ def problems(entries) -> list[str]:
                 out.append(f"{vid}: {e.label} can't design a voice")
             if not str(v.get("instruct") or "").strip() or not isinstance(v.get("seed"), int):
                 out.append(f"{vid}: a designed voice needs instruct and an int seed")
+            elif e.id == "omnivoice":
+                ins = voice_instruct.normalise(v["instruct"])
+                if ins.ignored or ins.text != v["instruct"]:
+                    out.append(f"{vid}: OmniVoice only takes {', '.join(voice_instruct.VALID)} (got {v['instruct']!r})")
     return out
 
 
@@ -121,7 +126,10 @@ def recipe(v: dict) -> tuple[str, dict]:
     """(kind, design-or-preset JSON) the way a VoiceProfile stores it."""
     if v["engine"] == "kokoro":
         return "preset", {"engine": "kokoro", "id": v["preset"], "gallery": v["id"]}
-    return "design", {"description": v["instruct"], "seed": v["seed"], "engine": v["engine"], "gallery": v["id"]}
+    spec = {"description": v["instruct"], "seed": v["seed"], "engine": v["engine"], "gallery": v["id"]}
+    if v.get("speed"):
+        spec["speed"] = v["speed"]
+    return "design", spec
 
 
 def notes_of(v: dict) -> str:
@@ -168,7 +176,7 @@ def _matches_q(v: dict, q: str) -> bool:
     from app import voices as vc
 
     hay = " ".join([v["id"], v["name"], v.get("accent") or "", " ".join(v.get("styles") or []),
-                    v.get("instruct") or "", v.get("gender") or "", v.get("age") or "",
+                    v.get("instruct") or "", v.get("description") or "", v.get("gender") or "", v.get("age") or "",
                     " ".join(vc.lang_name(x) for x in v.get("languages") or [])]).lower()
     return all(word in hay for word in q.lower().split())
 
@@ -222,7 +230,7 @@ def item_out(v: dict, added: dict[str, VoiceProfile]) -> dict:
            "sample_url": f"/api/voices/gallery/{v['id']}/sample", "sample_ready": sample_path(v["id"]).is_file(),
            "added_voice_id": mine.id if mine else None, "starred": bool(mine and mine.starred)}
     if kind == "design":
-        out.update(instruct=v["instruct"], seed=v["seed"])
+        out.update(instruct=v["instruct"], seed=v["seed"], description=v.get("description") or v["instruct"])
     else:
         out["preset"] = v["preset"]
     return out
@@ -254,7 +262,7 @@ def speech_params(v: dict) -> tuple[dict, int | None]:
     lang = v["languages"][0]
     vspec = {"kind": kind, "name": v["name"]}
     if kind == "design":
-        vspec["design"] = {k: spec[k] for k in ("description", "seed", "engine")}
+        vspec["design"] = {k: spec[k] for k in ("description", "seed", "engine", "speed") if k in spec}
     else:
         vspec["preset"] = spec["id"]
     params = {"kind": "speech", "model": v["engine"], "engine": v["engine"], "language": lang,
@@ -358,7 +366,8 @@ def render_samples(engine: str | None = None, force: bool = False, only: list[st
             seg = {"text": vc.spoken_text(params["text"], e), "out": str(work / f"{i}.wav"),
                    "language": params["language"], "seed": seed}
             if params["voice"]["kind"] == "design":
-                seg["instruct"] = params["voice"]["design"]["description"]
+                desc = params["voice"]["design"]["description"]
+                seg["instruct"] = voice_instruct.normalise(desc).text if eid == "omnivoice" else desc
             else:
                 seg["voice"] = params["voice"]["preset"]
             segs.append(seg)

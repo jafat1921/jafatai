@@ -1179,6 +1179,9 @@ export interface SpeakRequest {
 
 export interface SpeakResponse extends MediaBatch {
   engine_resolved?: string | null
+  // design previews on OmniVoice: what of the description it used, and what it had to drop
+  understood?: string[] | null
+  ignored?: string[] | null
 }
 
 export interface DesignPreviewRequest {

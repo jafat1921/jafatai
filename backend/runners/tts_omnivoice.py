@@ -58,7 +58,16 @@ def run(job: dict) -> dict:
             call["instruct"] = seg["instruct"]
         if seg.get("language"):
             call["language"] = seg["language"]
-        out = model.generate(text, **call)
+        try:
+            out = model.generate(text, **call)
+        except ValueError as err:
+            # the app only sends attributes OmniVoice lists, but a newer release could narrow the list again;
+            # better its own voice than a failed line
+            if "instruct" not in str(err) or not call.get("instruct"):
+                raise
+            print(f"omnivoice refused instruct {call['instruct']!r}; speaking without it", file=sys.stderr)
+            call.pop("instruct")
+            out = model.generate(text, **call)
         return np.concatenate([rio.to_numpy(a).reshape(-1) for a in out]) if isinstance(out, list) else out
 
     res = rio.speak_all(job, synth, rate)

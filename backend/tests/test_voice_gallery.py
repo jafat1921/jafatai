@@ -160,9 +160,10 @@ def test_add_is_idempotent_and_can_star(client):
     assert r.status_code == 201, r.text
     v = r.json()
     assert v["kind"] == "design" and v["language"] == "ur" and v["gender_hint"] == "male"
-    assert v["design"] == {"description": vg.get("ur-lahore-narrator")["instruct"],
-                           "seed": vg.get("ur-lahore-narrator")["seed"], "engine": "omnivoice",
-                           "gallery": "ur-lahore-narrator"}
+    lahore = vg.get("ur-lahore-narrator")
+    # the slow, measured delivery its description asked for travels as a speed hint
+    assert v["design"] == {"description": lahore["instruct"], "seed": lahore["seed"], "engine": "omnivoice",
+                           "gallery": "ur-lahore-narrator", **({"speed": lahore["speed"]} if lahore.get("speed") else {})}
     again = client.post("/api/voices/gallery/ur-lahore-narrator/add", json={"starred": True})
     assert again.status_code == 200 and again.json()["id"] == v["id"] and again.json()["starred"] is True
 

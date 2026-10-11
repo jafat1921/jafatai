@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import literal_column, or_, select
 from sqlalchemy.orm import Session
 
+from app import voice_instruct
 from app import voices as vc
 from app.db import get_db
 from app.models import VoiceProfile
@@ -172,4 +173,7 @@ def design_preview(body: DesignPreviewIn, db: Session = Depends(get_db), cur: Cu
                     title=f"Voice design · {' '.join(body.description.split())[:60]}", folder_id=body.folder_id)
     out = vc.queue_speech(db, cur, speak, flow="voice_design")
     db.commit()
+    if out.get("engine_resolved") == "omnivoice":
+        ins = voice_instruct.normalise(body.description)
+        out.update(understood=ins.understood, ignored=ins.ignored)
     return SpeakOut(**out)

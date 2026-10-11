@@ -1193,3 +1193,6 @@ class SpeakOut(BaseModel):
     jobs: list[JobOut]
     engine_resolved: str
     seed: int | None = None
+    # OmniVoice design: the attributes it was given, and the words of the description it can't use
+    understood: list[str] | None = None
+    ignored: list[str] | None = None

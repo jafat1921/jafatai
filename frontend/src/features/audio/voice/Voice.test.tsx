@@ -372,12 +372,12 @@ describe('Design', { timeout: 15_000 }, () => {
     await screen.findByRole('button', { name: 'Engine: OmniVoice' })
     await user.click(screen.getByRole('button', { name: 'Elder' }))
     const description = screen.getByRole('textbox', { name: 'Describe the voice' })
-    expect(description).toHaveValue('Elderly voice, slow and deep, a little gravel, gentle and wise')
+    expect(description).toHaveValue('male, elderly, low pitch, slow')
 
     await user.click(screen.getByRole('button', { name: /^Preview\b.*Enter/ }))
     await waitFor(() => expect(posts(calls, '/voices/design/preview')).toHaveLength(1))
     expect(posts(calls, '/voices/design/preview')[0]).toEqual({
-      description: 'Elderly voice, slow and deep, a little gravel, gentle and wise',
+      description: 'male, elderly, low pitch, slow',
       language: 'en',
       engine: 'omnivoice',
       text: 'The quick brown fox jumps over the lazy dog.',
@@ -401,7 +401,7 @@ describe('Design', { timeout: 15_000 }, () => {
       name: 'Dada jaan',
       language: 'en',
       kind: 'design',
-      design: { description: 'Elderly voice, slow and deep, a little gravel, gentle and wise', seed: 777, engine: 'omnivoice' },
+      design: { description: 'male, elderly, low pitch, slow', seed: 777, engine: 'omnivoice' },
     })
     expect(await screen.findByRole('dialog', { name: 'Dada jaan is saved' })).toBeInTheDocument()
   })

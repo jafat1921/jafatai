@@ -1,133 +1,2096 @@
 {
   "version": 1,
   "voices": [
-    {"id": "ur-lahore-narrator", "name": "Aamir, Lahore narrator", "languages": ["ur"], "gender": "male", "age": "adult", "accent": "Lahori Urdu", "styles": ["narrator", "warm", "deep"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, slow, warm, Pakistani accent", "seed": 410021},
-    {"id": "ur-karachi-host", "name": "Sana, Karachi podcast host", "languages": ["ur"], "gender": "female", "age": "young", "accent": "Karachi Urdu", "styles": ["podcast", "energetic", "warm"], "engine": "omnivoice", "instruct": "female, young adult, moderate pitch, fast, bright, Pakistani accent", "seed": 410022},
-    {"id": "ur-peshawar-storyteller", "name": "Gul Khan, Peshawari storyteller", "languages": ["ur", "ps"], "gender": "male", "age": "elder", "accent": "Peshawari Urdu", "styles": ["storyteller", "deep", "calm"], "engine": "omnivoice", "instruct": "male, elderly, low pitch, slow, gravelly, Pashtun accent", "seed": 410023},
-    {"id": "ur-punjabi-uncle", "name": "Rana Sahib, Punjabi-accented Urdu", "languages": ["ur", "pa"], "gender": "male", "age": "adult", "accent": "Punjabi-accented Urdu", "styles": ["warm", "energetic"], "engine": "omnivoice", "instruct": "male, middle-aged, moderate pitch, lively, hearty, Punjabi accent", "seed": 410024},
-    {"id": "ur-news-anchor-m", "name": "Faraz, PTV-style newsreader", "languages": ["ur"], "gender": "male", "age": "adult", "accent": "Formal news Urdu", "styles": ["news", "calm"], "engine": "omnivoice", "instruct": "male, middle-aged, moderate pitch, steady, formal, clear diction, Pakistani accent", "seed": 410025},
-    {"id": "ur-news-anchor-f", "name": "Ayesha, evening news anchor", "languages": ["ur"], "gender": "female", "age": "adult", "accent": "Formal news Urdu", "styles": ["news", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, steady, formal, clear diction, Pakistani accent", "seed": 410026},
-    {"id": "ur-ghazal-reciter", "name": "Ustad Noor, ghazal reciter", "languages": ["ur"], "gender": "male", "age": "elder", "accent": "Lucknowi Urdu", "styles": ["poetry", "calm", "deep"], "engine": "omnivoice", "instruct": "male, elderly, low pitch, very slow, soft, expressive, Urdu poetry recitation", "seed": 410027},
-    {"id": "ur-poetess", "name": "Parveen, poetry reader", "languages": ["ur"], "gender": "female", "age": "adult", "accent": "Literary Urdu", "styles": ["poetry", "warm", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, slow, soft, expressive, Urdu poetry recitation", "seed": 410028},
-    {"id": "ur-kids-storyteller", "name": "Baji Hina, kids storyteller", "languages": ["ur"], "gender": "female", "age": "young", "accent": "Urdu", "styles": ["kids", "storyteller", "energetic"], "engine": "omnivoice", "instruct": "female, young adult, high pitch, animated, playful, Pakistani accent", "seed": 410029},
-    {"id": "ur-dada", "name": "Dada Jan, grandfather", "languages": ["ur"], "gender": "male", "age": "elder", "accent": "Urdu", "styles": ["storyteller", "warm", "calm"], "engine": "omnivoice", "instruct": "male, elderly, low pitch, slow, gentle, slightly hoarse, Pakistani accent", "seed": 410030},
-    {"id": "ur-dadi", "name": "Dadi Amma, grandmother", "languages": ["ur"], "gender": "female", "age": "elder", "accent": "Urdu", "styles": ["storyteller", "warm", "calm"], "engine": "omnivoice", "instruct": "female, elderly, moderate pitch, slow, gentle, kind, Pakistani accent", "seed": 410031},
-    {"id": "ur-rj-female", "name": "Zoya, FM radio RJ", "languages": ["ur"], "gender": "female", "age": "young", "accent": "Urban Urdu", "styles": ["radio", "energetic", "podcast"], "engine": "omnivoice", "instruct": "female, young adult, high pitch, fast, cheerful, radio presenter, Pakistani accent", "seed": 410032},
-    {"id": "ur-rj-night", "name": "Saad, late-night radio", "languages": ["ur"], "gender": "male", "age": "young", "accent": "Urban Urdu", "styles": ["radio", "warm", "deep"], "engine": "omnivoice", "instruct": "male, young adult, low pitch, slow, smooth, intimate, Pakistani accent", "seed": 410033},
-    {"id": "ur-teacher", "name": "Miss Rubina, teacher", "languages": ["ur"], "gender": "female", "age": "adult", "accent": "Urdu", "styles": ["teacher", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, measured, clear, patient, Pakistani accent", "seed": 410034},
-    {"id": "ur-villain", "name": "Jabbar, drama villain", "languages": ["ur"], "gender": "male", "age": "adult", "accent": "Urdu", "styles": ["villain", "deep"], "engine": "omnivoice", "instruct": "male, middle-aged, very low pitch, slow, cold, menacing, Pakistani accent", "seed": 410035},
-    {"id": "ur-whisper", "name": "Noor, whisper", "languages": ["ur"], "gender": "female", "age": "young", "accent": "Urdu", "styles": ["whisper", "calm"], "engine": "omnivoice", "instruct": "female, young adult, whisper, soft, close to the microphone", "seed": 410036},
-    {"id": "ur-boy", "name": "Ali, schoolboy", "languages": ["ur"], "gender": "male", "age": "child", "accent": "Urdu", "styles": ["kids", "energetic"], "engine": "omnivoice", "instruct": "male, child, high pitch, quick, playful", "seed": 410037},
-    {"id": "ur-girl", "name": "Fatima, little girl", "languages": ["ur"], "gender": "female", "age": "child", "accent": "Urdu", "styles": ["kids", "energetic"], "engine": "omnivoice", "instruct": "female, child, very high pitch, bright, playful", "seed": 410038},
-
-    {"id": "hi-narrator", "name": "Vikram, Hindi narrator", "languages": ["hi"], "gender": "male", "age": "adult", "accent": "Standard Hindi", "styles": ["narrator", "deep", "warm"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, measured, warm, Indian accent", "seed": 420001},
-    {"id": "hi-news", "name": "Priya, Hindi news", "languages": ["hi"], "gender": "female", "age": "adult", "accent": "Standard Hindi", "styles": ["news", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, steady, formal, clear diction, Indian accent", "seed": 420002},
-    {"id": "hi-bollywood-hero", "name": "Raj, film hero", "languages": ["hi"], "gender": "male", "age": "young", "accent": "Mumbai Hindi", "styles": ["energetic", "warm"], "engine": "omnivoice", "instruct": "male, young adult, moderate pitch, confident, charming, Indian accent", "seed": 420003},
-    {"id": "hi-dadi", "name": "Nani Maa", "languages": ["hi"], "gender": "female", "age": "elder", "accent": "Hindi", "styles": ["storyteller", "warm", "calm"], "engine": "omnivoice", "instruct": "female, elderly, moderate pitch, slow, gentle, Indian accent", "seed": 420004},
-    {"id": "hi-kids", "name": "Chintu, kid", "languages": ["hi"], "gender": "male", "age": "child", "accent": "Hindi", "styles": ["kids", "energetic"], "engine": "omnivoice", "instruct": "male, child, high pitch, excited, playful", "seed": 420005},
-    {"id": "hi-podcast", "name": "Meera, podcast host", "languages": ["hi"], "gender": "female", "age": "young", "accent": "Delhi Hindi", "styles": ["podcast", "warm", "energetic"], "engine": "omnivoice", "instruct": "female, young adult, moderate pitch, conversational, friendly, Indian accent", "seed": 420006},
-    {"id": "hi-villain", "name": "Thakur, villain", "languages": ["hi"], "gender": "male", "age": "elder", "accent": "Hindi", "styles": ["villain", "deep"], "engine": "omnivoice", "instruct": "male, elderly, very low pitch, slow, cold, menacing, Indian accent", "seed": 420007},
-    {"id": "hi-teacher", "name": "Sharma Sir, teacher", "languages": ["hi"], "gender": "male", "age": "adult", "accent": "Hindi", "styles": ["teacher", "calm"], "engine": "omnivoice", "instruct": "male, middle-aged, moderate pitch, measured, clear, patient, Indian accent", "seed": 420008},
-
-    {"id": "pa-lahore-elder", "name": "Chaudhry Sahib, Punjabi elder", "languages": ["pa"], "gender": "male", "age": "elder", "accent": "Majhi Punjabi", "styles": ["storyteller", "deep", "warm"], "engine": "omnivoice", "instruct": "male, elderly, low pitch, slow, hearty, Punjabi accent", "seed": 430001},
-    {"id": "pa-folk-singer", "name": "Heer, folk storyteller", "languages": ["pa"], "gender": "female", "age": "young", "accent": "Punjabi", "styles": ["storyteller", "poetry", "warm"], "engine": "omnivoice", "instruct": "female, young adult, high pitch, expressive, melodic, Punjabi accent", "seed": 430002},
-    {"id": "pa-radio", "name": "Billa, Punjabi radio", "languages": ["pa"], "gender": "male", "age": "young", "accent": "Punjabi", "styles": ["radio", "energetic"], "engine": "omnivoice", "instruct": "male, young adult, moderate pitch, fast, loud, cheerful, Punjabi accent", "seed": 430003},
-    {"id": "pa-mother", "name": "Bebe, Punjabi mother", "languages": ["pa"], "gender": "female", "age": "adult", "accent": "Punjabi", "styles": ["warm", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, warm, caring, Punjabi accent", "seed": 430004},
-
-    {"id": "ar-quran-style-reader", "name": "Yusuf, classical reader", "languages": ["ar"], "gender": "male", "age": "adult", "accent": "Classical Arabic", "styles": ["calm", "deep", "poetry"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, slow, resonant, solemn, Arabic accent", "seed": 440001},
-    {"id": "ar-news", "name": "Layla, Arabic news", "languages": ["ar"], "gender": "female", "age": "adult", "accent": "Modern Standard Arabic", "styles": ["news", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, steady, formal, clear diction, Arabic accent", "seed": 440002},
-    {"id": "ar-gulf-host", "name": "Khalid, Gulf podcast host", "languages": ["ar"], "gender": "male", "age": "young", "accent": "Gulf Arabic", "styles": ["podcast", "energetic"], "engine": "omnivoice", "instruct": "male, young adult, moderate pitch, lively, friendly, Arabic accent", "seed": 440003},
-    {"id": "ar-egyptian", "name": "Mona, Cairo storyteller", "languages": ["ar"], "gender": "female", "age": "young", "accent": "Egyptian Arabic", "styles": ["storyteller", "warm"], "engine": "omnivoice", "instruct": "female, young adult, moderate pitch, expressive, warm, Egyptian accent", "seed": 440004},
-    {"id": "ar-elder", "name": "Abu Salim, elder", "languages": ["ar"], "gender": "male", "age": "elder", "accent": "Levantine Arabic", "styles": ["storyteller", "deep", "calm"], "engine": "omnivoice", "instruct": "male, elderly, low pitch, slow, wise, gravelly, Arabic accent", "seed": 440005},
-    {"id": "ar-kids", "name": "Salma, kids narrator", "languages": ["ar"], "gender": "female", "age": "young", "accent": "Arabic", "styles": ["kids", "energetic", "storyteller"], "engine": "omnivoice", "instruct": "female, young adult, high pitch, animated, playful, Arabic accent", "seed": 440006},
-
-    {"id": "en-us-narrator", "name": "James, documentary narrator", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["narrator", "deep", "calm"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, measured, rich, American accent", "seed": 450001},
-    {"id": "en-us-trailer", "name": "Max, movie trailer", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["deep", "narrator"], "engine": "omnivoice", "instruct": "male, middle-aged, very low pitch, slow, dramatic, gravelly, American accent", "seed": 450002},
-    {"id": "en-us-podcast-f", "name": "Riley, podcast host", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["podcast", "warm", "energetic"], "engine": "omnivoice", "instruct": "female, young adult, moderate pitch, conversational, upbeat, American accent", "seed": 450003},
-    {"id": "en-us-podcast-m", "name": "Jordan, podcast co-host", "languages": ["en"], "gender": "male", "age": "young", "accent": "American", "styles": ["podcast", "warm"], "engine": "omnivoice", "instruct": "male, young adult, moderate pitch, relaxed, friendly, American accent", "seed": 450004},
-    {"id": "en-us-news", "name": "Karen, network news", "languages": ["en"], "gender": "female", "age": "adult", "accent": "American", "styles": ["news", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, crisp, neutral, American accent", "seed": 450005},
-    {"id": "en-us-radio", "name": "Smooth Mike, late-night radio", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["radio", "deep", "warm"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, slow, smooth, intimate, American accent", "seed": 450006},
-    {"id": "en-us-kid", "name": "Lily, kid", "languages": ["en"], "gender": "female", "age": "child", "accent": "American", "styles": ["kids", "energetic"], "engine": "omnivoice", "instruct": "female, child, very high pitch, bright, playful, American accent", "seed": 450007},
-    {"id": "en-us-grandpa", "name": "Grandpa Joe", "languages": ["en"], "gender": "male", "age": "elder", "accent": "Southern American", "styles": ["storyteller", "warm"], "engine": "omnivoice", "instruct": "male, elderly, low pitch, slow, folksy, warm, American accent", "seed": 450008},
-    {"id": "en-us-villain", "name": "Victor, villain", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["villain", "deep"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, slow, cold, menacing, American accent", "seed": 450009},
-    {"id": "en-us-whisper", "name": "Ava, ASMR whisper", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["whisper", "calm"], "engine": "omnivoice", "instruct": "female, young adult, whisper, soft, close to the microphone, American accent", "seed": 450010},
-    {"id": "en-uk-narrator", "name": "Edward, BBC-style narrator", "languages": ["en"], "gender": "male", "age": "adult", "accent": "British RP", "styles": ["narrator", "calm", "deep"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, measured, refined, British accent", "seed": 450011},
-    {"id": "en-uk-news", "name": "Charlotte, UK newsreader", "languages": ["en"], "gender": "female", "age": "adult", "accent": "British RP", "styles": ["news", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, crisp, formal, British accent", "seed": 450012},
-    {"id": "en-uk-storyteller", "name": "Granny Maud, storyteller", "languages": ["en"], "gender": "female", "age": "elder", "accent": "British", "styles": ["storyteller", "warm", "kids"], "engine": "omnivoice", "instruct": "female, elderly, moderate pitch, slow, gentle, twinkling, British accent", "seed": 450013},
-    {"id": "en-uk-teacher", "name": "Mr Hughes, lecturer", "languages": ["en"], "gender": "male", "age": "elder", "accent": "British", "styles": ["teacher", "calm"], "engine": "omnivoice", "instruct": "male, elderly, moderate pitch, measured, clear, British accent", "seed": 450014},
-    {"id": "en-uk-young", "name": "Ellie, London presenter", "languages": ["en"], "gender": "female", "age": "young", "accent": "London English", "styles": ["podcast", "energetic", "radio"], "engine": "omnivoice", "instruct": "female, young adult, moderate pitch, quick, cheerful, British accent", "seed": 450015},
-    {"id": "en-pk-host", "name": "Hamza, Pakistani English host", "languages": ["en", "ur"], "gender": "male", "age": "young", "accent": "Pakistani English", "styles": ["podcast", "warm", "energetic"], "engine": "omnivoice", "instruct": "male, young adult, moderate pitch, lively, friendly, Pakistani accent", "seed": 450016},
-    {"id": "en-pk-narrator", "name": "Mahnoor, Pakistani English narrator", "languages": ["en", "ur"], "gender": "female", "age": "adult", "accent": "Pakistani English", "styles": ["narrator", "warm", "calm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, measured, warm, Pakistani accent", "seed": 450017},
-    {"id": "en-in-teacher", "name": "Anil, Indian English teacher", "languages": ["en", "hi"], "gender": "male", "age": "adult", "accent": "Indian English", "styles": ["teacher", "calm"], "engine": "omnivoice", "instruct": "male, middle-aged, moderate pitch, clear, patient, Indian accent", "seed": 450018},
-    {"id": "en-in-podcast", "name": "Kavya, Indian English podcaster", "languages": ["en", "hi"], "gender": "female", "age": "young", "accent": "Indian English", "styles": ["podcast", "energetic"], "engine": "omnivoice", "instruct": "female, young adult, moderate pitch, fast, upbeat, Indian accent", "seed": 450019},
-    {"id": "en-au-host", "name": "Liam, Australian host", "languages": ["en"], "gender": "male", "age": "young", "accent": "Australian", "styles": ["podcast", "energetic"], "engine": "omnivoice", "instruct": "male, young adult, moderate pitch, casual, cheerful, Australian accent", "seed": 450020},
-
-    {"id": "fa-poet", "name": "Dariush, Persian poetry", "languages": ["fa"], "gender": "male", "age": "elder", "accent": "Tehrani Persian", "styles": ["poetry", "calm", "deep"], "engine": "omnivoice", "instruct": "male, elderly, low pitch, slow, soft, expressive, Persian accent", "seed": 460001},
-    {"id": "fa-narrator", "name": "Shirin, Persian narrator", "languages": ["fa"], "gender": "female", "age": "adult", "accent": "Persian", "styles": ["narrator", "warm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, measured, warm, Persian accent", "seed": 460002},
-    {"id": "tr-host", "name": "Emre, Turkish host", "languages": ["tr"], "gender": "male", "age": "young", "accent": "Istanbul Turkish", "styles": ["podcast", "energetic"], "engine": "omnivoice", "instruct": "male, young adult, moderate pitch, lively, friendly, Turkish accent", "seed": 460003},
-    {"id": "tr-drama", "name": "Elif, Turkish drama", "languages": ["tr"], "gender": "female", "age": "young", "accent": "Turkish", "styles": ["storyteller", "warm"], "engine": "omnivoice", "instruct": "female, young adult, moderate pitch, emotional, expressive, Turkish accent", "seed": 460004},
-    {"id": "bn-narrator", "name": "Arif, Bengali narrator", "languages": ["bn"], "gender": "male", "age": "adult", "accent": "Dhaka Bengali", "styles": ["narrator", "warm"], "engine": "omnivoice", "instruct": "male, middle-aged, low pitch, measured, warm, Bengali accent", "seed": 460005},
-    {"id": "bn-storyteller", "name": "Rina, Bengali storyteller", "languages": ["bn"], "gender": "female", "age": "adult", "accent": "Kolkata Bengali", "styles": ["storyteller", "kids", "warm"], "engine": "omnivoice", "instruct": "female, middle-aged, moderate pitch, animated, gentle, Bengali accent", "seed": 460006},
-
-    {"id": "vx-hi-anchor", "name": "Arjun, Hindi anchor (VoxCPM2)", "languages": ["hi"], "gender": "male", "age": "adult", "accent": "Standard Hindi", "styles": ["news", "deep"], "engine": "voxcpm", "instruct": "a confident middle-aged Indian man, deep steady voice, formal news delivery", "seed": 470001},
-    {"id": "vx-hi-storyteller", "name": "Kiran, Hindi storyteller (VoxCPM2)", "languages": ["hi"], "gender": "female", "age": "young", "accent": "Hindi", "styles": ["storyteller", "warm"], "engine": "voxcpm", "instruct": "a young Indian woman, warm and expressive, telling a bedtime story", "seed": 470002},
-    {"id": "vx-en-narrator", "name": "Oliver, audiobook (VoxCPM2)", "languages": ["en"], "gender": "male", "age": "adult", "accent": "British", "styles": ["narrator", "calm"], "engine": "voxcpm", "instruct": "a calm British man in his forties, rich and measured audiobook narration", "seed": 470003},
-    {"id": "vx-en-energetic", "name": "Mia, upbeat presenter (VoxCPM2)", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["energetic", "podcast"], "engine": "voxcpm", "instruct": "a cheerful young American woman, bright upbeat presenter, fast pace", "seed": 470004},
-    {"id": "vx-en-elder", "name": "Walter, old sailor (VoxCPM2)", "languages": ["en"], "gender": "male", "age": "elder", "accent": "American", "styles": ["storyteller", "deep"], "engine": "voxcpm", "instruct": "an old weathered man, gravelly low voice, slow storytelling", "seed": 470005},
-
-    {"id": "af_heart", "name": "Heart", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["warm"], "engine": "kokoro", "preset": "af_heart"},
-    {"id": "af_alloy", "name": "Alloy", "languages": ["en"], "gender": "female", "age": "adult", "accent": "American", "styles": ["calm"], "engine": "kokoro", "preset": "af_alloy"},
-    {"id": "af_aoede", "name": "Aoede", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["warm"], "engine": "kokoro", "preset": "af_aoede"},
-    {"id": "af_bella", "name": "Bella", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["energetic", "warm"], "engine": "kokoro", "preset": "af_bella"},
-    {"id": "af_jessica", "name": "Jessica", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["podcast"], "engine": "kokoro", "preset": "af_jessica"},
-    {"id": "af_kore", "name": "Kore", "languages": ["en"], "gender": "female", "age": "adult", "accent": "American", "styles": ["calm"], "engine": "kokoro", "preset": "af_kore"},
-    {"id": "af_nicole", "name": "Nicole", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["whisper", "calm"], "engine": "kokoro", "preset": "af_nicole"},
-    {"id": "af_nova", "name": "Nova", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["energetic"], "engine": "kokoro", "preset": "af_nova"},
-    {"id": "af_river", "name": "River", "languages": ["en"], "gender": "female", "age": "adult", "accent": "American", "styles": ["calm"], "engine": "kokoro", "preset": "af_river"},
-    {"id": "af_sarah", "name": "Sarah", "languages": ["en"], "gender": "female", "age": "adult", "accent": "American", "styles": ["narrator"], "engine": "kokoro", "preset": "af_sarah"},
-    {"id": "af_sky", "name": "Sky", "languages": ["en"], "gender": "female", "age": "young", "accent": "American", "styles": ["energetic"], "engine": "kokoro", "preset": "af_sky"},
-    {"id": "am_adam", "name": "Adam", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["narrator"], "engine": "kokoro", "preset": "am_adam"},
-    {"id": "am_echo", "name": "Echo", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["calm"], "engine": "kokoro", "preset": "am_echo"},
-    {"id": "am_eric", "name": "Eric", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["news"], "engine": "kokoro", "preset": "am_eric"},
-    {"id": "am_fenrir", "name": "Fenrir", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["deep"], "engine": "kokoro", "preset": "am_fenrir"},
-    {"id": "am_liam", "name": "Liam", "languages": ["en"], "gender": "male", "age": "young", "accent": "American", "styles": ["podcast"], "engine": "kokoro", "preset": "am_liam"},
-    {"id": "am_michael", "name": "Michael", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["narrator", "warm"], "engine": "kokoro", "preset": "am_michael"},
-    {"id": "am_onyx", "name": "Onyx", "languages": ["en"], "gender": "male", "age": "adult", "accent": "American", "styles": ["deep"], "engine": "kokoro", "preset": "am_onyx"},
-    {"id": "am_puck", "name": "Puck", "languages": ["en"], "gender": "male", "age": "young", "accent": "American", "styles": ["energetic"], "engine": "kokoro", "preset": "am_puck"},
-    {"id": "am_santa", "name": "Santa", "languages": ["en"], "gender": "male", "age": "elder", "accent": "American", "styles": ["storyteller", "kids"], "engine": "kokoro", "preset": "am_santa"},
-    {"id": "bf_alice", "name": "Alice (British)", "languages": ["en"], "gender": "female", "age": "adult", "accent": "British", "styles": ["calm"], "engine": "kokoro", "preset": "bf_alice"},
-    {"id": "bf_emma", "name": "Emma (British)", "languages": ["en"], "gender": "female", "age": "adult", "accent": "British", "styles": ["narrator", "warm"], "engine": "kokoro", "preset": "bf_emma"},
-    {"id": "bf_isabella", "name": "Isabella (British)", "languages": ["en"], "gender": "female", "age": "young", "accent": "British", "styles": ["warm"], "engine": "kokoro", "preset": "bf_isabella"},
-    {"id": "bf_lily", "name": "Lily (British)", "languages": ["en"], "gender": "female", "age": "young", "accent": "British", "styles": ["calm"], "engine": "kokoro", "preset": "bf_lily"},
-    {"id": "bm_daniel", "name": "Daniel (British)", "languages": ["en"], "gender": "male", "age": "adult", "accent": "British", "styles": ["news"], "engine": "kokoro", "preset": "bm_daniel"},
-    {"id": "bm_fable", "name": "Fable (British)", "languages": ["en"], "gender": "male", "age": "adult", "accent": "British", "styles": ["storyteller"], "engine": "kokoro", "preset": "bm_fable"},
-    {"id": "bm_george", "name": "George (British)", "languages": ["en"], "gender": "male", "age": "adult", "accent": "British", "styles": ["narrator", "deep"], "engine": "kokoro", "preset": "bm_george"},
-    {"id": "bm_lewis", "name": "Lewis (British)", "languages": ["en"], "gender": "male", "age": "adult", "accent": "British", "styles": ["calm"], "engine": "kokoro", "preset": "bm_lewis"},
-    {"id": "jf_alpha", "name": "Alpha (Japanese)", "languages": ["ja"], "gender": "female", "age": "adult", "accent": "Japanese", "styles": ["narrator"], "engine": "kokoro", "preset": "jf_alpha"},
-    {"id": "jf_gongitsune", "name": "Gongitsune (Japanese)", "languages": ["ja"], "gender": "female", "age": "young", "accent": "Japanese", "styles": ["storyteller"], "engine": "kokoro", "preset": "jf_gongitsune"},
-    {"id": "jf_nezumi", "name": "Nezumi (Japanese)", "languages": ["ja"], "gender": "female", "age": "young", "accent": "Japanese", "styles": ["kids"], "engine": "kokoro", "preset": "jf_nezumi"},
-    {"id": "jf_tebukuro", "name": "Tebukuro (Japanese)", "languages": ["ja"], "gender": "female", "age": "young", "accent": "Japanese", "styles": ["storyteller", "warm"], "engine": "kokoro", "preset": "jf_tebukuro"},
-    {"id": "jm_kumo", "name": "Kumo (Japanese)", "languages": ["ja"], "gender": "male", "age": "adult", "accent": "Japanese", "styles": ["narrator"], "engine": "kokoro", "preset": "jm_kumo"},
-    {"id": "zf_xiaobei", "name": "Xiaobei (Mandarin)", "languages": ["zh"], "gender": "female", "age": "young", "accent": "Mandarin", "styles": ["warm"], "engine": "kokoro", "preset": "zf_xiaobei"},
-    {"id": "zf_xiaoni", "name": "Xiaoni (Mandarin)", "languages": ["zh"], "gender": "female", "age": "young", "accent": "Mandarin", "styles": ["energetic"], "engine": "kokoro", "preset": "zf_xiaoni"},
-    {"id": "zf_xiaoxiao", "name": "Xiaoxiao (Mandarin)", "languages": ["zh"], "gender": "female", "age": "young", "accent": "Mandarin", "styles": ["podcast"], "engine": "kokoro", "preset": "zf_xiaoxiao"},
-    {"id": "zf_xiaoyi", "name": "Xiaoyi (Mandarin)", "languages": ["zh"], "gender": "female", "age": "adult", "accent": "Mandarin", "styles": ["calm"], "engine": "kokoro", "preset": "zf_xiaoyi"},
-    {"id": "zm_yunjian", "name": "Yunjian (Mandarin)", "languages": ["zh"], "gender": "male", "age": "adult", "accent": "Mandarin", "styles": ["narrator"], "engine": "kokoro", "preset": "zm_yunjian"},
-    {"id": "zm_yunxi", "name": "Yunxi (Mandarin)", "languages": ["zh"], "gender": "male", "age": "young", "accent": "Mandarin", "styles": ["warm"], "engine": "kokoro", "preset": "zm_yunxi"},
-    {"id": "zm_yunxia", "name": "Yunxia (Mandarin)", "languages": ["zh"], "gender": "male", "age": "young", "accent": "Mandarin", "styles": ["energetic"], "engine": "kokoro", "preset": "zm_yunxia"},
-    {"id": "zm_yunyang", "name": "Yunyang (Mandarin)", "languages": ["zh"], "gender": "male", "age": "adult", "accent": "Mandarin", "styles": ["news"], "engine": "kokoro", "preset": "zm_yunyang"},
-    {"id": "ef_dora", "name": "Dora (Spanish)", "languages": ["es"], "gender": "female", "age": "adult", "accent": "Spanish", "styles": ["warm"], "engine": "kokoro", "preset": "ef_dora"},
-    {"id": "em_alex", "name": "Alex (Spanish)", "languages": ["es"], "gender": "male", "age": "adult", "accent": "Spanish", "styles": ["narrator"], "engine": "kokoro", "preset": "em_alex"},
-    {"id": "em_santa", "name": "Santa (Spanish)", "languages": ["es"], "gender": "male", "age": "elder", "accent": "Spanish", "styles": ["storyteller", "kids"], "engine": "kokoro", "preset": "em_santa"},
-    {"id": "ff_siwis", "name": "Siwis (French)", "languages": ["fr"], "gender": "female", "age": "adult", "accent": "French", "styles": ["narrator", "calm"], "engine": "kokoro", "preset": "ff_siwis"},
-    {"id": "hf_alpha", "name": "Alpha (Hindi)", "languages": ["hi"], "gender": "female", "age": "adult", "accent": "Hindi", "styles": ["narrator"], "engine": "kokoro", "preset": "hf_alpha"},
-    {"id": "hf_beta", "name": "Beta (Hindi)", "languages": ["hi"], "gender": "female", "age": "young", "accent": "Hindi", "styles": ["warm"], "engine": "kokoro", "preset": "hf_beta"},
-    {"id": "hm_omega", "name": "Omega (Hindi)", "languages": ["hi"], "gender": "male", "age": "adult", "accent": "Hindi", "styles": ["narrator"], "engine": "kokoro", "preset": "hm_omega"},
-    {"id": "hm_psi", "name": "Psi (Hindi)", "languages": ["hi"], "gender": "male", "age": "adult", "accent": "Hindi", "styles": ["calm"], "engine": "kokoro", "preset": "hm_psi"},
-    {"id": "if_sara", "name": "Sara (Italian)", "languages": ["it"], "gender": "female", "age": "adult", "accent": "Italian", "styles": ["warm"], "engine": "kokoro", "preset": "if_sara"},
-    {"id": "im_nicola", "name": "Nicola (Italian)", "languages": ["it"], "gender": "male", "age": "adult", "accent": "Italian", "styles": ["narrator"], "engine": "kokoro", "preset": "im_nicola"},
-    {"id": "pf_dora", "name": "Dora (Portuguese)", "languages": ["pt"], "gender": "female", "age": "adult", "accent": "Brazilian Portuguese", "styles": ["warm"], "engine": "kokoro", "preset": "pf_dora"},
-    {"id": "pm_alex", "name": "Alex (Portuguese)", "languages": ["pt"], "gender": "male", "age": "adult", "accent": "Brazilian Portuguese", "styles": ["narrator"], "engine": "kokoro", "preset": "pm_alex"},
-    {"id": "pm_santa", "name": "Santa (Portuguese)", "languages": ["pt"], "gender": "male", "age": "elder", "accent": "Brazilian Portuguese", "styles": ["storyteller", "kids"], "engine": "kokoro", "preset": "pm_santa"}
+    {
+      "id": "ur-lahore-narrator",
+      "name": "Aamir, Lahore narrator",
+      "languages": [
+        "ur"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Lahori Urdu",
+      "styles": [
+        "narrator",
+        "warm",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch, indian accent",
+      "seed": 410021,
+      "description": "male, middle-aged, low pitch, slow, warm, Pakistani accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-karachi-host",
+      "name": "Sana, Karachi podcast host",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Karachi Urdu",
+      "styles": [
+        "podcast",
+        "energetic",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, moderate pitch, indian accent",
+      "seed": 410022,
+      "description": "female, young adult, moderate pitch, fast, bright, Pakistani accent",
+      "speed": 1.08
+    },
+    {
+      "id": "ur-peshawar-storyteller",
+      "name": "Gul Khan, Peshawari storyteller",
+      "languages": [
+        "ur",
+        "ps"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Peshawari Urdu",
+      "styles": [
+        "storyteller",
+        "deep",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, low pitch",
+      "seed": 410023,
+      "description": "male, elderly, low pitch, slow, gravelly, Pashtun accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-punjabi-uncle",
+      "name": "Rana Sahib, Punjabi-accented Urdu",
+      "languages": [
+        "ur",
+        "pa"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Punjabi-accented Urdu",
+      "styles": [
+        "warm",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, moderate pitch, indian accent",
+      "seed": 410024,
+      "description": "male, middle-aged, moderate pitch, lively, hearty, Punjabi accent"
+    },
+    {
+      "id": "ur-news-anchor-m",
+      "name": "Faraz, PTV-style newsreader",
+      "languages": [
+        "ur"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Formal news Urdu",
+      "styles": [
+        "news",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, moderate pitch, indian accent",
+      "seed": 410025,
+      "description": "male, middle-aged, moderate pitch, steady, formal, clear diction, Pakistani accent"
+    },
+    {
+      "id": "ur-news-anchor-f",
+      "name": "Ayesha, evening news anchor",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Formal news Urdu",
+      "styles": [
+        "news",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, indian accent",
+      "seed": 410026,
+      "description": "female, middle-aged, moderate pitch, steady, formal, clear diction, Pakistani accent"
+    },
+    {
+      "id": "ur-ghazal-reciter",
+      "name": "Ustad Noor, ghazal reciter",
+      "languages": [
+        "ur"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Lucknowi Urdu",
+      "styles": [
+        "poetry",
+        "calm",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, low pitch, indian accent",
+      "seed": 410027,
+      "description": "male, elderly, low pitch, very slow, soft, expressive, Urdu poetry recitation",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-poetess",
+      "name": "Parveen, poetry reader",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Literary Urdu",
+      "styles": [
+        "poetry",
+        "warm",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, indian accent",
+      "seed": 410028,
+      "description": "female, middle-aged, moderate pitch, slow, soft, expressive, Urdu poetry recitation",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-kids-storyteller",
+      "name": "Baji Hina, kids storyteller",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Urdu",
+      "styles": [
+        "kids",
+        "storyteller",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, high pitch, indian accent",
+      "seed": 410029,
+      "description": "female, young adult, high pitch, animated, playful, Pakistani accent"
+    },
+    {
+      "id": "ur-dada",
+      "name": "Dada Jan, grandfather",
+      "languages": [
+        "ur"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Urdu",
+      "styles": [
+        "storyteller",
+        "warm",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, low pitch, indian accent",
+      "seed": 410030,
+      "description": "male, elderly, low pitch, slow, gentle, slightly hoarse, Pakistani accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-dadi",
+      "name": "Dadi Amma, grandmother",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "elder",
+      "accent": "Urdu",
+      "styles": [
+        "storyteller",
+        "warm",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, elderly, moderate pitch, indian accent",
+      "seed": 410031,
+      "description": "female, elderly, moderate pitch, slow, gentle, kind, Pakistani accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-rj-female",
+      "name": "Zoya, FM radio RJ",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Urban Urdu",
+      "styles": [
+        "radio",
+        "energetic",
+        "podcast"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, high pitch, indian accent",
+      "seed": 410032,
+      "description": "female, young adult, high pitch, fast, cheerful, radio presenter, Pakistani accent",
+      "speed": 1.08
+    },
+    {
+      "id": "ur-rj-night",
+      "name": "Saad, late-night radio",
+      "languages": [
+        "ur"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Urban Urdu",
+      "styles": [
+        "radio",
+        "warm",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, low pitch, indian accent",
+      "seed": 410033,
+      "description": "male, young adult, low pitch, slow, smooth, intimate, Pakistani accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-teacher",
+      "name": "Miss Rubina, teacher",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Urdu",
+      "styles": [
+        "teacher",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, indian accent",
+      "seed": 410034,
+      "description": "female, middle-aged, moderate pitch, measured, clear, patient, Pakistani accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-villain",
+      "name": "Jabbar, drama villain",
+      "languages": [
+        "ur"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Urdu",
+      "styles": [
+        "villain",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, very low pitch, indian accent",
+      "seed": 410035,
+      "description": "male, middle-aged, very low pitch, slow, cold, menacing, Pakistani accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ur-whisper",
+      "name": "Noor, whisper",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Urdu",
+      "styles": [
+        "whisper",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, whisper",
+      "seed": 410036,
+      "description": "female, young adult, whisper, soft, close to the microphone"
+    },
+    {
+      "id": "ur-boy",
+      "name": "Ali, schoolboy",
+      "languages": [
+        "ur"
+      ],
+      "gender": "male",
+      "age": "child",
+      "accent": "Urdu",
+      "styles": [
+        "kids",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, child, high pitch",
+      "seed": 410037,
+      "description": "male, child, high pitch, quick, playful",
+      "speed": 1.08
+    },
+    {
+      "id": "ur-girl",
+      "name": "Fatima, little girl",
+      "languages": [
+        "ur"
+      ],
+      "gender": "female",
+      "age": "child",
+      "accent": "Urdu",
+      "styles": [
+        "kids",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, child, very high pitch",
+      "seed": 410038,
+      "description": "female, child, very high pitch, bright, playful"
+    },
+    {
+      "id": "hi-narrator",
+      "name": "Vikram, Hindi narrator",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Standard Hindi",
+      "styles": [
+        "narrator",
+        "deep",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch, indian accent",
+      "seed": 420001,
+      "description": "male, middle-aged, low pitch, measured, warm, Indian accent",
+      "speed": 0.9
+    },
+    {
+      "id": "hi-news",
+      "name": "Priya, Hindi news",
+      "languages": [
+        "hi"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Standard Hindi",
+      "styles": [
+        "news",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, indian accent",
+      "seed": 420002,
+      "description": "female, middle-aged, moderate pitch, steady, formal, clear diction, Indian accent"
+    },
+    {
+      "id": "hi-bollywood-hero",
+      "name": "Raj, film hero",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Mumbai Hindi",
+      "styles": [
+        "energetic",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, moderate pitch, indian accent",
+      "seed": 420003,
+      "description": "male, young adult, moderate pitch, confident, charming, Indian accent"
+    },
+    {
+      "id": "hi-dadi",
+      "name": "Nani Maa",
+      "languages": [
+        "hi"
+      ],
+      "gender": "female",
+      "age": "elder",
+      "accent": "Hindi",
+      "styles": [
+        "storyteller",
+        "warm",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, elderly, moderate pitch, indian accent",
+      "seed": 420004,
+      "description": "female, elderly, moderate pitch, slow, gentle, Indian accent",
+      "speed": 0.9
+    },
+    {
+      "id": "hi-kids",
+      "name": "Chintu, kid",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "child",
+      "accent": "Hindi",
+      "styles": [
+        "kids",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, child, high pitch",
+      "seed": 420005,
+      "description": "male, child, high pitch, excited, playful",
+      "speed": 1.08
+    },
+    {
+      "id": "hi-podcast",
+      "name": "Meera, podcast host",
+      "languages": [
+        "hi"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Delhi Hindi",
+      "styles": [
+        "podcast",
+        "warm",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, moderate pitch, indian accent",
+      "seed": 420006,
+      "description": "female, young adult, moderate pitch, conversational, friendly, Indian accent"
+    },
+    {
+      "id": "hi-villain",
+      "name": "Thakur, villain",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Hindi",
+      "styles": [
+        "villain",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, very low pitch, indian accent",
+      "seed": 420007,
+      "description": "male, elderly, very low pitch, slow, cold, menacing, Indian accent",
+      "speed": 0.9
+    },
+    {
+      "id": "hi-teacher",
+      "name": "Sharma Sir, teacher",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Hindi",
+      "styles": [
+        "teacher",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, moderate pitch, indian accent",
+      "seed": 420008,
+      "description": "male, middle-aged, moderate pitch, measured, clear, patient, Indian accent",
+      "speed": 0.9
+    },
+    {
+      "id": "pa-lahore-elder",
+      "name": "Chaudhry Sahib, Punjabi elder",
+      "languages": [
+        "pa"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Majhi Punjabi",
+      "styles": [
+        "storyteller",
+        "deep",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, low pitch, indian accent",
+      "seed": 430001,
+      "description": "male, elderly, low pitch, slow, hearty, Punjabi accent",
+      "speed": 0.9
+    },
+    {
+      "id": "pa-folk-singer",
+      "name": "Heer, folk storyteller",
+      "languages": [
+        "pa"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Punjabi",
+      "styles": [
+        "storyteller",
+        "poetry",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, high pitch, indian accent",
+      "seed": 430002,
+      "description": "female, young adult, high pitch, expressive, melodic, Punjabi accent"
+    },
+    {
+      "id": "pa-radio",
+      "name": "Billa, Punjabi radio",
+      "languages": [
+        "pa"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Punjabi",
+      "styles": [
+        "radio",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, moderate pitch, indian accent",
+      "seed": 430003,
+      "description": "male, young adult, moderate pitch, fast, loud, cheerful, Punjabi accent",
+      "speed": 1.08
+    },
+    {
+      "id": "pa-mother",
+      "name": "Bebe, Punjabi mother",
+      "languages": [
+        "pa"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Punjabi",
+      "styles": [
+        "warm",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, indian accent",
+      "seed": 430004,
+      "description": "female, middle-aged, moderate pitch, warm, caring, Punjabi accent"
+    },
+    {
+      "id": "ar-quran-style-reader",
+      "name": "Yusuf, classical reader",
+      "languages": [
+        "ar"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Classical Arabic",
+      "styles": [
+        "calm",
+        "deep",
+        "poetry"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch",
+      "seed": 440001,
+      "description": "male, middle-aged, low pitch, slow, resonant, solemn, Arabic accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ar-news",
+      "name": "Layla, Arabic news",
+      "languages": [
+        "ar"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Modern Standard Arabic",
+      "styles": [
+        "news",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch",
+      "seed": 440002,
+      "description": "female, middle-aged, moderate pitch, steady, formal, clear diction, Arabic accent"
+    },
+    {
+      "id": "ar-gulf-host",
+      "name": "Khalid, Gulf podcast host",
+      "languages": [
+        "ar"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Gulf Arabic",
+      "styles": [
+        "podcast",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, moderate pitch",
+      "seed": 440003,
+      "description": "male, young adult, moderate pitch, lively, friendly, Arabic accent"
+    },
+    {
+      "id": "ar-egyptian",
+      "name": "Mona, Cairo storyteller",
+      "languages": [
+        "ar"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Egyptian Arabic",
+      "styles": [
+        "storyteller",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, moderate pitch",
+      "seed": 440004,
+      "description": "female, young adult, moderate pitch, expressive, warm, Egyptian accent"
+    },
+    {
+      "id": "ar-elder",
+      "name": "Abu Salim, elder",
+      "languages": [
+        "ar"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Levantine Arabic",
+      "styles": [
+        "storyteller",
+        "deep",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, low pitch",
+      "seed": 440005,
+      "description": "male, elderly, low pitch, slow, wise, gravelly, Arabic accent",
+      "speed": 0.9
+    },
+    {
+      "id": "ar-kids",
+      "name": "Salma, kids narrator",
+      "languages": [
+        "ar"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Arabic",
+      "styles": [
+        "kids",
+        "energetic",
+        "storyteller"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, high pitch",
+      "seed": 440006,
+      "description": "female, young adult, high pitch, animated, playful, Arabic accent"
+    },
+    {
+      "id": "en-us-narrator",
+      "name": "James, documentary narrator",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "narrator",
+        "deep",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch, american accent",
+      "seed": 450001,
+      "description": "male, middle-aged, low pitch, measured, rich, American accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-us-trailer",
+      "name": "Max, movie trailer",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "deep",
+        "narrator"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, very low pitch, american accent",
+      "seed": 450002,
+      "description": "male, middle-aged, very low pitch, slow, dramatic, gravelly, American accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-us-podcast-f",
+      "name": "Riley, podcast host",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "podcast",
+        "warm",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, moderate pitch, american accent",
+      "seed": 450003,
+      "description": "female, young adult, moderate pitch, conversational, upbeat, American accent"
+    },
+    {
+      "id": "en-us-podcast-m",
+      "name": "Jordan, podcast co-host",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "podcast",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, moderate pitch, american accent",
+      "seed": 450004,
+      "description": "male, young adult, moderate pitch, relaxed, friendly, American accent"
+    },
+    {
+      "id": "en-us-news",
+      "name": "Karen, network news",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "news",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, american accent",
+      "seed": 450005,
+      "description": "female, middle-aged, moderate pitch, crisp, neutral, American accent"
+    },
+    {
+      "id": "en-us-radio",
+      "name": "Smooth Mike, late-night radio",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "radio",
+        "deep",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch, american accent",
+      "seed": 450006,
+      "description": "male, middle-aged, low pitch, slow, smooth, intimate, American accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-us-kid",
+      "name": "Lily, kid",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "child",
+      "accent": "American",
+      "styles": [
+        "kids",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, child, very high pitch, american accent",
+      "seed": 450007,
+      "description": "female, child, very high pitch, bright, playful, American accent"
+    },
+    {
+      "id": "en-us-grandpa",
+      "name": "Grandpa Joe",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Southern American",
+      "styles": [
+        "storyteller",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, low pitch, american accent",
+      "seed": 450008,
+      "description": "male, elderly, low pitch, slow, folksy, warm, American accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-us-villain",
+      "name": "Victor, villain",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "villain",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch, american accent",
+      "seed": 450009,
+      "description": "male, middle-aged, low pitch, slow, cold, menacing, American accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-us-whisper",
+      "name": "Ava, ASMR whisper",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "whisper",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, american accent, whisper",
+      "seed": 450010,
+      "description": "female, young adult, whisper, soft, close to the microphone, American accent"
+    },
+    {
+      "id": "en-uk-narrator",
+      "name": "Edward, BBC-style narrator",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "British RP",
+      "styles": [
+        "narrator",
+        "calm",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch, british accent",
+      "seed": 450011,
+      "description": "male, middle-aged, low pitch, measured, refined, British accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-uk-news",
+      "name": "Charlotte, UK newsreader",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "British RP",
+      "styles": [
+        "news",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, british accent",
+      "seed": 450012,
+      "description": "female, middle-aged, moderate pitch, crisp, formal, British accent"
+    },
+    {
+      "id": "en-uk-storyteller",
+      "name": "Granny Maud, storyteller",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "elder",
+      "accent": "British",
+      "styles": [
+        "storyteller",
+        "warm",
+        "kids"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, elderly, moderate pitch, british accent",
+      "seed": 450013,
+      "description": "female, elderly, moderate pitch, slow, gentle, twinkling, British accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-uk-teacher",
+      "name": "Mr Hughes, lecturer",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "British",
+      "styles": [
+        "teacher",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, moderate pitch, british accent",
+      "seed": 450014,
+      "description": "male, elderly, moderate pitch, measured, clear, British accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-uk-young",
+      "name": "Ellie, London presenter",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "London English",
+      "styles": [
+        "podcast",
+        "energetic",
+        "radio"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, moderate pitch, british accent",
+      "seed": 450015,
+      "description": "female, young adult, moderate pitch, quick, cheerful, British accent",
+      "speed": 1.08
+    },
+    {
+      "id": "en-pk-host",
+      "name": "Hamza, Pakistani English host",
+      "languages": [
+        "en",
+        "ur"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Pakistani English",
+      "styles": [
+        "podcast",
+        "warm",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, moderate pitch, indian accent",
+      "seed": 450016,
+      "description": "male, young adult, moderate pitch, lively, friendly, Pakistani accent"
+    },
+    {
+      "id": "en-pk-narrator",
+      "name": "Mahnoor, Pakistani English narrator",
+      "languages": [
+        "en",
+        "ur"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Pakistani English",
+      "styles": [
+        "narrator",
+        "warm",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, indian accent",
+      "seed": 450017,
+      "description": "female, middle-aged, moderate pitch, measured, warm, Pakistani accent",
+      "speed": 0.9
+    },
+    {
+      "id": "en-in-teacher",
+      "name": "Anil, Indian English teacher",
+      "languages": [
+        "en",
+        "hi"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Indian English",
+      "styles": [
+        "teacher",
+        "calm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, moderate pitch, indian accent",
+      "seed": 450018,
+      "description": "male, middle-aged, moderate pitch, clear, patient, Indian accent"
+    },
+    {
+      "id": "en-in-podcast",
+      "name": "Kavya, Indian English podcaster",
+      "languages": [
+        "en",
+        "hi"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Indian English",
+      "styles": [
+        "podcast",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, moderate pitch, indian accent",
+      "seed": 450019,
+      "description": "female, young adult, moderate pitch, fast, upbeat, Indian accent",
+      "speed": 1.08
+    },
+    {
+      "id": "en-au-host",
+      "name": "Liam, Australian host",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Australian",
+      "styles": [
+        "podcast",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, moderate pitch, australian accent",
+      "seed": 450020,
+      "description": "male, young adult, moderate pitch, casual, cheerful, Australian accent"
+    },
+    {
+      "id": "fa-poet",
+      "name": "Dariush, Persian poetry",
+      "languages": [
+        "fa"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Tehrani Persian",
+      "styles": [
+        "poetry",
+        "calm",
+        "deep"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, elderly, low pitch",
+      "seed": 460001,
+      "description": "male, elderly, low pitch, slow, soft, expressive, Persian accent",
+      "speed": 0.9
+    },
+    {
+      "id": "fa-narrator",
+      "name": "Shirin, Persian narrator",
+      "languages": [
+        "fa"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Persian",
+      "styles": [
+        "narrator",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch",
+      "seed": 460002,
+      "description": "female, middle-aged, moderate pitch, measured, warm, Persian accent",
+      "speed": 0.9
+    },
+    {
+      "id": "tr-host",
+      "name": "Emre, Turkish host",
+      "languages": [
+        "tr"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Istanbul Turkish",
+      "styles": [
+        "podcast",
+        "energetic"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, young adult, moderate pitch",
+      "seed": 460003,
+      "description": "male, young adult, moderate pitch, lively, friendly, Turkish accent"
+    },
+    {
+      "id": "tr-drama",
+      "name": "Elif, Turkish drama",
+      "languages": [
+        "tr"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Turkish",
+      "styles": [
+        "storyteller",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, young adult, moderate pitch",
+      "seed": 460004,
+      "description": "female, young adult, moderate pitch, emotional, expressive, Turkish accent"
+    },
+    {
+      "id": "bn-narrator",
+      "name": "Arif, Bengali narrator",
+      "languages": [
+        "bn"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Dhaka Bengali",
+      "styles": [
+        "narrator",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "male, middle-aged, low pitch, indian accent",
+      "seed": 460005,
+      "description": "male, middle-aged, low pitch, measured, warm, Bengali accent",
+      "speed": 0.9
+    },
+    {
+      "id": "bn-storyteller",
+      "name": "Rina, Bengali storyteller",
+      "languages": [
+        "bn"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Kolkata Bengali",
+      "styles": [
+        "storyteller",
+        "kids",
+        "warm"
+      ],
+      "engine": "omnivoice",
+      "instruct": "female, middle-aged, moderate pitch, indian accent",
+      "seed": 460006,
+      "description": "female, middle-aged, moderate pitch, animated, gentle, Bengali accent",
+      "speed": 0.9
+    },
+    {
+      "id": "vx-hi-anchor",
+      "name": "Arjun, Hindi anchor (VoxCPM2)",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Standard Hindi",
+      "styles": [
+        "news",
+        "deep"
+      ],
+      "engine": "voxcpm",
+      "instruct": "a confident middle-aged Indian man, deep steady voice, formal news delivery",
+      "seed": 470001
+    },
+    {
+      "id": "vx-hi-storyteller",
+      "name": "Kiran, Hindi storyteller (VoxCPM2)",
+      "languages": [
+        "hi"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Hindi",
+      "styles": [
+        "storyteller",
+        "warm"
+      ],
+      "engine": "voxcpm",
+      "instruct": "a young Indian woman, warm and expressive, telling a bedtime story",
+      "seed": 470002
+    },
+    {
+      "id": "vx-en-narrator",
+      "name": "Oliver, audiobook (VoxCPM2)",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "British",
+      "styles": [
+        "narrator",
+        "calm"
+      ],
+      "engine": "voxcpm",
+      "instruct": "a calm British man in his forties, rich and measured audiobook narration",
+      "seed": 470003
+    },
+    {
+      "id": "vx-en-energetic",
+      "name": "Mia, upbeat presenter (VoxCPM2)",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "energetic",
+        "podcast"
+      ],
+      "engine": "voxcpm",
+      "instruct": "a cheerful young American woman, bright upbeat presenter, fast pace",
+      "seed": 470004
+    },
+    {
+      "id": "vx-en-elder",
+      "name": "Walter, old sailor (VoxCPM2)",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "American",
+      "styles": [
+        "storyteller",
+        "deep"
+      ],
+      "engine": "voxcpm",
+      "instruct": "an old weathered man, gravelly low voice, slow storytelling",
+      "seed": 470005
+    },
+    {
+      "id": "af_heart",
+      "name": "Heart",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "af_heart"
+    },
+    {
+      "id": "af_alloy",
+      "name": "Alloy",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "af_alloy"
+    },
+    {
+      "id": "af_aoede",
+      "name": "Aoede",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "af_aoede"
+    },
+    {
+      "id": "af_bella",
+      "name": "Bella",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "energetic",
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "af_bella"
+    },
+    {
+      "id": "af_jessica",
+      "name": "Jessica",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "podcast"
+      ],
+      "engine": "kokoro",
+      "preset": "af_jessica"
+    },
+    {
+      "id": "af_kore",
+      "name": "Kore",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "af_kore"
+    },
+    {
+      "id": "af_nicole",
+      "name": "Nicole",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "whisper",
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "af_nicole"
+    },
+    {
+      "id": "af_nova",
+      "name": "Nova",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "energetic"
+      ],
+      "engine": "kokoro",
+      "preset": "af_nova"
+    },
+    {
+      "id": "af_river",
+      "name": "River",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "af_river"
+    },
+    {
+      "id": "af_sarah",
+      "name": "Sarah",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "af_sarah"
+    },
+    {
+      "id": "af_sky",
+      "name": "Sky",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "energetic"
+      ],
+      "engine": "kokoro",
+      "preset": "af_sky"
+    },
+    {
+      "id": "am_adam",
+      "name": "Adam",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "am_adam"
+    },
+    {
+      "id": "am_echo",
+      "name": "Echo",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "am_echo"
+    },
+    {
+      "id": "am_eric",
+      "name": "Eric",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "news"
+      ],
+      "engine": "kokoro",
+      "preset": "am_eric"
+    },
+    {
+      "id": "am_fenrir",
+      "name": "Fenrir",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "deep"
+      ],
+      "engine": "kokoro",
+      "preset": "am_fenrir"
+    },
+    {
+      "id": "am_liam",
+      "name": "Liam",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "podcast"
+      ],
+      "engine": "kokoro",
+      "preset": "am_liam"
+    },
+    {
+      "id": "am_michael",
+      "name": "Michael",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "narrator",
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "am_michael"
+    },
+    {
+      "id": "am_onyx",
+      "name": "Onyx",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "American",
+      "styles": [
+        "deep"
+      ],
+      "engine": "kokoro",
+      "preset": "am_onyx"
+    },
+    {
+      "id": "am_puck",
+      "name": "Puck",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "American",
+      "styles": [
+        "energetic"
+      ],
+      "engine": "kokoro",
+      "preset": "am_puck"
+    },
+    {
+      "id": "am_santa",
+      "name": "Santa",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "American",
+      "styles": [
+        "storyteller",
+        "kids"
+      ],
+      "engine": "kokoro",
+      "preset": "am_santa"
+    },
+    {
+      "id": "bf_alice",
+      "name": "Alice (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "British",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "bf_alice"
+    },
+    {
+      "id": "bf_emma",
+      "name": "Emma (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "British",
+      "styles": [
+        "narrator",
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "bf_emma"
+    },
+    {
+      "id": "bf_isabella",
+      "name": "Isabella (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "British",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "bf_isabella"
+    },
+    {
+      "id": "bf_lily",
+      "name": "Lily (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "British",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "bf_lily"
+    },
+    {
+      "id": "bm_daniel",
+      "name": "Daniel (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "British",
+      "styles": [
+        "news"
+      ],
+      "engine": "kokoro",
+      "preset": "bm_daniel"
+    },
+    {
+      "id": "bm_fable",
+      "name": "Fable (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "British",
+      "styles": [
+        "storyteller"
+      ],
+      "engine": "kokoro",
+      "preset": "bm_fable"
+    },
+    {
+      "id": "bm_george",
+      "name": "George (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "British",
+      "styles": [
+        "narrator",
+        "deep"
+      ],
+      "engine": "kokoro",
+      "preset": "bm_george"
+    },
+    {
+      "id": "bm_lewis",
+      "name": "Lewis (British)",
+      "languages": [
+        "en"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "British",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "bm_lewis"
+    },
+    {
+      "id": "jf_alpha",
+      "name": "Alpha (Japanese)",
+      "languages": [
+        "ja"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Japanese",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "jf_alpha"
+    },
+    {
+      "id": "jf_gongitsune",
+      "name": "Gongitsune (Japanese)",
+      "languages": [
+        "ja"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Japanese",
+      "styles": [
+        "storyteller"
+      ],
+      "engine": "kokoro",
+      "preset": "jf_gongitsune"
+    },
+    {
+      "id": "jf_nezumi",
+      "name": "Nezumi (Japanese)",
+      "languages": [
+        "ja"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Japanese",
+      "styles": [
+        "kids"
+      ],
+      "engine": "kokoro",
+      "preset": "jf_nezumi"
+    },
+    {
+      "id": "jf_tebukuro",
+      "name": "Tebukuro (Japanese)",
+      "languages": [
+        "ja"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Japanese",
+      "styles": [
+        "storyteller",
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "jf_tebukuro"
+    },
+    {
+      "id": "jm_kumo",
+      "name": "Kumo (Japanese)",
+      "languages": [
+        "ja"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Japanese",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "jm_kumo"
+    },
+    {
+      "id": "zf_xiaobei",
+      "name": "Xiaobei (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Mandarin",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "zf_xiaobei"
+    },
+    {
+      "id": "zf_xiaoni",
+      "name": "Xiaoni (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Mandarin",
+      "styles": [
+        "energetic"
+      ],
+      "engine": "kokoro",
+      "preset": "zf_xiaoni"
+    },
+    {
+      "id": "zf_xiaoxiao",
+      "name": "Xiaoxiao (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Mandarin",
+      "styles": [
+        "podcast"
+      ],
+      "engine": "kokoro",
+      "preset": "zf_xiaoxiao"
+    },
+    {
+      "id": "zf_xiaoyi",
+      "name": "Xiaoyi (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Mandarin",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "zf_xiaoyi"
+    },
+    {
+      "id": "zm_yunjian",
+      "name": "Yunjian (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Mandarin",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "zm_yunjian"
+    },
+    {
+      "id": "zm_yunxi",
+      "name": "Yunxi (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Mandarin",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "zm_yunxi"
+    },
+    {
+      "id": "zm_yunxia",
+      "name": "Yunxia (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "male",
+      "age": "young",
+      "accent": "Mandarin",
+      "styles": [
+        "energetic"
+      ],
+      "engine": "kokoro",
+      "preset": "zm_yunxia"
+    },
+    {
+      "id": "zm_yunyang",
+      "name": "Yunyang (Mandarin)",
+      "languages": [
+        "zh"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Mandarin",
+      "styles": [
+        "news"
+      ],
+      "engine": "kokoro",
+      "preset": "zm_yunyang"
+    },
+    {
+      "id": "ef_dora",
+      "name": "Dora (Spanish)",
+      "languages": [
+        "es"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Spanish",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "ef_dora"
+    },
+    {
+      "id": "em_alex",
+      "name": "Alex (Spanish)",
+      "languages": [
+        "es"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Spanish",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "em_alex"
+    },
+    {
+      "id": "em_santa",
+      "name": "Santa (Spanish)",
+      "languages": [
+        "es"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Spanish",
+      "styles": [
+        "storyteller",
+        "kids"
+      ],
+      "engine": "kokoro",
+      "preset": "em_santa"
+    },
+    {
+      "id": "ff_siwis",
+      "name": "Siwis (French)",
+      "languages": [
+        "fr"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "French",
+      "styles": [
+        "narrator",
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "ff_siwis"
+    },
+    {
+      "id": "hf_alpha",
+      "name": "Alpha (Hindi)",
+      "languages": [
+        "hi"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Hindi",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "hf_alpha"
+    },
+    {
+      "id": "hf_beta",
+      "name": "Beta (Hindi)",
+      "languages": [
+        "hi"
+      ],
+      "gender": "female",
+      "age": "young",
+      "accent": "Hindi",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "hf_beta"
+    },
+    {
+      "id": "hm_omega",
+      "name": "Omega (Hindi)",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Hindi",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "hm_omega"
+    },
+    {
+      "id": "hm_psi",
+      "name": "Psi (Hindi)",
+      "languages": [
+        "hi"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Hindi",
+      "styles": [
+        "calm"
+      ],
+      "engine": "kokoro",
+      "preset": "hm_psi"
+    },
+    {
+      "id": "if_sara",
+      "name": "Sara (Italian)",
+      "languages": [
+        "it"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Italian",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "if_sara"
+    },
+    {
+      "id": "im_nicola",
+      "name": "Nicola (Italian)",
+      "languages": [
+        "it"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Italian",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "im_nicola"
+    },
+    {
+      "id": "pf_dora",
+      "name": "Dora (Portuguese)",
+      "languages": [
+        "pt"
+      ],
+      "gender": "female",
+      "age": "adult",
+      "accent": "Brazilian Portuguese",
+      "styles": [
+        "warm"
+      ],
+      "engine": "kokoro",
+      "preset": "pf_dora"
+    },
+    {
+      "id": "pm_alex",
+      "name": "Alex (Portuguese)",
+      "languages": [
+        "pt"
+      ],
+      "gender": "male",
+      "age": "adult",
+      "accent": "Brazilian Portuguese",
+      "styles": [
+        "narrator"
+      ],
+      "engine": "kokoro",
+      "preset": "pm_alex"
+    },
+    {
+      "id": "pm_santa",
+      "name": "Santa (Portuguese)",
+      "languages": [
+        "pt"
+      ],
+      "gender": "male",
+      "age": "elder",
+      "accent": "Brazilian Portuguese",
+      "styles": [
+        "storyteller",
+        "kids"
+      ],
+      "engine": "kokoro",
+      "preset": "pm_santa"
+    }
   ]
 }

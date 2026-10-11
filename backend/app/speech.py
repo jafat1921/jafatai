@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from app import venv_runner, voices
+from app import venv_runner, voice_instruct, voices
 from app.audio_analysis import stream_info
 from app.audio_edit import atempo
 from app.config import get_settings
@@ -60,12 +60,18 @@ def runner_job(params: dict, e: voices.Engine, texts: list[str], work: Path, see
     v = params.get("voice") or {}
     speed = float(params.get("speed") or 1.0)
     duration = params.get("duration_s")
+    instruct = ", ".join(x for x in ((v.get("design") or {}).get("description"), params.get("emotion")) if x) or None
+    if e.id == "omnivoice" and instruct:
+        # OmniVoice refuses any word outside its own attribute list; keep what it understands
+        ins = voice_instruct.normalise(instruct)
+        instruct = ins.text
+        hint = (v.get("design") or {}).get("speed") or ins.speed
+        if speed == 1.0 and not duration and hint != 1.0:
+            speed = float(hint)
     job = {"engine": e.id, "language": params.get("language") or "en", "seed": seed, "device": "cuda",
            "segments": [{"text": t, "out": str(work / f"seg{i}.wav")} for i, t in enumerate(texts)],
            "ref_audio": str(ref) if ref else None, "ref_text": v.get("ref_text") or None,
-           "instruct": ", ".join(x for x in ((v.get("design") or {}).get("description"), params.get("emotion"))
-                                 if x) or None,
-           "voice": v.get("preset")}
+           "instruct": instruct, "voice": v.get("preset")}
     # a fixed length wins over speed; the engine only gets it when there's one piece to fit
     if duration and e.native_duration and len(texts) == 1:
         job["duration"] = float(duration)

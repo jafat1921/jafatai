@@ -49,7 +49,8 @@ def make_thumbs() -> int:
     with SessionLocal() as db:
         made, failed = thumbs.backfill(db)
     print(f"thumbs: {made} made, {failed} failed")
-    return 1 if failed and not made else 0
+    # a partial run still exits 1 so the installer says which engine needs attention
+    return 1 if failed else 0
 
 
 def catalogue_backfill() -> int:
@@ -101,7 +102,8 @@ def voice_samples(args: list[str], run=None) -> int:
     only = [x.strip() for x in a.only.split(",") if x.strip()] or None
     made, failed = voice_gallery.render_samples(a.engine, a.force, only, run=run)
     print(f"voice samples: {made} made, {failed} failed")
-    return 1 if failed and not made else 0
+    # a partial run still exits 1 so the installer says which engine needs attention
+    return 1 if failed else 0
 
 
 def main(argv: list[str]) -> int:

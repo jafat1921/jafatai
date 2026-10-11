@@ -48,9 +48,28 @@ ChatterboxTTS.from_pretrained(device=dev)
 ChatterboxMultilingualTTS.from_pretrained(device=torch.device(dev))
 print('english + multilingual ready on', dev)"
 
+# Kokoro's text front-end (misaki) needs extra pieces per language that `pip install kokoro` leaves out:
+# spaCy's English model, pyopenjtalk + a dictionary for Japanese, ordered-set / jieba for Chinese
+if [[ $want == all || $want == kokoro ]] && [[ -x "$VENVS/tts-kokoro/bin/python" ]]; then
+  kpy="$VENVS/tts-kokoro/bin/python"
+  echo "==> kokoro language extras"
+  uv pip install --python "$kpy" -q pip "misaki[en,zh]" ordered-set 2>&1 | tail -n 3
+  "$kpy" -m spacy download en_core_web_sm 2>&1 | tail -n 1
+  # Japanese builds pyopenjtalk from source; if that fails only the 5 Japanese voices are affected
+  if uv pip install --python "$kpy" -q "misaki[ja]" 2>&1 | tail -n 3; then
+    "$kpy" -m unidic download 2>&1 | tail -n 1 || true
+  fi
+fi
+
 run kokoro tts-kokoro "
 from huggingface_hub import snapshot_download
-print(snapshot_download('hexgrad/Kokoro-82M'))"
+print(snapshot_download('hexgrad/Kokoro-82M'))
+import spacy; spacy.load('en_core_web_sm'); print('english front-end ok')
+from misaki import zh; print('chinese front-end ok')
+try:
+    from misaki import ja; print('japanese front-end ok')
+except Exception as e:
+    print('japanese front-end missing:', e)"
 
 run whisper stt-whisperx "
 from faster_whisper import download_model

@@ -93,6 +93,7 @@ import type { Album, Client, Facets, PhotoPage } from './catalogue'
 import type { RenderResponse, Script, ScriptCreate, ScriptPatch, ScriptSummary, SplitMode } from './dialogue'
 import type { Dub, DubCreate, DubExportBody, DubPatch, DubSummary, Transcript, TranscriptSummary } from './dub'
 import type { GalleryQuery, GalleryResponse, GallerySample } from './gallery'
+import type { StemsMode, StemsResponse } from './stems'
 import type { Ad, EditOp, Episode, EpisodeCreate, EpisodePatch, EpisodeSummary, InsertBody, PublishBody, Show, ShowCreate, ShowPatch, VideoBody } from './podcast'
 import type {
   AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema, ProfileInfo,
@@ -509,6 +510,9 @@ export const api = {
     mix: (body: MixIn & { stems?: boolean; note?: string }) => post<{ item: MediaItem; job: Job }>('/audio/mix', body),
     // contract-v16
     speak: (body: SpeakRequest) => post<SpeakResponse>('/audio/speak', body),
+    // contract-v21
+    stems: (id: string, body: { mode: StemsMode; version?: string }) => post<{ job: Job; items: MediaItem[] }>(`/audio/${id}/stems`, body),
+    stemsOf: (id: string) => get<StemsResponse>(`/audio/${id}/stems`),
   },
   voices: {
     list: async (q: VoiceQuery = {}) => listOf(await get<Voice[] | { items: Voice[] }>('/voices', { ...q, starred: q.starred || undefined })),

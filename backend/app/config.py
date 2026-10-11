@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     dub_separation_model_dir: str = "/data/models/audio-separator"
     # cosine distance under which two speech segments count as one speaker ("auto" speaker count)
     dub_speaker_threshold: float = 0.25
+    # Stems (contract v21): the four-stem Demucs model; two-stem splits reuse dub_separation_model.
+    # Both live in dub_separation_model_dir
+    stems_four_model: str = "htdemucs_ft.yaml"
 
     @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
     @classmethod

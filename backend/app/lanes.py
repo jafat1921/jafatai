@@ -21,8 +21,8 @@ GPU_LANES = ("image", "video")
 # TODO: let an idle lane borrow the other GPU (a night of image batches leaves the video GPU unused)
 # job types that always run on the video GPU whatever their generation says (SeedVR2 / FlashVSR segments)
 VIDEO_JOB_TYPES = frozenset({"upscale"})
-# speech-to-text on a voice's reference clip: a GPU model, but either card will do
-AUDIO_JOB_TYPES = frozenset({"voice_transcribe", "transcribe", "voice_sample"})
+# speech-to-text on a voice's reference clip: a GPU model, but either card will do; stem splits likewise
+AUDIO_JOB_TYPES = frozenset({"voice_transcribe", "transcribe", "voice_sample", "audio_stems"})
 # a dub_stage job's lane depends on its payload's stage, so it is set when the job is made (dub_lane)
 DUB_GPU_STAGES = frozenset({"separate", "transcribe", "render", "verify"})
 

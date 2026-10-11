@@ -3,14 +3,18 @@ import { Pause, Play, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Dub, DubSpeaker } from '@/lib/dub'
-import type { Voice, VoiceLanguage } from '@/lib/types'
+import type { Voice, VoiceEngine, VoiceLanguage } from '@/lib/types'
 import { refProblem } from '@/lib/voice'
-import { AddVoiceDialog, SELECT } from '../voice/AddVoiceDialog'
+import { AddVoiceDialog } from '../voice/AddVoiceDialog'
+import { VoiceChip } from '../voice/VoiceChips'
 import { togglePlay, useTrack } from '../sharedAudio'
 
 interface Props {
   dub: Dub
   voices: Voice[]
+  engines: VoiceEngine[]
+  // the target language being worked on: the picker's Gallery section starts on it
+  language: string
   languages: VoiceLanguage[]
   colorOf: (speakerId: string | null) => string
   disabled: boolean
@@ -33,12 +37,13 @@ function SamplePlay({ spk }: { spk: DubSpeaker }) {
  * Who speaks with which voice. Voices cloned from the video's own speakers come first in the list;
  * "Clone this speaker" opens the usual clone form with the sample clip in it (consent still asked).
  */
-export function CastingBoard({ dub, voices, languages, colorOf, disabled, onCast }: Props) {
+export function CastingBoard({ dub, voices, engines, language, languages, colorOf, disabled, onCast }: Props) {
   const [cloning, setCloning] = useState<DubSpeaker | null>(null)
   const [labels, setLabels] = useState<Record<string, string>>({})
   const samples = new Set(dub.speakers.map((s) => s.sample_media_id).filter(Boolean))
   const own = voices.filter((v) => v.ref && samples.has(v.ref.media_id))
-  const rest = voices.filter((v) => !own.includes(v))
+  // the picker sorts starred first but keeps this order otherwise, so the video's own clones lead
+  const ordered = [...own, ...voices.filter((v) => !own.includes(v))]
   const lines = (id: string) => dub.segments.filter((s) => s.speaker_id === id).length
 
   if (!dub.speakers.length) {
@@ -68,28 +73,20 @@ export function CastingBoard({ dub, voices, languages, colorOf, disabled, onCast
                 </span>
               </div>
               <SamplePlay spk={spk} />
-              <label className="flex flex-col gap-1 text-small">
+              <div className="flex flex-col gap-1 text-small">
                 <span className="section-label">Voice</span>
-                <select value={spk.voice_id ?? ''} disabled={disabled} onChange={(e) => onCast([{ id: spk.id, voice_id: e.target.value || null }])} className={SELECT}>
-                  <option value="">Stand-in voice (a steady designed one)</option>
-                  {own.length > 0 && (
-                    <optgroup label="Cloned from this video">
-                      {own.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label="Your voices">
-                    {rest.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-              </label>
+                <VoiceChip
+                  name={`Voice of ${label}`}
+                  voices={ordered}
+                  engines={engines}
+                  language={language}
+                  value={spk.voice_id ?? null}
+                  onChange={(v) => onCast([{ id: spk.id, voice_id: v }])}
+                  noneLabel="Stand-in voice"
+                  noneHint="A steady designed voice until you cast one"
+                  disabled={disabled}
+                />
+              </div>
               <Button type="button" size="sm" disabled={disabled || !spk.sample_media_id || !!short} title={short ?? undefined} onClick={() => setCloning(spk)}>
                 <UserPlus aria-hidden />
                 Clone this speaker

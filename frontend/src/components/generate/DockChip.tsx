@@ -23,13 +23,18 @@ interface Props {
   wide?: boolean
   // print "Brand:" before the value on the chip itself
   showName?: boolean
+  disabled?: boolean
 }
 
 /** "Model ▾" style chip: the current value on the chip, the full picker in a popover. */
-export function DockChip({ name, value, icon, active, children, wide, showName }: Props) {
+export function DockChip({ name, value, icon, active, children, wide, showName, disabled }: Props) {
   return (
     <Popover>
-      <PopoverTrigger className={chipClass(active)} aria-label={`${name}: ${typeof value === 'string' ? value : ''}`.replace(/: $/, '')}>
+      <PopoverTrigger
+        disabled={disabled}
+        className={cn(chipClass(active), 'disabled:cursor-not-allowed disabled:opacity-60')}
+        aria-label={`${name}: ${typeof value === 'string' ? value : ''}`.replace(/: $/, '')}
+      >
         {icon}
         <span className="truncate">
           {showName && <span className="text-studio-muted">{name}: </span>}

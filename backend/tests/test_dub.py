@@ -194,11 +194,11 @@ def test_comfy_driver_runs_the_dub_runners_in_audio_utils(tmp_path, monkeypatch)
     # every line of one voice in a single runner call
     outs = [tmp_path / "takes" / "a.flac", tmp_path / "takes" / "b.flac"]
     outs[0].parent.mkdir()
-    params = {"engine": "omnivoice", "language": "ur", "voice": {"kind": "design", "design": {"description": "calm"}}}
+    params = {"engine": "omnivoice", "language": "ur", "voice": {"kind": "design", "design": {"description": "female, elderly"}}}
     durs = d.speak_many(params, ["ایک", "دو"], outs, 7, lambda f, m: None)
     assert durs == [pytest.approx(1.0, abs=0.02), pytest.approx(2.0, abs=0.02)] and all(p.is_file() for p in outs)
     tts = [c for c in calls if c[0] == "tts_omnivoice"]
-    assert len(tts) == 1 and len(tts[0][3]["segments"]) == 2 and tts[0][3]["instruct"] == "calm"
+    assert len(tts) == 1 and len(tts[0][3]["segments"]) == 2 and tts[0][3]["instruct"] == "female, elderly"
     # and checked in one Whisper pass, the words handed back to the clip they fell in
     assert d.transcribe_many(outs, "ur", lambda f, m: None) == ["ek", "do"]
     assert sum(1 for c in calls if c[0] == "stt_whisper") == 1
@@ -453,6 +453,29 @@ def test_the_mix_voice_track_lines_up_with_the_starts(client, tmp_path, fast_dri
     first_end = d["segments"][0]["start"] + d["segments"][0]["target"]["ur"]["fitted_s"]
     gap = voice[int((first_end + 0.03) * rate):int((d["segments"][1]["start"] - 0.01) * rate)]
     assert gap.size == 0 or np.abs(gap).max() < 0.01
+
+
+def test_a_gallery_voice_can_be_cast(client, tmp_path, fast_driver, llm):
+    from app import voice_gallery
+
+    d = make_dub(client, tmp_path, targets=["ur"], speakers=1)
+    _run_all(fast_driver)
+    r = client.patch(f"/api/dubs/{d['id']}", json={"speakers": [{"id": "spk1", "voice_id": "gallery:ur-dadi"}]})
+    assert r.status_code == 200, r.text
+    dadi = voice_gallery.get("ur-dadi")
+    assert r.json()["speakers"][0]["voice_id"] == "gallery:ur-dadi"
+    assert r.json()["speakers"][0]["voice_name"] == dadi["name"]
+    bad = client.patch(f"/api/dubs/{d['id']}", json={"speakers": [{"id": "spk1", "voice_id": "gallery:nope"}]})
+    assert bad.status_code == 422
+
+    d = to_the_end(client, d["id"], fast_driver)
+    # the cast stage kept it (it drops voices it can't find) and every line was voiced with it
+    assert d["speakers"][0]["voice_id"] == "gallery:ur-dadi"
+    assert all(s["target"]["ur"]["status"] == "verified" for s in d["segments"])
+    with SessionLocal() as db:
+        dub = db.get(DubProject, d["id"])
+        params, _ = stages._voice(db, dub, "gallery:ur-dadi", dub.speakers[0], "ur")
+    assert params["voice"]["name"] == dadi["name"] and params["language"] == "ur"
 
 
 def test_runner_scripts_compile():

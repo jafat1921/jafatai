@@ -82,7 +82,9 @@ d = os.environ.get('DUB_SEPARATION_MODEL_DIR', '/data/models/audio-separator')
 os.makedirs(d, exist_ok=True)
 s = Separator(model_file_dir=d)
 s.load_model(model_filename=os.environ.get('DUB_SEPARATION_MODEL', 'model_bs_roformer_ep_317_sdr_12.9755.ckpt'))
-print('separation model ready in', d)"
+# the Stems tool's four-stem Demucs model (contract v21)
+s.load_model(model_filename=os.environ.get('STEMS_FOUR_MODEL', 'htdemucs_ft.yaml'))
+print('separation models ready in', d)"
 
 run embed audio-utils "
 import torchaudio, soundfile

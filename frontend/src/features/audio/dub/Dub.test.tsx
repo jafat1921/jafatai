@@ -2,7 +2,9 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DUB_STAGES, type Dub, type DubSegment, type DubStage, type DubStageName } from '@/lib/dub'
+import type { GalleryVoice } from '@/lib/gallery'
 import { stubMedia } from '@/test/audio-fixtures'
+import { closeChip, openChip } from '@/test/dock'
 import { T, job, media, mockApi, renderAt } from '@/test/media-fixtures'
 import { ENGINES, VOICES } from '@/test/voice-fixtures'
 import { resetPlayer, usePlayer } from '../sharedAudio'
@@ -14,7 +16,29 @@ const routes = [
   { path: '/audio/dub/:id', element: <DubWorkspacePage /> },
 ]
 
-const clip = media('v1', { kind: 'video', title: 'Harbour at dusk', duration_s: 6, media_url: '/media/v1.mp4', thumb_url: '/media/v1.webp' })
+const gv = (id: string, name: string, lang: string, extra: Partial<GalleryVoice> = {}): GalleryVoice => ({
+  id,
+  voice_id: `gallery:${id}`,
+  name,
+  language: lang,
+  languages: [lang],
+  gender: 'female',
+  age: 'adult',
+  accent: lang === 'ur' ? 'Urdu' : 'American',
+  styles: ['warm'],
+  engine: 'omnivoice',
+  kind: 'design',
+  instruct: 'female, elderly',
+  seed: 1,
+  sample_url: `/api/voices/gallery/${id}/sample`,
+  sample_ready: false,
+  added_voice_id: null,
+  starred: false,
+  ...extra,
+})
+const GALLERY = [gv('ur-dadi', 'Dadi Amma, grandmother', 'ur'), gv('en-uk-news', 'Charlotte, UK newsreader', 'en')]
+
+const clip = media('v1',{ kind: 'video', title: 'Harbour at dusk', duration_s: 6, media_url: '/media/v1.mp4', thumb_url: '/media/v1.webp' })
 
 const stagesUpTo = (upto: DubStageName | null, at?: Partial<DubStage> & { name: DubStageName }) =>
   Object.fromEntries(
@@ -79,6 +103,7 @@ function api(initial: Dub) {
     const b = body as Record<string, unknown>
     if (path === '/voices/engines') return ENGINES
     if (path === '/voices') return VOICES
+    if (path === '/voices/gallery') return { items: GALLERY, total: GALLERY.length, facets: {} }
     if (path === '/jobs') return []
     if (path === '/media') return { items: query.kind === 'video' ? [clip] : [] }
     if (method === 'GET' && path === '/dubs') return [{ ...current, segments: undefined }]
@@ -225,14 +250,27 @@ describe('Dub workspace', () => {
     expect(video.currentTime).toBe(8)
   })
 
-  it('casts a voice, and clones a speaker with the consent still asked', async () => {
+  it('casts a library or a gallery voice, and clones a speaker with the consent still asked', async () => {
     const calls = api(translated())
     const user = userEvent.setup()
     renderAt('/audio/dub/d1', routes)
     await user.click(await screen.findByRole('tab', { name: 'Cast' }))
     const cards = screen.getByRole('list', { name: 'Speakers' })
-    await user.selectOptions(within(cards).getAllByRole('combobox')[0], 'v1')
+    expect(within(cards).getByRole('button', { name: 'Voice of Speaker 1: Stand-in voice' })).toBeInTheDocument()
+    let pop = await openChip(user, 'Voice of Speaker 1')
+    await user.click(within(within(pop).getByRole('list', { name: 'Voice of Speaker 1 choices' })).getByRole('button', { name: /Ayesha/ }))
     await waitFor(() => expect(sent(calls, 'PATCH', '/dubs/d1')).toEqual([{ speakers: [{ id: 'spk1', voice_id: 'v1' }] }]))
+    await closeChip(user)
+
+    // the Gallery section starts on the dub's target language
+    pop = await openChip(user, 'Voice of Speaker 2')
+    const gallery = within(pop).getByRole('region', { name: 'Gallery' })
+    expect(within(gallery).getByRole('combobox', { name: 'Gallery language' })).toHaveValue('ur')
+    const choices = within(gallery).getByRole('list', { name: 'Voice of Speaker 2 gallery choices' })
+    expect(within(choices).getAllByRole('button')).toHaveLength(1)
+    await user.click(within(choices).getByRole('button', { name: /Dadi Amma/ }))
+    await waitFor(() => expect(sent(calls, 'PATCH', '/dubs/d1')[1]).toEqual({ speakers: [{ id: 'spk2', voice_id: 'gallery:ur-dadi' }] }))
+    await closeChip(user)
     // too short a sample to clone from
     expect(within(cards).getAllByRole('button', { name: 'Clone this speaker' })[1]).toBeDisabled()
 

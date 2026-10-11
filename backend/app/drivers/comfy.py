@@ -569,6 +569,11 @@ class ComfyDriver:
 
         return engines.separate(src, out_dir, model, progress_cb, lane=self.lane)
 
+    def separate_stems(self, src: Path, out_dir: Path, model: str, progress_cb: ProgressCallback) -> dict:
+        from app.dub import engines
+
+        return engines.separate_stems(src, out_dir, model, progress_cb, lane=self.lane)
+
     def speaker_embed(self, src: Path, spans, progress_cb: ProgressCallback) -> list[list[float]]:
         from app.dub import engines
 

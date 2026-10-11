@@ -65,4 +65,6 @@ export const qk = {
   podcastShows: ['podcast', 'shows'] as const,
   podcastEpisodes: ['podcast', 'episodes'] as const,
   podcastEpisode: (id: string) => ['podcast', 'episode', id] as const,
+  // contract-v21
+  stems: (id: string) => ['audio-stems', id] as const,
 }

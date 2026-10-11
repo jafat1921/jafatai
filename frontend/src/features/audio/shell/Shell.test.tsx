@@ -68,16 +68,14 @@ afterEach(() => {
 })
 
 describe('Audio workspace', () => {
-  it('groups the sidebar and shows the pages still to come as disabled', async () => {
+  it('groups the sidebar, every page live', async () => {
     renderWorkspace()
     const nav = await screen.findByRole('navigation', { name: 'Audio Studio' })
     expect(within(nav).getAllByRole('list').map((l) => l.getAttribute('aria-label'))).toEqual(['Create', 'Voice', 'Story', 'Edit', 'Tools', 'Library'])
     expect(within(nav).getByRole('link', { name: 'Song' })).toHaveAttribute('aria-current', 'page')
-    for (const soon of ['Stems']) {
-      const el = within(nav).getByRole('link', { name: new RegExp(`^${soon}`) })
-      expect(el).toHaveAttribute('aria-disabled', 'true')
-      expect(el).not.toHaveAttribute('href')
-    }
+    expect(within(nav).queryAllByRole('link').filter((l) => l.getAttribute('aria-disabled') === 'true')).toEqual([])
+    // contract v21
+    expect(within(nav).getByRole('link', { name: /^Stems/ })).toHaveAttribute('href', '/audio/stems')
     expect(within(nav).getByRole('link', { name: 'Score a Clip' })).toHaveAttribute('href', '/audio/score')
     // B2: the Voice group is live
     expect(within(nav).getByRole('link', { name: 'Speak' })).toHaveAttribute('href', '/audio/speak')

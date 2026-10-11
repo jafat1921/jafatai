@@ -77,7 +77,7 @@ export const AUDIO_GROUPS: AudioGroup[] = [
     id: 'tools',
     label: 'Tools',
     pages: [
-      { id: 'stems', label: 'Stems', to: '/audio/stems', icon: SquareSplitHorizontal, soon: true },
+      { id: 'stems', label: 'Stems', to: '/audio/stems', icon: SquareSplitHorizontal },
       { id: 'transcribe', label: 'Transcribe', to: '/audio/transcribe', icon: Captions },
       { id: 'dub', label: 'Dub', to: '/audio/dub', icon: Languages },
     ],

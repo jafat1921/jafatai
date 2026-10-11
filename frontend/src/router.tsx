@@ -153,6 +153,11 @@ export const shellRoutes: RouteObject[] = [
         const { TranscribePage } = await import('@/features/audio/transcribe/TranscribePage')
         return <TranscribePage />
       }),
+      // contract v21
+      page('stems', async () => {
+        const { StemsPage } = await import('@/features/audio/stems/StemsPage')
+        return <StemsPage />
+      }),
       page('dub', async () => {
         const { DubListPage } = await import('@/features/audio/dub/DubListPage')
         return <DubListPage />

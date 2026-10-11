@@ -218,6 +218,28 @@ class MockDriver:
         progress_cb(1.0, "Done")
         return {"vocals": vocals, "instrumental": bed}
 
+    def separate_stems(self, src: Path, out_dir: Path, model: str, progress_cb) -> dict:
+        # Stems (contract v21), four of them: vocals is the mix itself, the rest are made up the same length
+        # (a kick-like pulse, a low hum and a quiet bed) so each tile has a different waveform
+        from app.audio_analysis import stream_info
+
+        self._tick(progress_cb, "Separating the stems")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ff = get_settings().ffmpeg_path()
+        seconds = stream_info(src).duration or 1.0
+        fake = {"drums": f"aevalsrc=0.5*sin(2*PI*60*t)*lt(mod(t\\,0.5)\\,0.08):s=48000:d={seconds:.3f}",
+                "bass": f"aevalsrc=0.3*sin(2*PI*55*t):s=48000:d={seconds:.3f}",
+                "other": f"anoisesrc=d={seconds:.3f}:c=pink:r=48000:a=0.03"}
+        out = {"vocals": out_dir / "mock_(Vocals).wav"}
+        subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(src), "-ac", "2", "-ar", "48000", str(out["vocals"])],
+                       check=True, capture_output=True, timeout=120)
+        for name, graph in fake.items():
+            out[name] = out_dir / f"mock_({name.title()}).wav"
+            subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", graph, "-ac", "2", str(out[name])],
+                           check=True, capture_output=True, timeout=120)
+        progress_cb(1.0, "Done")
+        return out
+
     def speaker_embed(self, src: Path, spans, progress_cb) -> list[list[float]]:
         from app.audio_analysis import _decode_mono
         from app.dub.engines import band_embedding

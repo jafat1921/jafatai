@@ -1,11 +1,12 @@
 import { Link } from 'react-router'
 import {
   Aperture, Brush, Clapperboard, Download, ExternalLink, FolderInput, Heart, ImageUpscale, Layers, Maximize2, MoreHorizontal, Palette, PanelRightOpen,
-  Pencil, Play, RefreshCw, RotateCcw, Scissors, Trash2, AudioWaveform,
+  Pencil, Play, RefreshCw, RotateCcw, Scissors, SquareSplitHorizontal, Trash2, AudioWaveform,
 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { TileState } from '@/lib/images'
 import { downloadUrl, mediaAlt, projectLink } from '@/lib/media'
+import { stemsLink } from '@/lib/stems'
 import { AudioDownloadItems } from './AudioDownloads'
 import type { MediaItem, RegenerateMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -116,15 +117,29 @@ export function TileMenu({
                 Use in Score a Clip
               </Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to={stemsLink(item.id)}>
+                <SquareSplitHorizontal aria-hidden />
+                Split stems
+              </Link>
+            </DropdownMenuItem>
           </>
         )}
         {ready && item.kind === 'video' && (
-          <DropdownMenuItem asChild>
-            <Link to={`/audio/score?video=${item.id}`}>
-              <AudioWaveform aria-hidden />
-              Score a Clip…
-            </Link>
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem asChild>
+              <Link to={`/audio/score?video=${item.id}`}>
+                <AudioWaveform aria-hidden />
+                Score a Clip…
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to={stemsLink(item.id)}>
+                <SquareSplitHorizontal aria-hidden />
+                Split stems
+              </Link>
+            </DropdownMenuItem>
+          </>
         )}
         {audio && item.origin === 'generated' && (
           <>

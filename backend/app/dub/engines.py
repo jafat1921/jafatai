@@ -50,6 +50,18 @@ def separate(src: Path, out_dir: Path, model: str, progress, lane: str | None = 
     return {"vocals": Path(res["vocals"]), "instrumental": Path(res["instrumental"])}
 
 
+def separate_stems(src: Path, out_dir: Path, model: str, progress, lane: str | None = None, run=None
+                   ) -> dict[str, Path]:
+    """The Stems tool's split (contract v21): every stem the model writes, keyed by its lower-case name."""
+    s = get_settings()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    job = {"audio": str(src), "out_dir": str(out_dir), "model": model, "model_dir": s.dub_separation_model_dir,
+           "device": "cuda", "all_stems": True}
+    res = (run or venv_runner.run)("separate_vocals", UTILS_VENV, job, lane=lane, need_gb=SEPARATE_GB,
+                                   progress=lambda f, m: progress(f, m or "Separating the stems"))
+    return {name: Path(p) for name, p in (res.get("stems") or {}).items()}
+
+
 def speaker_embed(src: Path, spans: list[tuple[float, float]], progress, lane: str | None = None,
                   run=None) -> list[list[float]]:
     job = {"audio": str(src), "segments": [[round(a, 3), round(b, 3)] for a, b in spans]}

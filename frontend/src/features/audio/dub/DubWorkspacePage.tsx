@@ -365,7 +365,16 @@ function DubWorkspace({ dub }: { dub: Dub }) {
             </TabsContent>
 
             <TabsContent value="cast">
-              <CastingBoard dub={dub} voices={voices} languages={langs} colorOf={colorOf} disabled={busy} onCast={(speakers) => patch.mutate({ speakers })} />
+              <CastingBoard
+                dub={dub}
+                voices={voices}
+                engines={engines}
+                language={activeLang}
+                languages={langs}
+                colorOf={colorOf}
+                disabled={busy}
+                onCast={(speakers) => patch.mutate({ speakers })}
+              />
             </TabsContent>
 
             <TabsContent value="glossary">

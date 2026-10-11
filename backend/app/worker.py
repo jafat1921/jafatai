@@ -424,6 +424,10 @@ HANDLERS[podcast.MIX_JOB] = podcast_produce.handle_mix
 HANDLERS[podcast.PUBLISH_JOB] = podcast_publish.handle_publish
 HANDLERS[podcast.VIDEO_JOB] = podcast_publish.handle_video
 CPU_JOB_LEDGER.update({podcast.MIX_JOB: "audio_edit", podcast.PUBLISH_JOB: "export", podcast.VIDEO_JOB: "export"})
+from app import stems  # noqa: E402
+
+HANDLERS[stems.JOB] = stems.handle
+FINISHED_HOOKS.append(stems.on_job_finished)
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

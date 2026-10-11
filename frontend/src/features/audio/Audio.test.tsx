@@ -362,6 +362,7 @@ describe('Audio navigation', () => {
       ['Podcast', '/audio/podcast'],
       ['Editor', '/audio/edit'],
       ['Score a Clip', '/audio/score'],
+      ['Stems', '/audio/stems'],
       ['Transcribe', '/audio/transcribe'],
       ['Dub a video', '/audio/dub'],
       ['Prompt templates', '/audio/prompt-templates'],
@@ -377,5 +378,6 @@ describe('Audio navigation', () => {
     expect(pageTitle('/audio/library')).toBe('Audio library')
     expect(pageTitle('/audio/song')).toBe('Song')
     expect(pageTitle('/audio/voices')).toBe('Voices')
+    expect(pageTitle('/audio/stems')).toBe('Stems')
   })
 })

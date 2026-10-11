@@ -37,6 +37,9 @@ export function VoiceChip({
   value,
   onChange,
   language,
+  noneLabel = 'Engine default',
+  noneHint = "The engine's own voice for the language",
+  disabled,
 }: {
   name?: string
   voices: Voice[]
@@ -45,6 +48,10 @@ export function VoiceChip({
   onChange: (id: string | null) => void
   // the line's language: the Gallery section starts filtered to it
   language?: string
+  // what "no voice" means where the picker is used (Dub: a stand-in voice)
+  noneLabel?: string
+  noneHint?: string
+  disabled?: boolean
 }) {
   const [q, setQ] = useState('')
   const query = useDeferredValue(q.trim().toLowerCase())
@@ -62,7 +69,14 @@ export function VoiceChip({
   const galleryShown = galleryHits.slice(0, GALLERY_SHOWN)
 
   return (
-    <DockChip name={name} value={picked?.name ?? 'Engine default'} icon={picked ? <VoiceAvatar voice={picked} className="size-4 text-[9px]" /> : <UserRound aria-hidden />} active={!!picked} wide>
+    <DockChip
+      name={name}
+      value={picked?.name ?? noneLabel}
+      icon={picked ? <VoiceAvatar voice={picked} className="size-4 text-[9px]" /> : <UserRound aria-hidden />}
+      active={!!picked}
+      disabled={disabled}
+      wide
+    >
       <SearchField label="Search voices" value={q} onChange={setQ} />
       <div className="-mx-1 flex max-h-80 flex-col gap-2 overflow-y-auto">
         <ul aria-label={`${name} choices`} className="flex flex-col gap-0.5">
@@ -71,8 +85,8 @@ export function VoiceChip({
               <button type="button" aria-pressed={!value} onClick={() => onChange(null)} className={ROW}>
                 <VoiceAvatar voice={null} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-body">Engine default</span>
-                  <span className="block text-[11px] text-studio-muted">The engine's own voice for the language</span>
+                  <span className="block text-body">{noneLabel}</span>
+                  <span className="block text-[11px] text-studio-muted">{noneHint}</span>
                 </span>
               </button>
             </li>

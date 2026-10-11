@@ -9,11 +9,18 @@ import logging
 import os
 import signal
 import socket
+import sys
 import threading
 import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Callable
+
+# `python -m app.worker` runs this file as __main__. Without this, the handlers' `from app import worker`
+# loads a second copy, and the JobDeferred they raise isn't the class the loop below catches: a parent
+# job waiting on its children (autopilot, dub, video podcast) was failed instead of re-queued
+if __name__ == "__main__":
+    sys.modules.setdefault("app.worker", sys.modules[__name__])
 
 from sqlalchemy import exists, or_, select, update
 from sqlalchemy.orm import Session, aliased, sessionmaker

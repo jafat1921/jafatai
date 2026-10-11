@@ -50,6 +50,9 @@ export const qk = {
   voiceLists: ['voices', 'list'] as const,
   voices: (q: VoiceQuery) => ['voices', 'list', q] as const,
   voiceEngines: ['voice-engines'] as const,
+  // contract-v19
+  galleryAll: ['voice-gallery'] as const,
+  gallery: (q: Record<string, string | undefined>) => ['voice-gallery', q] as const,
   // contract-v17
   scripts: ['scripts', 'list'] as const,
   script: (id: string) => ['scripts', 'one', id] as const,
@@ -58,4 +61,8 @@ export const qk = {
   dub: (id: string) => ['dubs', 'one', id] as const,
   transcripts: ['transcripts', 'list'] as const,
   transcript: (id: string) => ['transcripts', 'one', id] as const,
+  // contract-v20
+  podcastShows: ['podcast', 'shows'] as const,
+  podcastEpisodes: ['podcast', 'episodes'] as const,
+  podcastEpisode: (id: string) => ['podcast', 'episode', id] as const,
 }

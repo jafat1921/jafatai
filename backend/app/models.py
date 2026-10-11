@@ -645,6 +645,55 @@ class Transcript(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class PodcastShow(Base):
+    """A podcast (contract v20): defaults for its episodes and the ID3 fields they publish with."""
+
+    __tablename__ = "podcast_show"
+    __table_args__ = (Index("ix_podcast_show_ws_updated", "workspace_id", "updated_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    author: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    language: Mapped[str] = mapped_column(String(12), default="en", server_default="en")
+    cover_media_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    hosts: Mapped[list] = mapped_column(JSON, default=list)
+    music: Mapped[dict] = mapped_column(JSON, default=dict)
+    ads: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class PodcastEpisode(Base):
+    """One episode (contract v20). Its lines live in a VoiceScript, so renders and takes are Dialogue's;
+    sources, hosts, chapters, produce settings and outputs are JSON written whole."""
+
+    __tablename__ = "podcast_episode"
+    __table_args__ = (Index("ix_podcast_episode_ws_updated", "workspace_id", "updated_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    show_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("podcast_show.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    format: Mapped[str] = mapped_column(String(20), default="conversation", server_default="conversation")
+    language: Mapped[str] = mapped_column(String(12), default="en", server_default="en")
+    target_minutes: Mapped[float] = mapped_column(Float, default=5.0, server_default="5")
+    step: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    cover_media_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sources: Mapped[dict] = mapped_column(JSON, default=dict)
+    hosts: Mapped[list] = mapped_column(JSON, default=list)
+    chapters: Mapped[list] = mapped_column(JSON, default=list)
+    script_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("voice_script.id", ondelete="SET NULL"), nullable=True
+    )
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    notes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    outputs: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

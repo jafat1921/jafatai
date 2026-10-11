@@ -43,6 +43,8 @@ function AudioGenerator({ kind }: { kind: AudioKind }) {
     return { ...base, prompt: params.get('prompt') ?? base.prompt, model: model ?? base.model, durationS }
   })
   const fromScore = params.get('from') === 'score'
+  // Podcast's Produce step sends ?from=podcast&episode=<id>; the music made here is then picked from the Library there
+  const fromEpisode = params.get('from') === 'podcast' ? params.get('episode') : null
   const results = useMediaList({ kind: 'audio', origin: 'generated' })
   const generate = useAudioGenerate()
   const record = useRecordRun<AudioRun>(page)
@@ -67,6 +69,13 @@ function AudioGenerator({ kind }: { kind: AudioKind }) {
 
   return (
     <GeneratorPage label={LABEL[kind]} targets={[]}>
+      {fromEpisode && (
+        <Link to={`/audio/podcast/${fromEpisode}`} className="-mb-3 inline-flex items-center gap-1 self-start text-small text-studio-muted underline-offset-2 hover:text-studio-text hover:underline">
+          <ArrowLeft aria-hidden className="size-3.5" />
+          Back to the podcast episode
+          <span className="text-studio-faint">· pick this from the Library in Produce, {form.durationS} s</span>
+        </Link>
+      )}
       {fromScore && (
         <Link to="/audio/score" className="-mb-3 inline-flex items-center gap-1 self-start text-small text-studio-muted underline-offset-2 hover:text-studio-text hover:underline">
           <ArrowLeft aria-hidden className="size-3.5" />

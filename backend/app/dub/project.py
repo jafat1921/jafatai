@@ -9,9 +9,10 @@ from pathlib import Path
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app import voices as vc
 from app.config import get_settings
 from app.lanes import dub_lane
-from app.models import DubProject, Generation, Job, MediaItem, VoiceProfile
+from app.models import DubProject, Generation, Job, MediaItem
 from app.services import generation_file, job_out, media_url
 
 STAGES = ("extract", "separate", "transcribe", "speakers", "translate", "cast", "render", "fit", "verify", "mix")
@@ -134,8 +135,7 @@ def dub_out(db: Session, dub: DubProject, *, light: bool = False) -> dict:
     out["tracks"] = tracks
     if light:
         return out
-    voices = {v.id: v for v in db.query(VoiceProfile).filter(
-        VoiceProfile.id.in_([s.get("voice_id") for s in dub.speakers or [] if s.get("voice_id")])).all()}
+    voices = vc.find_voices(db, dub.workspace_id, [s.get("voice_id") for s in dub.speakers or []])
     samples = {m.id: m for m in db.query(MediaItem).filter(
         MediaItem.id.in_([s.get("sample_media_id") for s in dub.speakers or [] if s.get("sample_media_id")])).all()}
     out["speakers"] = [{**s, "sample_url": _item_url(db, s.get("sample_media_id")),
@@ -237,8 +237,7 @@ def edit_speakers(db: Session, dub: DubProject, edits: list[dict]) -> None:
             s["label"] = " ".join(e["label"].split())[:80] or s["label"]
         if "voice_id" in e and e["voice_id"] != s.get("voice_id"):
             if e["voice_id"]:
-                v = db.get(VoiceProfile, e["voice_id"])
-                if v is None or v.workspace_id != dub.workspace_id:
+                if vc.find_voice(db, dub.workspace_id, e["voice_id"]) is None:
                     raise HTTPException(422, "That voice isn't in the library")
             s["voice_id"] = e["voice_id"] or None
             recast.add(s["id"])

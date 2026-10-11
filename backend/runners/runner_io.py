@@ -92,12 +92,16 @@ def main(fn) -> None:
 
 
 def speak_all(job: dict, synth, sample_rate) -> dict:
-    """Run `synth(text) -> audio` over every segment of a TTS job and write each one's wav."""
+    """Run `synth(text) -> audio` over every segment of a TTS job and write each one's wav.
+
+    With "per_segment": true (the gallery's sample batches) each segment may carry its own voice, so
+    synth is called as synth(text, seg) and reads instruct / seed / voice / language from seg."""
     segs = job.get("segments") or []
+    per_segment = bool(job.get("per_segment"))
     out = []
     for i, seg in enumerate(segs):
         progress(0.15 + 0.8 * i / max(1, len(segs)), f"Speaking line {i + 1}/{len(segs)}")
-        audio = synth(seg["text"])
+        audio = synth(seg["text"], seg) if per_segment else synth(seg["text"])
         rate = sample_rate() if callable(sample_rate) else sample_rate
         out.append({"out": seg["out"], "sample_rate": rate, "duration_s": write_wav(seg["out"], audio, rate)})
     progress(1.0, "Spoken")

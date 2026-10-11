@@ -122,7 +122,8 @@ describe('Audio workspace', () => {
 
     await user.keyboard('?')
     const sheet = await screen.findByRole('dialog', { name: 'Audio shortcuts' })
-    expect(within(sheet).getByText('Score a Clip')).toBeInTheDocument()
+    // the first nine pages get Ctrl+1…9; Gallery (Voice) is among them
+    expect(within(sheet).getByText('Gallery')).toBeInTheDocument()
     expect(within(sheet).getByText('Cut the region')).toBeInTheDocument()
     expect(within(sheet).getByText('Speak the script (Design: preview)')).toBeInTheDocument()
   })

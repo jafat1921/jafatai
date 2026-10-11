@@ -6,7 +6,8 @@ import { GeneratorPage, ResultsHeading } from '@/components/generate/GeneratorPa
 import { SessionResults } from '@/components/generate/SessionResults'
 import { useRecordRun } from '@/components/generate/useRecordRun'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
-import { useSpeak, useVoiceEngines, useVoices } from '@/hooks/useVoices'
+import { useVoiceChoices } from '@/hooks/useGallery'
+import { useSpeak, useVoiceEngines } from '@/hooks/useVoices'
 import { DEFAULT_SPEAK_FORM, isSpeech, speakFormFrom, type SpeakForm } from '@/lib/voice'
 import type { MediaItem, SpeakResponse } from '@/lib/types'
 import { announce } from '@/stores/ui'
@@ -24,7 +25,8 @@ function Speak() {
   const [params] = useSearchParams()
   const asked = params.get('voice')
   const [form, setForm] = useState<SpeakForm>(() => ({ ...DEFAULT_SPEAK_FORM, voiceId: asked, text: params.get('text') ?? '' }))
-  const voices = useVoices().data ?? []
+  // gallery voices too: ?voice=gallery:<id> arrives from the Gallery's "Use in Speak"
+  const voices = useVoiceChoices()
   const { engines } = useVoiceEngines()
   // ?voice= arrives before the library does; take its language once it's known
   const [adopted, setAdopted] = useState<string | null>(null)

@@ -8,7 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { ErrorState } from '@/components/studio/states'
 import { useImportProject, useMixScript, usePatchScript, useRenderLines, useScript, useSplitScript, useStemsScript } from '@/hooks/useDialogue'
-import { useVoiceEngines, useVoices } from '@/hooks/useVoices'
+import { useVoiceChoices } from '@/hooks/useGallery'
+import { useVoiceEngines } from '@/hooks/useVoices'
 import { clock } from '@/lib/audio'
 import {
   LOUDNESS_LABEL,
@@ -63,7 +64,7 @@ function Editor({ script }: { script: Script }) {
   const render = useRenderLines(script.id)
   const mix = useMixScript(script.id)
   const stems = useStemsScript(script.id)
-  const voices = useVoices().data ?? []
+  const voices = useVoiceChoices()
   const { engines } = useVoiceEngines()
 
   const [local, setLocal] = useState({ cast: script.cast, lines: script.lines })
@@ -253,7 +254,7 @@ function Editor({ script }: { script: Script }) {
       <MixBar script={script} stemsUrl={stemsUrl ?? null} />
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <CastPanel cast={local.cast} lineCounts={counts} voices={voices} engines={engines} onChange={(cast) => edit((l) => ({ ...l, cast }))} />
+        <CastPanel cast={local.cast} lineCounts={counts} voices={voices} engines={engines} language={script.language} onChange={(cast) => edit((l) => ({ ...l, cast }))} />
         <section aria-label="Lines" className="flex min-h-0 min-w-0 flex-1 flex-col">
           {lines.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
@@ -276,7 +277,7 @@ function Editor({ script }: { script: Script }) {
             </div>
           ) : (
             <>
-              <LineList lines={lines} cast={local.cast} voices={voices} engines={engines} title={script.title} actions={actions} focusText={focusText} onFocused={clearFocus} />
+              <LineList lines={lines} cast={local.cast} voices={voices} engines={engines} language={script.language} title={script.title} actions={actions} focusText={focusText} onFocused={clearFocus} />
               <div className="flex flex-wrap items-center gap-3 border-t border-studio-border px-3 py-1.5">
                 <Button type="button" size="sm" variant="ghost" onClick={addLine}>
                   <Plus aria-hidden />

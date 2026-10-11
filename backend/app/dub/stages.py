@@ -251,7 +251,7 @@ def stage_cast(ctx, dub: DubProject, run: dict) -> dict:
     db = ctx.db
     speakers = copy.deepcopy(dub.speakers or [])
     for spk in speakers:
-        if spk.get("voice_id") and db.get(VoiceProfile, spk["voice_id"]) is None:
+        if spk.get("voice_id") and voices.find_voice(db, dub.workspace_id, spk["voice_id"]) is None:
             spk["voice_id"] = None
         if not spk.get("voice_id") and spk.get("sample_media_id"):
             # a voice the user cloned from this very speaker beats any stand-in
@@ -268,9 +268,7 @@ def stage_cast(ctx, dub: DubProject, run: dict) -> dict:
 # ---------------------------------------------------------------- render / fit / verify
 
 def _voice(db, dub: DubProject, voice_id: str | None, spk: dict, lang: str) -> tuple[dict, int]:
-    voice = db.get(VoiceProfile, voice_id) if voice_id else None
-    if voice is not None and voice.workspace_id != dub.workspace_id:
-        voice = None
+    voice = voices.find_voice(db, dub.workspace_id, voice_id)
     design = None if voice is not None else (spk.get("design") or default_design(dub, spk))
     e = voices.resolve_engine("auto", voice, design)
     if e.id == "kokoro" and voice is not None:

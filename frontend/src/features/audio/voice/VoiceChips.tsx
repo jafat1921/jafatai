@@ -1,11 +1,13 @@
 import { useDeferredValue, useId, useState } from 'react'
 import { Link } from 'react-router'
 import { RadioGroup } from 'radix-ui'
-import { Cpu, Gauge, Hash, Languages, Lock, Plus, Search, Sparkles, UserRound } from 'lucide-react'
+import { Cpu, Gauge, Hash, Languages, LibraryBig, Lock, Plus, Search, Sparkles, UserRound } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { DockChip } from '@/components/generate/DockChip'
+import { useGalleryVoices } from '@/hooks/useGallery'
 import { MAX_TAKES } from '@/lib/audio'
+import { ENGINE_BADGE, galleryAsVoice, initialsOf, isGalleryId, matchesGallery, tintOf } from '@/lib/gallery'
 import { AUTO_ENGINE, clampSpeed, speedText, engineReason, KIND_LABEL, languageName, resolveEngine, SPEED_MAX, SPEED_MIN } from '@/lib/voice'
 import type { Voice, VoiceEngine, VoiceLanguage } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -13,6 +15,9 @@ import { VoiceAvatar } from './VoiceAvatar'
 
 const ROW =
   'flex w-full items-center gap-2.5 rounded-[6px] px-2 py-1.5 text-left transition-colors duration-150 hover:bg-studio-panel-hover aria-pressed:bg-studio-accent-soft focus-visible:outline-2 focus-visible:outline-studio-accent'
+
+// enough to scan; the full gallery has its own page
+const GALLERY_SHOWN = 30
 
 const FEATURE_TEXT: Record<string, string> = { clone: 'Clone', design: 'Design', tags: 'Tags', emotion: 'Emotion', preset_voices: 'Presets', fast: 'Fast' }
 
@@ -31,61 +36,118 @@ export function VoiceChip({
   engines,
   value,
   onChange,
+  language,
 }: {
   name?: string
   voices: Voice[]
   engines: VoiceEngine[]
   value: string | null
   onChange: (id: string | null) => void
+  // the line's language: the Gallery section starts filtered to it
+  language?: string
 }) {
   const [q, setQ] = useState('')
   const query = useDeferredValue(q.trim().toLowerCase())
-  const picked = voices.find((v) => v.id === value)
-  const shown = query ? voices.filter((v) => `${v.name} ${v.notes} ${languageName(v.language, engines)}`.toLowerCase().includes(query)) : voices
+  const { voices: gallery } = useGalleryVoices()
+  const [langPick, setLangPick] = useState<string | null>(null)
+  const galleryLang = langPick ?? language ?? ''
+  const mine = voices.filter((v) => !isGalleryId(v.id))
+  const fromGallery = isGalleryId(value) ? gallery.find((g) => g.voice_id === value) : undefined
+  const picked = mine.find((v) => v.id === value) ?? (fromGallery ? galleryAsVoice(fromGallery) : voices.find((v) => v.id === value))
+  const shown = query ? mine.filter((v) => `${v.name} ${v.notes} ${languageName(v.language, engines)}`.toLowerCase().includes(query)) : mine
   // starred first, then the library's own newest-first order
   const sorted = [...shown].sort((a, b) => Number(b.starred) - Number(a.starred))
+  const galleryLangs = [...new Set(gallery.flatMap((g) => g.languages))].sort((a, b) => languageName(a, engines).localeCompare(languageName(b, engines)))
+  const galleryHits = gallery.filter((g) => (!galleryLang || g.languages.includes(galleryLang)) && matchesGallery(g, query, (c) => languageName(c, engines)))
+  const galleryShown = galleryHits.slice(0, GALLERY_SHOWN)
 
   return (
     <DockChip name={name} value={picked?.name ?? 'Engine default'} icon={picked ? <VoiceAvatar voice={picked} className="size-4 text-[9px]" /> : <UserRound aria-hidden />} active={!!picked} wide>
       <SearchField label="Search voices" value={q} onChange={setQ} />
-      <ul aria-label={`${name} choices`} className="-mx-1 flex max-h-72 flex-col gap-0.5 overflow-y-auto">
-        {!query && (
-          <li>
-            <button type="button" aria-pressed={!value} onClick={() => onChange(null)} className={ROW}>
-              <VoiceAvatar voice={null} />
-              <span className="min-w-0 flex-1">
-                <span className="block text-body">Engine default</span>
-                <span className="block text-[11px] text-studio-muted">The engine's own voice for the language</span>
-              </span>
-            </button>
-          </li>
+      <div className="-mx-1 flex max-h-80 flex-col gap-2 overflow-y-auto">
+        <ul aria-label={`${name} choices`} className="flex flex-col gap-0.5">
+          {!query && (
+            <li>
+              <button type="button" aria-pressed={!value} onClick={() => onChange(null)} className={ROW}>
+                <VoiceAvatar voice={null} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-body">Engine default</span>
+                  <span className="block text-[11px] text-studio-muted">The engine's own voice for the language</span>
+                </span>
+              </button>
+            </li>
+          )}
+          {sorted.map((v) => (
+            <li key={v.id}>
+              <button type="button" aria-pressed={v.id === value} onClick={() => onChange(v.id)} className={ROW}>
+                <VoiceAvatar voice={v} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-body">
+                    {v.name}
+                    {v.starred && (
+                      <>
+                        <span aria-hidden className="ml-1 text-studio-accent">★</span>
+                        <span className="sr-only">, starred</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="block truncate text-[11px] text-studio-muted">
+                    {languageName(v.language, engines)}
+                    {v.uses ? ` · ${v.uses} use${v.uses === 1 ? '' : 's'}` : ''}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-[4px] border border-studio-border px-1 text-[10px] leading-4 text-studio-muted">{KIND_LABEL[v.kind]}</span>
+              </button>
+            </li>
+          ))}
+          {sorted.length === 0 && <li className="px-2 py-3 text-small text-studio-muted">{query ? `None of your voices match “${q.trim()}”.` : 'No voices in the library yet.'}</li>}
+        </ul>
+        {gallery.length > 0 && (
+          <section aria-label="Gallery" className="flex flex-col gap-1 border-t border-studio-border pt-2">
+            <div className="flex items-center gap-2 px-1">
+              <h3 className="section-label flex-1">Gallery</h3>
+              <select
+                aria-label="Gallery language"
+                value={galleryLang}
+                onChange={(e) => setLangPick(e.target.value)}
+                className="h-7 rounded-[6px] border border-studio-border-strong bg-studio-raised px-1.5 text-small text-studio-text"
+              >
+                <option value="">All languages</option>
+                {galleryLangs.map((c) => (
+                  <option key={c} value={c}>
+                    {languageName(c, engines)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <ul aria-label={`${name} gallery choices`} className="flex flex-col gap-0.5">
+              {galleryShown.map((g) => (
+                <li key={g.id}>
+                  <button type="button" aria-pressed={g.voice_id === value} onClick={() => onChange(g.voice_id)} className={ROW}>
+                    <span aria-hidden className={cn('flex size-7 shrink-0 items-center justify-center rounded-full border border-studio-border-strong font-display text-[11px] font-semibold', tintOf(g.id))}>
+                      {initialsOf(g.name)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-body">{g.name}</span>
+                      <span className="block truncate text-[11px] text-studio-muted">
+                        {g.accent} · {g.styles.slice(0, 2).join(', ')}
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded-[4px] border border-studio-border px-1 text-[10px] leading-4 text-studio-muted">{ENGINE_BADGE[g.engine] ?? g.engine}</span>
+                  </button>
+                </li>
+              ))}
+              {galleryHits.length === 0 && <li className="px-2 py-2 text-small text-studio-muted">No gallery voice matches. Try all languages.</li>}
+              {galleryHits.length > GALLERY_SHOWN && <li className="px-2 py-1 text-[11px] text-studio-faint">{galleryHits.length - GALLERY_SHOWN} more: type to narrow, or open the gallery.</li>}
+            </ul>
+          </section>
         )}
-        {sorted.map((v) => (
-          <li key={v.id}>
-            <button type="button" aria-pressed={v.id === value} onClick={() => onChange(v.id)} className={ROW}>
-              <VoiceAvatar voice={v} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-body">
-                  {v.name}
-                  {v.starred && (
-                    <>
-                      <span aria-hidden className="ml-1 text-studio-accent">★</span>
-                      <span className="sr-only">, starred</span>
-                    </>
-                  )}
-                </span>
-                <span className="block truncate text-[11px] text-studio-muted">
-                  {languageName(v.language, engines)}
-                  {v.uses ? ` · ${v.uses} use${v.uses === 1 ? '' : 's'}` : ''}
-                </span>
-              </span>
-              <span className="shrink-0 rounded-[4px] border border-studio-border px-1 text-[10px] leading-4 text-studio-muted">{KIND_LABEL[v.kind]}</span>
-            </button>
-          </li>
-        ))}
-        {sorted.length === 0 && <li className="px-2 py-3 text-small text-studio-muted">{query ? `No voice matches “${q.trim()}”.` : 'No voices in the library yet.'}</li>}
-      </ul>
+      </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-studio-border pt-2 text-small">
+        <Link to="/audio/gallery" className="inline-flex items-center gap-1 text-studio-muted hover:text-studio-text hover:underline">
+          <LibraryBig aria-hidden className="size-3.5" />
+          Open the gallery
+        </Link>
         <Link to="/audio/design" className="inline-flex items-center gap-1 text-studio-muted hover:text-studio-text hover:underline">
           <Sparkles aria-hidden className="size-3.5" />
           Design a voice…

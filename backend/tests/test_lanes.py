@@ -43,10 +43,13 @@ def test_every_registered_job_type_has_a_lane():
         "photo_render": "general", "look_video": "general",  # numpy / ffmpeg on the CPU
         "audio_render": "general", "audio_mix": "general",
         "voice_transcribe": "audio",  # faster-whisper on whichever GPU worker claims it
+        "voice_sample": "audio",  # a gallery voice's sample line through a speech engine
         "script_mix": "general", "script_stems": "general",  # dialogue: ffmpeg joins of finished takes
         "transcribe": "audio", "transcript_cleanup": "general", "transcript_video": "general",
         "dub_stage": None,  # by payload.stage, below
         "dub_export": "general",
+        # podcast: LLM writing, ffmpeg mixes / encodes of finished takes
+        "podcast_write": "general", "podcast_mix": "general", "podcast_publish": "general", "podcast_video": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

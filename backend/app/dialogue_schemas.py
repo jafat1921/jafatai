@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from app.schemas import JobOut, LangCode, Utc
 
 LineStatus = Literal["empty", "stale", "rendering", "ready", "failed"]
+LineKind = Literal["speech", "recording", "break", "ad", "music"]
 
 
 class CastMember(BaseModel):
@@ -26,6 +27,10 @@ class LineIn(BaseModel):
     pause_after_s: float | None = Field(None, ge=0, le=10)
     # ends a paragraph: the gap after it is settings.paragraph_gap_s unless pause_after_s says otherwise
     para: bool = False
+    # contract v20: a clip line (recording, ad, music) plays media_id instead of a TTS take
+    kind: LineKind = "speech"
+    media_id: str | None = Field(None, max_length=36)
+    chapter_id: str | None = Field(None, max_length=40)
 
 
 class LineOut(BaseModel):
@@ -37,6 +42,9 @@ class LineOut(BaseModel):
     emotion: str | None = None
     pause_after_s: float | None = None
     para: bool = False
+    kind: LineKind = "speech"
+    media_id: str | None = None
+    chapter_id: str | None = None
     take_id: str | None = None
     take_media_id: str | None = None
     take_url: str | None = None

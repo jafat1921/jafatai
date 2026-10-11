@@ -392,6 +392,9 @@ HANDLERS[audio_jobs.MIX_JOB] = audio_jobs.handle_mix
 from app import voices  # noqa: E402
 
 HANDLERS[voices.TRANSCRIBE_JOB] = voices.handle_transcribe
+from app import voice_gallery  # noqa: E402
+
+HANDLERS[voice_gallery.SAMPLE_JOB] = voice_gallery.handle_sample
 FINISHED_HOOKS.append(audio_analysis.on_job_finished)
 from app import dialogue  # noqa: E402
 
@@ -414,6 +417,13 @@ HANDLERS[transcripts.VIDEO_JOB] = transcripts.handle_video
 HANDLERS[dub_project.STAGE_JOB] = dub_stages.handle_stage
 HANDLERS[dub_project.EXPORT_JOB] = dub_stages.handle_export
 CPU_JOB_LEDGER.update({transcripts.VIDEO_JOB: "export", dub_project.EXPORT_JOB: "export"})
+from app.podcast import produce as podcast_produce, publish as podcast_publish, service as podcast, writer as podcast_writer  # noqa: E402
+
+HANDLERS[podcast.WRITE_JOB] = podcast_writer.handle_write
+HANDLERS[podcast.MIX_JOB] = podcast_produce.handle_mix
+HANDLERS[podcast.PUBLISH_JOB] = podcast_publish.handle_publish
+HANDLERS[podcast.VIDEO_JOB] = podcast_publish.handle_video
+CPU_JOB_LEDGER.update({podcast.MIX_JOB: "audio_edit", podcast.PUBLISH_JOB: "export", podcast.VIDEO_JOB: "export"})
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

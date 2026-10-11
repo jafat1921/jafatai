@@ -3,6 +3,7 @@
 # spend its timeout downloading. Run as the user the workers run as (gpu). Safe to re-run.
 #   ./scripts/install-voice-models.sh            all engines
 #   ./scripts/install-voice-models.sh omnivoice  just one (omnivoice voxcpm chatterbox kokoro whisper separator embed)
+#   ./scripts/install-voice-models.sh samples    render the Voice Gallery samples (after the models)
 set -uo pipefail
 
 VENVS="${AUDIO_VENVS_DIR:-/data/venvs}"
@@ -67,6 +68,18 @@ print('separation model ready in', d)"
 run embed audio-utils "
 import torchaudio, soundfile
 print('torchaudio', torchaudio.__version__, 'soundfile ok')"
+
+# the Voice Gallery's samples (contract v19): only on request, they need the models above in place.
+# Extra arguments go through, e.g. samples --engine kokoro --force
+if [[ $want == samples ]]; then
+  echo "==> gallery samples"
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if (cd "$root/backend" && .venv/bin/python -m app.manage voice-samples "${@:2}"); then
+    echo "    OK samples"
+  else
+    failed+=("samples")
+  fi
+fi
 
 echo
 if (( ${#failed[@]} )); then echo "Done with failures: ${failed[*]}"; else echo "All voice models ready."; fi

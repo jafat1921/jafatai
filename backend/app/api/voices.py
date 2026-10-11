@@ -3,7 +3,7 @@
 POST /audio/speak lives with the rest of Audio Studio in app.api.audio.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import or_, select
+from sqlalchemy import literal_column, or_, select
 from sqlalchemy.orm import Session
 
 from app import voices as vc
@@ -52,7 +52,8 @@ def list_voices(q: str | None = Query(None, max_length=120), language: str | Non
         stmt = stmt.where(VoiceProfile.kind == kind)
     if starred is not None:
         stmt = stmt.where(VoiceProfile.starred == starred)
-    rows = db.scalars(stmt.order_by(VoiceProfile.created_at.desc(), VoiceProfile.id)).all()
+    # rowid breaks ties between voices made in the same instant, keeping it newest first
+    rows = db.scalars(stmt.order_by(VoiceProfile.created_at.desc(), literal_column("voice_profile.rowid").desc())).all()
     return [_out(db, v) for v in rows]
 
 

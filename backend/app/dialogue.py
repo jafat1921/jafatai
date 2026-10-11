@@ -35,6 +35,11 @@ RUNNING = ("queued", "generating")
 DEFAULT_SETTINGS = {"gap_s": 0.35, "paragraph_gap_s": 0.8, "loudness": "podcast", "aerab": True}
 SR = 48000
 
+# line kinds (contract v20); a line without one is speech. Clip kinds play a Library clip as their take.
+KINDS = ("speech", "recording", "break", "ad", "music")
+CLIP_KINDS = ("recording", "ad", "music")
+BREAK_S = 1.0
+
 NARRATOR_COLOR = "#5B4630"
 # dark, earthy inks: each one holds 4.5:1 against the parchment panels, so a name can be set in it
 PALETTE = ("#2F5D62", "#8B2E2E", "#4A5D23", "#5B3A6B", "#8A4F0E", "#2C4A7A", "#7D3C5A", "#3D6B4F",
@@ -246,13 +251,9 @@ def import_scenes(scenes: list[Scene], cast: list[dict], include_action: bool) -
 # ---------------------------------------------------------------- fingerprints and status
 
 def _voices(db: Session, s: VoiceScript) -> dict[str, VoiceProfile]:
+    # gallery:<id> voices come back as unsaved profiles (contract v19)
     ids = {c.get("voice_id") for c in s.cast or []} | {ln.get("voice_id") for ln in s.lines or []}
-    ids.discard(None)
-    if not ids:
-        return {}
-    rows = db.scalars(select(VoiceProfile).where(VoiceProfile.id.in_(ids),
-                                                 VoiceProfile.workspace_id == s.workspace_id)).all()
-    return {v.id: v for v in rows}
+    return vc.find_voices(db, s.workspace_id, ids)
 
 
 def resolved_voice(s: VoiceScript, line: dict) -> str | None:
@@ -270,7 +271,25 @@ def resolved_engine(s: VoiceScript, voice: VoiceProfile | None) -> str:
         return s.engine or "auto"
 
 
+def kind_of(line: dict) -> str:
+    k = line.get("kind")
+    return k if k in KINDS else "speech"
+
+
+def has_clip(line: dict) -> bool:
+    return kind_of(line) in CLIP_KINDS and bool(line.get("media_id"))
+
+
+def needs_tts(line: dict) -> bool:
+    # a sponsor read is an ad line nobody recorded yet: a host voices it
+    k = kind_of(line)
+    return k == "speech" or (k == "ad" and not line.get("media_id"))
+
+
 def fingerprint(s: VoiceScript, line: dict, voices: dict[str, VoiceProfile]) -> str:
+    if not needs_tts(line):
+        blob = json.dumps([kind_of(line), line.get("media_id"), line.get("pause_after_s")])
+        return hashlib.sha1(blob.encode()).hexdigest()
     vid = resolved_voice(s, line)
     blob = json.dumps([_norm(line.get("text") or ""), vid, resolved_engine(s, voices.get(vid or "")),
                        (s.language or "en").lower(), round(float(line.get("speed") or 1.0), 3),
@@ -300,16 +319,45 @@ def _takes(db: Session, lines: list[dict]) -> dict[str, Generation]:
     return {g.id: g for g in db.scalars(select(Generation).where(Generation.id.in_(ids)))}
 
 
+def _sync_clips(db: Session, s: VoiceScript, lines: list[dict]) -> list[dict]:
+    """A clip line's take is its clip's current version, whatever was stored before."""
+    if not any(kind_of(ln) in CLIP_KINDS for ln in lines):
+        return lines
+    ids = [ln["media_id"] for ln in lines if has_clip(ln)]
+    items = {i.id: i for i in db.scalars(select(MediaItem).where(MediaItem.id.in_(ids or [""]),
+                                                                 MediaItem.workspace_id == s.workspace_id))}
+    out = []
+    for ln in lines:
+        if kind_of(ln) in CLIP_KINDS and not needs_tts(ln):
+            ln = dict(ln)
+            item = items.get(ln.get("media_id") or "")
+            if item is not None and item.generation_id:
+                ln.update(take_id=item.generation_id, take_media_id=item.id, duration_s=item.duration_s)
+            else:
+                for key in ("take_id", "take_media_id", "take_fp", "duration_s"):
+                    ln.pop(key, None)
+        out.append(ln)
+    return out
+
+
 def refresh(db: Session, s: VoiceScript) -> list[dict]:
     """Recompute every line's fingerprint and status and store them; returns the lines."""
     voices = _voices(db, s)
-    gens = _takes(db, s.lines or [])
+    lines = _sync_clips(db, s, s.lines or [])
+    gens = _takes(db, lines)
     out = []
-    for ln in s.lines or []:
+    for ln in lines:
         ln = dict(ln)
         fp = fingerprint(s, ln, voices)
         ln["fingerprint"] = fp
-        ln["status"] = _status(ln, fp, gens.get(ln.get("take_id") or ""))
+        if kind_of(ln) == "break":
+            ln["status"] = "ready"
+        elif not needs_tts(ln):
+            if ln.get("take_id"):
+                ln["take_fp"] = fp
+            ln["status"] = _status({**ln, "text": ln.get("text") or "clip"}, fp, gens.get(ln.get("take_id") or ""))
+        else:
+            ln["status"] = _status(ln, fp, gens.get(ln.get("take_id") or ""))
         if ln["status"] != "failed":
             ln.pop("error", None)
         out.append(ln)
@@ -333,6 +381,11 @@ def merge_lines(s: VoiceScript, incoming: list[dict]) -> list[dict]:
                "text": (ln.get("text") or "").strip(), "voice_id": ln.get("voice_id") or None,
                "speed": ln.get("speed"), "emotion": _norm(ln.get("emotion") or "") or None,
                "pause_after_s": ln.get("pause_after_s"), "para": bool(ln.get("para"))}
+        if kind_of(ln) != "speech":
+            row["kind"] = kind_of(ln)
+        for key in ("media_id", "chapter_id"):
+            if ln.get(key):
+                row[key] = ln[key]
         for key in ("take_id", "take_media_id", "take_fp", "error", "error_fp", "duration_s"):
             if prev.get(key) is not None:
                 row[key] = prev[key]
@@ -359,15 +412,36 @@ def gap_after(line: dict, settings: dict) -> float:
 
 
 def spoken(lines: list[dict]) -> list[dict]:
-    return [ln for ln in lines if _norm(ln.get("text") or "")]
+    """The lines that play something: speech with words, and clip lines (recordings, ads, music)."""
+    out = []
+    for ln in lines:
+        if kind_of(ln) == "break":
+            continue
+        if needs_tts(ln) and _norm(ln.get("text") or ""):
+            out.append(ln)
+        elif not needs_tts(ln) and (ln.get("media_id") or kind_of(ln) == "recording"):
+            # a recording nobody made yet still counts, so the mix waits for it
+            out.append(ln)
+    return out
+
+
+def break_s(line: dict) -> float:
+    return float(line["pause_after_s"]) if line.get("pause_after_s") is not None else BREAK_S
 
 
 def mix_plan(s: VoiceScript, lines: list[dict]) -> tuple[list[str], list[float], list[str], str]:
-    """(take ids, gap after each, speaker ids, basis hash) in script order; the last gap is 0."""
+    """(take ids, gap after each, speaker ids, basis hash) in script order; the last gap is 0. A break
+    adds its length to the gap before it."""
     st = settings_of(s)
-    rows = spoken(lines)
-    takes = [ln["take_id"] for ln in rows]
-    gaps = [round(gap_after(ln, st), 3) for ln in rows]
+    keep = {id(ln) for ln in spoken(lines)}
+    rows, gaps = [], []
+    for ln in lines:
+        if id(ln) in keep:
+            rows.append(ln)
+            gaps.append(round(gap_after(ln, st), 3))
+        elif kind_of(ln) == "break" and gaps:
+            gaps[-1] = round(gaps[-1] + break_s(ln), 3)
+    takes = [ln.get("take_id") for ln in rows]
     if gaps:
         gaps[-1] = 0.0
     speakers = [ln["speaker_id"] for ln in rows]
@@ -454,7 +528,8 @@ def queue_render(db: Session, cur, s: VoiceScript, line_ids: list[str] | None) -
         todo = [ln for ln in lines if ln["id"] in wanted and ln["status"] != "rendering"]
     else:
         todo = [ln for ln in lines if ln["status"] in ("stale", "empty", "failed")]
-    todo = [ln for ln in todo if _norm(ln.get("text") or "")]
+    # recordings, breaks and clips never go to TTS
+    todo = [ln for ln in todo if needs_tts(ln) and _norm(ln.get("text") or "")]
     voices = _voices(db, s)
     st = settings_of(s)
     names = {c["id"]: c["name"] for c in s.cast or []}

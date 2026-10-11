@@ -6,6 +6,8 @@
                            the server also makes them on first view)
   catalogue-backfill       read EXIF, capture date, size and a duplicate-check hash for photos uploaded
                            before the photo catalogue (M10); safe to run again
+  voice-samples [--engine omnivoice|kokoro|voxcpm] [--force] [--only id,id]
+                           render the Voice Gallery's missing samples on this GPU box (contract v19)
 """
 import getpass
 import os
@@ -86,6 +88,22 @@ def catalogue_backfill() -> int:
     return 0
 
 
+def voice_samples(args: list[str], run=None) -> int:
+    import argparse
+
+    from app import voice_gallery
+
+    p = argparse.ArgumentParser(prog="voice-samples")
+    p.add_argument("--engine", choices=("omnivoice", "kokoro", "voxcpm"))
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--only", default="")
+    a = p.parse_args(args)
+    only = [x.strip() for x in a.only.split(",") if x.strip()] or None
+    made, failed = voice_gallery.render_samples(a.engine, a.force, only, run=run)
+    print(f"voice samples: {made} made, {failed} failed")
+    return 1 if failed and not made else 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) >= 2 and argv[0] == "reset-password":
         return reset_password(argv[1])
@@ -95,6 +113,8 @@ def main(argv: list[str]) -> int:
         return make_thumbs()
     if argv[:1] == ["catalogue-backfill"]:
         return catalogue_backfill()
+    if argv[:1] == ["voice-samples"]:
+        return voice_samples(argv[1:])
     print(__doc__)
     return 2
 

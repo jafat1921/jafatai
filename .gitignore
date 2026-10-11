@@ -1,5 +1,7 @@
 .env
 data/
+# the Voice Gallery catalogue is code, not runtime data
+!backend/app/data/
 *.db
 *.db-*
 

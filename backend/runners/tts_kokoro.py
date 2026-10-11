@@ -11,14 +11,23 @@ def run(job: dict) -> dict:
     from kokoro import KPipeline
 
     voice = job.get("voice") or "af_heart"
-    code = voice[0] if voice[:1] in "abefhijpz" else LANG_CODES.get(job.get("language") or "en", "a")
     rio.progress(0.02, "Loading Kokoro")
-    pipeline = KPipeline(lang_code=code, repo_id="hexgrad/Kokoro-82M", device=rio.device(job))
+    pipelines = {}
+
+    def pipeline_for(v):
+        # one pipeline per language; the gallery batches American and British voices together
+        code = v[0] if v[:1] in "abefhijpz" else LANG_CODES.get(job.get("language") or "en", "a")
+        if code not in pipelines:
+            pipelines[code] = KPipeline(lang_code=code, repo_id="hexgrad/Kokoro-82M", device=rio.device(job))
+        return pipelines[code]
+
+    pipeline_for(voice)
     speed = float(job.get("speed") or 1.0)
 
-    def synth(text):
+    def synth(text, seg=None):
+        v = (seg or {}).get("voice") or voice
         # Kokoro yields one result per chunk it split the text into
-        chunks = [rio.to_numpy(r.audio).reshape(-1) for r in pipeline(text, voice=voice, speed=speed)
+        chunks = [rio.to_numpy(r.audio).reshape(-1) for r in pipeline_for(v)(text, voice=v, speed=speed)
                   if r.audio is not None]
         if not chunks:
             raise RuntimeError("Kokoro returned no audio")

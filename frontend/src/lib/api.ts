@@ -92,6 +92,8 @@ import type { MentionOption } from './mentions'
 import type { Album, Client, Facets, PhotoPage } from './catalogue'
 import type { RenderResponse, Script, ScriptCreate, ScriptPatch, ScriptSummary, SplitMode } from './dialogue'
 import type { Dub, DubCreate, DubExportBody, DubPatch, DubSummary, Transcript, TranscriptSummary } from './dub'
+import type { GalleryQuery, GalleryResponse, GallerySample } from './gallery'
+import type { Ad, EditOp, Episode, EpisodeCreate, EpisodePatch, EpisodeSummary, InsertBody, PublishBody, Show, ShowCreate, ShowPatch, VideoBody } from './podcast'
 import type {
   AutoResult, Background, Described, DevelopParams, EffectSpec, Edge, ExportFormat, Histogram, ImportResult, Look, PhotoHistory, PhotoSchema, ProfileInfo,
   PlanStep, PreviewResult, RestoreRequest, RestoreTool, SmartPlan, Snapshot,
@@ -519,6 +521,26 @@ export const api = {
       return 'job' in res ? res.job : res
     },
     designPreview: (body: DesignPreviewRequest) => post<DesignPreviewResponse>('/voices/design/preview', body),
+    // contract-v19
+    gallery: (q: GalleryQuery = {}) => get<GalleryResponse>('/voices/gallery', q),
+    gallerySample: async (id: string): Promise<GallerySample> => {
+      const path = `/voices/gallery/${encodeURIComponent(id)}/sample`
+      let res: Response
+      try {
+        res = await fetch(API_BASE + path, { credentials: 'include' })
+      } catch {
+        throw new ApiError(0, UNREACHABLE)
+      }
+      if (res.status === 202) {
+        const body = (await res.json()) as { job: Job }
+        return { ready: false, job: body.job }
+      }
+      if (!res.ok) throw new ApiError(res.status, messageFrom(res.status, await res.json().catch(() => null)))
+      // the player fetches it again (from the cache); only the status mattered here
+      res.body?.cancel().catch(() => {})
+      return { ready: true, url: API_BASE + path }
+    },
+    galleryAdd: (id: string, body: { starred?: boolean } = {}) => post<Voice>(`/voices/gallery/${encodeURIComponent(id)}/add`, body),
   },
   // contract-v17
   scripts: {
@@ -556,6 +578,39 @@ export const api = {
     cleanup: (id: string) => post<Job>(`/transcripts/${id}/cleanup`),
     video: (id: string, body: { mode: 'soft' | 'burn'; clean?: boolean }) =>
       post<{ job: Job; item_id: string; generation_id: string }>(`/transcripts/${id}/video`, body),
+  },
+  // contract-v20
+  podcast: {
+    shows: () => get<Show[]>('/podcast/shows'),
+    createShow: (body: ShowCreate) => post<Show>('/podcast/shows', body),
+    updateShow: (id: string, body: ShowPatch) => patch<Show>(`/podcast/shows/${id}`, body),
+    removeShow: (id: string) => del(`/podcast/shows/${id}`),
+    addAd: (id: string, body: Omit<Ad, 'id'>) => post<Show>(`/podcast/shows/${id}/ads`, body),
+    removeAd: (id: string, adId: string) => request<Show>('DELETE', `/podcast/shows/${id}/ads/${adId}`),
+    episodes: (showId?: string) => get<EpisodeSummary[]>('/podcast/episodes', { show_id: showId }),
+    get: (id: string) => get<Episode>(`/podcast/episodes/${id}`),
+    create: (body: EpisodeCreate) => post<Episode>('/podcast/episodes', body),
+    update: (id: string, body: EpisodePatch) => patch<Episode>(`/podcast/episodes/${id}`, body),
+    remove: (id: string) => del(`/podcast/episodes/${id}`),
+    addSource: async (id: string, file: File) => {
+      const form = new FormData()
+      form.append('file', file, file.name)
+      return (await (await send(`/podcast/episodes/${id}/sources`, { method: 'POST', body: form })).json()) as Episode
+    },
+    removeSource: (id: string, docId: string) => request<Episode>('DELETE', `/podcast/episodes/${id}/sources/${docId}`),
+    pasteScript: (id: string, text: string) => post<Episode>(`/podcast/episodes/${id}/script`, { text }),
+    write: (id: string) => post<Job>(`/podcast/episodes/${id}/write`),
+    editLines: (id: string, body: { op: EditOp; line_ids?: string[]; chapter_id?: string; note?: string }) =>
+      post<Job>(`/podcast/episodes/${id}/edit-lines`, body),
+    render: (id: string, lineIds?: string[]) => post<RenderResponse>(`/podcast/episodes/${id}/render`, lineIds ? { line_ids: lineIds } : {}),
+    recordLine: (id: string, body: { line_id: string; media_id: string }) => post<Episode>(`/podcast/episodes/${id}/record-line`, body),
+    insert: (id: string, body: InsertBody) => post<Episode>(`/podcast/episodes/${id}/insert`, body),
+    mix: (id: string) => post<Job>(`/podcast/episodes/${id}/mix`),
+    notes: (id: string) => post<Job>(`/podcast/episodes/${id}/notes`),
+    publish: (id: string, body: PublishBody) => post<Job>(`/podcast/episodes/${id}/publish`, body),
+    video: (id: string, body: VideoBody) => post<Job>(`/podcast/episodes/${id}/video`, body),
+    srtUrl: (id: string) => `${API_BASE}/podcast/episodes/${id}/subtitles.srt`,
+    notesUrl: (id: string) => `${API_BASE}/podcast/episodes/${id}/notes.md`,
   },
   videos: {
     // a MediaItem plus its job; tolerate a batch too

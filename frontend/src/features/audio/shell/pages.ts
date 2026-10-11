@@ -4,10 +4,12 @@ import {
   Languages,
   LayoutTemplate,
   Library,
+  LibraryBig,
   Mic,
   MessagesSquare,
   Music,
   Music4,
+  Podcast,
   Scissors,
   Sparkles,
   SquareSplitHorizontal,
@@ -51,10 +53,18 @@ export const AUDIO_GROUPS: AudioGroup[] = [
     pages: [
       { id: 'speak', label: 'Speak', to: '/audio/speak', icon: Mic },
       { id: 'voices', label: 'Voices', to: '/audio/voices', icon: UsersRound },
+      { id: 'gallery', label: 'Gallery', to: '/audio/gallery', icon: LibraryBig },
       { id: 'design', label: 'Design', to: '/audio/design', icon: Sparkles },
     ],
   },
-  { id: 'story', label: 'Story', pages: [{ id: 'dialogue', label: 'Dialogue', to: '/audio/dialogue', icon: MessagesSquare }] },
+  {
+    id: 'story',
+    label: 'Story',
+    pages: [
+      { id: 'dialogue', label: 'Dialogue', to: '/audio/dialogue', icon: MessagesSquare },
+      { id: 'podcast', label: 'Podcast', to: '/audio/podcast', icon: Podcast },
+    ],
+  },
   {
     id: 'edit',
     label: 'Edit',

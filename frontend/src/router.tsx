@@ -112,6 +112,10 @@ export const shellRoutes: RouteObject[] = [
         const { VoicesPage } = await import('@/features/audio/voice/VoicesPage')
         return <VoicesPage />
       }),
+      page('gallery', async () => {
+        const { GalleryPage } = await import('@/features/audio/voice/GalleryPage')
+        return <GalleryPage />
+      }),
       page('design', async () => {
         const { DesignPage } = await import('@/features/audio/voice/DesignPage')
         return <DesignPage />
@@ -123,6 +127,14 @@ export const shellRoutes: RouteObject[] = [
       page('dialogue/:id', async () => {
         const { DialogueEditorPage } = await import('@/features/audio/dialogue/DialogueEditorPage')
         return <DialogueEditorPage />
+      }),
+      page('podcast', async () => {
+        const { PodcastListPage } = await import('@/features/audio/podcast/PodcastListPage')
+        return <PodcastListPage />
+      }),
+      page('podcast/:id', async () => {
+        const { EpisodePage } = await import('@/features/audio/podcast/EpisodePage')
+        return <EpisodePage />
       }),
       page('edit', async () => {
         const { EditPickPage } = await import('@/features/audio/editor/EditPickPage')

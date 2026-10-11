@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { clock } from '@/lib/audio'
-import { STATUS_LABEL, VIRTUAL_AFTER, type CastMember, type LineStatus, type ScriptLine } from '@/lib/dialogue'
+import { STATUS_LABEL, VIRTUAL_AFTER, needsTts, type CastMember, type LineKind, type LineStatus, type ScriptLine } from '@/lib/dialogue'
 import { clampSpeed, speedText } from '@/lib/voice'
 import type { Voice, VoiceEngine } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -43,6 +43,14 @@ export function StatusPill({ status, error }: { status: LineStatus; error?: stri
   )
 }
 
+// contract-v20: how a line that isn't plain speech is marked
+const KIND_LABEL: Partial<Record<LineKind, string>> = { recording: 'Recording', ad: 'Ad', music: 'Music', break: 'Pause' }
+
+export interface LineSelection {
+  ids: ReadonlySet<string>
+  toggle: (id: string) => void
+}
+
 export interface LineActions {
   change: (id: string, patch: Partial<ScriptLine>) => void
   insertAfter: (index: number, text?: string) => string
@@ -61,6 +69,12 @@ interface Props {
   // a line id to put the caret in once it's on screen (a new line)
   focusText: string | null
   onFocused: () => void
+  // the script's language, for the voice picker's Gallery section
+  language?: string
+  // ticks to pick lines (Podcast's LLM edits act on the picked ones)
+  selection?: LineSelection
+  // where this list starts in the whole script, when a script is shown as several lists (Podcast chapters)
+  offset?: number
 }
 
 interface Focus {
@@ -71,7 +85,7 @@ interface Focus {
 
 const colorOf =(cast: CastMember[], id: string) => cast.find((c) => c.id === id)?.color ?? 'var(--color-studio-border-strong)'
 
-export function LineList({ lines, cast, voices, engines, title, actions, focusText, onFocused }: Props) {
+export function LineList({ lines, cast, voices, engines, title, actions, focusText, onFocused, language, selection, offset = 0 }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const rows = useRef(new Map<string, HTMLLIElement>())
   const texts = useRef(new Map<string, HTMLTextAreaElement>())
@@ -188,9 +202,12 @@ export function LineList({ lines, cast, voices, engines, title, actions, focusTe
               key={l.id}
               line={l}
               index={i}
+              offset={offset}
               cast={cast}
               voices={voices}
               engines={engines}
+              language={language}
+              selection={selection}
               scriptTitle={title}
               fixed={virtual}
               actions={actions}
@@ -209,9 +226,12 @@ export function LineList({ lines, cast, voices, engines, title, actions, focusTe
 interface RowProps {
   line: ScriptLine
   index: number
+  offset: number
   cast: CastMember[]
   voices: Voice[]
   engines: VoiceEngine[]
+  language?: string
+  selection?: LineSelection
   scriptTitle: string
   fixed: boolean
   actions: LineActions
@@ -221,8 +241,8 @@ interface RowProps {
   onTextKey: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
 }
 
-function LineRow({ line, index, cast, voices, engines, scriptTitle, fixed, actions, rowRef, textRef, onRowKey, onTextKey }: RowProps) {
-  const n = index + 1
+function LineRow({ line, index, offset, cast, voices, engines, language, selection, scriptTitle, fixed, actions, rowRef, textRef, onRowKey, onTextKey }: RowProps) {
+  const n = offset + index + 1
   const speaker = cast.find((c) => c.id === line.speaker_id)
   const track = useTrack(`take-${line.id}`)
   const overrides = [line.voice_id && 'voice', line.speed != null && line.speed !== 1 && speedText(line.speed), line.emotion].filter(Boolean)
@@ -241,6 +261,15 @@ function LineRow({ line, index, cast, voices, engines, scriptTitle, fixed, actio
       )}
       style={{ boxShadow: `inset 3px 0 0 ${colorOf(cast, line.speaker_id)}` }}
     >
+      {selection && (
+        <input
+          type="checkbox"
+          aria-label={`Select line ${n}`}
+          checked={selection.ids.has(line.id)}
+          onChange={() => selection.toggle(line.id)}
+          className="mt-2 size-4 shrink-0 accent-studio-accent"
+        />
+      )}
       <span aria-hidden className="w-7 shrink-0 pt-1.5 text-right font-mono text-[11px] text-studio-faint">
         {n}
       </span>
@@ -263,8 +292,11 @@ function LineRow({ line, index, cast, voices, engines, scriptTitle, fixed, actio
               </option>
             ))}
           </select>
-          <LineSettings line={line} n={n} voices={voices} engines={engines} onChange={(p) => actions.change(line.id, p)} active={overrides.length > 0} />
+          <LineSettings line={line} n={n} voices={voices} engines={engines} language={language} onChange={(p) => actions.change(line.id, p)} active={overrides.length > 0} />
           {overrides.length > 0 && <span className="truncate text-[11px] text-studio-muted">{overrides.join(' · ')}</span>}
+          {line.kind && KIND_LABEL[line.kind] && (
+            <span className="rounded-[4px] border border-studio-border-strong px-1.5 text-[11px] leading-5 text-studio-muted">{KIND_LABEL[line.kind]}</span>
+          )}
           <span className="ml-auto flex items-center gap-1.5">
             <label className="flex items-center gap-1 text-[11px] text-studio-muted">
               Pause
@@ -311,7 +343,7 @@ function LineRow({ line, index, cast, voices, engines, scriptTitle, fixed, actio
           type="button"
           size="icon-sm"
           variant="ghost"
-          disabled={!line.text.trim() || line.status === 'rendering'}
+          disabled={!line.text.trim() || line.status === 'rendering' || !needsTts(line)}
           aria-label={`Render line ${n}`}
           title="Render this line (Ctrl+Enter)"
           onClick={() => actions.render(line.id)}
@@ -326,7 +358,7 @@ function LineRow({ line, index, cast, voices, engines, scriptTitle, fixed, actio
   )
 }
 
-function LineSettings({ line, n, voices, engines, onChange, active }: { line: ScriptLine; n: number; voices: Voice[]; engines: VoiceEngine[]; onChange: (p: Partial<ScriptLine>) => void; active: boolean }) {
+function LineSettings({ line, n, voices, engines, language, onChange, active }: { line: ScriptLine; n: number; voices: Voice[]; engines: VoiceEngine[]; language?: string; onChange: (p: Partial<ScriptLine>) => void; active: boolean }) {
   return (
     <Popover>
       <PopoverTrigger
@@ -341,7 +373,7 @@ function LineSettings({ line, n, voices, engines, onChange, active }: { line: Sc
       <PopoverContent aria-label={`Line ${n} settings`} className="flex w-80 flex-col gap-3">
         <p className="section-label">Line {n}: overrides</p>
         <div className="flex flex-wrap gap-1.5">
-          <VoiceChip name="Line voice" voices={voices} engines={engines} value={line.voice_id} onChange={(v) => onChange({ voice_id: v })} />
+          <VoiceChip name="Line voice" voices={voices} engines={engines} language={language} value={line.voice_id} onChange={(v) => onChange({ voice_id: v })} />
           <SpeedChip value={line.speed ?? 1} onChange={(v) => onChange({ speed: clampSpeed(v) === 1 ? null : clampSpeed(v) })} />
         </div>
         <label className="flex flex-col gap-1 text-small">

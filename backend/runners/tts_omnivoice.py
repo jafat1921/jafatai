@@ -50,9 +50,15 @@ def run(job: dict) -> dict:
     # TODO: cache model.create_voice_clone_prompt(...) per voice under the data dir; today every line
     # re-encodes the reference clip
 
-    def synth(text):
-        rio.seed_all(job.get("seed"))  # same seed per line: a designed voice stays the same person
-        out = model.generate(text, **kw)
+    def synth(text, seg=None):
+        seg = seg or {}
+        rio.seed_all(seg.get("seed", job.get("seed")))  # same seed per line: a designed voice stays the same person
+        call = dict(kw)
+        if seg.get("instruct") and not job.get("ref_audio"):
+            call["instruct"] = seg["instruct"]
+        if seg.get("language"):
+            call["language"] = seg["language"]
+        out = model.generate(text, **call)
         return np.concatenate([rio.to_numpy(a).reshape(-1) for a in out]) if isinstance(out, list) else out
 
     res = rio.speak_all(job, synth, rate)

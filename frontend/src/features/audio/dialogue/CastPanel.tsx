@@ -12,9 +12,11 @@ interface Props {
   voices: Voice[]
   engines: VoiceEngine[]
   onChange: (cast: CastMember[]) => void
+  // the script's language, for the voice picker's Gallery section
+  language?: string
 }
 
-export function CastPanel({ cast, lineCounts, voices, engines, onChange }: Props) {
+export function CastPanel({ cast, lineCounts, voices, engines, onChange, language }: Props) {
   const [name, setName] = useState('')
   const update = (id: string, patch: Partial<CastMember>) => onChange(cast.map((c) => (c.id === id ? { ...c, ...patch } : c)))
   const taken = (n: string) => cast.some((c) => c.name.trim().toLowerCase() === n.trim().toLowerCase())
@@ -68,7 +70,7 @@ export function CastPanel({ cast, lineCounts, voices, engines, onChange }: Props
                   </Button>
                 )}
               </div>
-              <VoiceChip name={`Voice of ${c.name}`} voices={voices} engines={engines} value={c.voice_id} onChange={(v) => update(c.id, { voice_id: v })} />
+              <VoiceChip name={`Voice of ${c.name}`} voices={voices} engines={engines} language={language} value={c.voice_id} onChange={(v) => update(c.id, { voice_id: v })} />
             </li>
           )
         })}

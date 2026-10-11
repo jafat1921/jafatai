@@ -220,7 +220,7 @@ export function SpeakDock({ form, setForm, voices, engines, onRun, pending, erro
       chips={
         <>
           {form.compare && <span className="mr-0.5 font-mono text-small text-studio-muted" aria-hidden>A</span>}
-          <VoiceChip voices={voices} engines={engines} value={form.voiceId} onChange={pickVoice} />
+          <VoiceChip voices={voices} engines={engines} language={form.language} value={form.voiceId} onChange={pickVoice} />
           <EngineChip engines={engines} value={form.engine} onChange={(id) => set('engine', id)} language={form.language} voice={voice} />
           <SpeechLanguageChip languages={languages} engines={engines} value={form.language} onChange={(c) => set('language', c)} />
           <SpeedChip value={form.speed} onChange={(v) => set('speed', v)} />
@@ -242,7 +242,7 @@ export function SpeakDock({ form, setForm, voices, engines, onRun, pending, erro
               <span className="mr-0.5 font-mono text-small text-studio-muted" aria-hidden>
                 B
               </span>
-              <VoiceChip name="Voice B" voices={voices} engines={engines} value={form.b.voiceId} onChange={(id) => setB({ voiceId: id })} />
+              <VoiceChip name="Voice B" voices={voices} engines={engines} language={form.language} value={form.b.voiceId} onChange={(id) => setB({ voiceId: id })} />
               <EngineChip name="Engine B" engines={engines} value={form.b.engine} onChange={(id) => setB({ engine: id })} language={form.language} voice={voiceB} />
               <span className="text-small text-studio-faint">Same line, language and speed as A.</span>
             </div>

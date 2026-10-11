@@ -11,6 +11,8 @@ export const WORDS_PER_S = 2.5
 export type LineStatus = 'empty' | 'stale' | 'rendering' | 'ready' | 'failed'
 export type SplitMode = 'sentences' | 'paragraphs' | 'lines'
 export type LoudnessPreset = 'web' | 'podcast' | 'broadcast' | 'acx' | 'none'
+// contract-v20: a clip line (recording, ad, music) plays its media_id instead of a TTS take
+export type LineKind = 'speech' | 'recording' | 'break' | 'ad' | 'music'
 
 export interface CastMember {
   id: string
@@ -28,6 +30,9 @@ export interface ScriptLine {
   emotion: string | null
   pause_after_s: number | null
   para: boolean
+  kind?: LineKind
+  media_id?: string | null
+  chapter_id?: string | null
   take_id?: string | null
   take_media_id?: string | null
   take_url?: string | null
@@ -97,7 +102,7 @@ export interface ScriptCreate {
   project_id?: string | null
 }
 
-export type LinePatch = Pick<ScriptLine, 'speaker_id' | 'text' | 'voice_id' | 'speed' | 'emotion' | 'pause_after_s' | 'para'> & { id?: string }
+export type LinePatch = Pick<ScriptLine, 'speaker_id' | 'text' | 'voice_id' | 'speed' | 'emotion' | 'pause_after_s' | 'para' | 'kind' | 'media_id' | 'chapter_id'> & { id?: string }
 
 export interface ScriptPatch {
   title?: string
@@ -141,7 +146,12 @@ export function blankLine(speakerId: string = NARRATOR): ScriptLine {
   return { id: newLineId(), speaker_id: speakerId, text: '', voice_id: null, speed: null, emotion: null, pause_after_s: null, para: false, status: 'empty' }
 }
 
-const EDITABLE = ['speaker_id', 'text', 'voice_id', 'speed', 'emotion', 'pause_after_s', 'para'] as const
+// kind / media_id / chapter_id ride along so a Dialogue save keeps a podcast's recordings and chapters
+const EDITABLE = ['speaker_id', 'text', 'voice_id', 'speed', 'emotion', 'pause_after_s', 'para', 'kind', 'media_id', 'chapter_id'] as const
+
+/** Speech and sponsor reads go to TTS; recordings, breaks and clips never do (contract-v20). */
+export const needsTts = (l: Pick<ScriptLine, 'kind' | 'media_id'>) => !l.kind || l.kind === 'speech' || (l.kind === 'ad' && !l.media_id)
+const same = (k: (typeof EDITABLE)[number], a: unknown, b: unknown) => (k === 'kind' ? (a ?? 'speech') === (b ?? 'speech') : (a ?? null) === (b ?? null))
 
 export const toPatch = (l: ScriptLine): LinePatch => {
   const out = { id: l.id } as LinePatch
@@ -152,7 +162,7 @@ export const toPatch = (l: ScriptLine): LinePatch => {
 /** Did the user change what this line says (or how) since the server last saw it? */
 export function edited(local: ScriptLine, server: ScriptLine | undefined) {
   if (!server) return true
-  return EDITABLE.some((k) => (k === 'text' ? local.text.trim() !== server.text.trim() : (local[k] ?? null) !== (server[k] ?? null)))
+  return EDITABLE.some((k) => (k === 'text' ? local.text.trim() !== server.text.trim() : !same(k, local[k], server[k])))
 }
 
 /**
@@ -168,7 +178,7 @@ export function mergeServer(local: ScriptLine[], server: ScriptLine[], dirty: bo
     // added here and not saved yet
     if (!s) return { ...l, status: 'empty' as const }
     const mine = { ...s, ...pickEditable(l) }
-    if (edited(l, s) && hasText(l) && s.status !== 'rendering') mine.status = s.take_id ? 'stale' : 'empty'
+    if (edited(l, s) && hasText(l) && needsTts(mine) && s.status !== 'rendering') mine.status = s.take_id ? 'stale' : 'empty'
     return mine
   })
 }
@@ -180,7 +190,7 @@ function pickEditable(l: ScriptLine) {
 }
 
 /** What "Render N changed" sends: lines with words that aren't ready or on their way. */
-export const changedLines = (lines: ScriptLine[]) => lines.filter((l) => hasText(l) && (l.status === 'stale' || l.status === 'empty' || l.status === 'failed'))
+export const changedLines = (lines: ScriptLine[]) => lines.filter((l) => hasText(l) && needsTts(l) && (l.status === 'stale' || l.status === 'empty' || l.status === 'failed'))
 
 export function mixBlockedReason(lines: ScriptLine[], dirty = false): string | null {
   const spoken = lines.filter(hasText)

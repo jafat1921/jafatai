@@ -25,14 +25,16 @@ def run(job: dict) -> dict:
             # with a transcript the clip is also the prompt to continue from: closer timbre and pacing
             # verify on server: reference_wav_path and prompt_wav_path given together
             kw.update(prompt_wav_path=ref, prompt_text=job["ref_text"])
-    prefix = ""
-    if job.get("instruct") and not ref:
+    def prefix_for(instruct):
+        if not instruct or ref:
+            return ""
         # the README's voice design: the description in parentheses at the start of the text
-        prefix = "(" + " ".join(str(job["instruct"]).replace("(", " ").replace(")", " ").split()) + ")"
+        return "(" + " ".join(str(instruct).replace("(", " ").replace(")", " ").split()) + ")"
 
-    def synth(text):
-        rio.seed_all(job.get("seed"))
-        return model.generate(text=prefix + text, **kw)
+    def synth(text, seg=None):
+        seg = seg or {}
+        rio.seed_all(seg.get("seed", job.get("seed")))
+        return model.generate(text=prefix_for(seg.get("instruct") or job.get("instruct")) + text, **kw)
 
     return rio.speak_all(job, synth, rate)
 

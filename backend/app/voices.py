@@ -7,9 +7,10 @@ import re
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import library as lib
+from app import library as lib, voice_gallery
 from app.models import Generation, Job, MediaItem, VoiceProfile, new_id, utcnow
 from app.services import enqueue_generation, generation_file, job_out, media_url, new_seed
 
@@ -68,18 +69,9 @@ class Engine:
     presets: tuple[Preset, ...] = field(default_factory=tuple)
 
 
-KOKORO_PRESETS = (
-    Preset("af_heart", "Heart", "en", "female"), Preset("af_bella", "Bella", "en", "female"),
-    Preset("am_michael", "Michael", "en", "male"), Preset("am_adam", "Adam", "en", "male"),
-    Preset("bf_emma", "Emma (British)", "en", "female"), Preset("bm_george", "George (British)", "en", "male"),
-    Preset("hf_alpha", "Alpha", "hi", "female"), Preset("hm_omega", "Omega", "hi", "male"),
-    Preset("ef_dora", "Dora", "es", "female"), Preset("em_alex", "Alex", "es", "male"),
-    Preset("ff_siwis", "Siwis", "fr", "female"), Preset("if_sara", "Sara", "it", "female"),
-    Preset("im_nicola", "Nicola", "it", "male"), Preset("jf_alpha", "Alpha", "ja", "female"),
-    Preset("jm_kumo", "Kumo", "ja", "male"), Preset("pf_dora", "Dora", "pt", "female"),
-    Preset("pm_alex", "Alex", "pt", "male"), Preset("zf_xiaobei", "Xiaobei", "zh", "female"),
-    Preset("zm_yunxi", "Yunxi", "zh", "male"),
-)
+# every Kokoro voice, from the gallery catalogue (contract v19), so the two lists can't drift apart
+KOKORO_PRESETS = tuple(Preset(v["preset"], v["name"], v["languages"][0], v["gender"])
+                       for v in voice_gallery.kokoro_rows())
 
 ENGINES: dict[str, Engine] = {e.id: e for e in (
     Engine("omnivoice", "OmniVoice", ("clone", "design", "tags"), tuple(LANG_NAMES), "Apache-2.0",
@@ -328,6 +320,36 @@ def clean_preset(preset: dict | None) -> dict:
     return {"engine": engine, "id": pid}
 
 
+# ---------------------------------------------------------------- finding a voice
+
+def find_voice(db: Session, workspace_id: str, voice_id: str | None) -> VoiceProfile | None:
+    """A library voice, or a gallery one ("gallery:<id>") as an unsaved VoiceProfile."""
+    if not voice_id:
+        return None
+    gid = voice_gallery.parse(voice_id)
+    if gid is not None:
+        v = voice_gallery.get(gid)
+        return voice_gallery.as_profile(v, workspace_id) if v else None
+    p = db.get(VoiceProfile, voice_id)
+    return p if p is not None and p.workspace_id == workspace_id else None
+
+
+def find_voices(db: Session, workspace_id: str, ids) -> dict[str, VoiceProfile]:
+    ids = {i for i in ids if i}
+    gallery = {i for i in ids if voice_gallery.parse(i) is not None}
+    out = {i: p for i in gallery if (p := find_voice(db, workspace_id, i)) is not None}
+    rest = ids - gallery
+    if rest:
+        rows = db.scalars(select(VoiceProfile).where(VoiceProfile.id.in_(rest),
+                                                     VoiceProfile.workspace_id == workspace_id)).all()
+        out.update({v.id: v for v in rows})
+    return out
+
+
+def is_gallery(voice: VoiceProfile | None) -> bool:
+    return voice is not None and voice_gallery.parse(voice.id) is not None
+
+
 # ---------------------------------------------------------------- speaking
 
 def queue_speech(db: Session, cur, body, *, flow: str = "speak", seed: int | None = None) -> dict:
@@ -337,9 +359,10 @@ def queue_speech(db: Session, cur, body, *, flow: str = "speak", seed: int | Non
 
     voice = None
     if body.voice_id:
-        voice = db.get(VoiceProfile, body.voice_id)
-        if voice is None or voice.workspace_id != cur.workspace_id:
-            raise HTTPException(422, "That voice isn't in the library any more")
+        voice = find_voice(db, cur.workspace_id, body.voice_id)
+        if voice is None:
+            raise HTTPException(422, "That gallery voice doesn't exist" if voice_gallery.parse(body.voice_id)
+                                else "That voice isn't in the library any more")
     design = body.design.model_dump() if getattr(body, "design", None) is not None and voice is None else None
     try:
         e = resolve_engine(body.engine, voice, design)
@@ -405,7 +428,7 @@ def queue_speech(db: Session, cur, body, *, flow: str = "speak", seed: int | Non
         jobs.append(db.get(Job, g.job_id))
         if i == 0:
             base_seed = g.seed if base_seed is None else base_seed
-    if voice is not None:
+    if voice is not None and not is_gallery(voice):
         voice.uses = (voice.uses or 0) + body.count
     return {"items": lib.items_out(db, items), "jobs": [job_out(j) for j in jobs], "engine_resolved": e.id,
             "seed": base_seed}

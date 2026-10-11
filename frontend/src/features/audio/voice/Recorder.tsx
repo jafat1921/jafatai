@@ -22,10 +22,19 @@ function teardown(stream: React.RefObject<MediaStream | null>, ctx: React.RefObj
   ctx.current = null
 }
 
-const pct = (s: number) => `${(s / REF_MAX_S) * 100}%`
+export interface RecordLimits {
+  min: number
+  max: number
+  goodMin: number
+  goodMax: number
+}
 
-/** Record a reference clip in the browser: a level meter, a 5–15 s guide, playback, re-record. */
-export function Recorder({ prompt, onRecorded, disabled }: { prompt?: string; onRecorded: (file: File, seconds: number) => void; disabled?: boolean }) {
+const REFERENCE: RecordLimits = { min: REF_MIN_S, max: REF_MAX_S, goodMin: REF_GOOD_MIN_S, goodMax: REF_GOOD_MAX_S }
+
+/** Record a clip in the browser: a level meter, a guide with its sweet spot, playback, re-record. By default
+ * the limits are a voice reference's (5–15 s); a podcast line passes its own. */
+export function Recorder({ prompt, onRecorded, disabled, limits = REFERENCE, hint }: { prompt?: string; onRecorded: (file: File, seconds: number) => void; disabled?: boolean; limits?: RecordLimits; hint?: string }) {
+  const pct = (s: number) => `${(s / limits.max) * 100}%`
   const [phase, setPhase] = useState<Phase>('idle')
   const [said, setSaid] = useState('')
   const [elapsed, setElapsed] = useState(0)
@@ -132,12 +141,12 @@ export function Recorder({ prompt, onRecorded, disabled }: { prompt?: string; on
     timers.current.tick = setInterval(() => {
       const t = (performance.now() - started.current) / 1000
       setElapsed(t)
-      if (t >= REF_MAX_S) stop()
+      if (t >= limits.max) stop()
     }, 100)
   }
 
   const recording = phase === 'recording'
-  const inBand = elapsed >= REF_GOOD_MIN_S && elapsed <= REF_GOOD_MAX_S
+  const inBand = elapsed >= limits.goodMin && elapsed <= limits.goodMax
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -148,16 +157,16 @@ export function Recorder({ prompt, onRecorded, disabled }: { prompt?: string; on
         </p>
       )}
       <div aria-hidden className="flex flex-col gap-1">
-        {/* the guide: 0–30 s, the 5–15 s sweet spot shaded */}
+        {/* the guide: 0 to max, the sweet spot shaded */}
         <div className="relative h-2.5 overflow-hidden rounded-full bg-studio-raised ring-1 ring-studio-border">
-          <span className="absolute inset-y-0 bg-studio-success/20" style={{ left: pct(REF_GOOD_MIN_S), width: pct(REF_GOOD_MAX_S - REF_GOOD_MIN_S) }} />
-          <span className={cn('absolute inset-y-0 left-0', inBand ? 'bg-studio-success/70' : 'bg-studio-accent/70')} style={{ width: pct(Math.min(elapsed, REF_MAX_S)) }} />
+          <span className="absolute inset-y-0 bg-studio-success/20" style={{ left: pct(limits.goodMin), width: pct(limits.goodMax - limits.goodMin) }} />
+          <span className={cn('absolute inset-y-0 left-0', inBand ? 'bg-studio-success/70' : 'bg-studio-accent/70')} style={{ width: pct(Math.min(elapsed, limits.max)) }} />
         </div>
         <div className="relative h-3 font-mono text-[10px] text-studio-faint">
           <span className="absolute left-0">0</span>
-          <span className="absolute -translate-x-1/2" style={{ left: pct(REF_GOOD_MIN_S) }}>5 s</span>
-          <span className="absolute -translate-x-1/2" style={{ left: pct(REF_GOOD_MAX_S) }}>15 s</span>
-          <span className="absolute right-0">30 s</span>
+          <span className="absolute -translate-x-1/2" style={{ left: pct(limits.goodMin) }}>{limits.goodMin} s</span>
+          <span className="absolute -translate-x-1/2" style={{ left: pct(limits.goodMax) }}>{limits.goodMax} s</span>
+          <span className="absolute right-0">{limits.max} s</span>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -185,14 +194,14 @@ export function Recorder({ prompt, onRecorded, disabled }: { prompt?: string; on
       {take && phase === 'recorded' && (
         <div className="flex flex-wrap items-center gap-2">
           <audio controls src={take.url} preload="metadata" aria-label="Your recording" className="h-8 max-w-full" />
-          <Button type="button" size="sm" variant="primary" disabled={disabled || take.seconds < REF_MIN_S} onClick={() => onRecorded(take.file, take.seconds)}>
+          <Button type="button" size="sm" variant="primary" disabled={disabled || take.seconds < limits.min} onClick={() => onRecorded(take.file, take.seconds)}>
             Use this recording
           </Button>
-          {take.seconds < REF_MIN_S && <span className="text-small text-studio-warning">Too short; record at least {REF_MIN_S} seconds.</span>}
+          {take.seconds < limits.min && <span className="text-small text-studio-warning">Too short; record at least {limits.min} seconds.</span>}
         </div>
       )}
       <p role="status" aria-live="polite" className={cn('text-small', phase === 'denied' || phase === 'failed' || phase === 'unsupported' ? 'text-studio-danger' : 'text-studio-muted')}>
-        {said || 'Read naturally for 5 to 15 seconds, close to the microphone, in a quiet room.'}
+        {said || hint || 'Read naturally for 5 to 15 seconds, close to the microphone, in a quiet room.'}
       </p>
     </div>
   )

@@ -91,6 +91,7 @@ export function SetPanel({ vp }: { vp: VideoPodcast }) {
         <GenFrame gen={vp.set.establishing} alt="The empty set" aspect={aspectClass(vp.settings.aspect)} className="max-w-xl" />
         <GenActions
           gen={vp.set.establishing}
+          emptyHint="Not made yet: press Build the set above."
           what="the set"
           disabled={locked}
           regenerating={regen.isPending}

@@ -35,6 +35,7 @@ export function GenActions({
   onApprove,
   regenerating,
   approving,
+  emptyHint,
 }: {
   gen: Generation | null | undefined
   what: string
@@ -43,7 +44,10 @@ export function GenActions({
   onApprove: (id: string) => void
   regenerating?: boolean
   approving?: boolean
+  // shown instead of the buttons until the first one has been made by the stage's own button
+  emptyHint?: string
 }) {
+  if (!gen) return emptyHint ? <p className="text-[11px] text-studio-muted">{emptyHint}</p> : null
   return (
     <div className="flex flex-wrap gap-1.5">
       <Button type="button" size="sm" variant="secondary" disabled={disabled} loading={regenerating} aria-label={`Regenerate ${what}`} onClick={onRegenerate}>

@@ -257,8 +257,10 @@ describe('AI video podcast', { timeout: 20_000 }, () => {
     await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/regenerate')).toEqual([{ what: 'portrait', key: 'h1' }]))
     await user.click(screen.getByRole('button', { name: 'Approve portrait of Ali' }))
     await waitFor(() => expect(sent(calls, 'POST', '/generations/gp1/approve')).toHaveLength(1))
-    // Sara has no portrait yet, so nothing to approve
+    // Sara has no portrait yet: nothing to approve or regenerate, just a pointer to the stage button
     expect(screen.queryByRole('button', { name: 'Approve portrait of Sara' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Regenerate portrait of Sara' })).not.toBeInTheDocument()
+    expect(within(sara).getByText('Not made yet: press Make the portraits above.')).toBeInTheDocument()
   })
 
   it('sets the set preset and the shape', async () => {
@@ -268,8 +270,9 @@ describe('AI video podcast', { timeout: 20_000 }, () => {
     await user.click(await screen.findByRole('button', { name: 'Desi baithak' }))
     await user.click(screen.getByRole('radio', { name: /9:16/ }))
     await waitFor(() => expect(sent(calls, 'PATCH', '/podcast/ai-video/v1')).toEqual([{ settings: { set_preset: 'desi_baithak' } }, { settings: { aspect: '9:16' } }]))
-    await user.click(screen.getByRole('button', { name: 'Regenerate the set' }))
-    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/regenerate')).toEqual([{ what: 'set' }]))
+    // no establishing frame yet: the stage button makes it, there's nothing to regenerate
+    expect(screen.queryByRole('button', { name: 'Regenerate the set' })).not.toBeInTheDocument()
+    expect(screen.getByText('Not made yet: press Build the set above.')).toBeInTheDocument()
   })
 
   it('edits the plan: type, split, merge, and replan after a confirm', async () => {

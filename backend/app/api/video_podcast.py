@@ -222,7 +222,8 @@ def regenerate(vp_id: str, body: RegenerateIn, db: Session = Depends(get_db), cu
             raise HTTPException(404, "No such angle")
         base = vd.frame_of(db, sid)
     if base is None:
-        raise HTTPException(409, "There's nothing to regenerate yet: continue to make it first")
+        first = {"portrait": "Make the portraits", "set": "Build the set"}.get(body.what, "Make the camera angles")
+        raise HTTPException(409, f"This hasn't been made yet: press “{first}” first, then regenerate it if you want another")
     prompt, note = base.prompt, None
     if body.note and body.note.strip():
         note = body.note.strip()

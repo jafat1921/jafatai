@@ -44,6 +44,7 @@ function AngleCard({ vp, angle, hostName }: { vp: VideoPodcast; angle: VPAngle; 
       <GenFrame gen={angle.frame} alt={name} aspect={aspectClass(vp.settings.aspect)} />
       <GenActions
         gen={angle.frame}
+        emptyHint="Not made yet: press Make the camera angles above."
         what={name}
         disabled={jobRunning(vp)}
         regenerating={regen.isPending}

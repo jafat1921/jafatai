@@ -81,6 +81,7 @@ function HostCard({ vp, host }: { vp: VideoPodcast; host: VPHost }) {
           <GenActions
             gen={host.portrait}
             what={`portrait of ${host.name}`}
+            emptyHint="Not made yet: press Make the portraits above."
             disabled={locked}
             regenerating={regen.isPending}
             approving={approve.isPending}

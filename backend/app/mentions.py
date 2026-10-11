@@ -93,7 +93,8 @@ def _projects(db: Session, workspace_id: str, project_id: str | None) -> list[Pr
         if p is None or p.workspace_id != workspace_id:
             raise HTTPException(404, "Project not found")
         return [p]
-    return list(db.scalars(select(Project).where(Project.workspace_id == workspace_id)
+    return list(db.scalars(select(Project).where(Project.workspace_id == workspace_id,
+                                                 Project.authoring_mode != "podcast")
                            .order_by(Project.updated_at.desc()).limit(20)))
 
 

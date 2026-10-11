@@ -43,11 +43,11 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "photo_cutout_mask": 300.0, "photo_sam_mask": 300.0,
             "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0,
             "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
-            "ltx23_two_stage": 3600.0, "wan22_t2v": 2400.0,
+            "ltx23_two_stage": 3600.0, "ltx23_ia2v": 3600.0, "wan22_t2v": 2400.0,
             "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0,
             "ace15_song": 900.0, "sa3_music": 600.0, "sa3_sfx": 600.0, "sa3_medium": 1200.0, "minimax_music3": 1800.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
-LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend"}
+LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend", "ltx23_ia2v"}
 RESTORE_TEMPLATES = {"photo_model_1x", "photo_face_restore", "photo_colourise", "photo_supir", "photo_cutout_mask",
                      "photo_sam_mask", "image_upscale_seedvr2"}
 IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
@@ -267,6 +267,9 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         pre = _ref_preamble(params.get("reference_labels"), len(ref_ids)) if qwen else ""
         return edit_plan(ref_ids, pre + prompt, size)
 
+    if kind == "take" and params.get("speech_audio"):
+        return lipsync_plan(prompt, params, seed, lookup, negative, loras)
+
     if kind == "take":
         first = params.get("first_frame_id")
         if not first:
@@ -322,6 +325,34 @@ def hq_plan(inputs: dict, images: dict, aspect: str, params: dict, loras, source
         inputs["smooth_fps"] = float(inputs["fps"]) * 2
         sources["smooth_motion"] = True
     return Plan("ltx23_two_stage", inputs, images, _family("ltx23_i2v", loras), "video", sources)
+
+
+def lipsync_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:
+    """A lip-synced take (AI video podcast): START frame plus the speaker's dry voice, cut by the graph's
+    TrimAudioDuration to [audio_start_s, +duration]. Draft is one pass at the draft size; "hq" is the two-pass
+    graph at HQ size, its first pass at half."""
+    first = params.get("first_frame_id")
+    if not first:
+        raise ComfyError("A lip-sync take needs params.first_frame_id (the angle keyframe)")
+    aspect = params.get("aspect_ratio") or lookup.project_aspect(params.get("project_id")) or "16:9"
+    final = params.get("quality") == "hq"
+    w, h = (HQ_SIZES if final else VIDEO_SIZES).get(aspect, (HQ_SIZES if final else VIDEO_SIZES)["16:9"])
+    fps = float(params.get("fps") or 24)
+    frames = int(params["num_frames"]) if params.get("num_frames") else frames_for(float(params.get("duration_s") or 5), fps)
+    frames = min(frames, MAX_FRAMES)
+    inputs: dict[str, Any] = {
+        "prompt": prompt, "width": w, "height": h, "latent_width": w // 2 if final else w,
+        "latent_height": h // 2 if final else h, "num_frames": frames, "fps": fps, "seed": seed,
+        # the template feeds duration*fps+1 frames from the same duration, so the audio matches frames-1
+        "audio_start_s": round(float(params.get("audio_start_s") or 0.0), 4), "duration_s": round((frames - 1) / fps, 4),
+        "single_stage": not final,
+    }
+    if negative:
+        inputs["negative"] = negative
+    images: dict[str, Path | list[Path]] = {"first_image": lookup.generation_file(first),
+                                            "speech_audio": Path(params["speech_audio"])}
+    sources = {"first_frame_id": first, "lipsync": True, "quality": "hq" if final else "draft"}
+    return Plan("ltx23_ia2v", inputs, images, _family("ltx23_ia2v", loras), "video", sources)
 
 
 def clip_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:

@@ -462,7 +462,7 @@ def dashboard(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_curr
     from app.api.quick import recent
 
     ws = cur.workspace_id
-    projects = db.scalars(select(Project).where(Project.workspace_id == ws)
+    projects = db.scalars(select(Project).where(Project.workspace_id == ws, Project.authoring_mode != "podcast")
                           .order_by(Project.updated_at.desc()).limit(6)).all()
     videos, _ = lib.list_media(db, ws, kind="video", include_project=True, limit=6)
     images, _ = lib.list_media(db, ws, kind="image", limit=8)

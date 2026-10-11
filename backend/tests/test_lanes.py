@@ -51,6 +51,8 @@ def test_every_registered_job_type_has_a_lane():
         "dub_export": "general",
         # podcast: LLM writing, ffmpeg mixes / encodes of finished takes
         "podcast_write": "general", "podcast_mix": "general", "podcast_publish": "general", "podcast_video": "general",
+        # AI video podcast: the orchestrator (its takes are generate jobs on the video lane) and the ffmpeg cut
+        "video_podcast": "general", "video_podcast_assemble": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

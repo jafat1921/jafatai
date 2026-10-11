@@ -9,6 +9,7 @@ import { api } from '@/lib/api'
 import { busy, stamp, type Episode, type Notes } from '@/lib/podcast'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { AiVideoEntry } from './video/AiVideoEntry'
 
 type Fmt = 'mp3' | 'm4a'
 type Aspect = '16:9' | '1:1'
@@ -122,9 +123,9 @@ export function PublishStep({ ep }: { ep: Episode }) {
 
       <section aria-labelledby={`${uid}-video`} className="flex flex-col gap-3 rounded-[6px] border border-studio-border-strong bg-studio-panel p-3 shadow-card">
         <h3 id={`${uid}-video`} className="font-display text-[15px] font-semibold">
-          Video podcast
+          Audiogram
         </h3>
-        <p className="text-[11px] text-studio-muted">1080p MP4: the cover art, a moving waveform, who is speaking, and the subtitles. Saved to the Library as a video.</p>
+        <p className="text-[11px] text-studio-muted">A quick share video: cover, waveform, speaker names and subtitles</p>
         <div className="flex flex-wrap items-center gap-4 text-small">
           <fieldset className="flex gap-3">
             <legend className="sr-only">Shape</legend>
@@ -146,10 +147,10 @@ export function PublishStep({ ep }: { ep: Episode }) {
             variant="primary"
             aria-disabled={!!noMix || making || undefined}
             loading={making}
-            onClick={() => !noMix && !making && video.mutate({ aspect, burn_subtitles: burn }, { onSuccess: () => announce('Making the video podcast.') })}
+            onClick={() => !noMix && !making && video.mutate({ aspect, burn_subtitles: burn }, { onSuccess: () => announce('Making the audiogram.') })}
           >
             <Video aria-hidden />
-            Make the video
+            Make the audiogram
           </Button>
           {vid?.url && (
             <>
@@ -165,17 +166,19 @@ export function PublishStep({ ep }: { ep: Episode }) {
                   In the Library
                 </Link>
               </Button>
-              {vid.burned === false && burn && <span className="text-[11px] text-studio-warning">This server's ffmpeg can't burn subtitles; use the SRT.</span>}
+              {vid.burned === false && burn && <span className="text-[11px] text-studio-warning">The subtitles couldn't be burned in; use the SRT.</span>}
             </>
           )}
         </div>
-        <JobNote job={ep.jobs.video} what="Rendering the video" />
+        <JobNote job={ep.jobs.video} what="Rendering the audiogram" />
         {video.isError && (
           <p role="alert" className="text-small text-studio-danger">
             {video.error.message}
           </p>
         )}
       </section>
+
+      <AiVideoEntry ep={ep} />
 
       <MediaPicker
         open={pickCover}

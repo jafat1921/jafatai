@@ -198,6 +198,15 @@ def build(name: str, inputs: dict, loras: list[tuple[str, float]] | None = None)
             resolved[key] = images
             continue
 
+        if "if_set" in spec:
+            # a switch that removes part of the graph (ltx23_ia2v's single_stage drops the second pass)
+            on = bool(spec.get("default") if value is None else value)
+            if on:
+                drop.extend(spec["if_set"].get("drop", []))
+                bypass.update(spec["if_set"].get("bypass", {}))
+            resolved[key] = on
+            continue
+
         if value is None or value == "":
             if spec.get("required"):
                 raise TemplateError(f"{name}: missing required input '{key}'")

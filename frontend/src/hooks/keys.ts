@@ -67,4 +67,9 @@ export const qk = {
   podcastEpisode: (id: string) => ['podcast', 'episode', id] as const,
   // contract-v21
   stems: (id: string) => ['audio-stems', id] as const,
+  // contract-v24; the estimate and characters sit under aiVideo(id) so one invalidate refreshes them
+  episodeAiVideo: (episodeId: string) => ['podcast', 'episode-ai-video', episodeId] as const,
+  aiVideo: (id: string) => ['podcast', 'ai-video', id] as const,
+  aiVideoCharacters: (id: string) => ['podcast', 'ai-video', id, 'characters'] as const,
+  aiVideoEstimate: (id: string, quality: string, shots: string) => ['podcast', 'ai-video', id, 'estimate', quality, shots] as const,
 }

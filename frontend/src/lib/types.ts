@@ -1214,3 +1214,185 @@ export interface DesignPreviewRequest {
 export interface DesignPreviewResponse extends SpeakResponse {
   seed: number
 }
+
+// contract-v24-video-podcast.md (the AI video podcast)
+export type VPStageKey = 'cast' | 'set' | 'keyframes' | 'plan' | 'render' | 'assemble'
+export type VPStageStatus = 'pending' | 'running' | 'review' | 'done' | 'failed' | 'skipped'
+export type VPStatus = 'idle' | 'running' | 'review' | 'failed'
+export type VPAspect = '16:9' | '9:16' | '1:1'
+export type VPSubtitles = 'none' | 'soft' | 'burn'
+export type VPSetPreset = 'modern_studio' | 'cosy_room' | 'news_desk' | 'rooftop' | 'desi_baithak'
+export type VPShotType = 'lipsync' | 'medium' | 'reaction' | 'wide' | 'cover'
+export type VPQuality = 'draft' | 'final'
+export type VPHostSource = 'persona' | 'photo' | 'existing'
+
+export interface VPStage {
+  key: VPStageKey
+  label: string
+  status: VPStageStatus
+  detail: string | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface VPSettings {
+  aspect: VPAspect
+  style: string
+  subtitles: VPSubtitles
+  set_preset: VPSetPreset
+  set_prompt: string
+  cover_intro: boolean
+  cover_outro: boolean
+  cover_media_id: string | null
+}
+
+export interface VPConsent {
+  name: string
+  statement: string
+  at?: string | null
+  user_id?: string | null
+}
+
+export interface VPHost {
+  host_id: string
+  name: string
+  role: string
+  persona: string
+  source: VPHostSource
+  character_id: string | null
+  photo_media_id: string | null
+  photo_url: string | null
+  from_character_id: string | null
+  consent: VPConsent | null
+  portrait: Generation | null
+  sheet_views: { front?: Generation; three_quarter?: Generation }
+}
+
+export interface VPSet {
+  location_id: string | null
+  preset: VPSetPreset
+  prompt: string
+  description: string
+  establishing: Generation | null
+}
+
+export interface VPAngle {
+  key: string
+  label: string
+  host_id: string | null
+  shot_id: string | null
+  frame: Generation | null
+}
+
+export interface VPShot {
+  id: string
+  type: VPShotType
+  angle: string
+  speaker_id: string | null
+  line_id: string | null
+  start: number
+  end: number
+  duration: number
+  chapter_id: string | null
+  text: string
+  lipsync: boolean
+  marked: boolean
+  takes: { draft: Generation | null; final: Generation | null }
+  needs: { draft: boolean; final: boolean }
+  thumb_url: string | null
+}
+
+export interface VPPlanStats {
+  shots: number
+  lipsync: number
+  reaction: number
+  wide: number
+  medium: number
+  cover: number
+  seconds: number
+}
+
+export interface VPOutput {
+  media_id: string
+  generation_id: string
+  url: string
+  quality: VPQuality
+  duration_s: number
+  built_at: string
+  subtitles: VPSubtitles
+  renderer: string
+  fonts_missing: string[]
+  fallback_shots: string[]
+  width: number
+  height: number
+}
+
+export interface VideoPodcast {
+  id: string
+  episode_id: string
+  project_id: string
+  title: string
+  language: string
+  stage: VPStageKey | 'done'
+  status: VPStatus
+  review: 'hosts' | 'look' | null
+  stages: VPStage[]
+  settings: VPSettings
+  hosts: VPHost[]
+  set: VPSet
+  angles: VPAngle[]
+  plan: VPShot[]
+  plan_stats: VPPlanStats
+  duration_s: number | null
+  mix_stale: boolean
+  outputs: { draft: VPOutput | null; final: VPOutput | null }
+  job: Job | null
+  eta_s: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type VPHostChoice =
+  | { source: 'persona' }
+  | { source: 'photo'; media_id: string; consent: { name: string; statement: string } }
+  | { source: 'existing'; character_id: string }
+
+export interface VPPlanEdit {
+  id?: string
+  type: VPShotType
+  angle: string
+  start: number
+  end: number
+  marked?: boolean
+}
+
+export interface VideoPodcastPatch {
+  hosts?: Record<string, VPHostChoice>
+  settings?: Partial<VPSettings>
+  plan?: VPPlanEdit[]
+}
+
+export interface VPRegenerate {
+  what: 'portrait' | 'set' | 'angle'
+  key?: string
+  note?: string
+}
+
+export interface VPCharacterOption {
+  id: string
+  name: string
+  description: string
+  project_id: string
+  project_title: string
+  portrait_url: string | null
+}
+
+export interface VPEstimate {
+  quality: VPQuality
+  shots: number
+  seconds: number
+  low_s: number
+  high_s: number
+  basis: string
+  label: string
+}

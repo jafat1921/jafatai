@@ -154,7 +154,17 @@ def shaped(text: str) -> tuple[str, dict]:
         from bidi import get_display
     except ImportError:  # still renders, just unjoined and left-to-right
         return text, {}
-    return get_display(arabic_reshaper.reshape(text)), {}
+    return get_display(_reshaper(arabic_reshaper).reshape(text)), {}
+
+
+_RESHAPER = []
+
+
+def _reshaper(mod):
+    # the default reshaper drops harakat, and our Urdu and Arabic text carries its aerab on purpose
+    if not _RESHAPER:
+        _RESHAPER.append(mod.ArabicReshaper(configuration={"delete_harakat": False}))
+    return _RESHAPER[0]
 
 
 def text_width(draw: ImageDraw.ImageDraw, text: str, font) -> float:

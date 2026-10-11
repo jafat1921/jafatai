@@ -1,0 +1,41 @@
+{
+  "name": "ltx23_ia2v",
+  "family": "ltx-2.3",
+  "description": "LTX-2.3 image + audio to video (lip sync), after Comfy's video_ltx2_3_ia2v template without its prompt enhancer: the given speech is encoded with the audio VAE and frozen (SetLatentNoiseMask with a 0 SolidMask) so only the picture is generated next to it. dev fp8 + distilled LoRA 1.1 (0.5); first pass at latent size with the 8-step sigmas, then the x2 spatial upscaler and a 3-sigma refine at full size. single_stage drops the upscaler and the second pass (the 480p draft). The decoded audio is the first pass's, i.e. the speech as given.",
+  "inputs": {
+    "prompt":        {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":      {"type": "str", "default": "pc game, console game, video game, cartoon, childish, ugly, blurry, low quality, still frame, frozen, watermark, subtitles",
+                      "targets": [["Negative", "text"]]},
+    "first_image":   {"type": "image", "required": true, "targets": [["FirstImage", "image"]]},
+    "speech_audio":  {"type": "image", "required": true, "targets": [["SpeechAudio", "audio"]]},
+    "audio_start_s": {"type": "float", "default": 0.0, "targets": [["AudioTrim", "start_index"]]},
+    "duration_s":    {"type": "float", "default": 9.0, "targets": [["AudioTrim", "duration"]]},
+    "width":         {"type": "int", "default": 1280, "multiple_of": 32,
+                      "targets": [["FirstScale", "width"], ["AudioMask", "width"]]},
+    "height":        {"type": "int", "default": 704, "multiple_of": 32,
+                      "targets": [["FirstScale", "height"], ["AudioMask", "height"]]},
+    "latent_width":  {"type": "int", "default": 640, "multiple_of": 32, "targets": [["VideoLatent", "width"]]},
+    "latent_height": {"type": "int", "default": 352, "multiple_of": 32, "targets": [["VideoLatent", "height"]]},
+    "num_frames":    {"type": "int", "default": 217, "frames_8n1": true, "targets": [["VideoLatent", "length"]]},
+    "fps":           {"type": "float", "default": 24.0,
+                      "targets": [["Conditioning", "frame_rate"], ["Save", "frame_rate"]]},
+    "seed":          {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"], ["Noise2", "noise_seed"]]},
+    "single_stage":  {"type": "bool", "default": false,
+                      "if_set": {"drop": ["SpatialLoader", "CropGuides", "Noise2", "Sigmas2", "Guider2"],
+                                 "bypass": {"Separate2": {"0": "av_latent"}, "Sampler2": {"0": "latent_image"},
+                                            "AVLatent2": {"0": "video_latent"}, "FirstFrame2": {"0": "latent"},
+                                            "Upsample": {"0": "samples"}}}},
+    "filename_prefix": {"type": "str", "default": "mixai/ltx_ia2v", "targets": [["Save", "filename_prefix"]]}
+  },
+  "features": {"two_stage": ["SpatialLoader", "CropGuides", "Upsample", "FirstFrame2", "AVLatent2", "Noise2",
+                             "Sigmas2", "Guider2", "Sampler2", "Separate2"]},
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {
+    "checkpoints": ["ltx-2.3-22b-dev-fp8.safetensors"],
+    "text_encoders": ["gemma_3_12B_it_fp4_mixed.safetensors"],
+    "loras": ["ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors"],
+    "latent_upscale_models": ["ltx-2.3-spatial-upscaler-x2-1.1.safetensors"]
+  },
+  "lora": {"after": "DistillLoRA", "output": 0},
+  "progress_weights": {"Sampler": 8, "Sampler2": 8, "Checkpoint": 4, "TextEncoder": 3, "Upsample": 1, "Decode": 4, "Save": 1}
+}

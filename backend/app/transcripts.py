@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app import aerab
 from app import library as lib
+from app import subtitles as subs
 from app.audio_analysis import stream_info
 from app.models import Generation, Job, MediaItem, Transcript, new_id
 from app.services import generation_file, new_seed, next_version
@@ -31,20 +32,11 @@ CLEANUP_BATCH = 25
 
 # ---------------------------------------------------------------- subtitles
 
-def wrap(text: str, width: int = MAX_CHARS) -> list[str] | None:
-    """The text on one line, or on two balanced lines, or None when it needs more than two."""
-    text = " ".join(text.split())
-    if len(text) <= width:
-        return [text]
-    words = text.split(" ")
-    best = None
-    for i in range(1, len(words)):
-        a, b = " ".join(words[:i]), " ".join(words[i:])
-        if len(a) <= width and len(b) <= width:
-            score = abs(len(a) - len(b))
-            if best is None or score < best[0]:
-                best = (score, [a, b])
-    return best[1] if best else None
+def wrap(text: str, width: int | None = None) -> list[str] | None:
+    """The text on one line, or on two balanced lines, or None when it needs more than two.
+
+    Width defaults to 42 (34 for Urdu's Nastaliq), counted in base letters: aerab don't take up a column."""
+    return subs.wrap(text, width)
 
 
 def _word_text(w: dict) -> str:
@@ -120,24 +112,12 @@ def cues(segments: list[dict], *, clean: bool = False) -> list[tuple[float, floa
     return fixed
 
 
-def _ts(t: float, sep: str) -> str:
-    ms = int(round(max(0.0, t) * 1000))
-    h, ms = divmod(ms, 3600000)
-    m, ms = divmod(ms, 60000)
-    s, ms = divmod(ms, 1000)
-    return f"{h:02d}:{m:02d}:{s:02d}{sep}{ms:03d}"
-
-
-def _lines(text: str) -> str:
-    return "\n".join(wrap(text) or [text])
-
-
 def to_srt(items: list[tuple[float, float, str]]) -> str:
-    return "\n".join(f"{i}\n{_ts(a, ',')} --> {_ts(b, ',')}\n{_lines(t)}\n" for i, (a, b, t) in enumerate(items, 1))
+    return subs.srt_text(items)
 
 
 def to_vtt(items: list[tuple[float, float, str]]) -> str:
-    return "WEBVTT\n\n" + "\n".join(f"{_ts(a, '.')} --> {_ts(b, '.')}\n{_lines(t)}\n" for a, b, t in items)
+    return subs.vtt_text(items)
 
 
 # ---------------------------------------------------------------- the rows
@@ -371,12 +351,13 @@ def handle_video(ctx) -> dict:
     dst, part = folder / f"{gen.id}.mp4", folder / f".{gen.id}.part.mp4"
     t0 = time.monotonic()
     try:
-        srt = work / "subs.srt"
-        srt.write_text(to_srt(cues(t.segments or [], clean=bool(p.get("clean")))), encoding="utf-8")
-        ctx.progress(0.2, "Burning in the subtitles" if p.get("mode") == "burn" else "Adding the subtitles")
+        items = cues(t.segments or [], clean=bool(p.get("clean")))
         burn = p.get("mode") == "burn"
-        ex.build_mp4(generation_file(src), part, [ex.Stream(None, t.language, "Original", True)],
-                     [] if burn else [ex.Stream(srt, t.language, "Subtitles")], burn=srt if burn else None, work=work)
+        ctx.progress(0.2, "Burning in the subtitles" if burn else "Adding the subtitles")
+        soft = [] if burn else [ex.Stream(subs.write_srt(work / "subs.srt", items, t.language), t.language,
+                                          "Subtitles")]
+        burned = ex.build_mp4(generation_file(src), part, [ex.Stream(None, t.language, "Original", True)], soft,
+                              burn=items if burn else None, burn_language=t.language, work=work)
         part.replace(dst)
     finally:
         part.unlink(missing_ok=True)
@@ -384,5 +365,8 @@ def handle_video(ctx) -> dict:
     db.refresh(gen)
     rel = f"{rel_folder}/{dst.name}"
     gen.file_path, gen.media_type, gen.status = rel, "video/mp4", "ready"
-    return {"file_path": rel, "media_type": "video/mp4", "bytes": dst.stat().st_size,
-            "seconds": round(time.monotonic() - t0, 3)}
+    out = {"file_path": rel, "media_type": "video/mp4", "bytes": dst.stat().st_size,
+           "seconds": round(time.monotonic() - t0, 3)}
+    if burned:
+        out["subtitles"] = burned
+    return out

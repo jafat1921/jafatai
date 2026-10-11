@@ -694,6 +694,28 @@ class PodcastEpisode(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class VideoPodcast(Base):
+    """An episode as an AI video (contract v24). Its characters, set, angle frames and takes belong to a
+    hidden project (authoring_mode "podcast"), so the ordinary generation and approval flows apply."""
+
+    __tablename__ = "video_podcast"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    episode_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("podcast_episode.id", ondelete="CASCADE"), unique=True, index=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True)
+    stage: Mapped[str] = mapped_column(String(20), default="cast", server_default="cast")
+    stages: Mapped[dict] = mapped_column(JSON, default=dict)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    hosts: Mapped[dict] = mapped_column(JSON, default=dict)  # {host_id: {character_id, source, ...}}
+    set_location_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    plan: Mapped[list] = mapped_column(JSON, default=list)
+    outputs: Mapped[dict] = mapped_column(JSON, default=dict)
+    job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

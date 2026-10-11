@@ -666,15 +666,15 @@ def handle_export(ctx) -> dict:
         if p.get("include_original") and stream_info(video).has_audio:
             audio.append(ex.Stream(None, dub.source_language, "Original", False))
         subs, burn = [], None
-        if p.get("subtitles") in ("srt", "burn"):
-            for lang in langs if p["subtitles"] == "srt" else [p["default_lang"]]:
+        if p.get("subtitles") == "srt":
+            for lang in langs:
                 srt = work / f"subs_{lang}.srt"
                 srt.write_text(transcripts.to_srt(subtitle_cues(dub, lang)), encoding="utf-8")
                 subs.append(ex.Stream(srt, lang, voices.lang_name(lang)))
-            if p["subtitles"] == "burn":
-                burn, subs = subs[0].path, []
+        elif p.get("subtitles") == "burn":
+            burn = subtitle_cues(dub, p["default_lang"])
         ctx.progress(0.2, "Burning in the subtitles" if burn else "Packing the languages")
-        ex.build_mp4(video, part, audio, subs, burn=burn, work=work)
+        burned = ex.build_mp4(video, part, audio, subs, burn=burn, burn_language=p["default_lang"], work=work)
         part.replace(dst)
         stems = None
         if p.get("stems"):
@@ -690,6 +690,8 @@ def handle_export(ctx) -> dict:
     gen.file_path, gen.media_type, gen.status = rel, "video/mp4", "ready"
     out = {"file_path": rel, "media_type": "video/mp4", "langs": langs, "bytes": dst.stat().st_size,
            "seconds": round(time.monotonic() - t0, 3)}
+    if burned:
+        out["subtitles"] = burned
     if stems is not None:
         from app.services import media_url
 

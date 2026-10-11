@@ -18,7 +18,9 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.get("", response_model=list[ProjectOut])
 def list_projects(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     rows = db.scalars(
-        select(Project).where(Project.workspace_id == cur.workspace_id).order_by(Project.updated_at.desc())
+        # an AI video podcast's project is an implementation detail of the episode
+        select(Project).where(Project.workspace_id == cur.workspace_id, Project.authoring_mode != "podcast")
+        .order_by(Project.updated_at.desc())
     ).all()
     return [project_out(db, p) for p in rows]
 

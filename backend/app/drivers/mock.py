@@ -100,7 +100,14 @@ class MockDriver:
         render_placeholder(prompt, params, seed, frame)
         seconds = float(params.get("duration_s", 2))
         cmd = [get_settings().ffmpeg_path(), "-y", "-loglevel", "error", "-loop", "1", "-i", str(frame)]
-        if params.get("kind") == "take_chunk":
+        if params.get("speech_audio"):
+            # a lip-sync take (ltx23_ia2v): the 8n+1 frames it asked for, with the speech window it was given
+            frames = int(params.get("num_frames") or round(seconds * 24) + 1)
+            seconds = frames / 24
+            cmd += ["-ss", f"{float(params.get('audio_start_s') or 0):.4f}", "-t", f"{seconds:.4f}",
+                    "-i", str(params["speech_audio"]), "-af", f"apad=whole_dur={seconds:.4f}",
+                    "-frames:v", str(frames), "-c:a", "aac"]
+        elif params.get("kind") == "take_chunk":
             # long-take chunks: exact 8n+1 frame count plus a tone, so the joiner has audio to crossfade
             frames = int(params["num_frames"])
             seconds = frames / 24

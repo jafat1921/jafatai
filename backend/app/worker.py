@@ -435,6 +435,12 @@ from app import stems  # noqa: E402
 
 HANDLERS[stems.JOB] = stems.handle
 FINISHED_HOOKS.append(stems.on_job_finished)
+from app.podcast import video as video_podcast, video_stages as video_podcast_stages  # noqa: E402
+
+# the orchestrator only waits on its takes (they bill their own GPU time); the cut is ffmpeg
+HANDLERS[video_podcast.JOB] = video_podcast_stages.handle
+HANDLERS[video_podcast.ASSEMBLE_JOB] = video_podcast_stages.handle_assemble
+CPU_JOB_LEDGER.update({video_podcast.JOB: "autopilot", video_podcast.ASSEMBLE_JOB: "assembly"})
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

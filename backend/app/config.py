@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     # Stems (contract v21): the four-stem Demucs model; two-stem splits reuse dub_separation_model.
     # Both live in dub_separation_model_dir
     stems_four_model: str = "htdemucs_ft.yaml"
+    # burned subtitles (contract v24a): where the Noto fonts live (fonts-noto-core / -extra on Debian);
+    # renderer auto | ass | pillow
+    subtitle_fonts_dir: str = "/usr/share/fonts/truetype/noto"
+    subtitle_renderer: str = "auto"
 
     @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
     @classmethod

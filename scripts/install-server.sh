@@ -59,6 +59,40 @@ node_major=$(node -p 'process.versions.node.split(".")[0]')
 command -v ffmpeg >/dev/null || warn "ffmpeg not on PATH; the app will fall back to its bundled copy"
 echo "    uv $(uv --version | cut -d' ' -f2), node $(node -v)"
 
+# --- subtitle fonts --------------------------------------------------------------
+# burned subtitles want Noto per script: Nastaliq (Urdu) ships in fonts-noto-extra, Naskh / Sans / Devanagari
+# in fonts-noto-core. libfribidi lets Pillow's raqm layout shape the fallback renderer.
+say "Checking subtitle fonts"
+SUB_PKGS=(fonts-noto-core fonts-noto-extra libfribidi0)
+if command -v dpkg-query >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+  missing_pkgs=()
+  for pkg in "${SUB_PKGS[@]}"; do
+    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" || missing_pkgs+=("$pkg")
+  done
+  if (( ${#missing_pkgs[@]} )); then
+    echo "    installing ${missing_pkgs[*]} (sudo)…"
+    if sudo apt-get install -y --no-install-recommends "${missing_pkgs[@]}" >/dev/null; then
+      command -v fc-cache >/dev/null 2>&1 && sudo fc-cache -f >/dev/null 2>&1 || true
+    else
+      warn "couldn't install ${missing_pkgs[*]}; subtitles fall back to whatever fonts are there"
+    fi
+  fi
+else
+  warn "no apt here; install the Noto fonts (Nastaliq Urdu, Naskh Arabic, Sans, Sans Devanagari) yourself"
+fi
+if command -v fc-list >/dev/null 2>&1; then
+  for fam in "Noto Nastaliq Urdu" "Noto Naskh Arabic" "Noto Sans" "Noto Sans Devanagari"; do
+    if [[ -n "$(fc-list "$fam" file 2>/dev/null | head -n1)" ]]; then
+      echo "    font ok: $fam"
+    else
+      warn "font missing: $fam"
+    fi
+  done
+fi
+if command -v ffmpeg >/dev/null 2>&1 && ! ffmpeg -hide_banner -h filter=ass 2>/dev/null | grep -q shaping; then
+  warn "this ffmpeg's ass filter can't shape (no libass/HarfBuzz); Urdu/Arabic subtitles will be drawn with Pillow"
+fi
+
 # --- backend + frontend --------------------------------------------------------
 say "Installing backend (Python 3.12 venv via uv)"
 (cd "$APP_DIR/backend" && uv sync --frozen)

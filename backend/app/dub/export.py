@@ -4,7 +4,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from app import mixdown as md
+from app import subtitles as st
 from app.dub.engines import _ffmpeg
 from app.voices import lang_name
 
@@ -36,8 +36,15 @@ class Stream:
     default: bool = False
 
 
-def build_mp4(video: Path, dst: Path, audio: list[Stream], subs: list[Stream], *, burn: Path | None = None,
-              work: Path, timeout: int = 3600) -> None:
+def build_mp4(video: Path, dst: Path, audio: list[Stream], subs: list[Stream], *, burn: list | None = None,
+              burn_language: str | None = None, work: Path, timeout: int = 3600) -> dict | None:
+    """`burn` is a list of cues (subtitles.Cue or (start, end, text)); returns subtitles.burn's report then."""
+    burned = None
+    if burn:
+        # the burner re-encodes the picture and keeps the source audio, so this pass only copies
+        pic = work / "burned.mp4"
+        burned = st.burn(video, pic, burn, language=burn_language, timeout=timeout)
+        video = pic
     args = ["-i", str(video)]
     inputs = 1
     amaps, smaps = [], []
@@ -57,12 +64,7 @@ def build_mp4(video: Path, dst: Path, audio: list[Stream], subs: list[Stream], *
         args += ["-map", m]
     for m in smaps:
         args += ["-map", m]
-    if burn is not None:
-        # libass parses the filter argument itself; a bare file name in the working dir dodges all the
-        # escaping a Windows path (drive colon, backslashes) would need
-        args += ["-vf", f"subtitles={burn.name}", *md.VIDEO_REENCODE]
-    else:
-        args += ["-c:v", "copy"]
+    args += ["-c:v", "copy"]
     if audio:
         args += AUDIO_ARGS
     # MP4 keeps a track's name in its handler box; players show that one, mkv-minded tools read title
@@ -73,10 +75,10 @@ def build_mp4(video: Path, dst: Path, audio: list[Stream], subs: list[Stream], *
     if subs:
         args += ["-c:s", "mov_text"]
     for k, s in enumerate(subs):
-        args += [f"-metadata:s:s:{k}", f"language={iso3(s.lang)}", f"-metadata:s:s:{k}", f"title={s.title}",
-                 f"-metadata:s:s:{k}", f"handler_name={s.title}", f"-disposition:s:{k}", "0"]
+        args += st.soft_track_args(k, iso3(s.lang), s.title)
     dst.parent.mkdir(parents=True, exist_ok=True)
     _ffmpeg([*args, "-movflags", "+faststart", "-f", "mp4", str(dst)], timeout=timeout, cwd=work)
+    return burned
 
 
 def dub_title(lang: str) -> str:

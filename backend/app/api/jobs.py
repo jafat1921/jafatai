@@ -42,7 +42,7 @@ def cancel_job(job_id: str, db: Session = Depends(get_db), cur: CurrentUser = De
             g = db.get(Generation, job.generation_id)
             if g and g.status in ("queued", "generating"):
                 g.status = "failed"
-    if job.type == "autopilot":
+    if job.type in ("autopilot", "video_podcast"):  # the AI video podcast waits on children the same way
         from app.autopilot import cancel_children
 
         cancel_children(db, job)
@@ -62,7 +62,7 @@ def retry_job(job_id: str, db: Session = Depends(get_db), cur: CurrentUser = Dep
     job.attempts = 0
     job.started_at = job.finished_at = job.heartbeat_at = None
     job.gpu_seconds = None
-    if job.type == "autopilot":
+    if job.type in ("autopilot", "video_podcast"):
         from app.autopilot import on_retry  # resumes at the failed stage; finished stages stay done
 
         on_retry(job)

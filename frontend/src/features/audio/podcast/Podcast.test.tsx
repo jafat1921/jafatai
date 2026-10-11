@@ -303,7 +303,7 @@ describe('Podcast', { timeout: 20_000 }, () => {
     await waitFor(() => expect(sent(calls, 'POST', '/podcast/episodes/e1/mix')).toHaveLength(1))
   })
 
-  it('publishes the audio, the subtitles and the video podcast', async () => {
+  it('publishes the audio, the subtitles and the audiogram', async () => {
     const calls = api(episode({ step: 6, outputs: { mix: MIXED, publish: null, video: null } }))
     renderAt('/audio/podcast/e1', routes)
     const user = userEvent.setup()
@@ -315,7 +315,9 @@ describe('Podcast', { timeout: 20_000 }, () => {
     expect(screen.getByRole('link', { name: 'Download SRT' })).toHaveAttribute('href', '/api/podcast/episodes/e1/subtitles.srt')
     await user.click(screen.getByRole('radio', { name: /1:1/ }))
     await user.click(screen.getByRole('checkbox', { name: 'Burn in subtitles' }))
-    await user.click(screen.getByRole('button', { name: 'Make the video' }))
+    expect(screen.getByRole('heading', { name: 'Audiogram' })).toBeInTheDocument()
+    expect(screen.getByText('A quick share video: cover, waveform, speaker names and subtitles')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Make the audiogram' }))
     await waitFor(() => expect(sent(calls, 'POST', '/podcast/episodes/e1/video')).toEqual([{ aspect: '1:1', burn_subtitles: false }]))
     await user.type(screen.getByRole('textbox', { name: 'Description' }), 'Two friends on a bridge.')
     await user.click(screen.getByRole('button', { name: 'Save notes' }))

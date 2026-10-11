@@ -87,6 +87,13 @@ import type {
   VoiceEngine,
   VoicePatch,
   VoiceQuery,
+  VideoPodcast,
+  VideoPodcastPatch,
+  VPCharacterOption,
+  VPEstimate,
+  VPQuality,
+  VPRegenerate,
+  VPShotType,
 } from './types'
 import type { BrandKit, BrandKitPatch, LogoRevealRequest, PreviewKind } from './brand'
 import type { CameraPreset } from './camera'
@@ -623,6 +630,26 @@ export const api = {
     video: (id: string, body: VideoBody) => post<Job>(`/podcast/episodes/${id}/video`, body),
     srtUrl: (id: string) => `${API_BASE}/podcast/episodes/${id}/subtitles.srt`,
     notesUrl: (id: string) => `${API_BASE}/podcast/episodes/${id}/notes.md`,
+  },
+  // contract-v24: the AI video podcast (the Audiogram stays podcast.video)
+  aiVideo: {
+    getEpisodeAiVideo: (episodeId: string) => get<VideoPodcast>(`/podcast/episodes/${episodeId}/ai-video`),
+    createEpisodeAiVideo: (episodeId: string, body: { aspect?: string } = {}) => post<VideoPodcast>(`/podcast/episodes/${episodeId}/ai-video`, body),
+    getAiVideo: (id: string) => get<VideoPodcast>(`/podcast/ai-video/${id}`),
+    patchAiVideo: (id: string, body: VideoPodcastPatch) => patch<VideoPodcast>(`/podcast/ai-video/${id}`, body),
+    deleteAiVideo: (id: string) => del(`/podcast/ai-video/${id}`),
+    continueAiVideo: (id: string) => post<Job>(`/podcast/ai-video/${id}/continue`),
+    regenerateAiVideo: (id: string, body: VPRegenerate) => post<Generation>(`/podcast/ai-video/${id}/regenerate`, body),
+    aiVideoCharacters: (id: string) => get<VPCharacterOption[]>(`/podcast/ai-video/${id}/characters`),
+    replanAiVideo: (id: string) => post<VideoPodcast>(`/podcast/ai-video/${id}/replan`),
+    patchAiVideoShot: (id: string, shotId: string, body: { type?: VPShotType; angle?: string; marked?: boolean }) =>
+      patch<VideoPodcast>(`/podcast/ai-video/${id}/shots/${shotId}`, body),
+    splitAiVideoShot: (id: string, shotId: string, at?: number) => post<VideoPodcast>(`/podcast/ai-video/${id}/shots/${shotId}/split`, at == null ? {} : { at }),
+    mergeAiVideoShots: (id: string, shotIds: string[]) => post<VideoPodcast>(`/podcast/ai-video/${id}/shots/merge`, { shot_ids: shotIds }),
+    aiVideoEstimate: (id: string, quality: VPQuality, shotIds?: string[]) =>
+      get<VPEstimate>(`/podcast/ai-video/${id}/estimate`, { quality, shot_ids: shotIds?.length ? shotIds.join(',') : undefined }),
+    renderAiVideo: (id: string, body: { quality: VPQuality; shot_ids?: string[] }) => post<Job>(`/podcast/ai-video/${id}/render`, body),
+    assembleAiVideo: (id: string, quality: VPQuality) => post<Job>(`/podcast/ai-video/${id}/assemble`, { quality }),
   },
   videos: {
     // a MediaItem plus its job; tolerate a batch too

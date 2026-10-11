@@ -1,5 +1,6 @@
 """Publishing an episode (contract v20): the tagged MP3 / M4A with cover and chapters, the SRT from the mix
-timeline, show notes as Markdown, and the video podcast."""
+timeline, show notes as Markdown, and the Audiogram (the cover, a waveform, speaker names and subtitles
+as a quick share video; the endpoints and job type still say "video")."""
 import re
 import shutil
 import time
@@ -13,6 +14,7 @@ from app import audio_analysis as aa
 from app import audio_edit as ae
 from app import brand_render as br
 from app import library as lib
+from app import subtitles as st
 from app import transcripts as tr
 from app.models import Generation, Job, MediaItem, PodcastEpisode, PodcastShow, utcnow
 from app.podcast import service as sv
@@ -38,10 +40,14 @@ class PublishError(RuntimeError):
 
 # ---------------------------------------------------------------- text outputs
 
-def srt(timeline: list[dict]) -> str:
+def timeline_cues(timeline: list[dict]) -> list[tuple[float, float, str]]:
     segs = [{"start": t["start"], "end": t["end"], "text": t["text"]} for t in timeline
             if (t.get("text") or "").strip() and t.get("kind") in ("speech", "recording", "ad")]
-    return tr.to_srt(tr.cues(segs))
+    return tr.cues(segs)
+
+
+def srt(timeline: list[dict]) -> str:
+    return tr.to_srt(timeline_cues(timeline))
 
 
 def stamp(t: float) -> str:
@@ -119,8 +125,8 @@ def queue_video(db: Session, cur, ep: PodcastEpisode, aspect: str, burn: bool, c
     w, h = SIZES[aspect]
     params = {"episode_id": ep.id, "aspect": aspect, "size": f"{w}x{h}", "fps": FPS, "has_audio": True,
               "duration_s": mix.get("duration_s"), "created_by": {"user_id": cur.id, "flow": "podcast_video"}}
-    item, g = sv.library_version(db, ep, "video", "video", f"{ep.title} (video podcast)", ["podcast"], params)
-    return sv.queue_job(db, ep, sv.VIDEO_JOB, "video", "Video podcast", {
+    item, g = sv.library_version(db, ep, "video", "video", f"{ep.title} (audiogram)", ["podcast"], params)
+    return sv.queue_job(db, ep, sv.VIDEO_JOB, "video", "Audiogram", {
         "media_id": item.id, "aspect": aspect, "burn": burn, "cover_media_id": cover}, g)
 
 
@@ -240,10 +246,8 @@ def handle_publish(ctx) -> dict:
 def _box(aspect: str) -> dict:
     w, h = SIZES[aspect]
     if aspect == "16:9":
-        return {"cover": (140, 140, 640), "title": (900, 170, 880), "label": (900, 470), "wave": (900, 560, 880, 220),
-                "sub_margin": 40}
-    return {"cover": ((w - 520) // 2, 70, 520), "title": (110, 620, 860), "label": (110, 760), "wave": (110, 820, 860, 140),
-            "sub_margin": 20}
+        return {"cover": (140, 140, 640), "title": (900, 170, 880), "label": (900, 470), "wave": (900, 560, 880, 220)}
+    return {"cover": ((w - 520) // 2, 70, 520), "title": (110, 620, 860), "label": (110, 760), "wave": (110, 820, 860, 140)}
 
 
 def background(aspect: str, cover: Image.Image | None, title: str, show: str) -> Image.Image:
@@ -271,7 +275,8 @@ def background(aspect: str, cover: Image.Image | None, title: str, show: str) ->
 
 
 def label(name: str, height: int = 64) -> Image.Image:
-    font = br.load_font(None, int(height * 0.55))
+    # an Urdu host's name in Nastaliq, like the subtitles under it
+    font = br.load_font(st.font_file(st.font_for(None, name)), int(height * 0.55))
     probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
     tw = int(br.text_width(probe, name, font)) + height
     img = Image.new("RGBA", (max(tw, height * 2), height), (0, 0, 0, 0))
@@ -299,7 +304,7 @@ def speaker_spans(timeline: list[dict]) -> dict[str, list[tuple[float, float]]]:
     return out
 
 
-def video_graph(aspect: str, labels: list[tuple[int, list[tuple[float, float]]]], subs: str | None) -> str:
+def video_graph(aspect: str, labels: list[tuple[int, list[tuple[float, float]]]]) -> str:
     b = _box(aspect)
     wx, wy, ww, wh = b["wave"]
     lx, ly = b["label"]
@@ -310,13 +315,13 @@ def video_graph(aspect: str, labels: list[tuple[int, list[tuple[float, float]]]]
         on = "+".join(f"between(t,{a:.2f},{z:.2f})" for a, z in spans)
         parts.append(f"[{cur}][{idx}:v]overlay={lx}:{ly}:enable='{on}'[v{n}]")
         cur = f"v{n}"
-    tail = []
-    if subs:
-        tail.append(f"subtitles={subs}:force_style='FontSize=15,Outline=1,Shadow=0,MarginV={b['sub_margin']},"
-                    "PrimaryColour=&H00D8E8F2,OutlineColour=&H00141A1F,BorderStyle=1'")
-    tail.append("format=yuv420p")
-    parts.append(f"[{cur}]{','.join(tail)}[vout]")
+    parts.append(f"[{cur}]format=yuv420p[vout]")
     return ";".join(parts)
+
+
+def _venc(crf: int) -> list[str]:
+    return ["-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-crf", str(crf), "-pix_fmt", "yuv420p",
+            "-r", str(FPS)]
 
 
 def handle_video(ctx) -> dict:
@@ -327,7 +332,7 @@ def handle_video(ctx) -> dict:
     gen = db.get(Generation, job.generation_id or "")
     ep = db.get(PodcastEpisode, p.get("episode_id") or "")
     if gen is None or ep is None:
-        raise PublishError("The episode or its video record no longer exists")
+        raise PublishError("The episode or its audiogram record no longer exists")
     mix = (ep.outputs or {}).get("mix") or {}
     audio = generation_file(db.get(Generation, mix.get("generation_id") or ""))
     if audio is None or not audio.is_file():
@@ -352,26 +357,24 @@ def handle_video(ctx) -> dict:
             label(name).save(work / f"label{n}.png")
             inputs += ["-i", str(work / f"label{n}.png")]
             labels.append((n + 2, spans))
-        burn = bool(p.get("burn")) and ae.has_filter("subtitles")
-        if burn:
-            (work / "subs.srt").write_text(srt(tl), encoding="utf-8")
-
-        def encode(subs: str | None) -> None:
-            _ffmpeg([*inputs, "-filter_complex", video_graph(aspect, labels, subs), "-map", "[vout]", "-map", "1:a",
-                     "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-crf", "23", "-r", str(FPS),
-                     "-c:a", "aac", "-b:a", "192k", "-t", ae._f(total), "-movflags", "+faststart", str(part)],
-                    timeout=7200, cwd=work)
-
-        ctx.progress(0.15, "Rendering the video")
-        if burn:
+        cues = timeline_cues(tl) if p.get("burn") else []
+        plain = work / "plain.mp4" if cues else part
+        ctx.progress(0.15, "Rendering the audiogram")
+        # nearly lossless when the subtitle pass is going to encode it again
+        _ffmpeg([*inputs, "-filter_complex", video_graph(aspect, labels), "-map", "[vout]", "-map", "1:a",
+                 *_venc(16 if cues else 23), "-c:a", "aac", "-b:a", "192k", "-t", ae._f(total),
+                 "-movflags", "+faststart", str(plain)], timeout=7200, cwd=work)
+        burn, burned = False, None
+        if cues:
+            ctx.progress(0.6, "Burning in the subtitles")
+            w, h = SIZES[aspect]
             try:
-                # a bare file name in the working dir: libass parses the argument itself (see dub.export)
-                encode("subs.srt")
+                burned = st.burn(plain, part, cues, language=ep.language, width=w, height=h, timeout=7200,
+                                 encode=_venc(23))
+                burn = True
             except RuntimeError:
-                burn = False
-                encode(None)
-        else:
-            encode(None)
+                # the audiogram is still worth having without its subtitles
+                plain.replace(part)
         part.replace(dst)
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -380,10 +383,15 @@ def handle_video(ctx) -> dict:
     rel = f"{rel_folder}/{dst.name}"
     w, h = SIZES[aspect]
     gen.params = {**(gen.params or {}), "duration_s": round(total, 3), "burned": burn}
+    if burned and burned["fonts_missing"]:
+        gen.params["fonts_missing"] = burned["fonts_missing"]
     gen.file_path, gen.media_type, gen.status = rel, "video/mp4", "ready"
     outs = dict(ep.outputs or {})
     outs["video"] = {"media_id": p.get("media_id"), "generation_id": gen.id, "aspect": aspect, "burned": burn,
                      "built_at": utcnow().isoformat() + "Z"}
     ep.outputs = outs
-    return {"file_path": rel, "media_type": "video/mp4", "width": w, "height": h, "duration_s": round(total, 3),
-            "burned": burn, "bytes": dst.stat().st_size, "seconds": round(time.monotonic() - t0, 3)}
+    out = {"file_path": rel, "media_type": "video/mp4", "width": w, "height": h, "duration_s": round(total, 3),
+           "burned": burn, "bytes": dst.stat().st_size, "seconds": round(time.monotonic() - t0, 3)}
+    if burned:
+        out["subtitles"] = burned
+    return out

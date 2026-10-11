@@ -5,7 +5,8 @@ video   -> takes, long takes, renders, video upscales (COMFY_VIDEO_URLS)
 audio   -> songs, music, sound effects, speech and voice transcripts; served by both GPU workers, each on
            its own ComfyUI / GPU
 general -> LLM work, ffmpeg assembly / branding, exports, autopilot orchestration, Photo Studio renders and
-           looks on video, podcast writing / mixing / publishing (CPU only)
+           looks on video, podcast writing / mixing / publishing, the AI video podcast's orchestration and cut
+           (CPU only; its lip-sync takes are ordinary generate jobs on the video lane)
 
 Kept free of app imports on purpose: migration 0009 backfills with the same classifier.
 """

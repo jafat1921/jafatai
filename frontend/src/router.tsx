@@ -136,6 +136,10 @@ export const shellRoutes: RouteObject[] = [
         const { EpisodePage } = await import('@/features/audio/podcast/EpisodePage')
         return <EpisodePage />
       }),
+      page('podcast/:id/video', async () => {
+        const { VideoPodcastPage } = await import('@/features/audio/podcast/video/VideoPodcastPage')
+        return <VideoPodcastPage />
+      }),
       page('edit', async () => {
         const { EditPickPage } = await import('@/features/audio/editor/EditPickPage')
         return <EditPickPage />

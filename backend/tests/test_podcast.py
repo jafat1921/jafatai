@@ -1,5 +1,5 @@
 """Podcast Studio C2 (contract v20): shows, episodes, document ingest, the LLM writer, recording lines, the
-episode mix with music and ducking, publishing (ID3, chapters, SRT) and the video podcast."""
+episode mix with music and ducking, publishing (ID3, chapters, SRT) and the Audiogram."""
 import io
 import json
 import re
@@ -557,7 +557,7 @@ def test_video_podcast_mp4(client, tmp_path, fast_driver):
     ep = get(client, ep)
     assert ep["jobs"]["video"]["status"] == "done", ep["jobs"]["video"]
     vid = ep["outputs"]["video"]
-    assert vid["aspect"] == "1:1" and vid["burned"] is ae.has_filter("subtitles")
+    assert vid["aspect"] == "1:1" and vid["burned"] is True
     with SessionLocal() as db:
         g = db.get(Generation, vid["generation_id"])
         item = db.get(MediaItem, vid["media_id"])

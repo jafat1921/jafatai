@@ -4,7 +4,7 @@ import type { Generation, QuickStage, QuickStageKey, VideoPodcast, VPAngle, VPAs
 export const LIKENESS_STATEMENT = "I have the right to use this person's likeness, and they agreed to it being animated."
 
 export type VPStepId = 'hosts' | 'set' | 'look' | 'shots' | 'render' | 'result'
-export type VPStepState = 'done' | 'todo' | 'busy'
+export type VPStepState = 'done' | 'todo' | 'busy' | 'review'
 
 export const VP_STEPS: { id: VPStepId; label: string; stage: VPStageKey }[] = [
   { id: 'hosts', label: 'Hosts', stage: 'cast' },
@@ -68,10 +68,22 @@ export function stepStates(vp: VideoPodcast): Record<VPStepId, VPStepState> {
   const out = {} as Record<VPStepId, VPStepState>
   for (const step of VP_STEPS) {
     const st = by.get(step.stage)
-    out[step.id] = st === 'running' ? 'busy' : st === 'done' || st === 'skipped' ? 'done' : 'todo'
+    out[step.id] = st === 'running' ? 'busy' : st === 'done' || st === 'skipped' ? 'done' : st === 'review' ? 'review' : 'todo'
   }
   if (vp.outputs.draft || vp.outputs.final) out.result = by.get('assemble') === 'running' ? 'busy' : 'done'
   return out
+}
+
+/** The first earlier step that isn't finished: what this step is waiting on, if anything. */
+export function blockingStep(vp: VideoPodcast, stepIndex: number): { step: (typeof VP_STEPS)[number]; index: number; status: string } | null {
+  const by = new Map(vp.stages.map((s) => [s.key, s.status]))
+  for (let i = 0; i < stepIndex; i++) {
+    const status = by.get(VP_STEPS[i].stage) ?? 'pending'
+    // render and the cut are started from their own steps, so they never hold up the shot plan
+    if (VP_STEPS[i].stage === 'render' || VP_STEPS[i].stage === 'assemble') continue
+    if (status !== 'done' && status !== 'skipped') return { step: VP_STEPS[i], index: i, status }
+  }
+  return null
 }
 
 export function initialStep(vp: VideoPodcast): number {

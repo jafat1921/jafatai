@@ -18,7 +18,7 @@ import { RenderPanel } from './RenderPanel'
 import { ResultPanel } from './ResultPanel'
 import { SetPanel } from './SetPanel'
 import { ShotsPanel } from './ShotsPanel'
-import { VP_STEPS, initialStep, stepStates, timelineStages, type VPStepState } from './vp'
+import { VP_STEPS, blockingStep, initialStep, stepStates, timelineStages, type VPStepState } from './vp'
 
 export function VideoPodcastPage() {
   const { id = '' } = useParams()
@@ -108,6 +108,7 @@ function Workspace({ ep, seed }: { ep: Episode; seed: VideoPodcast }) {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-5 md:px-8">
           <Progress vp={vp} />
           <ReviewBanner vp={vp} onGo={go} />
+          <StepGate vp={vp} stepIndex={step - 1} onGo={go} />
           {q.isError && <ErrorState compact title="Couldn't refresh" error={q.error} onRetry={() => q.refetch()} />}
           {current.id === 'hosts' && <HostsPanel vp={vp} />}
           {current.id === 'set' && <SetPanel vp={vp} />}
@@ -125,12 +126,7 @@ function Workspace({ ep, seed }: { ep: Episode; seed: VideoPodcast }) {
         <span className="text-[12px] text-studio-muted">
           Step {step} of {VP_STEPS.length}: {current.label}
         </span>
-        {step < VP_STEPS.length && (
-          <Button type="button" size="sm" variant="primary" className="ml-auto" onClick={() => go(step + 1)}>
-            Next: {VP_STEPS[step].label}
-            <ArrowRight aria-hidden />
-          </Button>
-        )}
+        {step < VP_STEPS.length && <NextButton vp={vp} step={step} onGo={go} />}
       </footer>
     </main>
   )
@@ -157,6 +153,83 @@ function Progress({ vp }: { vp: VideoPodcast }) {
         </p>
       )}
     </div>
+  )
+}
+
+// a review step's Next approves and moves the pipeline on, not just the view
+function NextButton({ vp, step, onGo }: { vp: VideoPodcast; step: number; onGo: (n: number) => void }) {
+  const go = useContinueAiVideo(vp.id)
+  const status = vp.stages.find((s) => s.key === VP_STEPS[step - 1].stage)?.status
+  const approve = status === 'review' && !jobRunning(vp)
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="primary"
+      className="ml-auto"
+      loading={go.isPending}
+      onClick={() => {
+        if (!approve) return onGo(step + 1)
+        go.mutate(undefined, {
+          onSuccess: () => {
+            announce(`Approved. Working on the ${NOUN[VP_STEPS[step].stage].name} now.`)
+            onGo(step + 1)
+          },
+        })
+      }}
+    >
+      {approve ? `Approve and continue to ${VP_STEPS[step].label}` : `Next: ${VP_STEPS[step].label}`}
+      <ArrowRight aria-hidden />
+    </Button>
+  )
+}
+
+const NOUN: Record<string, { name: string; plural: boolean }> = {
+  cast: { name: 'host portraits', plural: true },
+  set: { name: 'set', plural: false },
+  keyframes: { name: 'camera angles', plural: true },
+  plan: { name: 'shot plan', plural: false },
+  render: { name: 'render', plural: false },
+  assemble: { name: 'final cut', plural: false },
+}
+
+/** Says why a step is still empty and offers the one action that moves it along. */
+function StepGate({ vp, stepIndex, onGo }: { vp: VideoPodcast; stepIndex: number; onGo: (n: number) => void }) {
+  const go = useContinueAiVideo(vp.id)
+  const block = blockingStep(vp, stepIndex)
+  if (!block) return null
+  const here = NOUN[VP_STEPS[stepIndex].stage].name
+  const { name: what, plural } = NOUN[block.step.stage]
+  const be = plural ? 'are' : 'is'
+  const running = block.status === 'running' || jobRunning(vp)
+  return (
+    <section aria-label="What this step is waiting for" className="flex flex-wrap items-center gap-3 rounded-[6px] border border-studio-border-strong bg-studio-raised p-3">
+      <p className="mr-auto text-small">
+        {running
+          ? `Working on the ${what} first; the ${here} follows on its own.`
+          : block.status === 'review'
+            ? `The ${what} ${be} waiting for your OK. Approve ${plural ? 'them' : 'it'} and the ${here} ${NOUN[VP_STEPS[stepIndex].stage].plural ? 'are' : 'is'} made next.`
+            : block.status === 'failed'
+              ? `The ${what} step failed, so the ${here} can't start yet.`
+              : `The ${here} ${NOUN[VP_STEPS[stepIndex].stage].plural ? 'come' : 'comes'} after the ${what}. Start there.`}
+      </p>
+      {!running && block.status === 'review' && (
+        <Button type="button" variant="primary" loading={go.isPending} onClick={() => go.mutate(undefined, { onSuccess: () => announce(`Approved. Working on the ${here} now.`) })}>
+          Approve the {what} and continue
+          <ArrowRight aria-hidden />
+        </Button>
+      )}
+      {!running && block.status !== 'review' && (
+        <Button type="button" variant="secondary" onClick={() => onGo(block.index + 1)}>
+          Go to {block.step.label}
+        </Button>
+      )}
+      {go.isError && (
+        <p role="alert" className="w-full text-small text-studio-danger">
+          {go.error.message}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -188,7 +261,7 @@ function ReviewBanner({ vp, onGo }: { vp: VideoPodcast; onGo: (n: number) => voi
   )
 }
 
-const STATE_TEXT = { done: 'done', todo: 'to do', busy: 'working' } as const
+const STATE_TEXT = { done: 'done', todo: 'to do', busy: 'working', review: 'needs your OK' } as const
 
 // the episode stepper's tabs, over the video's six steps
 function VPStepper({ current, states, onPick }: { current: number; states: Record<string, VPStepState>; onPick: (n: number) => void }) {
@@ -231,12 +304,13 @@ function VPStepper({ current, states, onPick }: { current: number; states: Recor
                 aria-hidden
                 className={cn(
                   'flex size-5 items-center justify-center rounded-full border text-[11px] [&_svg]:size-3',
-                  st === 'done' ? 'border-studio-success bg-studio-success text-studio-accent-fg' : 'border-studio-border-strong',
+                  st === 'done' ? 'border-studio-success bg-studio-success text-studio-accent-fg' : st === 'review' ? 'border-studio-accent bg-studio-accent text-studio-accent-fg' : 'border-studio-border-strong',
                 )}
               >
                 {st === 'done' ? <Check /> : st === 'busy' ? <Loader2 className="animate-spin" /> : i + 1}
               </span>
               {s.label}
+              {st === 'review' && <span aria-hidden className="text-[11px] text-studio-accent-hover">needs your OK</span>}
               <span className="sr-only">, {STATE_TEXT[st]}</span>
             </button>
           )

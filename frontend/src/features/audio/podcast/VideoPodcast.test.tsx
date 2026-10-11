@@ -218,6 +218,38 @@ describe('AI video podcast', { timeout: 20_000 }, () => {
     await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/continue')).toHaveLength(1))
   })
 
+  it('says what a later step is waiting for, and Next approves a review instead of only moving on', async () => {
+    const vp = vpOf('cast', { review: 'hosts', status: 'review' })
+    vp.stages[0].status = 'review'
+    const calls = api(vp)
+    renderAt('/audio/podcast/e1/video', routes)
+    const user = userEvent.setup()
+    expect(await screen.findByRole('tab', { name: /Hosts, needs your OK/ })).toBeInTheDocument()
+
+    // looking ahead at the set: it explains the wait and offers the approval right there
+    await user.click(screen.getByRole('tab', { name: /^Set/ }))
+    const gate = screen.getByRole('region', { name: 'What this step is waiting for' })
+    expect(gate).toHaveTextContent('The host portraits are waiting for your OK. Approve them and the set is made next.')
+    await user.click(within(gate).getByRole('button', { name: 'Approve the host portraits and continue' }))
+    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/continue')).toHaveLength(1))
+
+    await user.click(screen.getByRole('tab', { name: /^Hosts/ }))
+    await user.click(screen.getByRole('button', { name: 'Approve and continue to Set' }))
+    await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/continue')).toHaveLength(2))
+    expect(screen.getByRole('tab', { name: /^Set/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('points a later step back to where to start', async () => {
+    api(vpOf('cast'))
+    renderAt('/audio/podcast/e1/video', routes)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('tab', { name: /^Look/ }))
+    const gate = screen.getByRole('region', { name: 'What this step is waiting for' })
+    expect(gate).toHaveTextContent('The camera angles come after the host portraits. Start there.')
+    await user.click(within(gate).getByRole('button', { name: 'Go to Hosts' }))
+    expect(screen.getByRole('tab', { name: /^Hosts/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('needs a name and the consent tick before a photo is used', async () => {
     const calls = api(vpOf('cast'))
     renderAt('/audio/podcast/e1/video', routes)

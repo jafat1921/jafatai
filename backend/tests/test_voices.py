@@ -279,6 +279,20 @@ def test_speak_with_voices_and_engines(client, tmp_path, fast_driver):
     _run_all(fast_driver)
 
 
+def test_cloned_speech_shows_in_the_library_list_as_speech(client, tmp_path, fast_driver):
+    # the Speak page keeps only items whose params say speech; the list used to carry no params
+    v = clone(client, tmp_path).json()
+    r = speak(client, voice_id=v["id"], text="My own voice", language="ur", seed=7)
+    assert r.status_code == 202, r.text
+    _run_all(fast_driver)
+    listed = client.get("/api/media", params={"kind": "audio", "origin": "generated"}).json()["items"]
+    take = next(m for m in listed if m["id"] == r.json()["items"][0]["id"])
+    assert take["status"] == "ready" and take["media_url"]
+    p = take["params"]
+    assert p["kind"] == "speech" and p["voice_id"] == v["id"] and p["seed"] == 7
+    assert "created_by" not in p and "ref_file" not in p["voice"]
+
+
 def test_urdu_speech_gets_aerab(client, llm, fast_driver):
     fake = llm(lambda x: x.replace("دل", "دِل"))
     r = speak(client, text=f"{PLAIN} [pause 0.5s] [sigh]", language="ur")

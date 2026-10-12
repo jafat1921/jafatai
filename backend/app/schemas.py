@@ -683,6 +683,8 @@ class MediaItemOut(BaseModel):
     duplicate: bool = False
     # audio, once analysed (contract v15): {lufs_i, true_peak_db, flags} for the quality badges
     analysis: dict[str, Any] | None = None
+    # what made the current version (kind, engine, voice, text…), so pages can tell speech from songs
+    params: dict[str, Any] | None = None
 
 
 class UpscaleRowOut(BaseModel):

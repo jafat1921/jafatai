@@ -66,6 +66,8 @@ Each row: `{id, label, features, languages: [{code, name}], licence, default_for
 
 The result is a Library audio item, `kind: "audio"` with generation kind `speech`. Its `params` record `{engine, voice_id, language, text, text_spoken}`, where `text_spoken` is the text after aerab and tags.
 
+Every media item (`GET /media`, the speak response) carries its current version's `params`, minus `created_by` and the voice's `ref_file`, with the `seed` added. Speak lists only items whose `params.kind` is `speech`; the song, music and SFX pages filter on the same field.
+
 Errors are 422 with a readable message, for example a language the engine doesn't speak ("Chatterbox doesn't speak Urdu. Use OmniVoice."), a `clone` voice used with an engine without `clone`, or a missing voice.
 
 ## Design preview

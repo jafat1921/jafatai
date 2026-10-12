@@ -183,8 +183,21 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
             shutter_s=i.shutter_s, iso=i.iso, original_name=i.original_name, bytes=i.bytes,
             source_type=i.source_type, edited=counts.get(i.id, 1) > 1, album_ids=albums.get(i.id, []),
             analysis=audio_summary(g) if i.kind == "audio" else None,
+            params=public_params(g),
         ))
     return out
+
+
+def public_params(g: Generation | None) -> dict | None:
+    if g is None or not g.params:
+        return None
+    p = {k: v for k, v in g.params.items() if k != "created_by"}
+    if isinstance(p.get("voice"), dict):
+        # the reference clip's server path stays on the server
+        p["voice"] = {k: v for k, v in p["voice"].items() if k != "ref_file"}
+    if g.seed is not None:
+        p.setdefault("seed", g.seed)
+    return p
 
 
 def item_out(db: Session, item: MediaItem) -> MediaItemOut:

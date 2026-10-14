@@ -10,6 +10,35 @@ export interface User {
   display_name: string
   workspace_id: string
   role: Role
+  // contract v27: Settings shows API tokens / the docs open for this user (admin only while PUBLIC_API is off)
+  api_access?: boolean
+  api_docs?: boolean
+}
+
+// contract v27
+export type TokenScope = 'read' | 'generate' | 'manage'
+export type TokenExpiry = 30 | 90 | 365 | null
+
+export interface ApiToken {
+  id: string
+  name: string
+  prefix: string
+  scopes: TokenScope[]
+  status: 'active' | 'expired' | 'revoked'
+  expires_at: string | null
+  last_used_at: string | null
+  revoked_at: string | null
+  created_at: string
+}
+
+export interface ApiTokenCreated extends ApiToken {
+  token: string
+}
+
+export interface ApiTokenCreate {
+  name: string
+  scopes: TokenScope[]
+  expires_days: TokenExpiry
 }
 
 export interface SystemStatus {

@@ -12,6 +12,7 @@ from app.schemas import (BoardIn, CastLinkIn, CharacterCreate, CharacterFromPhot
                          CharacterVoiceDesignIn, CharacterVoiceDesignOut, GenerationOut, JobOut, OwnImageIn,
                          PanelRegenerateIn, PhotoConsent, SheetCropsIn, SheetIn, SheetPatch, TestClipIn, TestClipOut,
                          VoiceOut)
+from app.openapi import multipart
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import character_out, enqueue_generation, gen_out, generation_file, get_owned, job_out
 
@@ -143,7 +144,8 @@ def create_from_photo(body: CharacterFromPhoto, db: Session = Depends(get_db),
     return character_out(db, c, films=True)
 
 
-@router.post("/characters/import", response_model=CharacterOut, status_code=201)
+@router.post("/characters/import", response_model=CharacterOut, status_code=201,
+             openapi_extra=multipart(file_help="A character pack .zip exported from Character Studio"))
 async def import_pack(request: Request, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     c = await character_pack.receive_and_import(request, db, cur)
     return character_out(db, c, films=True)

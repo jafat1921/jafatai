@@ -741,6 +741,22 @@ class VideoPodcast(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class ApiToken(Base):
+    """Personal access tokens (contract v27). Only the sha256 of the secret is kept; the prefix finds the row."""
+    __tablename__ = "api_token"
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    workspace_id: Mapped[str] = _ws()
+    name: Mapped[str] = mapped_column(String(120))
+    prefix: Mapped[str] = mapped_column(String(16), unique=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    scopes: Mapped[list] = mapped_column(JSON, default=list)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

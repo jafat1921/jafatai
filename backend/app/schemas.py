@@ -61,6 +61,38 @@ class UserOut(Out):
     display_name: str
     workspace_id: str
     role: str
+    # contract v27: whether Settings shows API tokens, and whether /api/docs opens for this user
+    api_access: bool = False
+    api_docs: bool = False
+
+
+# API tokens (contract v27)
+TokenScope = Literal["read", "generate", "manage"]
+
+
+class TokenIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120, description="Shown in the token list, e.g. the script using it",
+                      examples=["Nightly renders"])
+    scopes: list[TokenScope] = Field(min_length=1, max_length=3, examples=[["read", "generate"]],
+                                     description="read = GET, generate = POST/PUT/PATCH, manage = DELETE")
+    expires_days: Literal[30, 90, 365] | None = Field(90, description="Days until it stops working; null = never")
+
+
+class TokenOut(Out):
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    status: Literal["active", "expired", "revoked"]
+    expires_at: Utc | None = None
+    last_used_at: Utc | None = None
+    revoked_at: Utc | None = None
+    created_at: Utc
+
+
+class TokenCreatedOut(TokenOut):
+    # the only time the full token is ever sent
+    token: str
 
 
 # projects
@@ -250,9 +282,14 @@ ProfileText = Annotated[str, Field(max_length=300)]
 
 
 class CharacterCreate(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "name": "Maya", "description": "A marine biologist in her thirties, short grey hair, weathered wetsuit",
+        "profile": {"age": "34", "gender": "female", "nationality": "British"}}]})
+
     name: str = Field(min_length=1, max_length=200)
-    description: str = ""
-    profile: dict[str, ProfileText] | None = None
+    description: str = Field("", description="Looks, clothes, manner. The portrait and sheet prompts start here")
+    profile: dict[str, ProfileText] | None = Field(None, description="Identity fields: age, gender, role, accent, "
+                                                                     "height, languages...")
 
 
 class CharacterPatch(BaseModel):
@@ -302,12 +339,16 @@ class CastLinkIn(BaseModel):
 
 
 class SheetIn(BaseModel):
-    preset: Literal["essential", "full", "custom"] = "essential"
-    # custom only: section -> panel count (snapped down to what the section allows)
-    counts: dict[str, int] | None = None
-    # named items: outfits (3), details (4), props (3), accessories (6); not used by essential
-    lists: dict[str, list[Annotated[str, Field(max_length=120)]]] | None = None
-    backdrop: Literal["grey", "dark"] | None = None
+    model_config = ConfigDict(json_schema_extra={"examples": [{"preset": "essential", "backdrop": "grey"}]})
+
+    preset: Literal["essential", "full", "custom"] = Field(
+        "essential", description="essential is about 10 panels (a few minutes); full about 30 (15-20 minutes); "
+                                 "custom takes `counts`. Needs an approved portrait first")
+    counts: dict[str, int] | None = Field(None, description="custom only: section -> panel count, snapped down "
+                                                            "to what the section allows. See /api/character-sheet/catalogue")
+    lists: dict[str, list[Annotated[str, Field(max_length=120)]]] | None = Field(
+        None, description="Named items: outfits (3), details (4), props (3), accessories (6). Not used by essential")
+    backdrop: Literal["grey", "dark"] | None = Field(None, description="One backdrop for every panel")
 
 
 class SheetPatch(BaseModel):
@@ -719,18 +760,20 @@ class ReelEstimateOut(BaseModel):
 
 # Upscale (contract v4)
 class UpscaleIn(BaseModel):
-    # videos: best|fast|quick (None = UPSCALE_DEFAULT_ENGINE); images: redraw|quick|best (None = redraw).
-    # Engine names (seedvr2, flashvsr, esrgan, zimage) are accepted as aliases.
+    model_config = ConfigDict(json_schema_extra={"examples": [{"engine": "best", "target": "1080p"},
+                                                              {"engine": "redraw", "target": "2x"}]})
+
+    # engine names (seedvr2, flashvsr, esrgan, zimage) are accepted as aliases
     engine: Literal["best", "fast", "quick", "redraw", "faithful", "seedvr2", "flashvsr", "esrgan", "zimage", "anime",
-                    "cartoon"] | None = None
-    # videos take 1080p|1440p|4k (default 1080p), images 2x|4x|2k|4k (default 2x)
-    target: Literal["1080p", "1440p", "4k", "2x", "4x", "2k"] | None = None
-    # SeedVR2 size, engine "best" only; None = UPSCALE_SEEDVR2_MODEL
-    variant: Literal["3b", "7b"] | None = None
-    # image "redraw" only: how much Z-Image may repaint (detail strength)
-    denoise: float | None = Field(None, ge=0.15, le=0.5)
-    # image "redraw" only: overrides the source's own prompt
-    prompt: str | None = Field(None, max_length=4000)
+                    "cartoon"] | None = Field(None, description="Videos: best, fast or quick (empty = the server "
+                                                                "default). Images: redraw, faithful, quick, anime "
+                                                                "or cartoon (empty = redraw)")
+    target: Literal["1080p", "1440p", "4k", "2x", "4x", "2k"] | None = Field(
+        None, description="Videos: 1080p, 1440p or 4k (default 1080p). Images: 2x, 4x, 2k or 4k (default 2x)")
+    variant: Literal["3b", "7b"] | None = Field(None, description="SeedVR2 size, video engine best only; 7b is "
+                                                                  "about twice as slow")
+    denoise: float | None = Field(None, ge=0.15, le=0.5, description="Image redraw only: how much may be repainted")
+    prompt: str | None = Field(None, max_length=4000, description="Image redraw only: replaces the source's prompt")
 
 
 # Media library, Image studio, Templates, Dashboard (contract v5)
@@ -829,63 +872,92 @@ class MediaPatch(BaseModel):
 MagicMode = Literal["auto", "on", "off"]
 
 
+# shared wording for the generation request fields below (contract v27 docs)
+_SEED = "Fixed seed for repeatable results; with count > 1 each picture adds 1"
+_MODEL = "A catalog model id from GET /api/models, or auto. Empty uses the default for the kind"
+_MAGIC = "auto, on or off: let the local LLM expand a short prompt first. Empty uses the server default"
+_FOLDER = "A Library folder id the new items are filed in"
+
+
 class ImageGenerateIn(BaseModel):
-    prompt: str = Field(min_length=1, max_length=4000)
-    negative: str | None = Field(None, max_length=2000)
-    aspect: ImageAspect = "1:1"
-    count: int = Field(1, ge=1, le=4)
-    style: str | None = None
-    seed: int | None = Field(None, ge=0, le=2**31 - 1)
-    steps: int | None = Field(None, ge=1, le=60)
-    template_id: str | None = None
-    title: str | None = Field(None, max_length=300)
-    model: str | None = Field(None, max_length=60)  # catalog id (contract v6); default Z-Image Turbo
-    speed: str | None = Field(None, max_length=30)
-    brand_kit_id: str | None = None  # contract v7: palette/look in the prompt, brand pass on the result
-    magic_prompt: MagicMode | None = None  # None: settings.magic_prompt_default
-    prompt_enhanced: bool = False  # the dock already ran /prompts/enhance; don't do it again
-    folder_id: str | None = None  # polish P4 "Generate into…": the new items land in this folder
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "prompt": "A lighthouse on a cliff at dusk, storm clouds, warm window light", "aspect": "16:9", "count": 2}]})
+
+    prompt: str = Field(min_length=1, max_length=4000, description="What to draw. @mentions of Library pictures "
+                                                                   "turn it into a reference-guided composition")
+    negative: str | None = Field(None, max_length=2000, description="Things to keep out of the picture")
+    aspect: ImageAspect = Field("1:1", description="Output shape, about 1 megapixel")
+    count: int = Field(1, ge=1, le=4, description="Pictures to make; one job each")
+    style: str | None = Field(None, description="A style id from GET /api/images/options")
+    seed: int | None = Field(None, ge=0, le=2**31 - 1, description=_SEED)
+    steps: int | None = Field(None, ge=1, le=60, description="Sampler steps; empty uses the model's own")
+    template_id: str | None = Field(None, description="The prompt template this came from, kept for the record")
+    title: str | None = Field(None, max_length=300, description="Library title; empty makes one from the prompt")
+    model: str | None = Field(None, max_length=60, description=_MODEL)  # contract v6; default Z-Image Turbo
+    speed: str | None = Field(None, max_length=30, description="A speed id the chosen model lists")
+    # contract v7: palette/look in the prompt, brand pass on the result
+    brand_kit_id: str | None = Field(None, description="Apply a brand kit's palette and look")
+    magic_prompt: MagicMode | None = Field(None, description=_MAGIC)
+    # the dock already ran /prompts/enhance; don't do it again
+    prompt_enhanced: bool = Field(False, description="The prompt was already enhanced; skip that step")
+    folder_id: str | None = Field(None, description=_FOLDER)  # polish P4 "Generate into…"
 
 
 class ImageEditIn(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "source_ids": ["3f2a9c1e-0000-4000-8000-000000000000"], "instruction": "Make it night, keep the lighthouse"}]})
+
     # the catalog's max_refs is checked in the route, so the message names the model
-    source_ids: list[str] = Field(min_length=1, max_length=8)
-    instruction: str = Field(min_length=1, max_length=4000)
-    aspect: ImageAspect | None = None
+    source_ids: list[str] = Field(min_length=1, max_length=8, description="Library item or generation ids of "
+                                                                         "finished images; the first is edited")
+    instruction: str = Field(min_length=1, max_length=4000, description="What to change")
+    aspect: ImageAspect | None = Field(None, description="Empty keeps the first picture's shape")
     count: int = Field(1, ge=1, le=4)
-    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1, description=_SEED)
     title: str | None = Field(None, max_length=300)
-    model: str | None = Field(None, max_length=60)
-    brand_kit_id: str | None = None  # contract v7: also adds product refs while there's room
-    folder_id: str | None = None  # polish P4 "Generate into…": the new items land in this folder
+    model: str | None = Field(None, max_length=60, description=_MODEL)
+    brand_kit_id: str | None = Field(None, description="Also adds the kit's product pictures while there's room")
+    folder_id: str | None = Field(None, description=_FOLDER)
 
 
 VideoAspect = Literal["16:9", "9:16", "1:1", "4:3", "2.39:1"]
 
 
 class VideoGenerateIn(BaseModel):
-    prompt: str = Field(min_length=1, max_length=4000)
-    model: str | None = Field(None, max_length=60)
-    duration_s: float = Field(5.0, ge=1)
-    aspect: VideoAspect | None = None  # None: the start image's shape (nearest supported), else 16:9
-    image_id: str | None = None
-    end_image_id: str | None = None  # first+last frame (LTX "flf"); needs image_id
-    seed: int | None = Field(None, ge=0, le=2**31 - 1)
-    smooth_motion: bool = False
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "prompt": "Waves crash against the lighthouse, slow push in", "duration_s": 5, "aspect": "16:9"}]})
+
+    prompt: str = Field(min_length=1, max_length=4000, description="The scene and its motion")
+    model: str | None = Field(None, max_length=60, description=_MODEL)
+    duration_s: float = Field(5.0, ge=1, description="Seconds. Past one model pass it renders as a long take in "
+                                                     "chunks, up to the server's LONGTAKE_MAX_S")
+    # None: the start image's shape (nearest supported), else 16:9
+    aspect: VideoAspect | None = Field(None, description="Empty: the start image's shape, else 16:9")
+    image_id: str | None = Field(None, description="Start frame: a Library image or generation id")
+    # first+last frame (LTX "flf")
+    end_image_id: str | None = Field(None, description="Last frame; needs image_id")
+    seed: int | None = Field(None, ge=0, le=2**31 - 1, description=_SEED)
+    smooth_motion: bool = Field(False, description="Interpolate to a higher frame rate after rendering")
     negative: str | None = Field(None, max_length=2000)
     title: str | None = Field(None, max_length=300)
     brand_kit_id: str | None = None  # contract v7
-    magic_prompt: MagicMode | None = None
+    magic_prompt: MagicMode | None = Field(None, description=_MAGIC)
     prompt_enhanced: bool = False
-    quality: Literal["standard", "hq"] | None = None  # only read with model "auto"
-    camera: Camera | None = None  # polish P2: written into the motion prompt
-    folder_id: str | None = None  # polish P4 "Generate into…": the new items land in this folder
+    quality: Literal["standard", "hq"] | None = Field(None, description="Only read when model is auto")
+    # polish P2
+    camera: Camera | None = Field(None, description="Shot size, angle and move, written into the motion prompt")
+    folder_id: str | None = Field(None, description=_FOLDER)
 
 
 class Img2ImgIn(BaseModel):
-    source_id: str  # a Library item (uploads too) or a finished image generation id
-    prompt: str = Field(min_length=1, max_length=4000)
-    strength: float = Field(0.45, ge=0.1, le=0.9)
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "source_id": "3f2a9c1e-0000-4000-8000-000000000000", "prompt": "Oil painting, thick brush strokes",
+        "strength": 0.5}]})
+
+    source_id: str = Field(description="A Library item (uploads too) or a finished image generation id")
+    prompt: str = Field(min_length=1, max_length=4000, description="The picture you want")
+    strength: float = Field(0.45, ge=0.1, le=0.9, description="How far it may move from the source: low keeps the "
+                                                              "layout, high keeps little more than the colours")
     model: str | None = Field(None, max_length=60)
     speed: str | None = Field(None, max_length=30)
     count: int = Field(1, ge=1, le=4)
@@ -916,20 +988,26 @@ AudioKind = Literal["song", "music", "sfx"]
 
 
 class AudioGenerateIn(BaseModel):
-    kind: AudioKind
-    prompt: str = Field(min_length=1, max_length=2000)
-    lyrics: str = Field("", max_length=6000)
+    model_config = ConfigDict(json_schema_extra={"examples": [
+        {"kind": "song", "prompt": "warm acoustic folk, female vocal", "lyrics": "[verse]\nSalt on the window",
+         "duration_s": 60},
+        {"kind": "sfx", "prompt": "a heavy wooden door creaks open", "duration_s": 4}]})
+
+    kind: AudioKind = Field(description="song (with lyrics), music (instrumental) or sfx")
+    prompt: str = Field(min_length=1, max_length=2000, description="Genre, mood, instruments; for sfx the sound")
+    lyrics: str = Field("", max_length=6000, description="Songs: [verse] / [chorus] sections. "
+                                                         "POST /api/audio/lyrics can write them")
     # ISO 639-1, plus "ur-latn" for Roman Urdu; ACE-Step reads anything it doesn't know as "unknown"
     language: str = Field("en", min_length=2, max_length=12, pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$")
     vocal: Literal["male", "female", "duet", "none"] | None = None
     bpm: int | None = Field(None, ge=40, le=220)
     category: Literal["music", "instrument", "loop", "sfx", "oneshot"] | None = None
-    duration_s: float = Field(30.0, ge=1, le=380)
-    model: str | None = Field(None, max_length=60)
+    duration_s: float = Field(30.0, ge=1, le=380, description="Seconds")
+    model: str | None = Field(None, max_length=60, description=_MODEL)
     count: int = Field(1, ge=1, le=4)
-    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1, description=_SEED)
     steps: int | None = Field(None, ge=1, le=100)
-    timbre_ref_id: str | None = None
+    timbre_ref_id: str | None = Field(None, description="A Library audio item whose sound the result takes on")
     # Arabic-script songs (Urdu, Arabic, Persian...): add the vowel marks to unmarked lines before singing
     aerab: bool = True
     # ACE-Step only: musical key, metre, how closely to follow the tags, and the planning LM
@@ -1284,14 +1362,19 @@ class SpeakDesignIn(BaseModel):
 
 
 class SpeakIn(BaseModel):
-    text: str = Field(min_length=1, max_length=5000)
-    voice_id: str | None = None
-    design: SpeakDesignIn | None = None
-    engine: str = Field("auto", max_length=20)
-    language: LangCode | None = None
-    aerab: bool = True
+    model_config = ConfigDict(json_schema_extra={"examples": [
+        {"text": "Welcome back to the studio.", "voice_id": "gallery:bm_george", "language": "en"}]})
+
+    text: str = Field(min_length=1, max_length=5000, description="What to say")
+    voice_id: str | None = Field(None, description="A voice from GET /api/voices, or gallery:<id> from "
+                                                   "GET /api/voices/gallery. Give this or `design`")
+    design: SpeakDesignIn | None = Field(None, description="Describe a new voice instead of picking one")
+    engine: str = Field("auto", max_length=20, description="auto, or an engine id from GET /api/voices/engines")
+    language: LangCode | None = Field(None, description="ISO 639-1; empty uses the voice's language")
+    aerab: bool = Field(True, description="Urdu, Arabic, Persian...: add the vowel marks before speaking")
     speed: float = Field(1.0, ge=0.5, le=2.0)
-    duration_s: float | None = Field(None, ge=0.5, le=600)
+    duration_s: float | None = Field(None, ge=0.5, le=600, description="Fit the speech to this length when the "
+                                                                       "engine can")
     steps: int | None = Field(None, ge=1, le=100)
     guidance: float | None = Field(None, ge=0, le=10)
     denoise: bool | None = None

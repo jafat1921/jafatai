@@ -400,6 +400,26 @@ class SmartRestoreIn(BaseModel):
     steps: list[SmartStep] = Field(min_length=1, max_length=12)
 
 
+class SmartRestoreQueued(BaseModel):
+    chain_id: str
+    steps: list[dict[str, Any]] = Field(description="The steps that will run, in order")
+    first_job_id: str = Field(description="Each step queues the next when it finishes; poll this one first")
+
+
+class HistogramOut(BaseModel):
+    r: list[float] = Field(description="256 bins, scaled so the tallest bin of any channel is 1")
+    g: list[float]
+    b: list[float]
+    luma: list[float]
+    clipped: dict[str, float] = Field(description="Share of pixels clipped in the shadows and highlights (0-1)")
+
+
+class AutoOut(BaseModel):
+    params: dict[str, Any] = Field(description="Develop params to apply; nothing is saved")
+    analysis: dict[str, Any]
+    notes: list[Any]
+
+
 class Background(_Loose):
     type: Literal["transparent", "colour", "image", "blur", "generated"] = "transparent"
     colour: str | None = Field(None, max_length=9)

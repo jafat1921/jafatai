@@ -2,6 +2,7 @@ import type { GenerationKind, MediaQuery, ModelType, TargetType, TemplateType, V
 
 export const qk = {
   me: ['me'] as const,
+  tokens: ['api-tokens'] as const,
   system: ['system-status'] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['projects', id] as const,

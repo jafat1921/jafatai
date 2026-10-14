@@ -1,10 +1,10 @@
 """Request bodies for Dub a video and Transcribe (contract v18). Responses are plain dicts built by
 app.dub.project.dub_out / app.transcripts.transcript_out: segments are free-form JSON rows."""
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas import LangCode
+from app.schemas import JobOut, LangCode
 
 Fit = Literal["smart", "stretch", "strict"]
 
@@ -93,10 +93,31 @@ class DubExportIn(BaseModel):
 
 
 class TranscribeIn(BaseModel):
-    media_id: str
-    language: str | None = Field(None, max_length=12)
-    words: bool = True
-    cleanup: bool = False
+    media_id: str = Field(description="A Library audio or video item", examples=["3f2a9c1e-0000-4000-8000-000000000000"])
+    language: str | None = Field(None, max_length=12, examples=["en"],
+                                 description="ISO 639-1 code of the speech; null detects it")
+    words: bool = Field(True, description="Keep word-level timings (karaoke subtitles, precise cuts)")
+    cleanup: bool = Field(False, description="Queue an LLM pass afterwards that fixes punctuation and fillers")
+
+
+class TranscribeQueued(BaseModel):
+    transcript_id: str = Field(description="GET /api/transcripts/{transcript_id} once the job is done")
+    job: JobOut
+
+
+class DubOut(BaseModel):
+    """The main fields of a dub project; the review data (speakers, segments, tracks) rides along as is."""
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    title: str
+    video_id: str
+    source_language: str | None = None
+    targets: list[str]
+    stage: str = Field(description="The pipeline stage it's at: extract, separate, transcribe, speakers, translate, "
+                                   "cast, render, fit, verify, mix")
+    stages: dict[str, Any]
+    job: JobOut | None = Field(None, description="The job working on the current stage")
 
 
 class TranscriptVideoIn(BaseModel):

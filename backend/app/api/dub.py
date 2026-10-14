@@ -10,7 +10,7 @@ from app import library as lib
 from app import transcripts as tr
 from app.db import get_db
 from app.dub import project as pj
-from app.dub.schemas import DubExportIn, DubIn, DubPatch, MergeIn, RegenIn, SplitIn
+from app.dub.schemas import DubExportIn, DubIn, DubOut, DubPatch, MergeIn, RegenIn, SplitIn
 from app.models import DubProject, Generation, Job, new_id
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import get_owned, job_out, new_seed, next_version
@@ -22,7 +22,7 @@ def _owned(db: Session, cur: CurrentUser, dub_id: str) -> DubProject:
     return get_owned(db, DubProject, dub_id, cur.workspace_id, "Dub")
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=202, response_model=DubOut)
 def create_dub(body: DubIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     item, g = tr.media_source(db, cur.workspace_id, body.video_id, video_only=True)
     settings = {**pj.DEFAULT_SETTINGS, **(body.settings.model_dump(exclude_none=True) if body.settings else {}),

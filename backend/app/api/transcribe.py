@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app import library as lib
 from app import transcripts as tr
 from app.db import get_db
-from app.dub.schemas import TranscribeIn, TranscriptVideoIn
+from app.dub.schemas import TranscribeIn, TranscribeQueued, TranscriptVideoIn
 from app.models import Job, Transcript
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import get_owned, job_out
@@ -30,7 +30,7 @@ def _out(db: Session, t: Transcript) -> dict:
     return out
 
 
-@router.post("/transcribe", status_code=202)
+@router.post("/transcribe", status_code=202, response_model=TranscribeQueued)
 def transcribe(body: TranscribeIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     t, job = tr.queue_transcribe(db, cur.workspace_id, body.media_id, body.language, body.words, body.cleanup)
     db.commit()

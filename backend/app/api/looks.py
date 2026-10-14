@@ -11,6 +11,7 @@ from app.photo import develop as dv
 from app.photo import looks as lk
 from app.photo.schemas import ApplyVideoIn, ImportOut, LookIn, LookOut, LookPatch
 from app.schemas import JobOut
+from app.openapi import multipart
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import job_out, owned_source
 
@@ -35,7 +36,8 @@ def create_look(body: LookIn, db: Session = Depends(get_db), cur: CurrentUser = 
     return lk.look_out(look)
 
 
-@router.post("/import", response_model=ImportOut, status_code=201)
+@router.post("/import", response_model=ImportOut, status_code=201,
+             openapi_extra=multipart(file_help="One or more .xmp, .lrtemplate or .cube files", many=True))
 async def import_looks(request: Request, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     form = await request.form(max_files=lk.MAX_IMPORT_FILES + 5)
     files = []

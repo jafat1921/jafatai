@@ -22,6 +22,7 @@ from app.brand_schemas import (
 from app.db import get_db
 from app.models import BrandKit, Generation, MediaItem, Project, utcnow
 from app.schemas import JobOut, MediaItemOut
+from app.openapi import multipart
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import generation_file, get_owned, job_out, media_url, owned_source
 
@@ -167,7 +168,8 @@ def set_default(kit_id: str, db: Session = Depends(get_db), cur: CurrentUser = D
 
 # ---------------------------------------------------------------- assets
 
-@router.post("/brand-kits/assets", response_model=BrandUploadOut, status_code=201)
+@router.post("/brand-kits/assets", response_model=BrandUploadOut, status_code=201,
+             openapi_extra=multipart(file_help="A logo, font, product shot or reference picture"))
 async def upload_asset(request: Request, purpose: Literal["logo", "font", "product", "reference"],
                        db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     folder, rel_folder = lib.media_dir(cur.workspace_id)

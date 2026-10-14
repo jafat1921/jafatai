@@ -214,6 +214,11 @@ export const shellRoutes: RouteObject[] = [
     const { SettingsPage } = await import('@/features/settings/SettingsPage')
     return <SettingsPage />
   }),
+  // contract v27: admin only while PUBLIC_API is off (the page sends anyone else back to Settings)
+  page('settings/api', async () => {
+    const { ApiTokensPage } = await import('@/features/settings/ApiTokensPage')
+    return <ApiTokensPage />
+  }),
 
   // Older addresses people have bookmarked
   { path: 'projects', element: <Navigate to="/video/projects" replace /> },

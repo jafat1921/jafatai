@@ -27,6 +27,13 @@ def list_jobs(
     return [job_out(j) for j in db.scalars(q).all()]
 
 
+@router.get("/{job_id}", response_model=JobOut, summary="Get one job",
+            description="Poll this after any 202 until `status` is `done` (or `failed` / `cancelled`). "
+                        "`progress` runs 0 to 1 and `message` says what the worker is doing.")
+def get_job(job_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    return job_out(get_owned(db, Job, job_id, cur.workspace_id, "Job"))
+
+
 @router.post("/{job_id}/cancel", response_model=JobOut)
 def cancel_job(job_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     job = get_owned(db, Job, job_id, cur.workspace_id, "Job")

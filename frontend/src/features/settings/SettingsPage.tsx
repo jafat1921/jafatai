@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router'
-import { LogOut } from 'lucide-react'
+import { Link, useNavigate } from 'react-router'
+import { ChevronRight, KeyRound, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useLogout, useMe } from '@/hooks/useAuth'
@@ -45,7 +45,25 @@ function AccountCard() {
   )
 }
 
+// contract v27: only rendered for users the server lets near the API (the admin while PUBLIC_API is off)
+function ApiCard() {
+  return (
+    <Card title="API">
+      <p className="text-body text-studio-muted">Tokens for your own scripts and tools, and the API reference.</p>
+      <Link
+        to="/settings/api"
+        className="flex items-center gap-3 self-start rounded-[6px] border border-studio-border-strong bg-studio-raised px-3 py-2 text-body font-medium hover:border-studio-border-hover hover:bg-studio-panel-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-studio-gold/50"
+      >
+        <KeyRound aria-hidden className="size-4 text-studio-accent" />
+        API tokens
+        <ChevronRight aria-hidden className="size-4 text-studio-muted" />
+      </Link>
+    </Card>
+  )
+}
+
 export function SettingsPage() {
+  const { data: me } = useMe()
   return (
     <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="settings-title">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 md:px-8">
@@ -60,6 +78,7 @@ export function SettingsPage() {
           <AccountCard />
           <LlmCard />
           <UpscaleCard />
+          {me?.api_access && <ApiCard />}
         </div>
         <TemplatesCard />
         {/* TODO: studio defaults (takes per shot, draft/final) once the backend stores per-user preferences */}

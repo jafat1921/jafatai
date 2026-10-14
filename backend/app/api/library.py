@@ -29,6 +29,7 @@ from app.schemas import (
     MediaPage,
     MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut, UpscalePage,
 )
+from app.openapi import multipart
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import enqueue_generation, job_out, new_seed, project_out
 
@@ -80,7 +81,17 @@ def _folder(db: Session, workspace_id: str, folder_id: str | None):
         raise HTTPException(404, str(e)) from None
 
 
-@router.post("/media/upload", response_model=MediaItemOut, status_code=201)
+UPLOAD_DOC = multipart({
+    "title": "Optional title (defaults to the file name)",
+    "album_id": "Optional photo album to file it in",
+    "on_duplicate": "skip (default) answers 200 with the existing item; keep stores it again",
+}, file_help="An image, video or audio file. Large videos stream; nothing is buffered in memory")
+
+
+@router.post("/media/upload", response_model=MediaItemOut, status_code=201, openapi_extra=UPLOAD_DOC,
+             summary="Upload a file to the Library",
+             description="multipart/form-data with one `file` part. 201 with the new item, or 200 with "
+                         "`duplicate: true` when the same file is already in the Library.")
 async def upload_media(request: Request, response: Response, db: Session = Depends(get_db),
                        cur: CurrentUser = Depends(require_editor)):
     from app.catalogue import importer

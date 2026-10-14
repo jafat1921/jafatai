@@ -240,7 +240,7 @@ async def _ping(role: str, present: set[str]) -> dict:
     return out
 
 
-@router.get("/system/llm-check")
+@router.get("/system/llm-check", include_in_schema=False)
 async def llm_check(ping: bool = True, _=Depends(get_current_user)):
     s = get_settings()
     report: dict = {"url": server_root(), "reasoning_format": s.llm_reasoning_format, "roles": {}}

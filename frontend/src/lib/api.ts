@@ -61,6 +61,9 @@ import type {
   UpscaleOptions,
   UpscaleRequest,
   User,
+  ApiToken,
+  ApiTokenCreate,
+  ApiTokenCreated,
   ComfyCheck,
   Dashboard,
   ImageEditRequest,
@@ -322,6 +325,12 @@ export const api = {
     me: () => get<User>('/auth/me'),
     // dev-only prefill; the server answers {enabled:false} anywhere but a local dev run
     devLogin: () => get<{ enabled: boolean; email?: string; password?: string }>('/auth/dev-login'),
+  },
+  // contract v27: browser session only; the server refuses these with a token
+  tokens: {
+    list: () => get<ApiToken[]>('/tokens'),
+    create: (body: ApiTokenCreate) => post<ApiTokenCreated>('/tokens', body),
+    revoke: (id: string) => del(`/tokens/${id}`),
   },
   system: {
     status: () => get<SystemStatus>('/system/status'),

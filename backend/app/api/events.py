@@ -4,7 +4,7 @@ import json
 import time
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -14,7 +14,7 @@ from app import storyboard as sb
 from app.library import items_out
 from app.models import Generation, Job, MediaItem, Shot, utcnow
 from app.reel import reel_events
-from app.security import COOKIE_NAME, load_current, read_session_token
+from app.security import authenticate
 from app.services import gen_out, job_out
 
 router = APIRouter(tags=["events"])
@@ -98,15 +98,10 @@ def _parse_last_id(value: str | None) -> datetime | None:
 
 def _auth_workspace(request: Request) -> str:
     # not using the get_db dependency: its session would stay open (and pin a
-    # WAL snapshot) for as long as the stream lives
-    token = request.cookies.get(COOKIE_NAME)
-    uid = read_session_token(token) if token else None
+    # WAL snapshot) for as long as the stream lives. Cookie or Bearer token (read scope), like any GET
     db = SessionLocal()
     try:
-        cur = load_current(db, uid) if uid else None
-        if not cur:
-            raise HTTPException(401, "Not signed in")
-        return cur.workspace_id
+        return authenticate(db, request).workspace_id
     finally:
         db.close()
 

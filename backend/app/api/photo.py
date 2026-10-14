@@ -16,10 +16,11 @@ from app.photo import lut as lt
 from app.photo import service as svc
 from app.photo import restore as rs
 from app.photo import workflow as wf
-from app.photo.schemas import (BackgroundIn, CubeIn, DevelopParams, EffectIn, ParamsIn, PreviewIn, RenderIn,
-                                RestoreIn, SmartRestoreIn, SnapshotIn, SnapshotPatch, SyncIn, UprightIn)
+from app.photo.schemas import (AutoOut, BackgroundIn, CubeIn, DevelopParams, EffectIn, HistogramOut, ParamsIn,
+                                PreviewIn, RenderIn, RestoreIn, SmartRestoreIn, SmartRestoreQueued, SnapshotIn,
+                                SnapshotPatch, SyncIn, UprightIn)
 from app.schemas import JobOut
-from app.security import CurrentUser, get_current_user, require_editor
+from app.security import CurrentUser, get_current_user, require_editor, token_scope
 from app.services import job_out, owned_source
 
 router = APIRouter(prefix="/photo", tags=["photo"])
@@ -45,7 +46,9 @@ def schema(cur: CurrentUser = Depends(get_current_user)):
     }
 
 
+# these POSTs only look at the picture, so a read-only token may call them
 @router.post("/{gen_id}/preview", responses={200: {"content": {"image/jpeg": {}}}})
+@token_scope("read")
 async def preview(gen_id: str, body: PreviewIn, db: Session = Depends(get_db),
                   cur: CurrentUser = Depends(get_current_user)):
     g = _source(db, cur, gen_id)
@@ -65,14 +68,15 @@ def _params_from_query(raw: str | None) -> dict:
         raise HTTPException(422, f"params isn't valid develop params JSON: {str(e)[:200]}") from None
 
 
-@router.get("/{gen_id}/histogram")
+@router.get("/{gen_id}/histogram", response_model=HistogramOut)
 async def histogram_get(gen_id: str, params: str | None = Query(None, max_length=20000), db: Session = Depends(get_db),
                         cur: CurrentUser = Depends(get_current_user)):
     g = _source(db, cur, gen_id)
     return await run_in_threadpool(svc.histogram, db, g, _params_from_query(params))
 
 
-@router.post("/{gen_id}/histogram")
+@router.post("/{gen_id}/histogram", response_model=HistogramOut)
+@token_scope("read")
 async def histogram_post(gen_id: str, body: ParamsIn, db: Session = Depends(get_db),
                          cur: CurrentUser = Depends(get_current_user)):
     g = _source(db, cur, gen_id)
@@ -92,13 +96,15 @@ async def palette(gen_id: str, k: int = Query(8, ge=2, le=16), db: Session = Dep
     return {"clusters": await run_in_threadpool(svc.palette, g, k)}
 
 
-@router.post("/{gen_id}/auto")
+@router.post("/{gen_id}/auto", response_model=AutoOut)
+@token_scope("read")
 async def auto(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     g = _source(db, cur, gen_id)
     return await run_in_threadpool(svc.auto, g)
 
 
 @router.post("/{gen_id}/upright")
+@token_scope("read")
 async def upright(gen_id: str, body: UprightIn, db: Session = Depends(get_db),
                   cur: CurrentUser = Depends(get_current_user)):
     """Transform's Upright buttons and Crop's Auto straighten: measured on the source, not saved."""
@@ -184,7 +190,7 @@ async def smart_plan(gen_id: str, db: Session = Depends(get_db), cur: CurrentUse
     return await run_in_threadpool(rs.smart_plan, db, g, info, driver)
 
 
-@router.post("/{gen_id}/smart-restore", status_code=202)
+@router.post("/{gen_id}/smart-restore", status_code=202, response_model=SmartRestoreQueued)
 def smart_restore(gen_id: str, body: SmartRestoreIn, db: Session = Depends(get_db),
                   cur: CurrentUser = Depends(require_editor)):
     g = _source(db, cur, gen_id)

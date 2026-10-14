@@ -429,3 +429,18 @@ def test_0012_adds_photo_snapshot(tmp_path):
     assert "photo_snapshot" not in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0019_adds_api_token(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0019")
+    con = sqlite3.connect(db)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(api_token)")}
+    assert {"id", "user_id", "workspace_id", "name", "prefix", "token_hash", "scopes", "expires_at", "last_used_at",
+            "revoked_at", "created_at"} <= cols
+    con.close()
+    _alembic(db, "downgrade", "0018")
+    con = sqlite3.connect(db)
+    assert "api_token" not in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    con.close()
+    _alembic(db, "upgrade", "head")

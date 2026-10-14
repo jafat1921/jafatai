@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     dev_login_prefill: bool = True
     admin_name: str = "Admin"
 
+    # token API (contract v27). Off: only the ADMIN_EMAIL owner sees the token page and the docs, everyone else
+    # gets 404. On: owners and editors mint tokens and any signed-in user can read the docs
+    public_api: bool = False
+    api_docs: bool = True
+
     database_url: str = "sqlite:///./data/mixai.db"
     data_dir: Path = Path("./data")
 

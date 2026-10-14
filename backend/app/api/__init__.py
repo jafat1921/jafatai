@@ -8,6 +8,7 @@ from app.api import podcast
 from app.api import stems
 from app.api import video_podcast
 from app.api import tokens
+from app.api import files
 
 router = APIRouter(prefix="/api")
 for mod in (auth, system, projects, scenes, shots, characters, locations, generations, jobs, events, library, organise, media, ai, reel, quick, catalog, videos, audio, audio_edit, brands, prompts, mentions, photo, looks, photos, gallery, voices):
@@ -21,3 +22,5 @@ router.include_router(stems.router)
 router.include_router(video_podcast.router)
 router.include_router(audio.text_router)
 router.include_router(tokens.router, include_in_schema=False)
+# signed links handed out by the MCP server; not something to call by hand
+router.include_router(files.router, include_in_schema=False)

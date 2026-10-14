@@ -12,6 +12,7 @@ import { useMe } from '@/hooks/useAuth'
 import { useCreateToken, useRevokeToken, useTokens } from '@/hooks/useTokens'
 import type { ApiToken, ApiTokenCreated, TokenExpiry, TokenScope } from '@/lib/types'
 import { cn, timeAgo } from '@/lib/utils'
+import { ConnectClaudeCard } from './ConnectClaudeCard'
 import { Card } from './SystemChecks'
 
 const SCOPES: { id: TokenScope; label: string; hint: string }[] = [
@@ -275,6 +276,8 @@ function DocsCard() {
 export function ApiTokensPage() {
   const { data: me, isPending } = useMe()
   const [made, setMade] = useState<ApiTokenCreated | null>(null)
+  // outlives the copy-once dialog so the Claude setup can offer to fill it in; memory only, gone on leaving
+  const [fresh, setFresh] = useState<ApiTokenCreated | null>(null)
 
   if (isPending) return null
   // same as the server: while PUBLIC_API is off only the admin gets here
@@ -295,12 +298,14 @@ export function ApiTokensPage() {
         </div>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="flex flex-col gap-4">
-            <NewTokenCard onCreated={setMade} />
+            <NewTokenCard onCreated={(t) => (setMade(t), setFresh(t))} />
             {me.api_docs && <DocsCard />}
           </div>
-          <TokensCard />
+          <div className="flex flex-col gap-4">
+            <TokensCard />
+            <ConnectClaudeCard fresh={fresh} />
+          </div>
         </div>
-        {/* TODO: "Connect to Claude" (MCP) card goes in this column next, under the tokens it uses */}
       </div>
       <ShowOnceDialog made={made} onClose={() => setMade(null)} />
     </main>

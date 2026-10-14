@@ -142,4 +142,5 @@ Settings shows an **API** card (only when `api_access`) linking to `/settings/ap
   **Revoke** behind a confirm.
 - **API reference:** a link to `/api/docs` (only when `api_docs`).
 
-The left column is where the MCP "Connect to Claude" card goes next.
+- **Connect to Claude:** MCP setup snippets for Claude Code, Claude Desktop and other clients, under the token
+  list. The MCP server itself is described in `docs/api/mcp.md`.

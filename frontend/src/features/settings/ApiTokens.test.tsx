@@ -123,6 +123,46 @@ describe('Settings: API tokens', () => {
   })
 })
 
+describe('Settings: Connect to Claude', () => {
+  const origin = window.location.origin
+
+  it('gives Claude Code, Desktop and generic setup with a placeholder, never a real token', async () => {
+    const { user } = open(admin)
+    const card = await screen.findByRole('region', { name: 'Connect to Claude' })
+    expect(within(card).getByLabelText('Claude Code command')).toHaveTextContent(
+      `claude mcp add --transport http mixai ${origin}/api/mcp --header "Authorization: Bearer <your-token>"`,
+    )
+    // nothing was made on this page, so there's nothing to fill in
+    expect(within(card).queryByRole('checkbox')).toBeNull()
+
+    await user.click(within(card).getByRole('tab', { name: 'Claude Desktop' }))
+    const config = JSON.parse(within(card).getByLabelText('Claude Desktop config').textContent ?? '')
+    expect(config.mcpServers.mixai.args).toContain(`${origin}/api/mcp`)
+    expect(config.mcpServers.mixai.env.MIXAI_AUTH).toBe('Bearer <your-token>')
+
+    await user.click(within(card).getByRole('tab', { name: 'Other clients' }))
+    expect(within(card).getByLabelText('MCP server URL')).toHaveTextContent(`${origin}/api/mcp`)
+  })
+
+  it('can fill in the token made just now, only when asked', async () => {
+    const secret = 'mxa_a1b2c3d4_' + 'y'.repeat(43)
+    const { user } = open(admin, (method, path, body) => {
+      if (method === 'POST' && path === '/tokens') return { ...token('t9'), ...(body as object), token: secret }
+    })
+    await user.type(await screen.findByLabelText('Name'), 'Claude')
+    await user.click(screen.getByRole('button', { name: 'Create token' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Copy your token now' })
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    const card = screen.getByRole('region', { name: 'Connect to Claude' })
+    const command = within(card).getByLabelText('Claude Code command')
+    expect(command).not.toHaveTextContent(secret)
+    await user.click(within(card).getByRole('checkbox', { name: /Fill in “Claude”/ }))
+    expect(command).toHaveTextContent(`Bearer ${secret}`)
+  })
+})
+
 describe('Settings page: API entry', () => {
   const settings = (me: User) => {
     mockApi((_m, path) => (path === '/auth/me' ? me : undefined))

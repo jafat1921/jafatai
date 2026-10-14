@@ -26,6 +26,7 @@ dependencies = [
     "exifread>=3.5.1",
     "pypdf>=6.0",
     "python-docx>=1.2.0",
+    "mcp>=2.3,<3",
 ]
 
 [dependency-groups]

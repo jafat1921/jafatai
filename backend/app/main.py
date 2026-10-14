@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import inspect
 
 from app import models  # noqa: F401  (registers tables on Base.metadata)
+from app import mcp_server
 from app.api import router as api_router
 from app.config import REPO_ROOT, get_settings
 from app.db import Base, SessionLocal, engine
@@ -39,7 +40,8 @@ async def lifespan(_app: FastAPI):
         Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed(db)
-    yield
+    async with mcp_server.running():
+        yield
 
 
 def create_app() -> FastAPI:
@@ -57,6 +59,8 @@ def create_app() -> FastAPI:
     )
     app.include_router(docs_router)
     app.include_router(api_router)
+    # MCP (Streamable HTTP) for Claude and other agents; an ASGI app of its own, so not in the OpenAPI spec
+    app.add_route("/api/mcp", mcp_server.endpoint, methods=["GET", "POST", "DELETE"], include_in_schema=False)
 
     if FRONTEND_DIST.is_dir():
         index = FRONTEND_DIST / "index.html"

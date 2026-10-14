@@ -408,3 +408,33 @@ def test_client_rides_out_a_short_comfy_restart(fast_poll):
 
     pid, entry = asyncio.run(go())
     assert pid == "p1" and entry["outputs"]
+
+
+def test_driver_waits_for_comfyui_to_come_up(monkeypatch):
+    # after a reboot the worker is up before ComfyUI; the job should wait, not fail on the first try
+    from app.config import get_settings
+
+    monkeypatch.setattr(asyncio, "sleep", lambda s: _noop())
+    tries = []
+
+    async def factory():
+        tries.append(1)
+        if len(tries) < 3:
+            raise ComfyError("no healthy ComfyUI instance (tried http://127.0.0.1:8189)")
+        return "client"
+
+    seen = []
+    s = get_settings().model_copy(update={"comfy_start_wait_s": 60.0})
+    d = ComfyDriver(settings=s, client_factory=factory, lookup=object())
+    assert asyncio.run(d._connect(lambda f, m="": seen.append(m))) == "client"
+    assert len(tries) == 3 and seen == ["Waiting for ComfyUI to start"] * 2
+
+    tries.clear()
+    s = get_settings().model_copy(update={"comfy_start_wait_s": 0.0})
+    d = ComfyDriver(settings=s, client_factory=factory, lookup=object())
+    with pytest.raises(ComfyError, match="no healthy"):
+        asyncio.run(d._connect(lambda f, m="": None))
+
+
+async def _noop():
+    return None

@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     comfy_video_urls: Annotated[list[str], NoDecode] = []
     comfy_auth_token: str = ""
     comfy_verify_tls: bool = False
+    # after a reboot the workers come up before ComfyUI has loaded; jobs wait this long rather than fail
+    comfy_start_wait_s: float = 300.0
     comfy_lora_dir: str = ""
     comfy_output_dir: str = ""
 

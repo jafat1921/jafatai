@@ -617,6 +617,18 @@ class ComfyDriver:
         )
         self.lookup = lookup or DbLookup()
 
+    async def _connect(self, progress_cb: ProgressCallback) -> ComfyClient:
+        deadline = time.monotonic() + max(0.0, self.settings.comfy_start_wait_s)
+        while True:
+            try:
+                return await self._client_factory()
+            except ComfyError:
+                if time.monotonic() >= deadline:
+                    raise
+            # progress keeps the job's heartbeat fresh while ComfyUI starts
+            progress_cb(0.0, "Waiting for ComfyUI to start")
+            await asyncio.sleep(5)
+
     def generate_image(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
         return self._generate(prompt, params, seed, out_path, progress_cb)
 
@@ -673,7 +685,7 @@ class ComfyDriver:
 
     async def _execute(self, plan: Plan, out_path: Path, progress_cb: ProgressCallback, params: dict) -> DriverResult:
         progress_cb(0.0, "Connecting to ComfyUI")
-        client = await self._client_factory()
+        client = await self._connect(progress_cb)
         try:
             inputs = dict(plan.inputs)
             for key, value in plan.images.items():

@@ -1,0 +1,141 @@
+{
+  "name": "zimage_controlnet",
+  "family": "z-image-turbo",
+  "description": "Z-Image Turbo steered by the Fun ControlNet Union 2.1 (lite, 8 steps), with a control map or sketch the user already has, used as is.",
+  "inputs": {
+    "image": {
+      "type": "image",
+      "required": true,
+      "targets": [
+        [
+          "Control",
+          "image"
+        ]
+      ]
+    },
+    "prompt": {
+      "type": "str",
+      "required": true,
+      "targets": [
+        [
+          "Positive",
+          "text"
+        ]
+      ]
+    },
+    "negative": {
+      "type": "str",
+      "default": "",
+      "targets": [
+        [
+          "Negative",
+          "text"
+        ]
+      ]
+    },
+    "width": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 16,
+      "targets": [
+        [
+          "Fit",
+          "width"
+        ],
+        [
+          "Latent",
+          "width"
+        ]
+      ]
+    },
+    "height": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 16,
+      "targets": [
+        [
+          "Fit",
+          "height"
+        ],
+        [
+          "Latent",
+          "height"
+        ]
+      ]
+    },
+    "strength": {
+      "type": "float",
+      "default": 0.8,
+      "targets": [
+        [
+          "ControlNet",
+          "strength"
+        ]
+      ]
+    },
+    "seed": {
+      "type": "int",
+      "default": 0,
+      "targets": [
+        [
+          "Sampler",
+          "seed"
+        ]
+      ]
+    },
+    "steps": {
+      "type": "int",
+      "default": 8,
+      "targets": [
+        [
+          "Sampler",
+          "steps"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/control",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "image": {
+      "node": "Save",
+      "kind": "image"
+    }
+  },
+  "requires": {
+    "pack": "ComfyUI core (comfy_extras/nodes_model_patch.py)",
+    "nodes": [
+      "ModelPatchLoader",
+      "QwenImageDiffsynthControlnet"
+    ],
+    "assumed": "UNVERIFIED on the server: ModelPatchLoader(name) and QwenImageDiffsynthControlnet(model, model_patch, vae, image, strength, optional mask/start_percent/end_percent) as in ComfyUI master on 2026-10-14; newer ComfyUI also has ZImageFunControlnet with the same inputs. Check /object_info before relying on it."
+  },
+  "models": {
+    "diffusion_models": [
+      "z_image_turbo_bf16.safetensors"
+    ],
+    "text_encoders": [
+      "qwen_3_4b.safetensors"
+    ],
+    "vae": [
+      "ae.safetensors"
+    ],
+    "model_patches": [
+      "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
+    ]
+  },
+  "progress_weights": {
+    "Sampler": 8,
+    "UNet": 2,
+    "Patch": 1,
+    "TextEncoder": 2
+  }
+}

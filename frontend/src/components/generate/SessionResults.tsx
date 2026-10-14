@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Download, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
+import { BookmarkPlus, Download, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/studio/states'
@@ -7,6 +7,7 @@ import { useMediaRegenerate } from '@/hooks/useMedia'
 import { downloadUrl } from '@/lib/media'
 import { plainPrompt } from '@/lib/mentions'
 import { sessionRows, type SessionRow } from '@/lib/sessions'
+import { draftFromItem } from '@/lib/templates'
 import type { MediaItem } from '@/lib/types'
 import { cn, plural, timeAgo } from '@/lib/utils'
 import { useSessions, type SessionRequest } from '@/stores/sessions'
@@ -138,6 +139,12 @@ export function SessionResults<S>({
                     <RotateCcw aria-hidden />
                     <span className="max-sm:sr-only">Reuse settings</span>
                   </Button>
+                  {row.items[0] && draftFromItem(row.items[0]) && (
+                    <Button type="button" size="sm" variant="ghost" onClick={() => handlers.saveTemplate?.(row.items[0], row.items.length)}>
+                      <BookmarkPlus aria-hidden />
+                      <span className="max-sm:sr-only">Save as template</span>
+                    </Button>
+                  )}
                   <Button type="button" size="sm" variant="ghost" onClick={() => downloadAll(row.items)} aria-label={`Download all ${plural(row.items.length, 'file')}`}>
                     <Download aria-hidden />
                     <span className="max-sm:sr-only">Download all</span>

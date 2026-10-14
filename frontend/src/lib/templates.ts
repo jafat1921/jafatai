@@ -1,7 +1,19 @@
 import { audioKindOf } from './audio'
 import { DEFAULT_IMAGE_FORM, IMAGE_ASPECTS, type ImageForm } from './images'
 import { QUICK_ASPECTS, QUICK_STYLES, type QuickForm } from './quick'
-import type { ImageAspect, ProjectCreate, QuickAspect, QuickStyle, Template, TemplateOption, TemplateStart, TemplateTool } from './types'
+import type {
+  ControlType,
+  ImageAspect,
+  MediaItem,
+  ProjectCreate,
+  QuickAspect,
+  QuickStyle,
+  Template,
+  TemplateOption,
+  TemplateStart,
+  TemplateTool,
+  UserTemplateRequest,
+} from './types'
 
 type Prefill = Record<string, unknown>
 
@@ -29,10 +41,12 @@ export const TARGET_ROUTE: Record<TemplateStart['target'], string> = {
   studio: '/video/projects',
   image: '/image/generate',
   'image-edit': '/image/edit',
+  'image-control': '/image/control',
   audio: '/audio/song',
 }
 
 export const isEditTemplate = (t: Pick<Template, 'target'>) => t.target === 'image-edit'
+export const isControlTemplate = (t: Pick<Template, 'target'>) => t.target === 'image-control'
 
 // Used when the server can't answer /start: the template's own defaults say the same thing.
 export function localStart(t: Template): TemplateStart {
@@ -43,6 +57,10 @@ export function localStart(t: Template): TemplateStart {
       target: 'image-edit',
       prefill: { ...rest, instruction: instruction_scaffold, refs_required: t.refs_required, ref_labels: t.ref_labels, options: t.options, tool: t.tool, template_id: t.id },
     }
+  }
+  if (isControlTemplate(t)) {
+    const { prompt_scaffold, ...rest } = d
+    return { target: 'image-control', prefill: { ...rest, prompt: prompt_scaffold, control: t.control?.type, template_id: t.id } }
   }
   if (t.type === 'image') return { target: 'image', prefill: d }
   if (t.type === 'audio') return { target: 'audio', prefill: { kind: audioKindOf(t), ...d } }
@@ -138,4 +156,96 @@ export function fillSlot(text: string, slot: string, value: string, previous?: s
   if (text.includes(token)) return text.replace(token, value)
   if (previous && text.includes(previous)) return text.replace(previous, value)
   return text
+}
+
+/** What "Save as template" starts from: a result's recipe, or the form as it is now (contract v31). */
+export interface TemplateDraft {
+  target: 'generate' | 'edit'
+  prompt: string
+  title?: string
+  style?: string | null
+  model?: string | null
+  aspect?: ImageAspect | null
+  count: number
+  negative?: string
+  // edit: how many pictures it took, and what they were called
+  refLabels?: string[]
+  fromMediaId?: string
+}
+
+const aspectOf = (v: unknown) => (IMAGE_ASPECTS.some((a) => a.value === v) ? (v as ImageAspect) : null)
+
+/** A finished Create or Edit result as a template draft; null for uploads, restyles, tools and control runs. */
+export function draftFromItem(m: MediaItem): TemplateDraft | null {
+  const p = m.params ?? {}
+  if (m.kind !== 'image' || m.origin !== 'generated' || p.img2img_of || p.control_of || p.image_tool || p.upscale) return null
+  const edit = Array.isArray(p.edit_of)
+  const prompt = edit ? str(p.instruction) : (str(p.user_prompt) ?? m.prompt)
+  if (!prompt?.trim()) return null
+  const refs = edit ? Math.min(3, (p.edit_of as unknown[]).length) : 0
+  return {
+    target: edit ? 'edit' : 'generate',
+    prompt: prompt.trim(),
+    title: m.title,
+    style: edit ? null : (str(p.style) ?? null),
+    model: str(p.model) ?? null,
+    aspect: aspectOf(p.aspect),
+    count: 1,
+    negative: edit ? '' : (str(p.negative) ?? ''),
+    refLabels: edit ? Array.from({ length: refs }, (_, i) => `Image ${i + 1}`) : undefined,
+    fromMediaId: m.id,
+  }
+}
+
+export function templateBody(d: TemplateDraft, title: string, prompt: string, labels: string[]): UserTemplateRequest {
+  const body: UserTemplateRequest = { title: title.trim(), target: d.target, prompt: prompt.trim(), count: Math.min(4, Math.max(1, d.count || 1)) }
+  if (d.model && d.model !== 'auto') body.model = d.model
+  if (d.aspect) body.aspect = d.aspect
+  if (d.target === 'edit') body.ref_labels = labels.map((l) => l.trim()).filter(Boolean)
+  else {
+    if (d.style) body.style = d.style
+    if (d.negative?.trim()) body.negative = d.negative.trim()
+  }
+  if (d.fromMediaId) body.from_media_id = d.fromMediaId
+  return body
+}
+
+/** Wraps the selected words in [brackets]: the part that changes each time the template is used. */
+export function markSlot(text: string, start: number, end: number): { text: string; caret: number } | null {
+  const picked = text.slice(start, end)
+  const word = picked.trim()
+  if (!word || word.length > 40 || /[[\]\n]/.test(word)) return null
+  const lead = picked.length - picked.trimStart().length
+  const s = start + lead
+  const e = s + word.length
+  const next = `${text.slice(0, s)}[${word}]${text.slice(e)}`
+  return { text: next, caret: e + 2 }
+}
+
+/** Control to image opened from a card (contract v31). */
+export interface ControlTemplateForm {
+  prompt: string
+  control: ControlType
+  useAsIs: boolean
+  strength: number
+  count: number
+  style: string | null
+  examples?: Record<string, string>
+}
+
+const CONTROLS: ControlType[] = ['depth', 'canny', 'pose', 'hed', 'scribble']
+
+export function controlFormFrom(p: Prefill): ControlTemplateForm {
+  const control = str(p.control) as ControlType | undefined
+  const strength = num(p.strength)
+  const count = num(p.count)
+  return {
+    prompt: promptOf(p),
+    control: control && CONTROLS.includes(control) ? control : 'depth',
+    useAsIs: p.use_as_is === true,
+    strength: strength ? Math.min(1, Math.max(0.65, strength)) : 0.8,
+    count: count ? Math.min(4, Math.max(1, Math.round(count))) : 2,
+    style: str(p.style) ?? null,
+    examples: examplesOf(p.examples),
+  }
 }

@@ -16,19 +16,21 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app import brand
+from app import control as ctl
 from app import image_tools as it
 from app import library as lib
 from app import mentions as mn
 from app import models_catalog as mc
 from app import organise as org
 from app import prompt_enhance, uploads
+from app import styles as st
 from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db
-from app.models import Generation, Job, MediaItem, Project, new_id
+from app.models import Generation, Job, MediaItem, Project, UserTemplate, new_id, utcnow
 from app.schemas import (
-    DashboardOut, ImageBatchOut, ImageEditIn, ImageGenerateIn, Img2ImgIn, JobOut, MediaDetailOut, MediaItemOut,
-    MediaPage,
-    MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut, UpscalePage,
+    DashboardOut, ImageBatchOut, ImageControlIn, ImageEditIn, ImageGenerateIn, Img2ImgIn, JobOut, MediaDetailOut,
+    MediaItemOut, MediaPage, MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut, UpscalePage, UserTemplateIn,
+    UserTemplatePatch,
 )
 from app.openapi import multipart
 from app.security import CurrentUser, get_current_user, require_editor
@@ -202,21 +204,35 @@ def _new_image_item(db: Session, cur: CurrentUser, title: str, prompt: str, para
 def image_options():
     return {"aspects": [{"id": a, "width": w, "height": h} for a, (w, h) in
                         ((a, lib.size_for_aspect(a)) for a in lib.ASPECTS)],
-            "styles": [{"id": k, "label": v[0], "suffix": v[1]} for k, v in lib.STYLES.items()],
-            "count": {"min": 1, "max": 4}, "edit_sources": {"min": 1, "max": 3}}
+            **st.options(), "count": {"min": 1, "max": 4}, "edit_sources": {"min": 1, "max": 3}}
+
+
+@router.get("/images/styles/{style_id}/preview")
+def style_preview(style_id: str, cur: CurrentUser = Depends(get_current_user)):
+    s = st.catalogue().get(style_id)
+    f = st.preview_file(s) if s is not None else None
+    if f is None:
+        raise HTTPException(404, "No preview for this style")
+    return FileResponse(f, media_type="image/webp", headers={"Cache-Control": "private, max-age=86400"})
+
+
+def _check_style(style: str | None) -> st.Style | None:
+    if style and style not in lib.STYLES:
+        raise HTTPException(422, f"Unknown style '{style}' (see GET /api/images/options for the {len(st.catalogue())} "
+                                 "style ids)")
+    return st.get(style)
 
 
 @router.post("/images/generate", response_model=ImageBatchOut, status_code=202)
 def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
-    if body.style and body.style not in lib.STYLES:
-        raise HTTPException(422, f"Unknown style '{body.style}' (expected {', '.join(lib.STYLES)})")
+    style = _check_style(body.style)
     if not body.prompt.strip():
         raise HTTPException(422, "A prompt is required")
     into = generate_into(db, cur.workspace_id, body.folder_id, "image")
     model, chosen = mc.choose(body.model, "image", mn.plain(body.prompt), count=body.count)
     speed = _speed(model, body)
     magic = prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "image",
-                                  style=lib.STYLES[body.style][0] if body.style else None,
+                                  style=style.label if style else None,
                                   brand_kit_id=body.brand_kit_id)
     w, h = lib.size_for_aspect(body.aspect)
     # mentioned pictures turn the run into a reference-guided composition on the edit model
@@ -234,8 +250,9 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
             params["mentions"] = mentioned.mentions
         if mentioned.ref_ids:
             params["reference_ids"], params["reference_labels"] = list(mentioned.ref_ids), list(mentioned.ref_labels)
-        if body.negative:
-            params["negative"] = body.negative.strip()
+        negative = st.joined_negative(body.negative, style, speed.cfg if speed else None)
+        if negative:
+            params["negative"] = negative
         if body.steps:
             params["steps"] = body.steps
         if body.template_id:
@@ -292,7 +309,8 @@ async def image_tools_list(cur: CurrentUser = Depends(get_current_user)):
 
     driver = get_settings().gen_driver
     info, error = (None, None) if driver == "mock" else await fetch_object_info()
-    return {"tools": it.options(info, driver=driver, error=error)}
+    return {"tools": it.options(info, driver=driver, error=error),
+            "control": ctl.status(info, driver=driver, error=error)}
 
 
 def _pick_tool(db: Session, body: ImageEditIn, template: dict | None,
@@ -392,37 +410,48 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
 
 @router.post("/images/img2img", response_model=ImageBatchOut, status_code=202)
 def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
-    if not body.prompt.strip():
-        raise HTTPException(422, "Describe the picture you want")
+    style = _check_style(body.style)
+    if not body.prompt.strip() and style is None:
+        raise HTTPException(422, "Describe the picture you want, or pick a style")
+    # the slider starts where the style's group works best; a value the user set always wins
+    strength = body.strength
+    if "strength" not in body.model_fields_set and style is not None:
+        strength = st.restyle_strength(style) or strength
     into = generate_into(db, cur.workspace_id, body.folder_id, "image")
-    model, chosen = mc.choose(body.model, "image", body.prompt, count=body.count)
+    model, chosen = mc.choose(body.model, "image", body.prompt or style.positive, count=body.count)
     reason = mc.capability_unavailable(model, "i2i")
     if reason:
         raise HTTPException(422, f"Image to image with {model.label} isn't available: {reason}")
     speed = _speed(model, body)
-    magic = prompt_enhance.marker(body.magic_prompt, body.prompt_enhanced, "image", brand_kit_id=body.brand_kit_id)
+    # nothing of the user's to improve when the style is the whole prompt
+    magic = prompt_enhance.marker(body.magic_prompt if body.prompt.strip() else "off", body.prompt_enhanced, "image",
+                                  style=style.label if style else None, brand_kit_id=body.brand_kit_id)
     media_id, src = _edit_source(db, cur.workspace_id, body.source_id)
     # the redraw graph has one image input, so mentions stay words
-    mentioned = mn.resolve(db, cur.workspace_id, body.prompt.strip(), budget=0)
+    mentioned = mn.resolve(db, cur.workspace_id, body.prompt.strip(), budget=0) if body.prompt.strip() else None
     if body.aspect == "source":
         sw, sh = lib._image_dims(src)
         w, h = lib.size_for_ratio(sw, sh) if sw and sh else lib.size_for_aspect("1:1")
     else:
         w, h = lib.size_for_aspect(body.aspect)
-    prompt = mentioned.prompt
-    title = (body.title or "").strip() or f"Restyle · {lib.short_title(mn.plain(body.prompt).strip(), 5)}"
+    prompt = lib.styled_prompt(mentioned.prompt if mentioned else "", body.style)
+    said = mn.plain(body.prompt).strip()
+    title = (body.title or "").strip() or f"Restyle · {lib.short_title(said, 5) if said else style.label}"
+    negative = st.joined_negative(body.negative, style, speed.cfg if speed else None)
     items, jobs = [], []
     for i in range(body.count):
         params = {"width": w, "height": h, "aspect": body.aspect, "model": model.id,
-                  "user_prompt": mn.plain(body.prompt).strip(),
-                  "img2img_of": {"media_id": media_id, "generation_id": src.id, "strength": body.strength},
+                  "user_prompt": said, "style": body.style,
+                  "img2img_of": {"media_id": media_id, "generation_id": src.id, "strength": strength},
                   "created_by": {"user_id": cur.id, "flow": "image_img2img"}, "magic_prompt": magic, **chosen}
         if speed:
             params["speed"] = speed.id
-        if body.negative:
-            params["negative"] = body.negative.strip()
-        if mentioned.mentions:
+        if negative:
+            params["negative"] = negative
+        if mentioned and mentioned.mentions:
             params["mentions"] = mentioned.mentions
+        if body.template_id:
+            params["template_id"] = body.template_id
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
             db, cur.workspace_id, body.brand_kit_id, prompt, params), seed, into)
@@ -433,16 +462,94 @@ def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = D
                          model_resolved=model.id, magic_prompt=magic)
 
 
+@router.post("/images/control", response_model=ImageBatchOut, status_code=202)
+def image_control(body: ImageControlIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    """Depth / Sketch / Pose / Edge to image (contract v31)."""
+    c = ctl.TYPES[body.control]
+    style = _check_style(body.style)
+    if not body.prompt.strip():
+        raise HTTPException(422, "Describe the picture you want")
+    template = templates().get(body.template_id) if body.template_id else None
+    into = generate_into(db, cur.workspace_id, body.folder_id, "image")
+    media_id, src = _edit_source(db, cur.workspace_id, body.source_id)
+    if body.aspect == "source":
+        sw, sh = lib._image_dims(src)
+        w, h = lib.size_for_ratio(sw, sh) if sw and sh else lib.size_for_aspect("1:1")
+    else:
+        w, h = lib.size_for_aspect(body.aspect)
+
+    reason = None if body.engine == "edit" else ctl.unavailable(c, body.use_as_is)
+    if body.engine == "edit":
+        reason = "the edit model was asked for"
+    elif reason and body.engine == "controlnet":
+        raise HTTPException(422, f"{c.label} to image can't run on the ControlNet: {reason}")
+
+    said = mn.plain(body.prompt).strip()
+    title = (body.title or "").strip() or f"{c.label} · {lib.short_title(said, 5)}"
+    control_of = {"media_id": media_id, "generation_id": src.id, "type": c.id, "as_is": body.use_as_is}
+    items, jobs = [], []
+    if reason is None:
+        try:
+            rec = ctl.build_record(c, src, cur.workspace_id, as_is=body.use_as_is, strength=body.strength,
+                                   size=(w, h))
+        except ctl.ControlError as e:
+            raise HTTPException(422, str(e)) from None
+        prompt = lib.styled_prompt(said, body.style)
+        for i in range(body.count):
+            params = {"width": w, "height": h, "aspect": body.aspect, "control": rec, "control_of": control_of,
+                      "user_prompt": said, "style": body.style, "model": "zimage_turbo",
+                      "created_by": {"user_id": cur.id, "flow": "image_control"}}
+            if body.negative:
+                params["negative"] = body.negative.strip()
+            if template is not None:
+                params["template_id"] = template["id"]
+            seed = (body.seed + i) % 2**31 if body.seed is not None else None
+            item, job = _new_image_item(db, cur, title, prompt, params, seed, into)
+            items.append(item)
+            jobs.append(job)
+        db.commit()
+        return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs],
+                             model_resolved="zimage_turbo", tool_resolved=f"controlnet:{c.id}")
+
+    # Qwen-Image-Edit reads the picture as a reference: it follows the layout, less exactly
+    editor = mc.default_for("edit")
+    instruction = ctl.fallback_instruction(c, said, style.positive if style else None)
+    for i in range(body.count):
+        params = {"width": w, "height": h, "aspect": body.aspect, "instruction": instruction,
+                  "edit_of": [{"media_id": media_id, "generation_id": src.id}], "reference_ids": [src.id],
+                  "model": editor.id, "control_of": control_of, "tool_fallback": reason, "style": body.style,
+                  "created_by": {"user_id": cur.id, "flow": "image_control"}}
+        if template is not None:
+            params["template_id"] = template["id"]
+        seed = (body.seed + i) % 2**31 if body.seed is not None else None
+        item, job = _new_image_item(db, cur, title, instruction, params, seed, into)
+        items.append(item)
+        jobs.append(job)
+    db.commit()
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs], model_resolved=editor.id,
+                         tool_fallback=reason)
+
+
 # ---------------------------------------------------------------- prompt templates
 # Shown to users as "Prompt templates"; /templates stays as the old name for the same thing.
 
 PREVIEW_DIR = TEMPLATE_DIR / "previews"
 
 
+MINE = "My templates"
+
+
 @lru_cache
 def categories() -> dict[str, list[str]]:
     return {kind: json.loads((TEMPLATE_DIR / f"{kind}.json").read_text(encoding="utf-8")).get("categories", [])
             for kind in ("video", "image", "audio")}
+
+
+def style_options() -> list[dict]:
+    """The "Restyle" card's picker: one choice per catalogue style, written into its [style] slot."""
+    return [{"slot": "style", "label": "Style", "gallery": "styles",
+             "choices": [{"label": s.label, "value": f"{s.label}: {s.positive}", "style_id": s.id}
+                         for s in st.catalogue().values()]}]
 
 
 @lru_cache
@@ -454,6 +561,8 @@ def templates() -> dict[str, dict]:
             row = {**t, "type": kind}
             if kind == "image":
                 row.setdefault("target", "image-generate")  # v2 cards predate edit templates
+            if t.get("options_from") == "styles":
+                row["options"] = style_options()
             out[t["id"]] = row
     return out
 
@@ -468,21 +577,143 @@ def preview_file(template_id: str) -> Path | None:
     return target
 
 
-def _template_out(t: dict) -> TemplateOut:
+def control_card(t: dict) -> dict | None:
+    c = ctl.TYPES.get(t.get("control") or "")
+    if c is None:
+        return None
+    return {"type": c.id, "label": c.label, "detector": c.detector, "licence": c.licence,
+            "noncommercial": c.noncommercial, "as_is": bool((t.get("defaults") or {}).get("use_as_is"))}
+
+
+def _template_out(t: dict, preview_url: str | None = None) -> TemplateOut:
     f = preview_file(t["id"])
     # mtime in the URL so a re-rendered preview isn't stuck behind the cache
-    url = f"/api/prompt-templates/{t['id']}/preview?v={int(f.stat().st_mtime)}" if f else None
+    url = f"/api/prompt-templates/{t['id']}/preview?v={int(f.stat().st_mtime)}" if f else preview_url
     return TemplateOut(**{k: t.get(k) for k in ("id", "type", "title", "description", "thumb", "defaults", "category",
                                                 "target")},
                        tags=t.get("tags") or [], examples=t.get("examples") or {}, preview_url=url,
                        requires_brand=bool(t.get("requires_brand")), refs_required=t.get("refs_required") or 0,
                        ref_labels=t.get("ref_labels") or [], options=t.get("options") or [],
-                       tool=it.template_tool(t))
+                       tool=it.template_tool(t), control=control_card(t), mine=bool(t.get("mine")))
 
+
+# ---------------------------------------------------------------- my templates (v31)
+
+def _mine_dict(row: UserTemplate) -> dict:
+    edit = row.target == "edit"
+    d: dict = {"count": row.count, "aspect": row.aspect}
+    if row.model:
+        d["model"] = row.model
+    if edit:
+        d["instruction_scaffold"] = row.prompt
+    else:
+        d.update(prompt_scaffold=row.prompt, aspect=row.aspect or "1:1", style=row.style,
+                 negative=row.negative or None)
+    return {"id": row.id, "type": "image", "title": row.title, "description": row.description or "",
+            "category": MINE, "target": "image-edit" if edit else "image-generate", "defaults": d, "tags": [],
+            "examples": dict(row.examples or {}),
+            "ref_labels": (list(row.ref_labels or []) or ["Photo"]) if edit else [],
+            "refs_required": 1 if edit else 0, "mine": True}
+
+
+def _mine_out(db: Session, rows: list[UserTemplate]) -> list[TemplateOut]:
+    from app import thumbs
+
+    ids = [r.preview_generation_id for r in rows if r.preview_generation_id]
+    gens = {g.id: g for g in db.scalars(select(Generation).where(Generation.id.in_(ids)))} if ids else {}
+    out = []
+    for r in rows:
+        g = gens.get(r.preview_generation_id or "")
+        url = thumbs.url_for(g) if g is not None and g.workspace_id == r.workspace_id else None
+        out.append(_template_out(_mine_dict(r), url))
+    return out
+
+
+def _my_rows(db: Session, workspace_id: str) -> list[UserTemplate]:
+    return list(db.scalars(select(UserTemplate).where(UserTemplate.workspace_id == workspace_id)
+                           .order_by(UserTemplate.updated_at.desc(), UserTemplate.id)))
+
+
+def _my_template(db: Session, workspace_id: str, template_id: str) -> UserTemplate:
+    row = db.get(UserTemplate, template_id) if _UUID.match(template_id) else None
+    if row is None or row.workspace_id != workspace_id:
+        raise HTTPException(404, "Template not found")
+    return row
+
+
+def _check_mine(body: UserTemplateIn) -> None:
+    kind = "edit" if body.target == "edit" else "image"
+    if body.target == "edit":
+        if body.style or body.negative.strip():
+            raise HTTPException(422, "Edit templates have no style or negative prompt")
+    else:
+        _check_style(body.style)
+        if body.ref_labels:
+            raise HTTPException(422, "Only edit templates name their pictures")
+    if body.model and body.model != mc.AUTO:
+        m = mc.MODELS.get(body.model)
+        if m is None or m.type != kind:
+            raise HTTPException(422, f"Unknown {kind} model '{body.model}'")
+    if any(not label.strip() for label in body.ref_labels):
+        raise HTTPException(422, "Picture labels can't be blank")
+
+
+@router.get("/my-templates", response_model=list[TemplateOut])
+def list_my_templates(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    return _mine_out(db, _my_rows(db, cur.workspace_id))
+
+
+@router.post("/my-templates", response_model=TemplateOut, status_code=201)
+def save_my_template(body: UserTemplateIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    _check_mine(body)
+    preview = None
+    if body.from_media_id:
+        _, g = _edit_source(db, cur.workspace_id, body.from_media_id)
+        preview = g.id
+    slots = set(placeholders(body.prompt))
+    row = UserTemplate(id=new_id(), workspace_id=cur.workspace_id, created_by=cur.id, title=body.title.strip(),
+                       description=body.description.strip(), target=body.target, prompt=body.prompt.strip(),
+                       negative=body.negative.strip(), style=body.style or None, model=body.model or None,
+                       aspect=body.aspect, count=body.count, ref_labels=[x.strip()[:40] for x in body.ref_labels],
+                       examples={k: v[:300] for k, v in body.examples.items() if k in slots},
+                       preview_generation_id=preview)
+    db.add(row)
+    db.commit()
+    return _mine_out(db, [row])[0]
+
+
+@router.patch("/my-templates/{template_id}", response_model=TemplateOut)
+def patch_my_template(template_id: str, body: UserTemplatePatch, db: Session = Depends(get_db),
+                      cur: CurrentUser = Depends(require_editor)):
+    row = _my_template(db, cur.workspace_id, template_id)
+    if body.title is not None:
+        if not body.title.strip():
+            raise HTTPException(422, "The name can't be blank")
+        row.title = body.title.strip()
+    if body.description is not None:
+        row.description = body.description.strip()
+    if body.prompt is not None:
+        if not body.prompt.strip():
+            raise HTTPException(422, "The prompt can't be blank")
+        row.prompt = body.prompt.strip()
+    row.updated_at = utcnow()
+    db.commit()
+    return _mine_out(db, [row])[0]
+
+
+@router.delete("/my-templates/{template_id}", status_code=204)
+def delete_my_template(template_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    db.delete(_my_template(db, cur.workspace_id, template_id))
+    db.commit()
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- listing and starting
 
 @router.get("/templates", response_model=list[TemplateOut])
 @router.get("/prompt-templates", response_model=list[TemplateOut])
-def list_templates(type: Literal["video", "image", "audio"] | None = None, cur: CurrentUser = Depends(get_current_user)):
+def list_templates(type: Literal["video", "image", "audio"] | None = None, db: Session = Depends(get_db),
+                   cur: CurrentUser = Depends(get_current_user)):
     rows = [t for t in templates().values() if type in (None, t["type"]) and it.template_visible(t)]
     order = categories()
 
@@ -491,7 +722,13 @@ def list_templates(type: Literal["video", "image", "audio"] | None = None, cur: 
         return cats.index(t["category"]) if t.get("category") in cats else len(cats)
 
     kinds = ("video", "image", "audio")
-    return [_template_out(t) for t in sorted(rows, key=lambda t: (kinds.index(t["type"]), rank(t)))]
+    shipped = [_template_out(t) for t in sorted(rows, key=lambda t: (kinds.index(t["type"]), rank(t)))]
+    if type not in (None, "image"):
+        return shipped
+    # the workspace's own lead the image cards (mine=true, category "My templates")
+    mine = _mine_out(db, _my_rows(db, cur.workspace_id))
+    at = next((i for i, t in enumerate(shipped) if t.type == "image"), len(shipped))
+    return shipped[:at] + mine + shipped[at:]
 
 
 @router.get("/templates/{template_id}/preview")
@@ -509,8 +746,11 @@ def placeholders(text: str) -> list[str]:
 
 @router.post("/templates/{template_id}/start", response_model=TemplateStartOut)
 @router.post("/prompt-templates/{template_id}/start", response_model=TemplateStartOut)
-def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user)):
+def start_template(template_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     t = templates().get(template_id)
+    if t is None and _UUID.match(template_id):
+        row = db.get(UserTemplate, template_id)
+        t = _mine_dict(row) if row is not None and row.workspace_id == cur.workspace_id else None
     if t is None or not it.template_visible(t):
         raise HTTPException(404, "Prompt template not found")
     d = dict(t["defaults"])
@@ -524,6 +764,13 @@ def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user
         if t.get("tool"):
             prefill["tool"] = it.template_tool(t)
         target = "image-edit"
+    elif t.get("target") == "image-control":
+        # opens Control to image: the photo, map or sketch is still to come
+        prefill = {"prompt": scaffold, "control": t["control"], "use_as_is": bool(d.get("use_as_is")),
+                   "strength": d.get("strength", ctl.STRENGTH_DEFAULT), "count": d.get("count", 1),
+                   "aspect": d.get("aspect", "source"), "style": d.get("style"), "template_id": t["id"],
+                   "control_card": control_card(t)}
+        target = "image-control"
     elif t["type"] == "image":
         prefill = {"prompt": scaffold, "aspect": d.get("aspect", "1:1"), "count": d.get("count", 1),
                    "style": d.get("style"), "negative": d.get("negative"), "template_id": t["id"]}
@@ -549,6 +796,8 @@ def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user
         prefill["examples"] = t["examples"]
     if t.get("requires_brand"):
         prefill["requires_brand"] = True
+    if t.get("mine"):
+        prefill["mine"] = True
     return TemplateStartOut(target=target, prefill=prefill)
 
 

@@ -969,9 +969,11 @@ class Img2ImgIn(BaseModel):
         "strength": 0.5}]})
 
     source_id: str = Field(description="A Library item (uploads too) or a finished image generation id")
-    prompt: str = Field(min_length=1, max_length=4000, description="The picture you want")
+    prompt: str = Field("", max_length=4000, description="The picture you want; may be empty when a style is set")
+    style: str | None = Field(None, max_length=40, description="A style id from GET /api/images/options (v31)")
     strength: float = Field(0.45, ge=0.1, le=0.9, description="How far it may move from the source: low keeps the "
-                                                              "layout, high keeps little more than the colours")
+                                                              "layout, high keeps little more than the colours. Left "
+                                                              "out with a style: the style group's preset")
     model: str | None = Field(None, max_length=60)
     speed: str | None = Field(None, max_length=30)
     count: int = Field(1, ge=1, le=4)
@@ -983,6 +985,33 @@ class Img2ImgIn(BaseModel):
     magic_prompt: MagicMode | None = None
     prompt_enhanced: bool = False
     folder_id: str | None = None
+    template_id: str | None = Field(None, max_length=80, description="The template this came from, for the record")
+
+
+class ImageControlIn(BaseModel):
+    """Depth / Sketch / Pose / Edge to image (contract v31)."""
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "source_id": "3f2a9c1e-0000-4000-8000-000000000000", "control": "pose",
+        "prompt": "A knight in silver armour on a misty hill", "strength": 0.8}]})
+
+    source_id: str = Field(description="A Library item or finished image generation id: a photo, or a map/sketch")
+    control: Literal["depth", "canny", "pose", "hed", "scribble"] = Field(
+        description="What the picture steers: depth, canny (edges), pose, hed (soft edges, non-commercial) or "
+                    "scribble (sketch)")
+    use_as_is: bool = Field(False, description="The picture already is the map or sketch; skip extracting one")
+    prompt: str = Field(min_length=1, max_length=4000, description="What to draw")
+    style: str | None = Field(None, max_length=40, description="A style id from GET /api/images/options")
+    strength: float = Field(0.8, ge=0.65, le=1.0, description="How closely to follow the map")
+    aspect: Literal["source", "1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2"] = "source"
+    count: int = Field(1, ge=1, le=4)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1, description=_SEED)
+    negative: str | None = Field(None, max_length=2000)
+    title: str | None = Field(None, max_length=300)
+    engine: Literal["auto", "controlnet", "edit"] = Field("auto", description="auto: the ControlNet when installed, "
+                                                                              "else Qwen-Image-Edit (looser); "
+                                                                              "controlnet: it or 422; edit: never it")
+    template_id: str | None = Field(None, max_length=80)
+    folder_id: str | None = Field(None, description=_FOLDER)
 
 
 class VideoGenerateOut(MediaItemOut):
@@ -1193,17 +1222,48 @@ class TemplateOut(BaseModel):
     examples: dict[str, str] = {}  # placeholder -> sample value (hint text, and what the preview shows)
     preview_url: str | None = None
     # image templates only (v29): which page runs it, and for edits the reference slots it needs
-    target: Literal["image-generate", "image-edit"] | None = None
+    target: Literal["image-generate", "image-edit", "image-control"] | None = None
     refs_required: int = 0
     ref_labels: list[str] = []
     options: list[dict[str, Any]] = []  # [{slot, label, choices: [{label, value, aspect?}]}]
     # v30: the image tool behind the card ({id, label, engine, licence, noncommercial, fallback, needs_mask})
     tool: dict[str, Any] | None = None
+    # v31: Depth / Sketch / Pose to image cards ({type, label, detector, licence, noncommercial, as_is})
+    control: dict[str, Any] | None = None
+    mine: bool = False  # saved in this workspace (Save as template); can be renamed and deleted
 
 
 class TemplateStartOut(BaseModel):
-    target: Literal["quick", "studio", "image", "image-edit", "audio"]
+    target: Literal["quick", "studio", "image", "image-edit", "image-control", "audio"]
     prefill: dict[str, Any]
+
+
+class UserTemplateIn(BaseModel):
+    """Save as template (contract v31). [slots] in the prompt are what the next person fills in."""
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "title": "Product on marble", "target": "generate", "aspect": "4:3", "count": 2, "style": "product",
+        "prompt": "[product] on white marble, soft window light, a sprig of [herb] beside it"}]})
+
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field("", max_length=500)
+    target: Literal["generate", "edit"] = "generate"
+    prompt: str = Field(min_length=1, max_length=4000, description="The prompt, or the instruction for an edit")
+    negative: str = Field("", max_length=2000)
+    style: str | None = Field(None, max_length=40)
+    model: str | None = Field(None, max_length=60)
+    aspect: ImageAspect | None = None
+    count: int = Field(1, ge=1, le=4)
+    ref_labels: list[str] = Field(default_factory=list, max_length=3,
+                                  description="Edit templates: what each picture is, e.g. Person, Garment")
+    examples: dict[str, str] = Field(default_factory=dict, description="[slot] -> a sample value, shown as a hint")
+    from_media_id: str | None = Field(None, description="The Library result it was saved from; its picture becomes "
+                                                        "the card's preview")
+
+
+class UserTemplatePatch(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=500)
+    prompt: str | None = Field(None, min_length=1, max_length=4000)
 
 
 class DashboardOut(BaseModel):

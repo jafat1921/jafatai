@@ -757,6 +757,31 @@ class ApiToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class UserTemplate(Base):
+    """A prompt template someone saved in this workspace (contract v31). Shared by the workspace, like the Library;
+    [slots] in the prompt work as in the shipped templates."""
+    __tablename__ = "user_template"
+    __table_args__ = (Index("ix_user_template_ws_updated", "workspace_id", "updated_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)  # kept when the user goes
+    title: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    target: Mapped[str] = mapped_column(String(16), default="generate")  # generate | edit
+    prompt: Mapped[str] = mapped_column(Text)
+    negative: Mapped[str] = mapped_column(Text, default="", server_default="")
+    style: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    aspect: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    ref_labels: Mapped[list] = mapped_column(JSON, default=list)
+    examples: Mapped[dict] = mapped_column(JSON, default=dict)
+    # the result it was saved from, shown as the card's picture while it exists
+    preview_generation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

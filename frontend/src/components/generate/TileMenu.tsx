@@ -1,12 +1,13 @@
 import { Link } from 'react-router'
 import {
-  Aperture, Brush, Clapperboard, Download, ExternalLink, FolderInput, Heart, ImageUpscale, Layers, Maximize2, MoreHorizontal, Palette, PanelRightOpen,
+  Aperture, BookmarkPlus, Brush, Clapperboard, Download, ExternalLink, FolderInput, Heart, ImageUpscale, Layers, Maximize2, MoreHorizontal, Palette, PanelRightOpen,
   Pencil, Play, RefreshCw, RotateCcw, Scissors, SquareSplitHorizontal, Trash2, AudioWaveform,
 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { TileState } from '@/lib/images'
 import { downloadUrl, mediaAlt, projectLink } from '@/lib/media'
 import { stemsLink } from '@/lib/stems'
+import { draftFromItem } from '@/lib/templates'
 import { AudioDownloadItems } from './AudioDownloads'
 import type { MediaItem, RegenerateMode } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -29,6 +30,8 @@ export interface TileHandlers {
   retry?: (item: MediaItem) => void
   // the label for "Use as reference" on this page ("Use as start frame"…)
   refLabel: string
+  // v31: keep this result's recipe as one of My templates
+  saveTemplate?: (item: MediaItem, count?: number) => void
 }
 
 // keeps a click on the menu from reaching the tile underneath (select / open)
@@ -189,6 +192,12 @@ export function TileMenu({
               <Layers aria-hidden />
               {h.refLabel}
             </DropdownMenuItem>
+            {h.saveTemplate && draftFromItem(item) && (
+              <DropdownMenuItem onSelect={() => h.saveTemplate?.(item)}>
+                <BookmarkPlus aria-hidden />
+                Save as template…
+              </DropdownMenuItem>
+            )}
           </>
         )}
         {canRegenerate && ready && (

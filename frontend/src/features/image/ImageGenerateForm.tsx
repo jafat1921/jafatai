@@ -1,10 +1,11 @@
 import { useId, useRef, useState } from 'react'
-import { ChevronDown, ImagePlus, LayoutTemplate, Wand2 } from 'lucide-react'
+import { BookmarkPlus, ChevronDown, ImagePlus, LayoutTemplate, Wand2 } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -14,22 +15,26 @@ import { Label } from '@/components/ui/label'
 import { PlaceholderHint } from '@/components/studio/placeholder-hint'
 import { ErrorState } from '@/components/studio/states'
 import { DockChip } from '@/components/generate/DockChip'
-import { AspectChip, BrandDockChip, CountChip, ModelChip, StyleChip } from '@/components/generate/DockChips'
+import { AspectChip, BrandDockChip, CountChip, ModelChip } from '@/components/generate/DockChips'
 import { GenerateButton } from '@/components/generate/GenerateButton'
 import { PromptDock } from '@/components/generate/PromptDock'
+import { SaveTemplateDialog } from '@/components/generate/SaveTemplateDialog'
+import { StyleDockChip } from '@/components/generate/StyleGallery'
 import { useDockModels } from '@/components/generate/useDockModels'
 import { useMagicPrompt } from '@/components/generate/useMagicPrompt'
 import { useBrandChoice } from '@/hooks/useBrandKits'
 import { useGenEstimate } from '@/hooks/useGenEstimate'
+import { useImageOptions } from '@/hooks/useMedia'
 import { useTemplates } from '@/hooks/useStudio'
 import { withBrand } from '@/lib/brand'
 import { localEstimate } from '@/lib/estimate'
-import { IMAGE_ASPECTS, IMAGE_STYLES, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
+import { IMAGE_ASPECTS, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
 import { defaultSpeed, has } from '@/lib/models'
 import { MENTION_REFS } from '@/lib/mentions'
-import { imageFormFrom, isEditTemplate } from '@/lib/templates'
+import { findStyle } from '@/lib/styles'
+import { imageFormFrom, isControlTemplate, isEditTemplate, type TemplateDraft } from '@/lib/templates'
 import { TemplatePreview } from '@/features/templates/TemplatePreview'
-import type { ImageGenerateRequest } from '@/lib/types'
+import type { ImageGenerateRequest, Template } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { CountPicker, ImageAspectTiles } from './controls'
@@ -72,7 +77,19 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
 
   const slots = placeholdersIn(form.prompt)
   const blocked = slots.length ? `Replace ${slots.join(', ')} first.` : form.prompt.trim().length < 3 ? 'Describe the image first.' : null
-  const styleLabel = IMAGE_STYLES.find((s) => s.value === form.style)?.label
+  const options = useImageOptions()
+  const styleLabel = findStyle(options.data?.styles ?? [], form.style, options.data?.style_aliases)?.label
+  const [saving, setSaving] = useState<TemplateDraft | null>(null)
+  const saveDraft = (): TemplateDraft => ({
+    target: 'generate',
+    prompt: form.prompt,
+    title: fromTemplate,
+    style: form.style,
+    model: form.model ?? null,
+    aspect: form.aspect,
+    count: form.count,
+    negative: form.negative,
+  })
 
   const submit = () => {
     if (blocked || pending) return
@@ -80,6 +97,28 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
     const summary = [model?.label, form.aspect, plural(form.count, 'image'), styleLabel, brand.sendId ? `Brand: ${brand.kit?.name}` : null].filter(Boolean).join(' · ')
     onRun({ form: { ...form, model: model?.id, speed: speed?.id }, body, summary })
   }
+
+  // edit and control templates need pictures; they open their own pages from the gallery instead
+  const usable = templates.data?.filter((t) => !isEditTemplate(t) && !isControlTemplate(t)) ?? []
+  const mine = usable.filter((t) => t.mine)
+  const menuItem = (t: Template) => (
+    <DropdownMenuItem
+      key={t.id}
+      onSelect={() => {
+        const next = imageFormFrom({ ...(t.defaults ?? {}), examples: t.examples }, t.id)
+        // a text template brings Qwen along; otherwise keep the model the user picked
+        setForm({ ...next, model: next.model ?? form.model, speed: next.model ? undefined : form.speed })
+        setFromTemplate(t.title)
+        announce(`Filled in from the ${t.title} prompt template. Replace the highlighted words, then create.`)
+      }}
+    >
+      <TemplatePreview t={t} decorative className="size-12 shrink-0 rounded-[4px]" iconClassName="size-4" />
+      <span className="flex min-w-0 flex-col">
+        <span>{t.title}</span>
+        <span className="line-clamp-2 text-small text-studio-muted">{t.description || String(t.defaults?.prompt_scaffold ?? '')}</span>
+      </span>
+    </DropdownMenuItem>
+  )
 
   const templateMenu = (
     <DropdownMenu>
@@ -91,28 +130,18 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-[70vh] w-80 overflow-y-auto">
-        <DropdownMenuLabel>Image prompt templates</DropdownMenuLabel>
-        {templates.isPending && <p className="px-2 py-1.5 text-small text-studio-muted">Loading…</p>}
-        {templates.isError && <p className="px-2 py-1.5 text-small text-studio-muted">Prompt templates aren't available right now.</p>}
-        {/* edit templates need pictures; they open Edit Image from the gallery instead */}
-        {templates.data?.filter((t) => !isEditTemplate(t)).map((t) => (
-          <DropdownMenuItem
-            key={t.id}
-            onSelect={() => {
-              const next = imageFormFrom({ ...(t.defaults ?? {}), examples: t.examples }, t.id)
-              // a text template brings Qwen along; otherwise keep the model the user picked
-              setForm({ ...next, model: next.model ?? form.model, speed: next.model ? undefined : form.speed })
-              setFromTemplate(t.title)
-              announce(`Filled in from the ${t.title} prompt template. Replace the highlighted words, then create.`)
-            }}
-          >
-            <TemplatePreview t={t} decorative className="size-12 shrink-0 rounded-[4px]" iconClassName="size-4" />
-            <span className="flex min-w-0 flex-col">
-              <span>{t.title}</span>
-              <span className="line-clamp-2 text-small text-studio-muted">{t.description}</span>
-            </span>
-          </DropdownMenuItem>
-        ))}
+        {mine.length > 0 && (
+          <DropdownMenuGroup aria-label="My templates">
+            <DropdownMenuLabel>My templates</DropdownMenuLabel>
+            {mine.map(menuItem)}
+          </DropdownMenuGroup>
+        )}
+        <DropdownMenuGroup aria-label="Image prompt templates">
+          <DropdownMenuLabel>Image prompt templates</DropdownMenuLabel>
+          {templates.isPending && <p className="px-2 py-1.5 text-small text-studio-muted">Loading…</p>}
+          {templates.isError && <p className="px-2 py-1.5 text-small text-studio-muted">Prompt templates aren't available right now.</p>}
+          {usable.filter((t) => !t.mine).map(menuItem)}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -125,6 +154,11 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
       headerExtra={
         <>
           {fromTemplate && <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Prompt template: {fromTemplate}</span>}
+          <Button type="button" size="sm" variant="ghost" disabled={!form.prompt.trim()} onClick={() => setSaving(saveDraft())} aria-label="Save this prompt as a template">
+            <BookmarkPlus aria-hidden />
+            <span className="max-sm:sr-only">Save as template</span>
+          </Button>
+          <SaveTemplateDialog draft={saving} onOpenChange={(o) => !o && setSaving(null)} />
           {templateMenu}
         </>
       }
@@ -158,7 +192,12 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
           <CountChip value={`×${form.count}`}>
             <CountPicker value={form.count} onChange={(n) => set('count', n)} />
           </CountChip>
-          <StyleChip options={IMAGE_STYLES} value={form.style as (typeof IMAGE_STYLES)[number]['value'] | null} onChange={(v) => set('style', v)} />
+          <StyleDockChip
+            value={form.style}
+            onChange={(v) => set('style', v)}
+            modelId={effective?.id}
+            onUseModel={(id) => setForm((f) => ({ ...f, model: id, speed: undefined }))}
+          />
           <DockChip name="References" value="Refs" icon={<ImagePlus aria-hidden />}>
             <p className="text-small text-studio-muted">Start from a picture you have. You can also drop or paste one anywhere on this page.</p>
             <div className="flex flex-wrap gap-2">

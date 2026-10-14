@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import { fieldClass } from '@/components/ui/input'
+import { StyleDockChip } from '@/components/generate/StyleGallery'
 import type { TemplateOption } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -17,7 +18,21 @@ export function TemplateChoices({
   if (!options.length) return null
   return (
     <div role="group" aria-label="Template choices" className="flex flex-wrap items-end gap-3">
-      {options.map((o, n) => (
+      {options.map((o, n) =>
+        o.gallery === 'styles' ? (
+          // the Restyle card: the same gallery as Create Image, writing "Label: description" into [style]
+          <div key={o.slot} className="flex flex-col items-start gap-1">
+            <span className="text-small font-medium">{o.label}</span>
+            <StyleDockChip
+              value={picked[o.slot] === undefined ? null : (o.choices[picked[o.slot]]?.style_id ?? null)}
+              onChange={(id) => {
+                const i = o.choices.findIndex((c) => c.style_id === id)
+                if (i >= 0) onPick(o, i)
+              }}
+              allowNone={false}
+            />
+          </div>
+        ) : (
         <div key={o.slot} className="flex flex-col gap-1">
           <label htmlFor={`${uid}-${n}`} className="text-small font-medium">
             {o.label}

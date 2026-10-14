@@ -11,15 +11,6 @@ export const IMAGE_ASPECTS: { value: ImageAspect; label: string; size: string; w
   { value: '3:2', label: 'Photo wide', size: '1216×832', w: 26, h: 17 },
 ]
 
-export const IMAGE_STYLES = [
-  { value: 'photoreal', label: 'Photoreal' },
-  { value: 'cinematic', label: 'Cinematic' },
-  { value: 'illustration', label: 'Illustration' },
-  { value: 'anime', label: 'Anime' },
-  { value: '3d', label: '3D render' },
-  { value: 'painting', label: 'Painting' },
-] as const
-
 export const MAX_EDIT_SOURCES = 3
 export const MAX_COUNT = 4
 

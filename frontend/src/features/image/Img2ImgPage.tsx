@@ -11,14 +11,16 @@ import { GeneratorPage, ResultsHeading } from '@/components/generate/GeneratorPa
 import { PromptDock } from '@/components/generate/PromptDock'
 import { RefSlot } from '@/components/generate/RefSlot'
 import { SessionResults } from '@/components/generate/SessionResults'
+import { StyleDockChip } from '@/components/generate/StyleGallery'
 import { useDockModels } from '@/components/generate/useDockModels'
 import { useMagicPrompt } from '@/components/generate/useMagicPrompt'
 import { useRecordRun } from '@/components/generate/useRecordRun'
 import { useBrandChoice } from '@/hooks/useBrandKits'
 import { useGenEstimate } from '@/hooks/useGenEstimate'
-import { flatItems, useImg2Img, useMediaItem, useMediaList } from '@/hooks/useMedia'
+import { flatItems, useImageOptions, useImg2Img, useMediaItem, useMediaList } from '@/hooks/useMedia'
 import { localEstimate } from '@/lib/estimate'
-import { DEFAULT_I2I_FORM, i2iModels, img2imgPayload, strengthLabel, type Img2ImgForm } from '@/lib/img2img'
+import { DEFAULT_I2I_FORM, i2iModels, img2imgPayload, STRENGTH_DEFAULT, strengthLabel, type Img2ImgForm } from '@/lib/img2img'
+import { findStyle, restyleStrength } from '@/lib/styles'
 import { defaultSpeed, normalizeModelId } from '@/lib/models'
 import type { Img2ImgRequest } from '@/lib/types'
 import { plural } from '@/lib/utils'
@@ -46,7 +48,20 @@ export function Img2ImgPage() {
   const [modelId, setModelId] = useState<string | undefined>(wanted ?? undefined)
   const [speedId, setSpeedId] = useState<string | undefined>()
   const [batch, setBatch] = useState<string[]>([])
+  // once the user moves the slider, picking a style no longer moves it for them
+  const [strengthSet, setStrengthSet] = useState(false)
   const set = <K extends keyof Img2ImgForm>(k: K, v: Img2ImgForm[K]) => setForm((f) => ({ ...f, [k]: v }))
+  const options = useImageOptions()
+  const styles = options.data?.styles ?? []
+  const style = findStyle(styles, form.style, options.data?.style_aliases)
+  const pickStyle = (id: string | null) => {
+    const next = findStyle(styles, id)
+    setForm((f) => ({ ...f, style: id, strength: strengthSet ? f.strength : restyleStrength(next, options.data?.style_groups ?? [], STRENGTH_DEFAULT) }))
+  }
+  const setStrength = (v: number) => {
+    setStrengthSet(true)
+    set('strength', v)
+  }
 
   const { models, model, send, effective } = useDockModels('image', modelId, { only: i2iModels, prompt: form.prompt, count: form.count })
   const speed = model?.speeds?.find((s) => s.id === speedId && s.available !== false) ?? defaultSpeed(model)
@@ -64,7 +79,12 @@ export function Img2ImgPage() {
     localEstimate(effective, { count: form.count, speed: speed?.id }),
   )
 
-  const blocked = !form.sourceId ? 'Add your picture first: drop, paste or pick one.' : form.prompt.trim().length < 3 ? 'Describe the result first.' : null
+  // a style on its own is enough: "redraw my photo as watercolour"
+  const blocked = !form.sourceId
+    ? 'Add your picture first: drop, paste or pick one.'
+    : !form.style && form.prompt.trim().length < 3
+      ? 'Describe the result or pick a style first.'
+      : null
 
   const go = (r: I2iRun) =>
     run.mutate(r.body, {
@@ -78,7 +98,9 @@ export function Img2ImgPage() {
   const submit = () => {
     if (blocked || run.isPending || !form.sourceId) return
     const body = { ...img2imgPayload({ ...form, sourceId: form.sourceId }, send, speed?.id, brand.sendId), ...magic.fields() }
-    const summary = [model?.label, `${strengthLabel(form.strength)} ${form.strength.toFixed(2)}`, form.aspect === 'source' ? 'source shape' : form.aspect, plural(form.count, 'image')].join(' · ')
+    const summary = [model?.label, style?.label, `${strengthLabel(form.strength)} ${form.strength.toFixed(2)}`, form.aspect === 'source' ? 'source shape' : form.aspect, plural(form.count, 'image')]
+      .filter(Boolean)
+      .join(' · ')
     go({ form, model: model?.id, speed: speed?.id, body, summary })
   }
 
@@ -109,6 +131,7 @@ export function Img2ImgPage() {
           </div>
         }
         promptLabel="Describe the result"
+        promptHint={form.style ? 'Optional with a style: leave it empty to restyle the picture as it is.' : undefined}
         prompt={form.prompt}
         onPrompt={(v) => set('prompt', v)}
         mentions={{ refBudget: 0, namesOnlyNote: 'Image to Image redraws one picture, so each mention adds its name and a short description. To put someone in, use Edit Image.' }}
@@ -126,8 +149,10 @@ export function Img2ImgPage() {
               onSpeed={setSpeedId}
               highlighted={!!wanted}
             />
-            <DockChip name="How much to change" value={`${strengthLabel(form.strength)} ${form.strength.toFixed(2)}`} icon={<Gauge aria-hidden />}>
-              <StrengthSlider value={form.strength} onChange={(v) => set('strength', v)} />
+            <StyleDockChip value={form.style} onChange={pickStyle} modelId={effective?.id} noneHint="Your words only" />
+            <DockChip name="Style strength" value={`${strengthLabel(form.strength)} ${form.strength.toFixed(2)}`} icon={<Gauge aria-hidden />}>
+              <StrengthSlider value={form.strength} onChange={setStrength} />
+              {style && !strengthSet && <p className="text-small text-studio-muted">Set for {style.label}; move it and it stays where you put it.</p>}
             </DockChip>
             <AspectChip value={form.aspect === 'source' ? 'Keep source' : form.aspect}>
               <ImageAspectTiles value={form.aspect === 'source' ? null : form.aspect} onChange={(v) => set('aspect', v ?? 'source')} allowAuto autoLabel="Keep source" />

@@ -3,7 +3,7 @@ import { STRENGTH_DEFAULT, STRENGTH_MARKS, STRENGTH_MAX, STRENGTH_MIN, strengthH
 
 const pct = (v: number) => ((v - STRENGTH_MIN) / (STRENGTH_MAX - STRENGTH_MIN)) * 100
 
-/** "How much to change": a plain range input, so arrow keys, Home/End and screen readers all just work. */
+/** "Style strength": a plain range input, so arrow keys, Home/End and screen readers all just work. */
 export function StrengthSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const uid = useId()
   const word = strengthLabel(value)
@@ -11,7 +11,7 @@ export function StrengthSlider({ value, onChange }: { value: number; onChange: (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between gap-2">
         <label htmlFor={`${uid}-s`} className="section-label">
-          How much to change
+          Style strength
         </label>
         <output htmlFor={`${uid}-s`} className="text-small">
           <span className="font-medium">{word}</span> <span className="font-mono text-studio-muted">{value.toFixed(2)}</span>
@@ -30,16 +30,19 @@ export function StrengthSlider({ value, onChange }: { value: number; onChange: (
         aria-describedby={`${uid}-h`}
         className="w-full accent-[var(--accent)]"
       />
-      <div aria-hidden className="relative h-4 text-small text-studio-muted">
-        {STRENGTH_MARKS.map((m, i) => (
-          <span
+      {/* the marks are presets too: one click sets the slider there */}
+      <div role="group" aria-label="Style strength presets" className="relative h-6 text-small">
+        {STRENGTH_MARKS.map((m) => (
+          <button
             key={m.label}
-            className="absolute -translate-x-1/2 whitespace-nowrap data-[edge=first]:translate-x-0 data-[edge=last]:-translate-x-full"
-            data-edge={i === 0 ? 'first' : i === STRENGTH_MARKS.length - 1 ? 'last' : undefined}
-            style={{ left: `${i === 0 ? 0 : i === STRENGTH_MARKS.length - 1 ? 100 : pct(m.value)}%` }}
+            type="button"
+            onClick={() => onChange(m.value)}
+            aria-pressed={Math.abs(value - m.value) < 0.001}
+            className="absolute -translate-x-1/2 whitespace-nowrap rounded-[4px] px-1 text-studio-muted hover:text-studio-text aria-pressed:font-medium aria-pressed:text-studio-text"
+            style={{ left: `${pct(m.value)}%` }}
           >
-            {m.label}
-          </span>
+            {m.label} {m.value.toFixed(1)}
+          </button>
         ))}
       </div>
       <p id={`${uid}-h`} className="text-small text-studio-muted">

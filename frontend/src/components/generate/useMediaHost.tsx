@@ -19,7 +19,9 @@ import type { MediaDetail, MediaItem, RegenerateMode } from '@/lib/types'
 import { useFavourites } from '@/stores/favourites'
 import { trackJobs } from '@/stores/toasts'
 import { announce } from '@/stores/ui'
+import { draftFromItem, type TemplateDraft } from '@/lib/templates'
 import { Lightbox, type LightboxEntry } from './Lightbox'
+import { SaveTemplateDialog } from './SaveTemplateDialog'
 import type { TileHandlers } from './TileActions'
 
 export function entryFor(item: MediaItem, detail?: MediaDetail | null, fav = false): LightboxEntry {
@@ -90,6 +92,7 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
   const [deleting, setDeleting] = useState<MediaItem | null>(null)
   const [moving, setMoving] = useState<MediaItem | null>(null)
   const [renaming, setRenaming] = useState<MediaItem | null>(null)
+  const [saving, setSaving] = useState<TemplateDraft | null>(null)
   const regenerate = useMediaRegenerate()
   const remove = useDeleteMedia()
   const move = useBatchAction()
@@ -152,6 +155,11 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
     },
     retry,
     refLabel,
+    saveTemplate: (item, count) => {
+      setViewing(null)
+      const d = draftFromItem(item)
+      setSaving(d && { ...d, count: Math.min(4, count ?? d.count) })
+    },
   }
 
   const byKey = (fn: (m: MediaItem) => void) => (e: LightboxEntry) => {
@@ -208,6 +216,7 @@ export function useMediaHost({ items, onUseAsRef, refLabel = 'Use as reference',
           if (item) move.mutate({ action: 'move', refs: [mediaRef(item)], options: { folder_id: folderId } }, { onSuccess: () => announce(`Moved ${mediaAlt(item)}.`) })
         }}
       />
+      <SaveTemplateDialog draft={saving} onOpenChange={(o) => !o && setSaving(null)} />
       <RenameDialog
         item={renaming}
         pending={rename.isPending}

@@ -2788,7 +2788,8 @@
    "required": {
     "name": [
      [
-      "SUPIR-v0Q_fp16.safetensors"
+      "SUPIR-v0Q_fp16.safetensors",
+      "Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
      ]
     ]
    }
@@ -4277,6 +4278,176 @@
      "FLOAT",
      {
       "default": 2.5
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "QwenImageDiffsynthControlnet": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "model_patch": [
+     "MODEL_PATCH"
+    ],
+    "vae": [
+     "VAE"
+    ],
+    "image": [
+     "IMAGE"
+    ],
+    "strength": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "min": -10.0,
+      "max": 10.0,
+      "step": 0.01
+     }
+    ]
+   },
+   "optional": {
+    "mask": [
+     "MASK"
+    ],
+    "start_percent": [
+     "FLOAT",
+     {
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.001
+     }
+    ],
+    "end_percent": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.001
+     }
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ],
+  "output_name": [
+   "MODEL"
+  ]
+ },
+ "DWPreprocessor": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   },
+   "optional": {
+    "detect_hand": [
+     [
+      "enable",
+      "disable"
+     ],
+     {
+      "default": "enable"
+     }
+    ],
+    "detect_body": [
+     [
+      "enable",
+      "disable"
+     ],
+     {
+      "default": "enable"
+     }
+    ],
+    "detect_face": [
+     [
+      "enable",
+      "disable"
+     ],
+     {
+      "default": "enable"
+     }
+    ],
+    "resolution": [
+     "INT",
+     {
+      "default": 512,
+      "min": 64,
+      "max": 16384,
+      "step": 64
+     }
+    ],
+    "bbox_detector": [
+     [
+      "None",
+      "yolox_l.torchscript.pt",
+      "yolox_l.onnx",
+      "yolo_nas_l_fp16.onnx",
+      "yolo_nas_m_fp16.onnx",
+      "yolo_nas_s_fp16.onnx"
+     ],
+     {
+      "default": "yolox_l.onnx"
+     }
+    ],
+    "pose_estimator": [
+     [
+      "dw-ll_ucoco_384_bs5.torchscript.pt",
+      "dw-ll_ucoco_384.onnx",
+      "dw-ll_ucoco.onnx"
+     ],
+     {
+      "default": "dw-ll_ucoco_384_bs5.torchscript.pt"
+     }
+    ],
+    "scale_stick_for_xinsr_cn": [
+     [
+      "disable",
+      "enable"
+     ],
+     {
+      "default": "disable"
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE",
+   "POSE_KEYPOINT"
+  ]
+ },
+ "Scribble_XDoG_Preprocessor": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   },
+   "optional": {
+    "threshold": [
+     "INT",
+     {
+      "default": 32,
+      "min": 1,
+      "max": 64
+     }
+    ],
+    "resolution": [
+     "INT",
+     {
+      "default": 512,
+      "min": 64,
+      "max": 16384,
+      "step": 64
      }
     ]
    }

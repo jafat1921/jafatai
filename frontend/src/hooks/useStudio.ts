@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { qk } from './keys'
 import type { TemplateType } from '@/lib/types'
@@ -10,6 +10,25 @@ export function useTemplates(type: TemplateType) {
 
 export function useStartTemplate() {
   return useMutation({ mutationFn: (id: string) => api.templates.start(id) })
+}
+
+// v31: "Save as template" and the My templates cards; the image list carries them, so it is what refreshes
+export function useSaveTemplate() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: api.templates.save, onSuccess: () => qc.invalidateQueries({ queryKey: qk.templates('image') }) })
+}
+
+export function useRenameTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => api.templates.rename(id, title),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.templates('image') }),
+  })
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (id: string) => api.templates.remove(id), onSuccess: () => qc.invalidateQueries({ queryKey: qk.templates('image') }) })
 }
 
 export function useDashboard() {

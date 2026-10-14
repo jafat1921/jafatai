@@ -15,7 +15,7 @@ from PIL import Image
 from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import thumbs
+from app import styles, thumbs
 from app.config import get_settings
 from app.models import Character, Generation, Job, Location, MediaItem, Project, utcnow
 from app.schemas import MediaDetailOut, MediaItemOut
@@ -68,17 +68,8 @@ def clean_tags(tags: list[str]) -> list[str]:
 ASPECTS = {"1:1": (1, 1), "16:9": (16, 9), "9:16": (9, 16), "4:3": (4, 3), "3:4": (3, 4), "2:3": (2, 3), "3:2": (3, 2)}
 TARGET_PIXELS = 1024 * 1024
 
-# appended to the user's prompt; short and concrete so Z-Image doesn't drown the subject
-STYLES = {
-    "photoreal": ("Photoreal", "photorealistic, natural light, true-to-life colour, sharp focus, fine detail"),
-    "cinematic": ("Cinematic", "cinematic film still, anamorphic lens, shallow depth of field, motivated lighting, "
-                               "subtle film grain, graded colour"),
-    "illustration": ("Illustration", "detailed digital illustration, clean linework, painterly shading, "
-                                     "harmonious palette"),
-    "product": ("Product", "commercial product photography, seamless studio backdrop, softbox lighting, "
-                           "crisp reflections, high detail"),
-    "painterly": ("Painterly", "oil painting, visible brushwork, rich texture, classical composition"),
-}
+# the style catalogue (contract v31) lives in templates/styles.json; aliases (painterly -> oil) included here
+STYLES = styles.by_id()
 
 
 def snap64(x: float) -> int:
@@ -95,9 +86,12 @@ def size_for_aspect(aspect: str) -> tuple[int, int]:
 
 
 def styled_prompt(prompt: str, style: str | None) -> str:
-    if not style:
+    s = styles.get(style)
+    if s is None:
         return prompt.strip()
-    return f"{prompt.strip().rstrip('.')}. {STYLES[style][1]}"
+    if not prompt.strip():
+        return s.positive  # a restyle may say nothing but the style
+    return f"{prompt.strip().rstrip('.')}. {s.positive}"
 
 
 # ---------------------------------------------------------------- shaping

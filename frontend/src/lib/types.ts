@@ -959,13 +959,86 @@ export interface ImageToolInfo {
 /** What a template card says about the tool behind it. */
 export type TemplateTool = Pick<ImageToolInfo, 'id' | 'label' | 'engine' | 'licence' | 'noncommercial' | 'fallback' | 'needs_mask'>
 
+/** GET /images/options styles (contract v31): prompt modifiers, grouped, with a 3:4 example picture when rendered. */
+export interface ImageStyle {
+  id: string
+  group: string
+  label: string
+  subtitle: string
+  suffix: string
+  negative: string
+  best_model: string
+  preview_url: string | null
+}
+
+export interface StyleGroup {
+  id: string
+  label: string
+  // Image to Image starts its slider here for this group
+  restyle_strength?: number
+}
+
+export interface ImageOptions {
+  styles: ImageStyle[]
+  style_groups: StyleGroup[]
+  style_aliases: Record<string, string>
+}
+
+export type ControlType = 'depth' | 'canny' | 'pose' | 'hed' | 'scribble'
+
+/** GET /images/tools "control" (contract v31): the Z-Image ControlNet and the map types this server can make. */
+export interface ControlStatus {
+  engine: string
+  licence: string
+  available: boolean
+  reason: string | null
+  fallback: string
+  strength: { min: number; max: number; default: number }
+  types: { id: ControlType; label: string; detector: string; licence: string; noncommercial: boolean; available: boolean; reason: string | null }[]
+}
+
+export interface ImageControlRequest {
+  folder_id?: string
+  source_id: string
+  control: ControlType
+  use_as_is?: boolean
+  prompt: string
+  style?: string
+  strength: number
+  aspect: Img2ImgAspect
+  count: number
+  seed?: number
+  negative?: string
+  engine?: 'auto' | 'controlnet' | 'edit'
+  template_id?: string
+}
+
+/** POST /my-templates: Save as template (contract v31). */
+export interface UserTemplateRequest {
+  title: string
+  description?: string
+  target: 'generate' | 'edit'
+  prompt: string
+  negative?: string
+  style?: string | null
+  model?: string | null
+  aspect?: ImageAspect | null
+  count: number
+  ref_labels?: string[]
+  examples?: Record<string, string>
+  from_media_id?: string
+}
+
 export type Img2ImgAspect = 'source' | ImageAspect
 
 export interface Img2ImgRequest extends MagicFields {
   // P4 "Generate into…"
   folder_id?: string
   source_id: string
+  // may be empty when a style is set (contract v31)
   prompt: string
+  style?: string
+  template_id?: string
   strength: number
   count: number
   aspect: Img2ImgAspect
@@ -1001,23 +1074,29 @@ export interface Template {
   preview_url?: string | null
   requires_brand?: boolean
   // v29: image templates that open Edit Image, with the pictures they need
-  target?: 'image-generate' | 'image-edit' | null
+  target?: 'image-generate' | 'image-edit' | 'image-control' | null
   refs_required?: number
   ref_labels?: string[]
   options?: TemplateOption[]
   // v30: the image tool behind an edit card
   tool?: TemplateTool | null
+  // v31: Depth / Sketch / Pose to image cards
+  control?: { type: ControlType; label: string; detector: string; licence: string; noncommercial: boolean; as_is: boolean } | null
+  // v31: saved in this workspace; can be renamed and deleted
+  mine?: boolean
 }
 
 /** A picker that fills one [slot] of a template's prompt or instruction. */
 export interface TemplateOption {
   slot: string
   label: string
-  choices: { label: string; value: string; aspect?: ImageAspect }[]
+  choices: { label: string; value: string; aspect?: ImageAspect; style_id?: string }[]
+  // v31: "styles" shows the style gallery instead of a plain list
+  gallery?: 'styles'
 }
 
 export interface TemplateStart {
-  target: 'quick' | 'studio' | 'image' | 'image-edit' | 'audio'
+  target: 'quick' | 'studio' | 'image' | 'image-edit' | 'image-control' | 'audio'
   prefill: Record<string, unknown>
 }
 

@@ -1,15 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ArrowRight, LayoutTemplate, Search } from 'lucide-react'
+import { ArrowRight, LayoutTemplate, MoreHorizontal, Pencil, Search, Trash2 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Chip } from '@/components/studio/chip'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { useImageTools } from '@/hooks/useMedia'
-import { useStartTemplate, useTemplates } from '@/hooks/useStudio'
+import { useDeleteTemplate, useRenameTemplate, useStartTemplate, useTemplates } from '@/hooks/useStudio'
 import { splitPlaceholders } from '@/lib/images'
-import { isEditTemplate, localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
+import { isControlTemplate, isEditTemplate, localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
+import { announce } from '@/stores/ui'
 import { AUDIO_ROUTE, audioKindOf, KIND_NOUN } from '@/lib/audio'
 import type { Template, TemplateStart, TemplateType } from '@/lib/types'
 import { formatRuntime } from '@/lib/utils'
@@ -41,6 +46,7 @@ function meta(t: Template) {
   if (t.type === 'video') bits.push(d.authoring_mode && d.authoring_mode !== 'quick' ? 'Studio project' : 'Quick video')
   else if (t.type === 'audio') bits.push(KIND_NOUN[audioKindOf(t)].one)
   else if (isEditTemplate(t)) bits.push(`Edit · needs ${(t.ref_labels ?? []).join(' + ') || 'a photo'}`)
+  else if (isControlTemplate(t)) bits.push(t.control?.as_is ? 'Needs your sketch' : 'Needs a photo or map')
   else if (typeof d.count === 'number') bits.push(`${d.count} variations`)
   if (d.model === 'qwen_image_2512') bits.push('Qwen text')
   return bits.join(' · ')
@@ -56,6 +62,95 @@ const MODES: { value: Mode; label: string }[] = [
   { value: 'generate', label: 'Generate' },
   { value: 'edit', label: 'Edit my photo' },
 ]
+// sketch, depth and pose cards start from the user's own picture too
+const fromPicture = (t: Template) => isEditTemplate(t) || isControlTemplate(t)
+
+function MineMenu({ t }: { t: Template }) {
+  const uid = useId()
+  const rename = useRenameTemplate()
+  const remove = useDeleteTemplate()
+  const [renaming, setRenaming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [title, setTitle] = useState(t.title)
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" variant="ghost" aria-label={`More for ${t.title}`}>
+            <MoreHorizontal aria-hidden />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onSelect={() => {
+              setTitle(t.title)
+              rename.reset()
+              setRenaming(true)
+            }}
+          >
+            <Pencil aria-hidden />
+            Rename…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setDeleting(true)} className="text-studio-danger">
+            <Trash2 aria-hidden />
+            Delete…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog open={renaming} onOpenChange={setRenaming}>
+        <DialogContent className="max-w-md">
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!title.trim()) return
+              rename.mutate(
+                { id: t.id, title: title.trim() },
+                {
+                  onSuccess: (r) => {
+                    setRenaming(false)
+                    announce(`Renamed to ${r.title}.`)
+                  },
+                },
+              )
+            }}
+          >
+            <DialogHeader className="mb-0">
+              <DialogTitle>Rename template</DialogTitle>
+              <DialogDescription>Everyone in this workspace sees the new name.</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${uid}-n`}>Name</Label>
+              <Input id={`${uid}-n`} value={title} maxLength={120} autoFocus onChange={(e) => setTitle(e.target.value)} />
+              {rename.isError && (
+                <p role="alert" className="text-small text-studio-danger">
+                  {rename.error.message}
+                </p>
+              )}
+            </div>
+            <DialogFooter className="mt-0">
+              <Button type="button" variant="ghost" onClick={() => setRenaming(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={!title.trim()} loading={rename.isPending}>
+                Save name
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={`Delete “${t.title}”?`}
+        description="It goes from My templates for everyone in this workspace. Pictures made with it stay in the Library."
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => remove.mutate(t.id, { onSuccess: () => announce(`Deleted the ${t.title} template.`) })}
+      />
+    </>
+  )
+}
 
 function Card({ t, onStart, starting }: { t: Template; onStart: () => void; starting: boolean }) {
   const prompt = scaffoldOf(t)
@@ -63,14 +158,24 @@ function Card({ t, onStart, starting }: { t: Template; onStart: () => void; star
     <article aria-labelledby={`tpl-${t.id}`} className="flex flex-col overflow-hidden rounded-[8px] border border-studio-border-strong bg-studio-panel shadow-card">
       <TemplatePreview t={t} className="aspect-[4/3] border-x-0 border-t-0" />
       <div className="flex flex-1 flex-col gap-2 p-3">
-        {t.category && <p className="section-label">{t.category}</p>}
-        <h2 id={`tpl-${t.id}`} className="font-display text-panel font-semibold">
-          {t.title}
-        </h2>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-col gap-2">
+            {t.category && <p className="section-label">{t.category}</p>}
+            <h2 id={`tpl-${t.id}`} className="font-display text-panel font-semibold">
+              {t.title}
+            </h2>
+          </div>
+          {t.mine && <MineMenu t={t} />}
+        </div>
         <p className="text-small text-studio-muted">{t.description}</p>
         {prompt && (
           <p className="line-clamp-3 rounded-[6px] border border-studio-border bg-studio-raised px-2 py-1.5 text-small">
             <Highlighted text={prompt} examples={t.examples} />
+          </p>
+        )}
+        {t.control && (
+          <p className="text-[12px] text-studio-muted">
+            Runs on Z-Image Turbo + Fun ControlNet when installed, else the edit model · {t.control.noncommercial ? 'non-commercial licence' : 'Apache-2.0'}
           </p>
         )}
         {t.tool && (
@@ -81,7 +186,7 @@ function Card({ t, onStart, starting }: { t: Template; onStart: () => void; star
         )}
         <p className="mt-auto font-mono text-[12px] text-studio-muted">{meta(t)}</p>
         <Button variant="primary" onClick={onStart} loading={starting} aria-label={`Use the ${t.title} prompt template`}>
-          {isEditTemplate(t) ? 'Use with my photos' : 'Use prompt template'}
+          {isEditTemplate(t) ? 'Use with my photos' : isControlTemplate(t) ? 'Use with my picture' : 'Use prompt template'}
           <ArrowRight aria-hidden />
         </Button>
       </div>
@@ -111,18 +216,20 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
     () => templates.data?.filter((t) => !t.tool || t.tool.fallback || !tools.isSuccess || tools.data.some((x) => x.id === t.tool?.id && x.available)),
     [templates.data, tools.isSuccess, tools.data],
   )
-  const hasEdits = !!all?.some(isEditTemplate)
-  const inMode = useMemo(() => (all ?? []).filter((t) => !mode || (mode === 'edit') === isEditTemplate(t)), [all, mode])
-  // the server sends them in category order
-  const categories = useMemo(() => [...new Set(inMode.map((t) => t.category).filter((c): c is string => !!c))], [inMode])
-  const shown = useMemo(() => {
+  const hasEdits = !!all?.some(fromPicture)
+  const inMode = useMemo(() => (all ?? []).filter((t) => !mode || (mode === 'edit') === fromPicture(t)), [all, mode])
+  // the workspace's own get a section of their own; the rest come in category order from the server
+  const shipped = useMemo(() => inMode.filter((t) => !t.mine), [inMode])
+  const categories = useMemo(() => [...new Set(shipped.map((t) => t.category).filter((c): c is string => !!c))], [shipped])
+  const [shown, mine] = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean)
-    return inMode.filter((t) => (!category || t.category === category) && words.every((w) => haystack(t).includes(w)))
-  }, [inMode, q, category])
+    const hit = (t: Template) => words.every((w) => haystack(t).includes(w))
+    return [shipped.filter((t) => (!category || t.category === category) && hit(t)), inMode.filter((t) => t.mine && hit(t))]
+  }, [shipped, inMode, q, category])
   const chooseMode = (m: Mode | null) => {
     setMode(m)
     // a category from the other mode would leave nothing on screen
-    if (category && !all?.some((t) => t.category === category && (!m || (m === 'edit') === isEditTemplate(t)))) setCategory(null)
+    if (category && !all?.some((t) => t.category === category && (!m || (m === 'edit') === fromPicture(t)))) setCategory(null)
   }
 
   const open = (t: Template) =>
@@ -179,6 +286,21 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
               </Chip>
             ))}
           </div>
+        )}
+        {mine.length > 0 && (
+          <section aria-labelledby="tpl-mine" className="flex flex-col gap-3">
+            <h2 id="tpl-mine" className="font-display text-panel font-semibold">
+              My templates
+            </h2>
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+              {mine.map((t) => (
+                <li key={t.id} className="flex [&>article]:w-full">
+                  <Card t={t} onStart={() => open(t)} starting={start.isPending && start.variables === t.id} />
+                </li>
+              ))}
+            </ul>
+            <h2 className="mt-2 font-display text-panel font-semibold">{noun}</h2>
+          </section>
         )}
         {templates.isPending ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4" role="status" aria-label="Loading prompt templates">

@@ -40,6 +40,6 @@ async def enhance(body: EnhanceIn, db: Session = Depends(get_db), cur: CurrentUs
             raise HTTPException(404, "Brand kit not found")
         context = brand.prompt_context(kit)
     # image styles go by their label; quick styles (cinematic, documentary...) are labels already
-    style = lib.STYLES[body.style][0] if body.style in lib.STYLES else body.style
+    style = lib.STYLES[body.style].label if body.style in lib.STYLES else body.style
     return await prompt_enhance.enhance(body.prompt, body.kind, mode=body.mode, model=body.model, style=style,
                                         brand_context=context)

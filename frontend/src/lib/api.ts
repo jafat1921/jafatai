@@ -69,6 +69,10 @@ import type {
   ImageEditRequest,
   ImageGenerateRequest,
   ImageToolInfo,
+  ImageControlRequest,
+  ImageOptions,
+  ControlStatus,
+  UserTemplateRequest,
   LlmCheck,
   MediaBatch,
   MediaDetail,
@@ -554,7 +558,10 @@ export const api = {
     generate: (body: ImageGenerateRequest) => post<MediaBatch>('/images/generate', body),
     edit: (body: ImageEditRequest) => post<MediaBatch>('/images/edit', body),
     img2img: (body: Img2ImgRequest) => post<MediaBatch>('/images/img2img', body),
-    tools: () => get<{ tools: ImageToolInfo[] }>('/images/tools'),
+    tools: () => get<{ tools: ImageToolInfo[]; control?: ControlStatus }>('/images/tools'),
+    // contract v31
+    options: () => get<ImageOptions>('/images/options'),
+    control: (body: ImageControlRequest) => post<MediaBatch>('/images/control', body),
   },
   // contract-v6
   models: {
@@ -734,6 +741,10 @@ export const api = {
   templates: {
     list: (type: TemplateType) => get<Template[]>('/prompt-templates', { type }),
     start: (id: string) => post<TemplateStart>(`/prompt-templates/${id}/start`),
+    // v31: the workspace's own ("Save as template")
+    save: (body: UserTemplateRequest) => post<Template>('/my-templates', body),
+    rename: (id: string, title: string) => patch<Template>(`/my-templates/${id}`, { title }),
+    remove: (id: string) => del(`/my-templates/${id}`),
   },
   // contract-v9: Photo Studio
   photo: {

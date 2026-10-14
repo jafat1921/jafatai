@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteD
 import { api } from '@/lib/api'
 import { tileState } from '@/lib/images'
 import { withInto } from '@/stores/generateInto'
-import type { Generation, ImageEditRequest, ImageGenerateRequest, Img2ImgRequest, MediaDetail, MediaItem, MediaKind, MediaOrigin, MediaPage, MediaQuery, RegenerateMode } from '@/lib/types'
+import type { Generation, ImageControlRequest, ImageEditRequest, ImageGenerateRequest, ImageOptions, ImageStyle, Img2ImgRequest, MediaDetail, StyleGroup, MediaItem, MediaKind, MediaOrigin, MediaPage, MediaQuery, RegenerateMode } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob, useJobs } from './useJobs'
 
@@ -121,8 +121,28 @@ export const useImageGenerate = () => useBatch((body: ImageGenerateRequest) => a
 export const useImageTools = (enabled = true) =>
   useQuery({ queryKey: ['images', 'tools'], queryFn: api.images.tools, staleTime: 60_000, enabled, select: (d) => (Array.isArray(d?.tools) ? d.tools : []) })
 
+// contract v31: the Z-Image ControlNet behind Depth / Sketch / Pose to image; same request as the tools list
+export const useControlStatus = () =>
+  useQuery({ queryKey: ['images', 'tools'], queryFn: api.images.tools, staleTime: 60_000, select: (d) => d?.control ?? null })
+
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+
+// contract v31: the style catalogue (and aspects); an older or failing server gives an empty gallery, not a crash
+export const useImageOptions = () =>
+  useQuery({
+    queryKey: ['images', 'options'],
+    queryFn: api.images.options,
+    staleTime: 30 * 60_000,
+    select: (d): ImageOptions => ({
+      styles: asArray<ImageStyle>(d?.styles).filter((s) => s && typeof s.id === 'string'),
+      style_groups: asArray<StyleGroup>(d?.style_groups),
+      style_aliases: d?.style_aliases && typeof d.style_aliases === 'object' ? d.style_aliases : {},
+    }),
+  })
+
 export const useImageEdit = () => useBatch((body: ImageEditRequest) => api.images.edit(withInto('image', body)))
 export const useImg2Img = () => useBatch((body: Img2ImgRequest) => api.images.img2img(withInto('image', body)))
+export const useImageControl = () => useBatch((body: ImageControlRequest) => api.images.control(withInto('image', body)))
 
 export function useMediaRegenerate() {
   const qc = useQueryClient()

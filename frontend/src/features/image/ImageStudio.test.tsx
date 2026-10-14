@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addSources, editPayload, imagePayload, DEFAULT_IMAGE_FORM, placeholdersIn, splitPlaceholders } from '@/lib/images'
 import { job, media, mockApi, renderAt } from '@/test/media-fixtures'
 import { closeChip, openChip } from '@/test/dock'
+import { STYLE_OPTIONS } from '@/test/style-fixtures'
 import { ImageEditPage } from './ImageEditPage'
 import { ImageGeneratePage } from './ImageGeneratePage'
 import { ImageReferencesPage } from './ImageReferencesPage'
@@ -45,6 +46,7 @@ describe('Create Image page', () => {
     const calls = mockApi((method, path) => {
       if (path === '/media') return { items: [media('old', { title: 'Older image' })] }
       if (path === '/prompt-templates') return []
+      if (path === '/images/options') return STYLE_OPTIONS
       if (method === 'POST' && path === '/images/generate') return { items: created, jobs: [job('j1', { generation_id: 'g-n1' }), job('j2', { generation_id: 'g-n2' })] }
     })
     renderAt('/image/generate?model=z-image-turbo', [{ path: '/image/generate', element: <ImageGeneratePage /> }])
@@ -58,7 +60,7 @@ describe('Create Image page', () => {
     await closeChip(user)
     await user.click(within(await openChip(user, 'Count')).getByRole('radio', { name: '4 images' }))
     await closeChip(user)
-    await user.click(within(await openChip(user, 'Style')).getByRole('button', { name: 'Cinematic' }))
+    await user.click(within(await openChip(user, 'Style')).getByRole('radio', { name: 'Cinematic, Film still' }))
     await closeChip(user)
     expect(screen.getByRole('button', { name: 'Style: Cinematic' })).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Advanced' }))

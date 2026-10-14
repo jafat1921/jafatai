@@ -32,8 +32,8 @@ def test_template_json_is_sound(kind, minimum):
         assert t["id"].startswith(f"{kind}-") and re.fullmatch(r"[a-z0-9-]+", t["id"])
         assert t["title"] and t["description"] and t["tags"]
         d = t["defaults"]
-        if t.get("target") == "image-edit":
-            continue  # test_edit_templates
+        if t.get("target") in ("image-edit", "image-control"):
+            continue  # test_edit_templates, test_control_templates
         texts = [d.get("prompt_scaffold", ""), d.get("logline_hint", ""), t.get("preview_prompt", "")]
         slots = set(SLOT.findall(d["prompt_scaffold"]))
         assert 2 <= len(slots) <= 4, t["id"]
@@ -121,7 +121,9 @@ EDIT_IDS = {"image-edit-outfit-swap", "image-edit-hairstyle", "image-edit-hairst
             "image-edit-3d-billboard", "image-edit-miniature-factory", "image-edit-exploded-view",
             "image-edit-photo-grid", "image-edit-across-time", "image-edit-front-page", "image-edit-mini-me",
             "image-edit-tiny-me", "image-edit-pet-cover", "image-edit-style-breakdown", "image-edit-trend-collage",
-            "image-edit-virtual-tryon", "image-edit-depth-map", "image-edit-edge-map"}
+            "image-edit-virtual-tryon", "image-edit-depth-map", "image-edit-edge-map", "image-edit-restyle",
+            "image-edit-image-prompt"}
+CONTROL_IDS = {"image-control-depth", "image-control-sketch", "image-control-pose", "image-control-edges"}
 
 
 def test_edit_templates():
@@ -156,7 +158,8 @@ def test_edit_templates():
 
 def test_every_template_loads_and_names_a_real_model():
     rows = [t for t in lib_api.templates().values() if t["type"] == "image"]
-    assert len(rows) == 67 and sum(t["target"] == "image-edit" for t in rows) == len(EDIT_IDS)
+    assert len(rows) == 73 and sum(t["target"] == "image-edit" for t in rows) == len(EDIT_IDS)
+    assert {t["id"] for t in rows if t["target"] == "image-control"} == CONTROL_IDS
     for t in rows:
         want = "edit" if t["target"] == "image-edit" else "image"
         model = t["defaults"].get("model")

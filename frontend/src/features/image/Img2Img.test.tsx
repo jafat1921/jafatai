@@ -18,7 +18,7 @@ const WITH_I2I: Record<ModelType, ModelInfo[]> = {
 
 describe('img2img rules', () => {
   it('labels the slider and keeps strength inside 0.1–0.9', () => {
-    expect([0.1, 0.2, 0.45, 0.6, 0.8, 0.9].map(strengthLabel)).toEqual(['Subtle', 'Subtle', 'Balanced', 'Balanced', 'Reimagine', 'Reimagine'])
+    expect([0.1, 0.3, 0.45, 0.5, 0.6, 0.7, 0.9].map(strengthLabel)).toEqual(['Subtle', 'Subtle', 'Balanced', 'Balanced', 'Strong', 'Strong', 'Strong'])
     expect(clampStrength(0.02)).toBe(0.1)
     expect(clampStrength(1.4)).toBe(0.9)
     expect(clampStrength(0.456)).toBe(0.46)
@@ -59,11 +59,11 @@ describe('Image to Image page', () => {
     expect(within(await openChip(user, 'Aspect')).getByRole('radio', { name: 'Same as the source' })).toBeChecked()
     await closeChip(user)
 
-    await openChip(user, 'How much to change')
-    const slider = screen.getByRole('slider', { name: 'How much to change' })
+    await openChip(user, 'Style strength')
+    const slider = screen.getByRole('slider', { name: 'Style strength' })
     expect(slider).toHaveAttribute('aria-valuetext', '0.45, Balanced')
     fireEvent.change(slider, { target: { value: '0.8' } })
-    expect(slider).toHaveAttribute('aria-valuetext', '0.80, Reimagine')
+    expect(slider).toHaveAttribute('aria-valuetext', '0.80, Strong')
     expect(screen.getByText('Keeps a loose layout, redraws almost everything.')).toBeInTheDocument()
     await closeChip(user)
 

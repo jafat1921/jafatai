@@ -38,7 +38,7 @@ describe('prompt dock', () => {
       'Model: Auto',
       'Aspect: 1:1',
       'Count: ×2',
-      'Style: Any style',
+      'Style: None',
       'References: Refs',
       'Brand: none',
     ])

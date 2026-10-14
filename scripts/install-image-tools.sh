@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Mix AI Cinema Studio - Edit Image tools for the IMAGE GPU's ComfyUI (contract v30).
+# Mix AI Cinema Studio - Edit Image tools for the IMAGE GPU's ComfyUI (contract v30; ControlNet: v31).
 #
-#   ./scripts/install-image-tools.sh                    # aux + inpaint + iclight (the commercial-safe set)
+#   ./scripts/install-image-tools.sh                    # aux + inpaint + iclight + control (the commercial-safe set)
 #   ./scripts/install-image-tools.sh --all --dry-run    # show everything it would do
 #
 #   --aux        comfyui_controlnet_aux + line art, anime line art, soft edge (HED), Depth Anything V2 Small  ~0.4 GB
 #   --inpaint    comfyui-inpaint-nodes + big-lama (object removal)                                           ~0.2 GB
 #   --iclight    ComfyUI-IC-Light + IC-Light v1 fc/fbc + Realistic Vision 5.1 (SD1.5) checkpoint              ~5.6 GB
 #   --tryon      ComfyUI-CatVTON + CatVTON, SD1.5 inpainting and sd-vae-ft-mse (CatVTON is NON-COMMERCIAL)    ~7.6 GB
-#   --all        all four
+#   --control    Z-Image Fun ControlNet Union 2.1 lite + DWPose (pose) weights for controlnet_aux; implies --aux ~2.4 GB
+#                (contract v31: Depth / Sketch / Pose / Edge to image)
+#   --all        all five
 #   --dry-run    print what would happen, change nothing
 #   --no-restart skip the ComfyUI restart + API check
 #   --uninstall-list  print what to remove for the chosen sets (deletes nothing)
@@ -19,9 +21,10 @@
 # uses, so the CatVTON node finds its downloads).
 # Sizes and sha256 come from the Hugging Face API / GitHub release API, checked on 2026-10-14. big-lama.pt and the
 # CatVTON node zip are GitHub release assets with no published hash: size only. Licences: docs/api/contract-v30-image-tools.md
+# and docs/api/contract-v31-styles-control-templates.md
 set -euo pipefail
 
-WANT_AUX=0 WANT_INPAINT=0 WANT_ICLIGHT=0 WANT_TRYON=0
+WANT_AUX=0 WANT_INPAINT=0 WANT_ICLIGHT=0 WANT_TRYON=0 WANT_CONTROL=0
 DRY=0 RESTART=1 UNINSTALL_LIST=0 LATEST=0
 FREE_MARGIN=$((10 * 1024 * 1024 * 1024))
 
@@ -31,17 +34,22 @@ while [[ $# -gt 0 ]]; do
     --inpaint) WANT_INPAINT=1 ;;
     --iclight) WANT_ICLIGHT=1 ;;
     --tryon)   WANT_TRYON=1 ;;
-    --all)     WANT_AUX=1; WANT_INPAINT=1; WANT_ICLIGHT=1; WANT_TRYON=1 ;;
+    --control) WANT_CONTROL=1 ;;
+    --all)     WANT_AUX=1; WANT_INPAINT=1; WANT_ICLIGHT=1; WANT_TRYON=1; WANT_CONTROL=1 ;;
     --dry-run) DRY=1 ;;
     --no-restart) RESTART=0 ;;
     --latest)  LATEST=1 ;;
     --uninstall-list) UNINSTALL_LIST=1 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
   shift
 done
-if (( WANT_AUX + WANT_INPAINT + WANT_ICLIGHT + WANT_TRYON == 0 )); then WANT_AUX=1; WANT_INPAINT=1; WANT_ICLIGHT=1; fi
+if (( WANT_AUX + WANT_INPAINT + WANT_ICLIGHT + WANT_TRYON + WANT_CONTROL == 0 )); then
+  WANT_AUX=1; WANT_INPAINT=1; WANT_ICLIGHT=1; WANT_CONTROL=1
+fi
+# the ControlNet's photo-to-map step runs on the controlnet_aux preprocessors
+if (( WANT_CONTROL )); then WANT_AUX=1; fi
 
 say()  { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
@@ -98,6 +106,11 @@ FILES=(
   "inpaint|LaMa big-lama|https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt|models/inpaint/big-lama.pt|205669692|"
   "iclight|IC-Light v1 fc|https://huggingface.co/lllyasviel/ic-light/resolve/9cad1878695f546a7fb9eaca14e2a89131ba5ffe/iclight_sd15_fc.safetensors|models/unet/iclight_sd15_fc.safetensors|1719148312|a033fbaaa2f3f7859fa6a4477ee63ebbf9c116bf3569d5811856d2807f3468cd"
   "iclight|IC-Light v1 fbc|https://huggingface.co/lllyasviel/ic-light/resolve/9cad1878695f546a7fb9eaca14e2a89131ba5ffe/iclight_sd15_fbc.safetensors|models/unet/iclight_sd15_fbc.safetensors|1719171352|bb8ccedaa4944b16cfa8356afcbc2c2174cc4c4af57de19124ae0cddd0d96947"
+  # contract v31. The lite 2602 build: 2.0 GB instead of 6.7 GB, so it fits beside Z-Image Turbo bf16 on a 20 GB card
+  "control|Z-Image Fun ControlNet Union 2.1 lite|https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1/resolve/5155fc56d17821007d6f62ac192c09e0f0e72016/Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors|models/model_patches/Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors|2016627488|3ea098db9bd145be525c7e2366920b6d76c5ffd46b3d7aa8169bbc943fdaee35"
+  # DWPose for DWPreprocessor, TorchScript builds (no onnxruntime needed); both repos say apache-2.0
+  "control|DWPose YOLOX-L detector|https://huggingface.co/hr16/yolox-onnx/resolve/a124b32c3b7c5cebda1c7cd96178f0f9d2050125/yolox_l.torchscript.pt|$AUX/hr16/yolox-onnx/yolox_l.torchscript.pt|217697649|80bc14b13c260c24b3014cd42c02994bf52296ab8fa2d80a60b6afe08c93ef42"
+  "control|DWPose ll_ucoco 384|https://huggingface.co/hr16/DWPose-TorchScript-BatchSize5/resolve/359d662a9b33b73f6d0f21732baf8845f17bb4be/dw-ll_ucoco_384_bs5.torchscript.pt|$AUX/hr16/DWPose-TorchScript-BatchSize5/dw-ll_ucoco_384_bs5.torchscript.pt|135059124|d86a0b2b59fddc0901a7076e9f59c9f8602602133ed72511c693fd11eea23d91"
   "iclight|Realistic Vision 5.1 fp16|https://huggingface.co/SG161222/Realistic_Vision_V5.1_noVAE/resolve/main/Realistic_Vision_V5.1_fp16-no-ema.safetensors|models/checkpoints/Realistic_Vision_V5.1_fp16-no-ema.safetensors|2132625894|99a75a901f4fec732056930a89fa34cf360f6f72d75ce5bf333ddf82adf8dd2a"
 )
 
@@ -143,6 +156,11 @@ CHECKS=(
   "tryon|node:LoadAutoMasker"
   "tryon|node:AutoMasker"
   "tryon|node:CatVTON"
+  "control|node:ModelPatchLoader"
+  "control|node:QwenImageDiffsynthControlnet"
+  "control|node:DWPreprocessor"
+  "control|node:Scribble_XDoG_Preprocessor"
+  "control|model:model_patches:Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors"
 )
 
 wanted() {
@@ -151,6 +169,7 @@ wanted() {
     inpaint) (( WANT_INPAINT )) ;;
     iclight) (( WANT_ICLIGHT )) ;;
     tryon) (( WANT_TRYON )) ;;
+    control) (( WANT_CONTROL )) ;;
     *) return 1 ;;
   esac
 }
@@ -203,6 +222,12 @@ fi
 if (( WANT_TRYON )); then
   warn "CatVTON weights are CC BY-NC-SA 4.0: NON-COMMERCIAL ONLY. The app offers try-on only while"
   warn "IMAGE_ALLOW_NONCOMMERCIAL=true. SD1.5 inpainting: CreativeML OpenRAIL-M; sd-vae-ft-mse: MIT."
+fi
+
+if (( WANT_CONTROL )); then
+  info "Z-Image-Turbo-Fun-Controlnet-Union-2.1 is Apache-2.0. DWPose (yzd-v/DWPose, hr16 TorchScript builds) and YOLOX"
+  info "are Apache-2.0 per their model cards. HED soft edges stay non-commercial (Annotators, see --aux)."
+  info "ModelPatchLoader / QwenImageDiffsynthControlnet are ComfyUI core nodes: an old ComfyUI needs updating first."
 fi
 
 # ---------------------------------------------------------------- plan + disk check
@@ -505,6 +530,10 @@ for port in "${PORTS[@]}"; do
 done
 info "Paste the input specs for the CatVTON / IC-Light / inpaint nodes back to the team:"
 info "  curl -s http://127.0.0.1:${PORTS[0]:-8188}/object_info/CatVTON  (and AutoMasker, LoadCatVTONPipeline, LightSource)"
+if (( WANT_CONTROL )); then
+  info "and the ControlNet ones (contract v31 assumes their inputs):"
+  info "  curl -s http://127.0.0.1:${PORTS[0]:-8188}/object_info/QwenImageDiffsynthControlnet  (and ModelPatchLoader, DWPreprocessor, ZImageFunControlnet)"
+fi
 
 if (( FAILED )); then
   warn "something is MISSING or FAILED above. Logs: journalctl -u comfyui -n 200 (and comfyui-gpu1)"

@@ -41,7 +41,9 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0,
             "ace15_song": 900.0, "sa3_music": 600.0, "sa3_sfx": 600.0, "sa3_medium": 1200.0, "minimax_music3": 1800.0,
             "image_lineart": 300.0, "image_lineart_anime": 300.0, "image_depth": 300.0, "image_canny": 120.0,
-            "image_softedge": 300.0, "image_lama_inpaint": 600.0, "image_iclight": 900.0, "image_catvton": 1200.0}
+            "image_softedge": 300.0, "image_lama_inpaint": 600.0, "image_iclight": 900.0, "image_catvton": 1200.0,
+            "zimage_controlnet": 900.0, "zimage_controlnet_depth": 900.0, "zimage_controlnet_canny": 900.0,
+            "zimage_controlnet_pose": 900.0, "zimage_controlnet_hed": 900.0, "zimage_controlnet_scribble": 900.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
 LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend", "ltx23_ia2v",
                  "ltx23_ia2v_extend"}
@@ -166,6 +168,9 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
 
     if params.get("image_tool"):
         return image_tool_plan(params["image_tool"], seed, lookup)
+
+    if params.get("control"):
+        return control_plan(params["control"], prompt, negative, seed, lookup)
 
     if params.get("upscale") and kind in ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end",
                                           "keyframe_mid", "image"):
@@ -537,6 +542,25 @@ def image_tool_plan(t: dict, seed: int, lookup) -> Plan:
     inputs = {**(t.get("inputs") or {}), "seed": seed}
     sources = {k: t[k] for k in ("source_id", "garment_id", "background_id") if t.get(k)}
     return Plan(template, inputs, images, [], "image", {**sources, "tool": t.get("tool")})
+
+
+def control_plan(c: dict, prompt: str, negative: str, seed: int, lookup) -> Plan:
+    """Depth / Sketch / Pose / Edge to image (app.control): Z-Image Turbo with the Fun ControlNet patch."""
+    from app.control import TEMPLATES
+
+    template = c.get("template")
+    if template not in TEMPLATES:
+        raise ComfyError(f"unknown control template {template!r}")
+    if c.get("control_file"):
+        # an inverted copy of a dark-on-light sketch
+        image = get_settings().data_dir / c["control_file"]
+        if not image.is_file():
+            raise ComfyError("the prepared control picture is missing on disk")
+    else:
+        image = lookup.generation_file(c["source_id"])
+    inputs = {**(c.get("inputs") or {}), "prompt": prompt, "negative": negative, "seed": seed}
+    return Plan(template, inputs, {"image": image}, [], "image",
+                {"source_id": c["source_id"], "control": c.get("type"), "as_is": bool(c.get("as_is"))})
 
 
 def style_tags(prompt: str, params: dict) -> str:

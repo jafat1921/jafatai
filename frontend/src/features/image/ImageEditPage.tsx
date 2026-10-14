@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
-import { Brush, Images } from 'lucide-react'
+import { BookmarkPlus, Brush, Images } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PlaceholderHint } from '@/components/studio/placeholder-hint'
@@ -9,6 +10,7 @@ import { AspectChip, BrandDockChip, CountChip, ModelChip } from '@/components/ge
 import { GenerateButton } from '@/components/generate/GenerateButton'
 import { GeneratorPage, ResultsHeading } from '@/components/generate/GeneratorPage'
 import { PromptDock } from '@/components/generate/PromptDock'
+import { SaveTemplateDialog } from '@/components/generate/SaveTemplateDialog'
 import { SessionResults } from '@/components/generate/SessionResults'
 import { useDockModels } from '@/components/generate/useDockModels'
 import { useRecordRun } from '@/components/generate/useRecordRun'
@@ -19,7 +21,7 @@ import { withBrand } from '@/lib/brand'
 import { localEstimate } from '@/lib/estimate'
 import { addSources, editPayload, MAX_EDIT_SOURCES, placeholdersIn, placeSources } from '@/lib/images'
 import { normalizeModelId } from '@/lib/models'
-import { editFormFrom, fillSlot, type TemplatePrefill } from '@/lib/templates'
+import { editFormFrom, fillSlot, type TemplateDraft, type TemplatePrefill } from '@/lib/templates'
 import type { ImageAspect, ImageEditRequest, LightFrom, MediaItem, TemplateOption } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
@@ -87,6 +89,16 @@ export function ImageEditPage() {
   const [painted, setPainted] = useState<{ on: string; png: string | null } | null>(null)
   const mask = painted && painted.on === ids[0] ? painted.png : null
   const [light, setLight] = useState<LightFrom>('none')
+  const [saving, setSaving] = useState<TemplateDraft | null>(null)
+  const saveDraft = (): TemplateDraft => ({
+    target: 'edit',
+    prompt: instruction,
+    title: tpl?.title,
+    model: model?.id ?? null,
+    aspect,
+    count,
+    refLabels: labels.length ? labels : sources.map((_, i) => `Image ${i + 1}`).slice(0, 3),
+  })
   const toolOn = !!tool && !!toolInfo?.available && useTool
   // LaMa needs a mask; without one the edit model reads the instruction
   const toolRuns = toolOn && (!tool.needs_mask || !!mask)
@@ -181,7 +193,16 @@ export function ImageEditPage() {
         into="image"
         title="Edit Image"
         icon={<Brush aria-hidden className="size-4 text-studio-accent-hover" />}
-        headerExtra={tpl && <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Prompt template: {tpl.title}</span>}
+        headerExtra={
+          <>
+            {tpl && <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Prompt template: {tpl.title}</span>}
+            <Button type="button" size="sm" variant="ghost" disabled={!instruction.trim()} onClick={() => setSaving(saveDraft())} aria-label="Save this instruction as a template">
+              <BookmarkPlus aria-hidden />
+              <span className="max-sm:sr-only">Save as template</span>
+            </Button>
+            <SaveTemplateDialog draft={saving} onOpenChange={(o) => !o && setSaving(null)} />
+          </>
+        }
         refs={
           <EditSources
             ids={ids}

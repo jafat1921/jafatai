@@ -18,7 +18,8 @@
     "Illustration & art",
     "Surreal",
     "Characters & concept",
-    "Edit a photo"
+    "Edit a photo",
+    "Sketch, depth & pose"
   ],
   "templates": [
     {
@@ -1619,6 +1620,128 @@
         "style": "product",
         "negative": "garbled labels, misspelled words, messy, extra ingredients, watermark",
         "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-edit-restyle",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Restyle my photo",
+      "description": "Redraw your picture in any style from the gallery, from oil paint to anime, keeping the layout, faces and who is in it.",
+      "thumb": null,
+      "tags": ["restyle", "style", "painting", "anime", "art", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Photo"],
+      "options_from": "styles",
+      "examples": {
+        "style": "Watercolour: loose watercolour, bleeding pigment washes, white paper showing through, delicate edges"
+      },
+      "preview_prompt": "A couple walking a dog along a seaside promenade, redrawn as [style].",
+      "defaults": {
+        "instruction_scaffold": "Redraw image 1 as [style]; keep the composition, faces and identity.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-image-prompt",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Image prompting",
+      "description": "Start from a picture you like and make a new one with its subject and look, in a scene you describe.",
+      "thumb": null,
+      "tags": ["reference", "image prompt", "variation", "inspiration", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Reference"],
+      "examples": {
+        "new scene": "the same character reading on a rainy train at night"
+      },
+      "preview_prompt": "A small knitted fox toy, shown again as [new scene], soft cosy light.",
+      "defaults": {
+        "instruction_scaffold": "Make a new picture of [new scene], in the subject and style of image 1: keep its main subject, palette and look, but compose a fresh scene rather than copying the original.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-control-depth",
+      "category": "Sketch, depth & pose",
+      "target": "image-control",
+      "control": "depth",
+      "title": "Depth to image",
+      "description": "Keep the 3D layout of a photo, what is near and what is far, and paint a completely new scene into it.",
+      "thumb": null,
+      "tags": ["depth", "controlnet", "layout", "composition", "3d"],
+      "examples": {
+        "scene": "a cosy reading nook inside a treehouse",
+        "light": "warm lamp light at dusk"
+      },
+      "preview_prompt": "[scene], [light], detailed and atmospheric.",
+      "defaults": {
+        "prompt_scaffold": "[scene], [light]",
+        "strength": 0.8,
+        "count": 2
+      }
+    },
+    {
+      "id": "image-control-sketch",
+      "category": "Sketch, depth & pose",
+      "target": "image-control",
+      "control": "scribble",
+      "title": "Sketch to image",
+      "description": "Turn a rough drawing, even a phone doodle, into a finished picture that follows your lines.",
+      "thumb": null,
+      "tags": ["sketch", "drawing", "doodle", "scribble", "controlnet"],
+      "examples": {
+        "subject": "a lighthouse on a rocky island with a small boat",
+        "finish": "soft morning light, gentle painterly detail"
+      },
+      "preview_prompt": "[subject], [finish].",
+      "defaults": {
+        "prompt_scaffold": "[subject], [finish]",
+        "use_as_is": true,
+        "strength": 0.75,
+        "count": 2
+      }
+    },
+    {
+      "id": "image-control-pose",
+      "category": "Sketch, depth & pose",
+      "target": "image-control",
+      "control": "pose",
+      "title": "Pose to image",
+      "description": "Copy the pose from a photo of a person and give it to a new character, outfit and setting.",
+      "thumb": null,
+      "tags": ["pose", "person", "character", "body", "controlnet"],
+      "examples": {
+        "character": "a dancer in a flowing red dress",
+        "setting": "an empty theatre stage under a single spotlight"
+      },
+      "preview_prompt": "[character] on [setting], full body, dramatic light.",
+      "defaults": {
+        "prompt_scaffold": "[character], [setting]",
+        "strength": 0.85,
+        "count": 2
+      }
+    },
+    {
+      "id": "image-control-edges",
+      "category": "Sketch, depth & pose",
+      "target": "image-control",
+      "control": "canny",
+      "title": "Edge to image",
+      "description": "Trace the outlines of a photo and redraw everything inside them: new materials, colours and light.",
+      "thumb": null,
+      "tags": ["edges", "canny", "outline", "redesign", "controlnet"],
+      "examples": {
+        "subject": "the same room as a sunlit Scandinavian living room",
+        "materials": "pale oak, linen and white plaster"
+      },
+      "preview_prompt": "[subject], [materials], bright and airy.",
+      "defaults": {
+        "prompt_scaffold": "[subject], [materials]",
+        "strength": 0.8,
+        "count": 2
       }
     }
   ]

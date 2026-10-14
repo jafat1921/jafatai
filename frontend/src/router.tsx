@@ -56,6 +56,10 @@ export const shellRoutes: RouteObject[] = [
     const { Img2ImgPage } = await import('@/features/image/Img2ImgPage')
     return <Img2ImgPage />
   }),
+  page('image/control', async () => {
+    const { ControlPage } = await import('@/features/image/ControlPage')
+    return <ControlPage />
+  }),
   page('image/references', async () => {
     const { ImageReferencesPage } = await import('@/features/image/ImageReferencesPage')
     return <ImageReferencesPage />

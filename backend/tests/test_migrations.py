@@ -444,3 +444,18 @@ def test_0019_adds_api_token(tmp_path):
     assert "api_token" not in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0020_adds_user_template(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0020")
+    con = sqlite3.connect(db)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(user_template)")}
+    assert {"id", "workspace_id", "created_by", "title", "target", "prompt", "negative", "style", "model", "aspect",
+            "count", "ref_labels", "examples", "preview_generation_id", "created_at", "updated_at"} <= cols
+    con.close()
+    _alembic(db, "downgrade", "0019")
+    con = sqlite3.connect(db)
+    assert "user_template" not in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    con.close()
+    _alembic(db, "upgrade", "head")

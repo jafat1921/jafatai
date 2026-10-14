@@ -445,3 +445,203 @@ def test_podcast_picker_lists_studio_characters(client, db):
 
     found = vd.other_characters(db, VP())
     assert [x["name"] for x in found] == ["Maya"] and found[0]["studio"] and found[0]["project_id"] is None
+
+
+# ---------------------------------------------------------------- own images
+
+def upload(client, data, name="mine.png"):
+    r = client.post("/api/media/upload", files={"file": (name, data, "image/png")})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def consent():
+    from app.api.characters import PHOTO_CONSENT
+
+    return {"name": "Haris", "statement": PHOTO_CONSENT}
+
+
+def pixels(gen_id):
+    with SessionLocal() as db:
+        from app.services import generation_file
+
+        with Image.open(generation_file(db.get(Generation, gen_id))) as im:
+            return im.size, im.convert("RGB").getcolors(4096)
+
+
+def sheet_image() -> bytes:
+    # red left third, a blue block at (120, 40) 60x80, green everywhere else
+    im = Image.new("RGB", (300, 200), (0, 160, 0))
+    im.paste((200, 0, 0), (0, 0, 100, 200))
+    im.paste((0, 0, 220), (120, 40, 180, 120))
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def own_sheet(client, c):
+    item = upload(client, sheet_image(), "sheet.png")
+    r = client.post(f"/api/characters/{c['id']}/sheet/upload", json={"media_id": item["id"]})
+    assert r.status_code == 200, r.text
+    return item, r.json()
+
+
+def test_portrait_as_is_is_approved_and_used(client, project, fast_driver):
+    item = upload(client, png((180, 140, 120), (320, 400)))
+    body = {"name": "Me", "media_id": item["id"], "consent": consent(), "use": "as_is"}
+    r = client.post("/api/characters/from-photo", json=body)
+    assert r.status_code == 201, r.text
+    c = r.json()
+    g = c["approved_portrait"]
+    assert g["params"]["source"] == "upload" and g["params"]["from_photo"] == item["id"]
+    assert g["params"]["consent"]["name"] == "Haris"
+    assert pixels(g["id"]) == ((320, 400), [(320 * 400, (180, 140, 120))])
+    with SessionLocal() as db:
+        assert not db.query(Job).filter(Job.generation_id == g["id"]).count()  # nothing was queued
+        assert db.get(Character, c["id"]).sheet["photo"]["use"] == "as_is"
+
+    assert client.post(f"/api/projects/{project['id']}/cast", json={"character_id": c["id"]}).status_code == 201
+    scene = client.post(f"/api/projects/{project['id']}/scenes", json={}).json()
+    shot = client.post(f"/api/scenes/{scene['id']}/shots", json={"description": "Me", "character_ids": [c["id"]]}).json()
+    with SessionLocal() as db:
+        from app import storyboard as sb
+
+        assert sb.references_for(db, db.get(Shot, shot["id"]))[0] == [g["id"]]
+
+    # a second picture from the Portrait tab waits for the user's approval; there's one approved already
+    other = upload(client, png((10, 20, 30)))
+    url = f"/api/characters/{c['id']}/portrait/upload"
+    assert client.post(url, json={"media_id": other["id"], "consent": {"name": "Haris", "statement": "ok"}}).status_code == 422
+    r = client.post(url, json={"media_id": other["id"]})
+    assert r.status_code == 201 and r.json()["status"] == "ready" and r.json()["version"] == 2
+    # an upload has no prompt to redo
+    r = client.post(f"/api/generations/{g['id']}/regenerate", json={"mode": "same"})
+    assert r.status_code == 422 and "nothing to regenerate" in r.text
+
+    # a character with no approved portrait gets the upload approved straight away
+    fresh = studio_character(client, name="Fresh")
+    r = client.post(f"/api/characters/{fresh['id']}/portrait/upload", json={"media_id": other["id"], "consent": consent()})
+    assert r.json()["status"] == "approved" and r.json()["params"]["consent"]["statement"]
+    assert client.get(f"/api/characters/{fresh['id']}").json()["approved_portrait"]["id"] == r.json()["id"]
+
+
+def test_own_sheet_stays_the_board_until_a_new_layout(client, fast_driver):
+    c = studio_character(client)
+    with_portrait(client, fast_driver, c)
+    client.post(f"/api/characters/{c['id']}/sheet", json={"preset": "essential"})
+    run_all(fast_driver)
+    made = client.get(f"/api/characters/{c['id']}/sheet").json()["board"]
+    assert made["status"] == "ready" and not made["uploaded"]
+
+    item, sheet = own_sheet(client, c)
+    assert sheet["board"]["uploaded"] and sheet["board"]["media_id"] == item["id"]
+    assert sheet["board"]["status"] == "ready" and sheet["own_sheet"]["media_id"] == item["id"]
+    assert (sheet["own_sheet"]["width"], sheet["own_sheet"]["height"]) == (300, 200)
+    assert client.get(f"/api/characters/{c['id']}").json()["board_thumb_url"]
+
+    # approving a panel or changing the board text would recompose; the uploaded board is left alone
+    smile = panels(client, c)["expr_smile"]["current"]
+    client.post(f"/api/generations/{smile['id']}/approve")
+    client.patch(f"/api/characters/{c['id']}/sheet", json={"titles": {"hero": "Hero"}})
+    run_all(fast_driver)
+    board = client.get(f"/api/characters/{c['id']}/sheet").json()["board"]
+    assert board["uploaded"] and board["media_id"] == item["id"]
+    r = client.get(f"/api/characters/{c['id']}/sheet/board/download")
+    assert r.status_code == 200 and r.content == sheet_image()
+
+    # "Lay out a new board from panels" goes back to the board item the recomposes live on
+    assert client.post(f"/api/characters/{c['id']}/sheet/board", json={"layout": "studio"}).status_code == 202
+    run_all(fast_driver)
+    sheet = client.get(f"/api/characters/{c['id']}/sheet").json()
+    assert not sheet["board"]["uploaded"] and sheet["board"]["media_id"] == made["media_id"]
+    assert sheet["board"]["status"] == "ready" and sheet["board"]["layout"] == "studio"
+    assert sheet["own_sheet"]["media_id"] == item["id"]  # still there to cut panels from
+
+
+def test_crops_are_cut_from_the_original(client, project, fast_driver):
+    c = studio_character(client)
+    url = f"/api/characters/{c['id']}/sheet/crops"
+    assert client.post(url, json={"crops": [{"panel": "turn_front", "x": 0, "y": 0, "w": 50, "h": 50}]}).status_code == 409
+    own_sheet(client, c)
+
+    bad = [
+        {"panel": "turn_front", "x": 260, "y": 0, "w": 60, "h": 80},  # off the right edge
+        {"panel": "turn_front", "x": 0, "y": 0, "w": 10, "h": 80},  # too small
+        {"panel": "nope", "x": 0, "y": 0, "w": 60, "h": 80},
+        {"panel": "turn_front", "x": -1, "y": 0, "w": 60, "h": 80},
+    ]
+    for box in bad:
+        ok_box = {"panel": "closeup", "x": 0, "y": 0, "w": 40, "h": 40}
+        r = client.post(url, json={"crops": [ok_box, box]})
+        assert r.status_code == 422, box
+    assert client.post(url, json={"crops": []}).status_code == 422
+    assert panels(client, c) == {}  # a bad box saves nothing, not even the good one before it
+
+    r = client.post(url, json={"crops": [{"panel": "turn_front", "x": 120, "y": 40, "w": 60, "h": 80},
+                                         {"panel": "portrait", "x": 0, "y": 0, "w": 100, "h": 200}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["saved"] == 2
+    front = panels(client, c)["turn_front"]
+    g = front["current"]
+    assert front["status"] == "approved" and not front["stale"]
+    assert g["params"]["source"] == "upload" and g["params"]["crop"] == [120, 40, 60, 80]
+    assert pixels(g["id"]) == ((60, 80), [(60 * 80, (0, 0, 220))])
+    portrait = client.get(f"/api/characters/{c['id']}").json()["approved_portrait"]
+    assert pixels(portrait["id"]) == ((100, 200), [(100 * 200, (200, 0, 0))])
+
+    # crops are references like generated panels: a wide shot takes the turnaround front
+    client.post(f"/api/projects/{project['id']}/cast", json={"character_id": c["id"]})
+    scene = client.post(f"/api/projects/{project['id']}/scenes", json={}).json()
+    shot = client.post(f"/api/scenes/{scene['id']}/shots", json={
+        "shot_type": "wide", "description": "Maya on the pier", "character_ids": [c["id"]]}).json()
+    refs = client.get(f"/api/shots/{shot['id']}/refs").json()["refs"]
+    assert refs[0]["panel"] == "turn_front" and refs[0]["generation"]["id"] == g["id"]
+
+
+def test_upload_a_single_panel(client, fast_driver):
+    c = studio_character(client)
+    first, second = upload(client, png((1, 2, 3))), upload(client, png((40, 50, 60), (90, 120)))
+    url = f"/api/characters/{c['id']}/sheet/panels/closeup/upload"
+    a = client.post(url, json={"media_id": first["id"]}).json()
+    b = client.post(url, json={"media_id": second["id"]}).json()
+    assert a["status"] == "approved" and b["status"] == "approved" and b["params"]["panel"] == "closeup"
+    got = panels(client, c)["closeup"]
+    assert got["current"]["id"] == b["id"] and got["versions"] == 2
+    assert pixels(b["id"]) == ((90, 120), [(90 * 120, (40, 50, 60))])
+    with SessionLocal() as db:
+        assert db.get(Generation, a["id"]).status == "ready"  # one approved per panel
+    assert client.post(f"/api/characters/{c['id']}/sheet/panels/nope/upload",
+                       json={"media_id": first["id"]}).status_code == 404
+    assert client.post(url, json={"media_id": "missing"}).status_code == 404
+    # regenerating an uploaded panel draws it fresh, which needs a portrait
+    assert client.post(f"/api/generations/{b['id']}/regenerate", json={"mode": "same"}).status_code == 409
+
+
+def test_pack_round_trip_keeps_an_uploaded_board(client, fast_driver):
+    c = studio_character(client)
+    own_sheet(client, c)
+    client.post(f"/api/characters/{c['id']}/sheet/crops", json={"crops": [
+        {"panel": "portrait", "x": 0, "y": 0, "w": 100, "h": 200},
+        {"panel": "expr_smile", "x": 120, "y": 40, "w": 60, "h": 80}]})
+
+    r = client.get(f"/api/characters/{c['id']}/pack")
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    meta = json.loads(z.read("character.json"))
+    assert meta["board_uploaded"] and meta["portrait"]["source"] == "upload"
+    assert [p["source"] for p in meta["panels"]] == ["upload"]
+
+    r = client.post("/api/characters/import", files={"file": ("maya.mixchar.zip", r.content, "application/zip")})
+    assert r.status_code == 201, r.text
+    copy = r.json()
+    run_all(fast_driver)
+    sheet = client.get(f"/api/characters/{copy['id']}/sheet").json()
+    assert sheet["board"]["uploaded"] and sheet["board"]["status"] == "ready"
+    assert sheet["own_sheet"]["media_id"] == sheet["board"]["media_id"]
+    with SessionLocal() as db:
+        assert not db.query(Job).filter(Job.type == cs.BOARD_JOB).count()  # nothing redrew it
+    smile = panels(client, copy)["expr_smile"]["current"]
+    assert smile["status"] == "approved" and smile["params"]["source"] == "upload"
+    assert pixels(smile["id"]) == ((60, 80), [(60 * 80, (0, 0, 220))])
+    r = client.get(f"/api/characters/{copy['id']}/sheet/board/download")
+    with Image.open(io.BytesIO(r.content)) as im:
+        assert im.size == (300, 200) and im.convert("RGB").getpixel((150, 80)) == (0, 0, 220)

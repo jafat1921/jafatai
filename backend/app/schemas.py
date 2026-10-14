@@ -275,6 +275,26 @@ class CharacterFromPhoto(BaseModel):
     media_id: str
     consent: PhotoConsent
     description: str = ""
+    # contract v25 own images: as_is keeps the photo itself as the approved portrait, no AI edit
+    use: Literal["studio", "as_is"] = "studio"
+
+
+class OwnImageIn(BaseModel):
+    media_id: str
+    # required (and checked) when the picture is a photo of a real person
+    consent: PhotoConsent | None = None
+
+
+class SheetCrop(BaseModel):
+    panel: str = Field(min_length=1, max_length=40)
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    w: int = Field(gt=0)
+    h: int = Field(gt=0)
+
+
+class SheetCropsIn(BaseModel):
+    crops: list[SheetCrop] = Field(min_length=1, max_length=60)
 
 
 class CastLinkIn(BaseModel):

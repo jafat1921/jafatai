@@ -35,6 +35,8 @@ class HostChoice(BaseModel):
     media_id: str | None = None
     character_id: str | None = None
     consent: Consent | None = None
+    # photo only: use the photo itself as the approved portrait instead of a studio edit of it
+    as_is: bool = False
 
 
 class SettingsIn(BaseModel):

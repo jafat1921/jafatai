@@ -11,9 +11,8 @@ import { ErrorState } from '@/components/studio/states'
 import { useCharacterFromPhoto, useCreateStudioCharacter } from '@/hooks/useCharacterStudio'
 import { acceptFor, checkFile, uploadMedia } from '@/lib/upload'
 import type { Character, MediaItem } from '@/lib/types'
-
-// the server checks this exact sentence, like the voice clone consent
-export const PHOTO_CONSENT = 'I have the right to use this photo, and the person in it agreed to it being made into a character.'
+import { PhotoConsentFields } from './OwnImageUpload'
+import { PHOTO_CONSENT } from './sheet'
 
 interface Props {
   open: boolean
@@ -27,7 +26,7 @@ export function NewCharacterDialog({ open, onOpenChange, onCreated }: Props) {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>New character</DialogTitle>
-          <DialogDescription>Start from words or from a photo. Either way you approve a portrait, and the sheet follows from it.</DialogDescription>
+          <DialogDescription>Start from words or from a photo. The portrait comes first, and the sheet follows from it.</DialogDescription>
         </DialogHeader>
         {open && (
           <Tabs defaultValue="describe" className="flex flex-col gap-3">
@@ -89,6 +88,11 @@ function Describe({ onCreated, onCancel }: { onCreated: Props['onCreated']; onCa
   )
 }
 
+const USES = [
+  { value: 'studio', label: 'Make a clean studio portrait from it', hint: 'The AI keeps the face and redraws the light and the background.' },
+  { value: 'as_is', label: 'Use my picture as the portrait', hint: 'Kept exactly as it is, and approved straight away.' },
+] as const
+
 function FromPhoto({ onCreated, onCancel }: { onCreated: Props['onCreated']; onCancel: () => void }) {
   const uid = useId()
   const create = useCharacterFromPhoto()
@@ -96,6 +100,7 @@ function FromPhoto({ onCreated, onCancel }: { onCreated: Props['onCreated']; onC
   const [name, setName] = useState('')
   const [person, setPerson] = useState('')
   const [agreed, setAgreed] = useState(false)
+  const [use, setUse] = useState<'studio' | 'as_is'>('studio')
   const [photo, setPhoto] = useState<MediaItem | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -120,7 +125,7 @@ function FromPhoto({ onCreated, onCancel }: { onCreated: Props['onCreated']; onC
         e.preventDefault()
         if (!ready || !photo) return
         create.mutate(
-          { name: name.trim(), media_id: photo.id, consent: { name: person.trim(), statement: PHOTO_CONSENT } },
+          { name: name.trim(), media_id: photo.id, use, consent: { name: person.trim(), statement: PHOTO_CONSENT } },
           { onSuccess: onCreated },
         )
       }}
@@ -147,25 +152,33 @@ function FromPhoto({ onCreated, onCancel }: { onCreated: Props['onCreated']; onC
         <Label htmlFor={`${uid}-name`}>Character name</Label>
         <Input id={`${uid}-name`} dir="auto" value={name} onChange={(e) => setName(e.target.value)} placeholder="Maya Khan" />
       </div>
-      <fieldset className="flex flex-col gap-2 rounded-[6px] border border-studio-border p-3">
-        <legend className="px-1 text-small font-medium">Consent</legend>
-        <p className="text-small text-studio-muted">Only use photos of yourself, or of people who agreed to it.</p>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`${uid}-person`}>Name of the person in the photo</Label>
-          <Input id={`${uid}-person`} value={person} onChange={(e) => setPerson(e.target.value)} />
-        </div>
-        <label className="flex items-start gap-2 text-body">
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 size-4 accent-studio-accent" />
-          <span>{PHOTO_CONSENT}</span>
-        </label>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="section-label mb-1">The portrait</legend>
+        {USES.map((u) => (
+          <label key={u.value} className="flex items-start gap-2 text-body">
+            <input
+              type="radio"
+              name={`${uid}-use`}
+              value={u.value}
+              checked={use === u.value}
+              onChange={() => setUse(u.value)}
+              className="mt-1 size-4 accent-studio-accent"
+            />
+            <span>
+              {u.label}
+              <span className="block text-small text-studio-muted">{u.hint}</span>
+            </span>
+          </label>
+        ))}
       </fieldset>
+      <PhotoConsentFields person={person} agreed={agreed} onPerson={setPerson} onAgreed={setAgreed} />
       {create.isError && <ErrorState compact title="Couldn't create the character" error={create.error} />}
       <DialogFooter className="mt-0">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={!ready} loading={create.isPending}>
-          Make a studio portrait
+          {use === 'as_is' ? 'Use my picture' : 'Make a studio portrait'}
         </Button>
       </DialogFooter>
     </form>

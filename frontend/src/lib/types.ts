@@ -210,12 +210,31 @@ export interface CharacterSheet {
   palette: string[]
   estimate: { panels: number; seconds_low: number; seconds_high: number }
   has_portrait: boolean
-  board: { media_id: string | null; layout: BoardLayout; generation: Generation | null; status: 'none' | 'queued' | 'running' | 'ready' }
+  // uploaded: the user's own sheet is the board, and nothing redraws over it until they lay out a new one
+  board: { media_id: string | null; layout: BoardLayout; generation: Generation | null; status: 'none' | 'queued' | 'running' | 'ready'; uploaded?: boolean }
+  // the sheet the user uploaded, to cut panels from
+  own_sheet?: { media_id: string; generation: Generation; width: number | null; height: number | null } | null
   queued?: number
+  saved?: number
+}
+
+/** A crop of the uploaded sheet in its own pixels; panel "portrait" makes a portrait version. */
+export interface SheetCrop {
+  panel: string
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface PhotoConsentRecord {
+  name: string
+  statement: string
 }
 
 export interface SheetCatalogue {
   sections: { key: string; label: string }[]
+  panels: { key: string; section: string; label: string }[]
   counts: Record<string, number[]>
   lists: Record<SheetListName, number>
   presets: Record<'essential' | 'full', { counts: Record<string, number>; panels: number }>
@@ -1381,6 +1400,7 @@ export interface VPHost {
   source: VPHostSource
   character_id: string | null
   photo_media_id: string | null
+  photo_as_is?: boolean
   photo_url: string | null
   from_character_id: string | null
   consent: VPConsent | null
@@ -1526,7 +1546,7 @@ export interface VideoPodcast {
 
 export type VPHostChoice =
   | { source: 'persona' }
-  | { source: 'photo'; media_id: string; consent: { name: string; statement: string } }
+  | { source: 'photo'; media_id: string; consent: { name: string; statement: string }; as_is?: boolean }
   | { source: 'existing'; character_id: string }
 
 export interface VPCutEdit {

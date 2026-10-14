@@ -21,8 +21,10 @@ import type {
   CharacterVoiceDesign,
   TestClip,
   SheetCatalogue,
+  SheetCrop,
   SheetRequest,
   SheetTextPatch,
+  PhotoConsentRecord,
   ShotRef,
   Generation,
   GenerationKind,
@@ -364,8 +366,16 @@ export const api = {
     get: (id: string) => get<Character>(`/characters/${id}`),
     createStudio: (body: { name: string; description?: string; profile?: CharacterProfile }) =>
       post<Character>('/characters', body),
-    fromPhoto: (body: { name: string; media_id: string; description?: string; consent: { name: string; statement: string } }) =>
+    fromPhoto: (body: { name: string; media_id: string; description?: string; consent: PhotoConsentRecord; use?: 'studio' | 'as_is' }) =>
       post<Character>('/characters/from-photo', body),
+    // own images: an uploaded picture used as it is (consent only for a photo of a real person)
+    uploadPortrait: (id: string, body: { media_id: string; consent?: PhotoConsentRecord }) =>
+      post<Generation>(`/characters/${id}/portrait/upload`, body),
+    uploadPanel: (id: string, key: string, body: { media_id: string; consent?: PhotoConsentRecord }) =>
+      post<Generation>(`/characters/${id}/sheet/panels/${encodeURIComponent(key)}/upload`, body),
+    uploadSheet: (id: string, body: { media_id: string; consent?: PhotoConsentRecord }) =>
+      post<CharacterSheet>(`/characters/${id}/sheet/upload`, body),
+    cutSheet: (id: string, crops: SheetCrop[]) => post<CharacterSheet>(`/characters/${id}/sheet/crops`, { crops }),
     saveToStudio: (id: string) => post<Character>(`/characters/${id}/save-to-studio`),
     link: (projectId: string, characterId: string) =>
       post<Character>(`/projects/${projectId}/cast`, { character_id: characterId }),

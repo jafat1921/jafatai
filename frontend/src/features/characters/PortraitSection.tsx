@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Loader2, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
@@ -10,15 +10,19 @@ import { StudioImageModelField } from '@/components/models/StudioImageModel'
 import { useStudioImageModel } from '@/hooks/useStudioImageModel'
 import { useGenerationActions, type GenerationTarget } from '@/hooks/useGenerations'
 import { useAiJob } from '@/hooks/useAi'
+import { useUploadPortrait } from '@/hooks/useCharacterStudio'
 import { api } from '@/lib/api'
 import { modKey } from '@/lib/keyboard'
 import type { Character } from '@/lib/types'
 import { announce } from '@/stores/ui'
+import { OwnImageUpload } from './OwnImageUpload'
 
 // shared by the film's Cast inspector and Character Studio; a studio character has no project
 export function PortraitSection({ character }: { character: Character }) {
   const target: GenerationTarget = { targetType: 'character', targetId: character.id, kind: 'portrait' }
   const { create } = useGenerationActions()
+  const upload = useUploadPortrait(character.id)
+  const ownId = useId()
   const imageModel = useStudioImageModel(character.project_id ?? '')
   const [prompt, setPrompt] = useState(
     character.description ? `Portrait of ${character.name}, ${character.description}` : `Portrait of ${character.name}`,
@@ -95,6 +99,30 @@ export function PortraitSection({ character }: { character: Character }) {
         <Kbd>{modKey}+Enter</Kbd>
       </Button>
       {create.isError && <ErrorState compact title="Couldn't start the generation" error={create.error} />}
+
+      <section aria-labelledby={ownId} className="flex flex-col gap-2 rounded-[6px] border border-studio-border bg-studio-raised p-3">
+        <h3 id={ownId} className="section-label">Or use your own picture</h3>
+        <p className="text-small text-studio-muted">
+          {character.approved_portrait
+            ? 'It comes in as a new version, used exactly as it is. Approve it below to make it the portrait.'
+            : 'Used exactly as it is, and approved straight away as the portrait.'}
+        </p>
+        <OwnImageUpload
+          label="Upload portrait"
+          title={`Portrait of ${character.name}`}
+          busy={upload.isPending}
+          onUploaded={(m, consent) =>
+            upload.mutate(
+              { media_id: m.id, consent },
+              {
+                onSuccess: (g) =>
+                  announce(g.status === 'approved' ? 'Your picture is now the portrait.' : `Your picture is portrait version ${g.version}. Approve it to use it.`),
+              },
+            )
+          }
+        />
+        {upload.isError && <ErrorState compact title="Couldn't use that picture" error={upload.error} />}
+      </section>
 
       <div>
         <h3 className="section-label mb-2">Result</h3>

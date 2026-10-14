@@ -2,16 +2,32 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mockApi, renderAt } from '@/test/media-fixtures'
-import type { Character, CharacterSheet, Generation, SheetCatalogue, SheetPanel, Shot } from '@/lib/types'
+import type { Character, CharacterSheet, Generation, MediaItem, SheetCatalogue, SheetPanel, Shot } from '@/lib/types'
 import { RefsStrip } from '@/features/storyboard/RefsStrip'
 import { CharacterPage } from './CharacterPage'
 import { CharacterStudioPage } from './CharacterStudioPage'
-import { countPanels } from './sheet'
+import { NewCharacterDialog } from './NewCharacterDialog'
+import { countPanels, PHOTO_CONSENT } from './sheet'
+
+// the XHR upload itself is covered in lib/upload; here it hands back a Library item at once
+const UPLOADED = { id: 'm1', kind: 'image', title: 'me.png', thumb_url: '/t/m1.webp' } as MediaItem
+vi.mock('@/lib/upload', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/upload')>()),
+  uploadMedia: vi.fn(() => ({ promise: Promise.resolve(UPLOADED), abort: () => {} })),
+}))
 
 afterEach(() => vi.unstubAllGlobals())
 
+const picture = () => new File(['png'], 'me.png', { type: 'image/png' })
+const fileInput = (root: ParentNode = document) => root.querySelector<HTMLInputElement>('input[type="file"]')!
+
 const CAT: SheetCatalogue = {
-  sections: [],
+  sections: [{ key: 'turnaround', label: 'Turnaround' }, { key: 'closeup', label: 'Close-up' }],
+  panels: [
+    { key: 'turn_front', section: 'turnaround', label: 'Front' },
+    { key: 'turn_back', section: 'turnaround', label: 'Back' },
+    { key: 'closeup', section: 'closeup', label: 'Close-up' },
+  ],
   counts: { turnaround: [0, 4], motion: [0, 1], head: [0, 5, 15], expressions: [0, 4, 8], closeup: [0, 1], gestures: [0, 1, 2, 3, 4], postures: [0, 1, 2, 3] },
   lists: { outfits: 3, details: 4, props: 3, accessories: 6 },
   presets: {
@@ -191,6 +207,95 @@ describe('References strip', () => {
     await waitFor(() => {
       const p = calls.find((c) => c.method === 'PATCH' && c.path === '/shots/s1')
       expect(p?.body).toEqual({ ref_panels: { c1: 'turn_back' } })
+    })
+  })
+})
+
+describe('Own images', () => {
+  it('starts a character from a photo used as it is', async () => {
+    const calls = mockApi((method, path) => {
+      if (method === 'POST' && path === '/characters/from-photo') return character()
+    })
+    const user = userEvent.setup()
+    const onCreated = vi.fn()
+    renderAt('/x', [{ path: '/x', element: <NewCharacterDialog open onOpenChange={() => {}} onCreated={onCreated} /> }])
+    await user.click(screen.getByRole('tab', { name: 'From a photo' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(fileInput(dialog), picture())
+    expect(await within(dialog).findByAltText('The uploaded photo')).toBeInTheDocument()
+    // the studio edit is the default; the photo itself is one choice away
+    expect(within(dialog).getByRole('radio', { name: /Make a clean studio portrait/ })).toBeChecked()
+    await user.click(within(dialog).getByRole('radio', { name: /Use my picture as the portrait/ }))
+    await user.type(within(dialog).getByLabelText('Character name'), 'Me')
+    const go = within(dialog).getByRole('button', { name: 'Use my picture' })
+    expect(go).toBeDisabled()
+    await user.type(within(dialog).getByLabelText('Name of the person in the photo'), 'Haris')
+    await user.click(within(dialog).getByRole('checkbox', { name: PHOTO_CONSENT }))
+    await user.click(go)
+    await waitFor(() => expect(onCreated).toHaveBeenCalled())
+    const post = calls.find((c) => c.method === 'POST' && c.path === '/characters/from-photo')
+    expect(post?.body).toEqual({ name: 'Me', media_id: 'm1', use: 'as_is', consent: { name: 'Haris', statement: PHOTO_CONSENT } })
+  })
+
+  it('cuts panels from an uploaded sheet with the keyboard', async () => {
+    const own = { media_id: 'm9', generation: gen('g-own', ''), width: 300, height: 200 }
+    const board = { media_id: 'm9', layout: 'dossier' as const, generation: gen('g-own', ''), status: 'ready' as const, uploaded: true }
+    const { calls, user } = page((method, path) => {
+      if (method === 'GET' && path === '/characters/c1/sheet') return sheet({ own_sheet: own, board })
+      if (method === 'POST' && path === '/characters/c1/sheet/crops') return { ...sheet(), saved: 1 }
+    })
+    await user.click(await screen.findByRole('tab', { name: /Sheet/ }))
+    // the uploaded board stays until the user asks for a new layout
+    expect(await screen.findByRole('button', { name: 'Lay out a new board from panels' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download image' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add a crop' }))
+    const box = screen.getByRole('button', { name: /^Crop 1: Portrait \(face\), 75 by 67 pixels at 100, 67$/ })
+    box.focus()
+    await user.keyboard('{ArrowRight}{Shift>}{ArrowDown}{/Shift}{Alt>}{ArrowRight}{ArrowRight}{/Alt}')
+    expect(screen.getByRole('button', { name: /^Crop 1: Portrait \(face\), 77 by 67 pixels at 101, 77$/ })).toHaveFocus()
+
+    const x = screen.getByRole('spinbutton', { name: 'X of crop 1' })
+    await user.clear(x)
+    await user.type(x, '250')
+    await user.tab()
+    // pulled back inside the sheet: it is 300 wide and the box is 77
+    expect(x).toHaveValue(223)
+    await user.selectOptions(screen.getByLabelText('Panel for crop 1'), 'turn_front')
+
+    await user.click(screen.getByRole('button', { name: 'Add a crop' }))
+    expect(screen.getByLabelText('Panel for crop 2')).toHaveValue('portrait')
+    screen.getByRole('button', { name: /^Crop 2:/ }).focus()
+    await user.keyboard('{Delete}')
+    expect(screen.queryByLabelText('Panel for crop 2')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add a crop' }))
+    await user.click(screen.getByRole('button', { name: 'Delete crop 2' }))
+    expect(within(screen.getByRole('list', { name: 'Crops' })).getAllByRole('listitem')).toHaveLength(1)
+
+    await user.click(screen.getByRole('button', { name: 'Save 1 panel' }))
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && c.path === '/characters/c1/sheet/crops')
+      expect(post?.body).toEqual({ crops: [{ panel: 'turn_front', x: 223, y: 77, w: 77, h: 67 }] })
+    })
+  })
+
+  it('uploads one image as a panel', async () => {
+    const { calls, user } = page((method, path) => {
+      if (method === 'POST' && path === '/characters/c1/sheet/panels/turn_front/upload') return gen('g9', 'turn_front', 'approved')
+    })
+    await user.click(await screen.findByRole('tab', { name: /Sheet/ }))
+    await user.click(await screen.findByRole('button', { name: 'Upload image for Front' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: 'Upload an image for Turnaround: Front' })).toBeInTheDocument()
+    // a real person's photo asks for consent before the picker opens
+    const real = within(dialog).getByRole('checkbox', { name: "It's a photo of a real person" })
+    await user.click(real)
+    expect(within(dialog).getByRole('button', { name: 'Choose an image' })).toHaveAttribute('aria-disabled', 'true')
+    await user.click(real)
+    await user.upload(fileInput(dialog), picture())
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && c.path === '/characters/c1/sheet/panels/turn_front/upload')
+      expect(post?.body).toEqual({ media_id: 'm1' })
     })
   })
 })

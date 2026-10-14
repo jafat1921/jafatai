@@ -47,6 +47,7 @@ function HostCard({ vp, host }: { vp: VideoPodcast; host: VPHost }) {
   const [photo, setPhoto] = useState<string | null>(host.photo_media_id)
   const [who, setWho] = useState(host.consent?.name ?? '')
   const [agreed, setAgreed] = useState(false)
+  const [asIs, setAsIs] = useState(!!host.photo_as_is)
   const [picking, setPicking] = useState(false)
   const locked = jobRunning(vp)
 
@@ -56,7 +57,10 @@ function HostCard({ vp, host }: { vp: VideoPodcast; host: VPHost }) {
   const photoBlocked = !photo ? 'Pick or upload a photo first.' : !who.trim() ? "Type the person's name." : !agreed ? 'Tick the consent statement to use this photo.' : null
   const applyPhoto = () => {
     if (photoBlocked || !photo || locked) return
-    choose({ source: 'photo', media_id: photo, consent: { name: who.trim(), statement: LIKENESS_STATEMENT } }, `${host.name} will be made from the photo.`)
+    choose(
+      { source: 'photo', media_id: photo, as_is: asIs, consent: { name: who.trim(), statement: LIKENESS_STATEMENT } },
+      asIs ? `The photo is now ${host.name}'s approved portrait.` : `${host.name} will be made from the photo.`,
+    )
   }
 
   const views = [
@@ -136,6 +140,13 @@ function HostCard({ vp, host }: { vp: VideoPodcast; host: VPHost }) {
               {host.consent.at ? `, ${new Date(host.consent.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
             </p>
           )}
+          <label className="flex items-start gap-2 text-body">
+            <input type="checkbox" checked={asIs} onChange={(e) => setAsIs(e.target.checked)} className="mt-1 size-4 accent-studio-accent" />
+            <span>
+              Use the photo itself as the portrait
+              <span className="block text-small text-studio-muted">No AI clean-up: it's approved as it is, and only the side views are made from it.</span>
+            </span>
+          </label>
           <ConsentFields name={who} agreed={agreed} onName={setWho} onAgreed={setAgreed} />
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" variant="primary" aria-disabled={!!photoBlocked || locked || undefined} aria-describedby={`${uid}-why`} loading={patch.isPending} onClick={applyPhoto}>

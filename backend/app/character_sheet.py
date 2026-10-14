@@ -8,7 +8,12 @@ The board is a CPU job on the general lane: a Library image item whose versions 
 
 character.sheet holds: preset, counts (custom), lists {outfits, details, props, accessories}, extras
 {panel key: item name}, keys, pending, backdrop, titles {section: text}, labels {panel key: text},
-footer {team, number}, ruler, palette, board {media_id, layout, job_id}.
+footer {team, number}, ruler, palette, board {media_id, layout, job_id, uploaded, made_media_id},
+own_sheet {media_id}.
+
+Own images (contract v25): a portrait, a panel or crops cut from an uploaded sheet are stored as PNG
+generations with params.source "upload". An uploaded sheet is the board itself, and nothing recomposes over
+it until the user lays out a new board from the panels.
 """
 import io
 import logging
@@ -26,8 +31,8 @@ from app import character_panels as cp
 from app import models_catalog, subtitles
 from app.config import get_settings
 from app.library import touch
-from app.models import Character, Generation, Job, MediaItem, Project, new_id
-from app.services import enqueue_generation, gen_out, generation_file, new_seed, next_version
+from app.models import Character, Generation, Job, MediaItem, Project, new_id, utcnow
+from app.services import approve, enqueue_generation, gen_out, generation_file, new_seed, next_version
 
 log = logging.getLogger("mixai.sheet")
 
@@ -160,6 +165,8 @@ def sheet_out(db: Session, c: Character) -> dict:
     bg = db.get(Generation, item.generation_id) if item is not None and item.generation_id else None
     job = db.get(Job, board.get("job_id") or "")
     to_make = sum(1 for x in panels if x["status"] in ("none", "waiting", "queued", "generating", "failed"))
+    own = db.get(MediaItem, (s.get("own_sheet") or {}).get("media_id") or "")
+    og = db.get(Generation, own.generation_id) if own is not None and own.generation_id else None
     return {
         "character_id": c.id, "preset": s.get("preset"), "counts": s.get("counts") or {},
         "lists": s.get("lists") or {}, "backdrop": s.get("backdrop") or "grey",
@@ -171,7 +178,11 @@ def sheet_out(db: Session, c: Character) -> dict:
             "generation": gen_out(bg) if bg else None,
             "status": job.status if job is not None and job.status in ("queued", "running") else (
                 "ready" if bg is not None and bg.status in FINISHED else "none"),
+            "uploaded": bool(board.get("uploaded")),
         },
+        # the sheet the user brought, for cutting panels from (it stays after a new board is laid out)
+        "own_sheet": {"media_id": own.id, "generation": gen_out(og), "width": own.width, "height": own.height}
+        if og is not None and og.file_path else None,
     }
 
 
@@ -321,6 +332,105 @@ def update_text(c: Character, *, titles: dict | None = None, labels: dict | None
         put(c, backdrop=backdrop)
 
 
+# ---------------------------------------------------------------- own images
+
+UPLOAD_PROMPT = "Your own picture (uploaded)"
+MIN_CROP = 16
+
+
+def uploaded_image(db: Session, workspace_id: str, media_id: str, what: str = "picture") -> tuple[MediaItem, Generation]:
+    """A finished Library image (an upload from /media/upload, usually) and its current version."""
+    item = db.get(MediaItem, media_id or "")
+    if item is None or item.workspace_id != workspace_id:
+        raise HTTPException(404, f"That {what} isn't in the Library")
+    if item.kind != "image":
+        raise HTTPException(422, f"The {what} has to be an image")
+    g = db.get(Generation, item.generation_id or "")
+    if g is None or g.status not in FINISHED or not g.file_path:
+        raise HTTPException(409, f"That {what} isn't finished yet")
+    return item, g
+
+
+def open_picture(g: Generation) -> Image.Image:
+    try:
+        with Image.open(generation_file(g)) as im:
+            # the browser shows a phone photo upright, so crops are measured upright too
+            return ImageOps.exif_transpose(im).convert("RGB")
+    except (OSError, TypeError) as e:
+        raise HTTPException(422, f"That picture can't be read ({e})") from None
+
+
+def store_picture(c: Character, pic: Image.Image, kind: str, *, prompt: str = "", status: str = "ready",
+                  params: dict | None = None, version: int = 1) -> Generation:
+    """Saves the pixels as a PNG generation of the character. The caller adds it to the session."""
+    gid = new_id()
+    rel = (Path("workspaces") / c.workspace_id / "projects" / (c.project_id or "_unassigned") / "generations"
+           / f"{gid}.png")
+    dest = get_settings().data_dir / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    pic.save(dest, "PNG")
+    return Generation(id=gid, workspace_id=c.workspace_id, project_id=c.project_id, target_type="character",
+                      target_id=c.id, kind=kind, version=version, status=status, prompt=prompt or "", seed=0,
+                      file_path=rel.as_posix(), media_type="image/png",
+                      params={**(params or {}), "size": [pic.width, pic.height]},
+                      approved_at=utcnow() if status == "approved" else None)
+
+
+def add_own(db: Session, c: Character, pic: Image.Image, *, panel: str = "portrait", params: dict | None = None,
+            approved: bool = True) -> Generation:
+    """The user's own picture as a new version of the portrait or of a sheet panel, used as it is."""
+    params = {**(params or {}), "source": "upload"}
+    kind = "portrait"
+    if panel != "portrait":
+        p = cp.panel(panel, extras(c))
+        if p is None:
+            raise HTTPException(422, f"This sheet has no panel '{panel}'")
+        kind = "sheet_view"
+        params.update(panel=panel, view=p.view or panel)
+    g = store_picture(c, pic, kind, prompt=UPLOAD_PROMPT, params=params,
+                      version=next_version(db, "character", c.id, kind))
+    db.add(g)
+    db.flush()
+    if approved:
+        approve(db, g)
+    if panel == "hero":
+        _release_pending(db, c)
+    return g
+
+
+def use_own_sheet(db: Session, c: Character, item: MediaItem) -> None:
+    """An uploaded sheet becomes the board. The panels' own board item is remembered for a later re-layout."""
+    board = dict((c.sheet or {}).get("board") or {})
+    made = board.get("made_media_id") if board.get("uploaded") else board.get("media_id")
+    put(c, own_sheet={"media_id": item.id, "at": utcnow().isoformat() + "Z"},
+        board={"media_id": item.id, "layout": board.get("layout") or "dossier", "uploaded": True, "made_media_id": made})
+
+
+def cut_panels(db: Session, c: Character, crops: list[dict]) -> list[Generation]:
+    """Crops of the uploaded sheet, in its own pixels, each saved as that slot's approved version.
+    Every box is checked before anything is saved."""
+    item_id = ((c.sheet or {}).get("own_sheet") or {}).get("media_id")
+    if not item_id:
+        raise HTTPException(409, "Upload your own sheet first")
+    item, src = uploaded_image(db, c.workspace_id, item_id, "sheet")
+    pic = open_picture(src)
+    W, H = pic.size
+    boxes = []
+    for n, cr in enumerate(crops, 1):
+        key = str(cr.get("panel") or "")
+        x, y, w, h = (int(cr.get(k) or 0) for k in ("x", "y", "w", "h"))
+        if key != "portrait" and cp.panel(key, extras(c)) is None:
+            raise HTTPException(422, f"Crop {n}: this sheet has no panel '{key}'")
+        if w < MIN_CROP or h < MIN_CROP:
+            raise HTTPException(422, f"Crop {n} is too small; make it at least {MIN_CROP} × {MIN_CROP} pixels")
+        if x < 0 or y < 0 or x + w > W or y + h > H:
+            raise HTTPException(422, f"Crop {n} runs off the sheet, which is {W} × {H} pixels")
+        boxes.append((key, (x, y, w, h)))
+    return [add_own(db, c, pic.crop((x, y, x + w, y + h)), panel=key,
+                    params={"crop": [x, y, w, h], "from_media": item.id})
+            for key, (x, y, w, h) in boxes]
+
+
 # ---------------------------------------------------------------- palette
 
 def palette_of(path: Path, n: int = 6) -> list[str]:
@@ -364,12 +474,18 @@ def refresh_palette(db: Session, c: Character) -> list[str]:
 
 # ---------------------------------------------------------------- the board
 
-def queue_board(db: Session, c: Character, layout: str | None = None) -> Job:
-    """One recompose at a time: a board job still waiting just picks up the new layout."""
+def queue_board(db: Session, c: Character, layout: str | None = None, *, replace_upload: bool = False) -> Job | None:
+    """One recompose at a time: a board job still waiting just picks up the new layout. An uploaded board
+    is left alone (None) unless the user asked for a new one from the panels."""
     board = dict((c.sheet or {}).get("board") or {})
     layout = layout or board.get("layout") or "dossier"
     if layout not in LAYOUTS:
         raise HTTPException(422, f"layout must be one of {', '.join(LAYOUTS)}")
+    if board.get("uploaded"):
+        if not replace_upload:
+            return None
+        # back to the board item the recomposes live on; the user's own sheet stays in the Library
+        board = {"media_id": board.get("made_media_id"), "layout": layout}
     waiting = db.get(Job, board.get("job_id") or "")
     if waiting is not None and waiting.status == "queued":
         waiting.payload = {**(waiting.payload or {}), "layout": layout}

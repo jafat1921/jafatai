@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { BoardLayout, Character, CharacterSheet, SheetRequest, SheetTextPatch, TestClip } from '@/lib/types'
+import type { BoardLayout, Character, CharacterSheet, PhotoConsentRecord, SheetCrop, SheetRequest, SheetTextPatch, TestClip } from '@/lib/types'
 import { qk } from './keys'
 import { upsertGeneration } from './useGenerations'
 import { upsertJob } from './useJobs'
@@ -113,7 +113,40 @@ export function useSheetActions(id: string) {
       },
     }),
     board: useMutation({ mutationFn: (layout: BoardLayout) => api.characters.makeBoard(id, layout), onSuccess: refresh }),
+    // own images (contract v25)
+    uploadSheet: useMutation({ mutationFn: (body: OwnImage) => api.characters.uploadSheet(id, body), onSuccess: set }),
+    cut: useMutation({
+      mutationFn: (crops: SheetCrop[]) => api.characters.cutSheet(id, crops),
+      onSuccess: (s) => {
+        set(s)
+        // a crop for the portrait slot changes the character too
+        qc.invalidateQueries({ queryKey: qk.character(id) })
+        qc.invalidateQueries({ queryKey: qk.generationsFor('character', id, 'portrait') })
+      },
+    }),
+    uploadPanel: useMutation({
+      mutationFn: ({ key, ...body }: OwnImage & { key: string }) => api.characters.uploadPanel(id, key, body),
+      onSuccess: (g) => {
+        upsertGeneration(qc, g)
+        refresh()
+      },
+    }),
   }
+}
+
+export type OwnImage = { media_id: string; consent?: PhotoConsentRecord }
+
+/** "Upload portrait": a new portrait version, approved by the server only if none is yet. */
+export function useUploadPortrait(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: OwnImage) => api.characters.uploadPortrait(id, body),
+    onSuccess: (g) => {
+      upsertGeneration(qc, g)
+      qc.invalidateQueries({ queryKey: qk.character(id) })
+      qc.invalidateQueries({ queryKey: qk.characterSheet(id) })
+    },
+  })
 }
 
 // `version` is the shot's updated_at, so a changed shot (type, text, characters) asks again

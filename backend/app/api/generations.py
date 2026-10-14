@@ -8,7 +8,7 @@ from app.ai_jobs import rewrite_prompt_from_note
 from app import character_sheet, models_catalog, reel, storyboard, upscale, upscale_image
 from app.api.media import resolve_media_path
 from app.config import get_settings
-from app.models import Generation, Job, Location, Project, Shot, utcnow
+from app.models import Character, Generation, Job, Location, Project, Shot, utcnow
 from app.schemas import (
     GenerationCreate, GenerationOut, GenerationPatch, JobOut, RegenerateIn, RejectIn, RenderOut, UpscaleIn,
 )
@@ -86,6 +86,14 @@ def create_generation(body: GenerationCreate, db: Session = Depends(get_db), cur
 @router.post("/{gen_id}/regenerate", response_model=GenerationOut, status_code=201)
 def regenerate(gen_id: str, body: RegenerateIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     parent = get_owned(db, Generation, gen_id, cur.workspace_id, "Generation")
+    if parent.target_type == "character" and (parent.params or {}).get("source") == "upload":
+        # the user's own picture has no prompt to redo; a panel is drawn fresh from the portrait instead
+        if parent.kind != "sheet_view" or not (parent.params or {}).get("panel"):
+            raise HTTPException(422, "This is your own uploaded picture, so there's nothing to regenerate. "
+                                     "Generate a new version from a prompt, or upload another picture.")
+        g = character_sheet.regenerate(db, db.get(Character, parent.target_id), parent.params["panel"], body.note or "")
+        db.commit()
+        return gen_out(g)
     prompt, params, seed, note = parent.prompt, dict(parent.params or {}), new_seed(), None
     # regenerating an upscaled image makes a fresh picture, not another upscale of its source
     if parent.kind in upscale_image.IMAGE_KINDS and params.pop("upscale", None) is not None:

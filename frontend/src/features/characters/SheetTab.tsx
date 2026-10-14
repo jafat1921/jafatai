@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react'
-import { AlertTriangle, Download, FileDown, LayoutGrid, Loader2, RefreshCw, User, Wand2 } from 'lucide-react'
+import { AlertTriangle, Download, FileDown, ImageUp, LayoutGrid, Loader2, RefreshCw, User, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,8 @@ import type {
 } from '@/lib/types'
 import { cn, plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { OwnImageUpload } from './OwnImageUpload'
+import { OwnSheet } from './OwnSheet'
 import { COUNT_LABELS, countPanels, LISTS, minutes, SELECT } from './sheet'
 
 function panelStatus(p: SheetPanel): StatusView {
@@ -184,7 +186,52 @@ function PanelDialog({ character, panel, onClose }: { character: Character; pane
   )
 }
 
-function PanelTile({ panel, onOpen, onRegenerate, busy }: { panel: SheetPanel; onOpen: () => void; onRegenerate: () => void; busy: boolean }) {
+function PanelUploadDialog({ character, panel, onClose }: { character: Character; panel: SheetPanel; onClose: () => void }) {
+  const { uploadPanel } = useSheetActions(character.id)
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Upload an image for {panel.section_title}: {panel.label}
+          </DialogTitle>
+          <DialogDescription>Your picture becomes this panel's approved version, used as it is on the board and in shots.</DialogDescription>
+        </DialogHeader>
+        <OwnImageUpload
+          label="Choose an image"
+          title={`${panel.label} panel of ${character.name}`}
+          busy={uploadPanel.isPending}
+          onUploaded={(m, consent) =>
+            uploadPanel.mutate(
+              { key: panel.key, media_id: m.id, consent },
+              {
+                onSuccess: () => {
+                  announce(`${panel.label}: your image is the approved version.`)
+                  onClose()
+                },
+              },
+            )
+          }
+        />
+        {uploadPanel.isError && <ErrorState compact title="Couldn't use that image" error={uploadPanel.error} />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PanelTile({
+  panel,
+  onOpen,
+  onRegenerate,
+  onUpload,
+  busy,
+}: {
+  panel: SheetPanel
+  onOpen: () => void
+  onRegenerate: () => void
+  onUpload: () => void
+  busy: boolean
+}) {
   const img = panel.current?.thumb_url ?? panel.current?.media_url
   const live = panel.status === 'queued' || panel.status === 'generating'
   return (
@@ -223,6 +270,9 @@ function PanelTile({ panel, onOpen, onRegenerate, busy }: { panel: SheetPanel; o
         >
           <RefreshCw aria-hidden />
         </Button>
+        <Button size="icon-sm" variant="ghost" onClick={onUpload} disabled={live} aria-label={`Upload image for ${panel.label}`} title="Upload image">
+          <ImageUp aria-hidden />
+        </Button>
       </div>
       <StatusPill className="self-start" status={panelStatus(panel)} />
     </li>
@@ -232,6 +282,7 @@ function PanelTile({ panel, onOpen, onRegenerate, busy }: { panel: SheetPanel; o
 function PanelGrid({ character, sheet }: { character: Character; sheet: CharacterSheet }) {
   const { regenerate } = useSheetActions(character.id)
   const [open, setOpen] = useState<string | null>(null)
+  const [uploading, setUploading] = useState<string | null>(null)
   const sections = useMemo(() => {
     const out: { key: string; title: string; panels: SheetPanel[] }[] = []
     for (const p of sheet.panels) {
@@ -242,6 +293,7 @@ function PanelGrid({ character, sheet }: { character: Character; sheet: Characte
     return out
   }, [sheet.panels])
   const opened = sheet.panels.find((p) => p.key === open)
+  const uploadFor = sheet.panels.find((p) => p.key === uploading)
 
   if (!sheet.panels.length) {
     return (
@@ -265,6 +317,7 @@ function PanelGrid({ character, sheet }: { character: Character; sheet: Characte
                 panel={p}
                 busy={regenerate.isPending}
                 onOpen={() => setOpen(p.key)}
+                onUpload={() => setUploading(p.key)}
                 onRegenerate={() =>
                   regenerate.mutate({ key: p.key }, { onSuccess: (g) => announce(`${p.label}: version ${g.version} queued.`) })
                 }
@@ -274,6 +327,7 @@ function PanelGrid({ character, sheet }: { character: Character; sheet: Characte
         </section>
       ))}
       {opened && <PanelDialog character={character} panel={opened} onClose={() => setOpen(null)} />}
+      {uploadFor && <PanelUploadDialog character={character} panel={uploadFor} onClose={() => setUploading(null)} />}
     </div>
   )
 }
@@ -345,6 +399,7 @@ function Board({ character, sheet }: { character: Character; sheet: CharacterShe
   const g = sheet.board.generation
   const working = sheet.board.status === 'queued' || sheet.board.status === 'running' || board.isPending
   const anyReady = sheet.panels.some((p) => p.current)
+  const uploaded = !!sheet.board.uploaded
   return (
     <section aria-labelledby={`${uid}-h`} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -364,24 +419,35 @@ function Board({ character, sheet }: { character: Character; sheet: CharacterShe
           disabled={!anyReady || working}
         >
           {working ? <Loader2 aria-hidden className="animate-spin" /> : <LayoutGrid aria-hidden />}
-          {g ? 'Redraw board' : 'Make board'}
+          {uploaded ? 'Lay out a new board from panels' : g ? 'Redraw board' : 'Make board'}
         </Button>
       </div>
-      <p className="text-small text-studio-muted">
-        Dossier is dark, Studio is light. They're export styles for the sheet only. The board redraws itself when panels change, and
-        it's saved in your Library.
-      </p>
+      {uploaded ? (
+        <p className="text-small text-studio-muted">
+          This is the sheet you uploaded, kept as it is. Panel changes don't redraw over it; lay out a new board from the panels when
+          you want one.
+        </p>
+      ) : (
+        <p className="text-small text-studio-muted">
+          Dossier is dark, Studio is light. They're export styles for the sheet only. The board redraws itself when panels change,
+          and it's saved in your Library.
+        </p>
+      )}
       {board.isError && <ErrorState compact title="Couldn't lay out the board" error={board.error} />}
       {g?.media_url ? (
         <figure className="flex flex-col gap-2">
           <a href={g.media_url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-[6px] border border-studio-border-strong">
-            <img src={g.thumb_url ?? g.media_url} alt={`Character sheet board of ${character.name}`} className="w-full" />
+            <img
+              src={g.thumb_url ?? g.media_url}
+              alt={uploaded ? `Your uploaded sheet of ${character.name}` : `Character sheet board of ${character.name}`}
+              className="w-full"
+            />
           </a>
           <figcaption className="flex flex-wrap gap-2">
             <Button asChild variant="secondary" size="sm">
               <a href={api.characters.boardUrl(character.id, 'png')} download>
                 <Download aria-hidden />
-                Download PNG
+                {uploaded ? 'Download image' : 'Download PNG'}
               </a>
             </Button>
             <Button asChild variant="secondary" size="sm">
@@ -433,6 +499,7 @@ export function SheetTab({ character }: { character: Character }) {
   return (
     <div className="flex flex-col gap-6">
       <SheetBuilder key={s.preset ?? 'new'} character={character} sheet={s} cat={cat.data} />
+      <OwnSheet character={character} sheet={s} cat={cat.data} />
       {making > 0 && (
         <p role="status" className={cn('text-small text-studio-muted')}>
           {plural(making, 'panel')} still to make · about {minutes(s.estimate.seconds_low)}–{minutes(s.estimate.seconds_high)} min left

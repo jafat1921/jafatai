@@ -1,7 +1,7 @@
 """Character packs (contract v25): one zip that carries a character to another workspace or server.
 
 character.json holds the profile, the sheet's settings and each panel's metadata; the portrait, the panels
-and the board ride along as PNGs. A voice goes as its definition. A cloned voice's reference clip only goes
+and the board ride along as PNGs. A board the user uploaded comes back as their sheet; a laid-out one is redrawn. A voice goes as its definition. A cloned voice's reference clip only goes
 with its consent record, and comes back in only with it.
 """
 import io
@@ -74,7 +74,8 @@ def build(db: Session, c: Character) -> bytes:
         path = generation_file(p) if p is not None else None
         if path is not None and path.is_file():
             z.write(path, "portrait.png")
-            meta["portrait"] = {"file": "portrait.png", "prompt": p.prompt, "approved": p.status == "approved"}
+            meta["portrait"] = {"file": "portrait.png", "prompt": p.prompt, "approved": p.status == "approved",
+                                "source": (p.params or {}).get("source")}
         for key, gens in cs.panel_gens(db, c.id).items():
             g = cs.current(gens)
             path = generation_file(g) if g is not None else None
@@ -84,12 +85,14 @@ def build(db: Session, c: Character) -> bytes:
             z.write(path, name)
             meta["panels"].append({"key": key, "file": name, "prompt": g.prompt, "approved": g.status == "approved",
                                    "source": (g.params or {}).get("source")})
-        item = db.get(MediaItem, ((c.sheet or {}).get("board") or {}).get("media_id") or "")
+        board = (c.sheet or {}).get("board") or {}
+        item = db.get(MediaItem, board.get("media_id") or "")
         bg = db.get(Generation, item.generation_id) if item is not None and item.generation_id else None
         path = generation_file(bg) if bg is not None and bg.status in cs.FINISHED else None
         if path is not None and path.is_file():
             z.write(path, "board.png")
             meta["board"] = "board.png"
+            meta["board_uploaded"] = bool(board.get("uploaded"))
         meta["voice"] = _voice(db, c, z)
         z.writestr("character.json", json.dumps(meta, ensure_ascii=False, indent=2))
     return buf.getvalue()
@@ -103,23 +106,19 @@ def _read(z: zipfile.ZipFile, name: str | None) -> bytes | None:
     return z.read(name)
 
 
-def _image_gen(c: Character, kind: str, prompt: str, data: bytes, status: str, params: dict, version: int) -> Generation:
+def _pixels(data: bytes) -> Image.Image:
     # re-encoded, so nothing but pixels comes in from the pack
     try:
         with Image.open(io.BytesIO(data)) as im:
             im.load()
-            pic = im.convert("RGB")
+            return im.convert("RGB")
     except (UnidentifiedImageError, OSError) as e:
         raise HTTPException(422, f"A picture in the pack can't be read ({e})") from None
-    gid = new_id()
-    rel = Path("workspaces") / c.workspace_id / "projects" / "_unassigned" / "generations" / f"{gid}.png"
-    dest = get_settings().data_dir / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    pic.save(dest, "PNG")
-    return Generation(id=gid, workspace_id=c.workspace_id, project_id=None, target_type="character", target_id=c.id,
-                      kind=kind, version=version, status=status, prompt=prompt or "", seed=0, file_path=rel.as_posix(),
-                      media_type="image/png", params={**params, "imported": True},
-                      approved_at=utcnow() if status == "approved" else None)
+
+
+def _image_gen(c: Character, kind: str, prompt: str, data: bytes, status: str, params: dict, version: int) -> Generation:
+    return cs.store_picture(c, _pixels(data), kind, prompt=prompt, status=status,
+                            params={**params, "imported": True}, version=version)
 
 
 def _import_voice(db: Session, cur, z: zipfile.ZipFile, v: dict | None) -> str | None:
@@ -159,20 +158,24 @@ def _import_voice(db: Session, cur, z: zipfile.ZipFile, v: dict | None) -> str |
 
 
 def _store_clip(db: Session, cur, data: bytes, filename: str) -> MediaItem:
+    media_type = uploads.sniff_audio(data[:64])
+    if media_type is None:
+        raise HTTPException(422, "The voice clip in the pack isn't audio")
+    return _store_upload(db, cur, data, media_type, filename, "Voice reference (imported)")
+
+
+def _store_upload(db: Session, cur, data: bytes, media_type: str, filename: str, title: str) -> MediaItem:
+    """Into the Library the way /media/upload stores a file. This commits."""
     import hashlib
 
     from app.catalogue import importer
     from app.library import media_dir
 
-    media_type = uploads.sniff_audio(data[:64])
-    if media_type is None:
-        raise HTTPException(422, "The voice clip in the pack isn't audio")
     folder, rel = media_dir(cur.workspace_id)
     folder.mkdir(parents=True, exist_ok=True)
     tmp = folder / f".pack-{new_id()}.part"
     tmp.write_bytes(data)
-    got = uploads.Received(tmp, media_type, len(data), filename, "Voice reference (imported)",
-                           hashlib.sha256(data).hexdigest(), {})
+    got = uploads.Received(tmp, media_type, len(data), filename, title, hashlib.sha256(data).hexdigest(), {})
     item, _ = importer.store(db, cur.workspace_id, cur.id, got, folder, rel)
     return item
 
@@ -208,7 +211,7 @@ def import_zip(db: Session, cur, path: Path) -> Character:
         data = _read(z, por.get("file"))
         if data is not None:
             db.add(_image_gen(c, "portrait", por.get("prompt") or "", data, "approved" if por.get("approved") else "ready",
-                              {}, 1))
+                              {"source": "upload"} if por.get("source") == "upload" else {}, 1))
         for p in meta.get("panels") or []:
             key = str(p.get("key") or "")
             data = _read(z, p.get("file"))
@@ -218,10 +221,17 @@ def import_zip(db: Session, cur, path: Path) -> Character:
                               "approved" if p.get("approved") else "ready",
                               {"panel": key, "view": key, "source": p.get("source")}, 1))
         db.flush()
-        if any(cs.current(v) for v in cs.panel_gens(db, c.id).values()):
-            # the board is redrawn here rather than trusted from the pack
+        own = _read(z, meta.get("board")) if meta.get("board_uploaded") else None
+        if own is not None:
+            # the user's own sheet: kept as it is (re-encoded), never redrawn from the panels
+            buf = io.BytesIO()
+            _pixels(own).save(buf, "PNG")
+            item = _store_upload(db, cur, buf.getvalue(), "image/png", "sheet.png", f"{name} · own sheet"[:300])
+            cs.use_own_sheet(db, c, item)
+        elif any(cs.current(v) for v in cs.panel_gens(db, c.id).values()):
+            # a laid-out board is redrawn here rather than trusted from the pack
             cs.queue_board(db, c, (sheet.get("board") or {}).get("layout"))
-        # last on purpose: storing the clip commits, so everything before it has to be complete by now
+        # last on purpose: storing a file commits, so everything before it has to be complete by now
         c.voice_id = _import_voice(db, cur, z, meta.get("voice"))
     return c
 

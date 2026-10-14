@@ -86,7 +86,7 @@ A studio character's generations have `project_id: null`.
 ### The sheet
 | Route | |
 |---|---|
-| `GET /character-sheet/catalogue` | `{sections:[{key,label}], counts:{section:[allowed counts]}, lists:{outfits:3, details:4, props:3, accessories:6}, presets:{essential:{counts,panels:10}, full:{counts,panels:30}}, backdrops:["grey","dark"], seconds_per_panel:[20,40]}` |
+| `GET /character-sheet/catalogue` | `{sections:[{key,label}], panels:[{key,section,label}], counts:{section:[allowed counts]}, lists:{outfits:3, details:4, props:3, accessories:6}, presets:{essential:{counts,panels:10}, full:{counts,panels:30}}, backdrops:["grey","dark"], seconds_per_panel:[20,40]}` |
 | `GET /characters/{id}/sheet` | `SheetOut` |
 | `POST /characters/{id}/sheet {preset, counts?, lists?, backdrop?}` → 202 `SheetOut + {queued}` | queues every panel of the preset that has **no** picture yet. Panels that already have one are kept. 409 without a portrait |
 | `PATCH /characters/{id}/sheet {titles?, labels?, footer?, ruler?, backdrop?, lists?}` | board text and settings. A blank title or label goes back to the default. If a board exists, it's redrawn |
@@ -108,7 +108,9 @@ A studio character's generations have `project_id: null`.
  palette: ["#rrggbb", ...],                   // up to 6, from the hero (else the portrait), backdrop left out
  estimate: {panels, seconds_low, seconds_high},   // what is still to make, at 20–40 s a panel
  has_portrait: bool,
- board: {media_id, layout, generation: GenerationOut | null, status: "none" | "queued" | "running" | "ready"}}
+ board: {media_id, layout, generation: GenerationOut | null, status: "none" | "queued" | "running" | "ready",
+         uploaded: bool},                     // the user's own sheet is the board (see Own images)
+ own_sheet: {media_id, generation: GenerationOut, width, height} | null}   // the uploaded sheet, to cut panels from
 ```
 `waiting` = a panel drawn from the full-body hero, waiting for the hero to finish.
 
@@ -202,14 +204,64 @@ It creates a studio character, stores `{media_id, generation_id, consent: {name,
 in its sheet state, and queues a `portrait` edit of the photo that keeps the identity on a clean grey
 studio background. The user approves it like any portrait, and the sheet follows from it.
 
+With `use: "as_is"` (the default is `"studio"`) nothing is queued: the photo itself becomes the approved
+portrait (see Own images). The consent record is still required.
+
+## Own images
+
+The user can bring their own pictures instead of generating them. Every picture is uploaded first with
+`POST /media/upload` and passed as `media_id` (a finished Library image; 404 / 422 / 409 as for a photo).
+`consent` is optional on these routes. The UI sends it when the user ticks "It's a photo of a real person",
+and it must then read exactly as in From a photo (422 otherwise). It's kept in the generation's `params.consent`.
+
+| Route | |
+|---|---|
+| `POST /characters/{id}/portrait/upload {media_id, consent?}` → 201 GenerationOut | a new portrait version. It's approved straight away only if the character has no approved portrait yet; otherwise it's `ready` and the user approves it in the viewer |
+| `POST /characters/{id}/sheet/panels/{key}/upload {media_id, consent?}` → 201 GenerationOut | the picture as that panel's approved version. 404 for an unknown key or `portrait` |
+| `POST /characters/{id}/sheet/upload {media_id, consent?}` → `SheetOut` | the user's own sheet or chart becomes the board, as it is |
+| `POST /characters/{id}/sheet/crops {crops: [{panel, x, y, w, h}]}` → `SheetOut + {saved}` | panels cut from the uploaded sheet. 409 before a sheet is uploaded |
+
+What gets stored:
+- Each picture is copied into a PNG `Generation` on the character: `kind` is `portrait`, or `sheet_view` with
+  `params.panel`. `params.source` is `"upload"`, along with `from_media` (or `from_photo`), `size`, and for a
+  crop `crop: [x, y, w, h]`. The prompt is "Your own picture (uploaded)".
+- Approval goes through the usual approve, so there's one approved version per panel and approved crops
+  are references exactly like generated panels (`storyboard.character_ref`, `references_for`, `/shots/{id}/refs`).
+- An uploaded panel is never stale. An uploaded hero frees the panels waiting for it.
+- `POST /generations/{id}/regenerate` on an uploaded portrait is a 422 (there's no prompt to redo). On an
+  uploaded panel it draws that panel fresh from the portrait / hero, like the sheet's own regenerate.
+
+Crops:
+- `x, y, w, h` are pixels of the **original** upload, upright (EXIF orientation applied), not of a preview.
+  The server crops the original with Pillow.
+- `panel` is `portrait` or any panel key the sheet knows: the catalogue's fixed keys (`catalogue.panels`)
+  or this sheet's named outfits / details / props / accessories.
+- A box must lie inside the image and be at least 16 × 16. Up to 60 crops in one call. Every box is checked
+  before anything is saved, so one bad box (422) saves none of them. Negative or zero numbers are a 422 too.
+
+The uploaded board:
+- `sheet.board` becomes `{media_id: <the upload's Library item>, layout, uploaded: true, made_media_id}`, and
+  `sheet.own_sheet` keeps `{media_id, at, consent?}`.
+- While `uploaded` is set, nothing recomposes over it: approving a panel, a finished panel and a board-text
+  change all leave it alone.
+- `POST /characters/{id}/sheet/board` ("Lay out a new board from panels") is the only way to replace it. The
+  new board goes back onto the panels' own board item (`made_media_id`), and `own_sheet` stays, so panels can
+  still be cut from it.
+- `GET /characters/{id}/sheet/board/download?format=png` returns the uploaded file as it is, with its own
+  type and extension. `format=pdf` works the same as for a laid-out board.
+
+Video podcast hosts: `PATCH /podcast/ai-video/{id} {hosts: {host_id: {source: "photo", media_id, consent,
+as_is: true}}}` makes the photo itself the host's approved portrait, so the cast stage only makes the front
+and ¾ views from it. `hosts[].photo_as_is` says which hosts use their photo like this.
+
 ## Packs
 
 `character.json` (`format: "mixai.character"`, `version: 1`) holds:
 - the name, description and profile;
 - the sheet settings (preset, counts, lists, extras, keys, backdrop, titles, labels, footer, ruler, palette) and the layout;
-- `portrait: {file, prompt, approved}`;
-- `panels: [{key, file, prompt, approved, source}]`;
-- `board`;
+- `portrait: {file, prompt, approved, source}`;
+- `panels: [{key, file, prompt, approved, source}]`; `source` is `"upload"` for the user's own pictures and crops;
+- `board`, and `board_uploaded: true` when the board is the user's own sheet;
 - `voice`.
 
 The files are `portrait.png`, `panels/<key>.png` and `board.png`.
@@ -224,7 +276,9 @@ A clone's clip is left out (`reference: null`) when it has no consent record.
 Import:
 - Every picture is re-encoded to PNG; a picture that can't be read is a 422.
 - Panel and portrait approval comes back as it was.
-- The board is redrawn rather than copied.
+- A laid-out board is redrawn rather than copied. An uploaded board (`board_uploaded`) comes back as the
+  user's own sheet: a new Library image, kept as the board and as `own_sheet`, and never redrawn.
+- Uploaded portraits and panels keep `params.source: "upload"`.
 - A voice in the same workspace is reused. A designed or preset voice is recreated. A clone comes back only
   with its clip and a matching consent statement, as a new upload; otherwise the character just has no voice.
 

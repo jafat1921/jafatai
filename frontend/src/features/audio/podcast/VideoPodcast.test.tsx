@@ -285,10 +285,12 @@ describe('AI video podcast', { timeout: 20_000 }, () => {
     expect(within(ali).getByText('Tick the consent statement to use this photo.')).toBeInTheDocument()
     expect(sent(calls, 'PATCH', '/podcast/ai-video/v1')).toEqual([])
     await user.click(within(ali).getByRole('checkbox', { name: LIKENESS_STATEMENT }))
+    // the photo itself as the approved portrait, no AI clean-up
+    await user.click(within(ali).getByRole('checkbox', { name: /Use the photo itself as the portrait/ }))
     await user.click(use)
     await waitFor(() =>
       expect(sent(calls, 'PATCH', '/podcast/ai-video/v1')).toEqual([
-        { hosts: { h1: { source: 'photo', media_id: 'p1', consent: { name: 'Ali Raza', statement: LIKENESS_STATEMENT } } } },
+        { hosts: { h1: { source: 'photo', media_id: 'p1', as_is: true, consent: { name: 'Ali Raza', statement: LIKENESS_STATEMENT } } } },
       ]),
     )
   })

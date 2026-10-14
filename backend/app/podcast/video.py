@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app import audio_analysis as aa
+from app import character_sheet as cs
 from app import dialogue as dl
 from app import estimate as est
 from app import library as lib
@@ -261,6 +262,11 @@ def choose_host(db: Session, cur, vp: VideoPodcast, ep: PodcastEpisode, host_id:
         new.update(photo_media_id=item.id, photo_generation_id=g.id,
                    consent=check_consent(choice.get("consent"), cur.id))
         c.description = c.description or f"{host['name']}, from the uploaded photo"
+        if choice.get("as_is"):
+            # the photo itself is the portrait, approved now, so the cast stage only turns it for the views
+            cs.add_own(db, c, cs.open_picture(g), params={"from_photo": item.id, "vp": vp.id, "vp_rev": rev,
+                                                          "consent": new["consent"]})
+            new["as_is"] = True
     elif src == "existing":
         other = db.get(Character, choice.get("character_id") or "")
         if other is None or other.workspace_id != vp.workspace_id:
@@ -928,6 +934,7 @@ def hosts_out(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> list[dict]:
         out.append({"host_id": h["id"], "name": h["name"], "role": h.get("role"), "persona": h.get("persona") or "",
                     "source": entry.get("source") or "persona", "character_id": entry["character_id"],
                     "photo_media_id": entry.get("photo_media_id"),
+                    "photo_as_is": bool(entry.get("as_is")),
                     "photo_url": sv.item_url(db, photo.id) if photo else None,
                     "from_character_id": entry.get("from_character_id"), "consent": entry.get("consent"),
                     "portrait": _gen(current_portrait(db, entry)), "sheet_views": sheets})

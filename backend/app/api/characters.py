@@ -9,8 +9,9 @@ from app.ai_jobs import enqueue_ai
 from app.db import get_db
 from app.models import Character, Generation, Job, MediaItem, Project, VoiceProfile, utcnow
 from app.schemas import (BoardIn, CastLinkIn, CharacterCreate, CharacterFromPhoto, CharacterOut, CharacterPatch,
-                         CharacterVoiceDesignIn, CharacterVoiceDesignOut, GenerationOut, JobOut, PanelRegenerateIn,
-                         SheetIn, SheetPatch, TestClipIn, TestClipOut, VoiceOut)
+                         CharacterVoiceDesignIn, CharacterVoiceDesignOut, GenerationOut, JobOut, OwnImageIn,
+                         PanelRegenerateIn, PhotoConsent, SheetCropsIn, SheetIn, SheetPatch, TestClipIn, TestClipOut,
+                         VoiceOut)
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import character_out, enqueue_generation, gen_out, generation_file, get_owned, job_out
 
@@ -30,6 +31,15 @@ def _stem(name: str) -> str:
 
 def _character(db: Session, cur: CurrentUser, character_id: str) -> Character:
     return get_owned(db, Character, character_id, cur.workspace_id, "Character")
+
+
+def _consent(cur: CurrentUser, consent: PhotoConsent | None) -> dict:
+    name = " ".join((consent.name if consent else "").split())
+    if not name:
+        raise HTTPException(422, "Using a photo of a real person needs a consent record: the person's name")
+    if " ".join(consent.statement.split()) != PHOTO_CONSENT:
+        raise HTTPException(422, f"The consent statement must read exactly: “{PHOTO_CONSENT}”")
+    return {"name": name[:120], "statement": PHOTO_CONSENT, "at": utcnow().isoformat() + "Z", "user_id": cur.id}
 
 
 # ---------------------------------------------------------------- a film's cast
@@ -111,27 +121,21 @@ def create_studio_character(body: CharacterCreate, db: Session = Depends(get_db)
 @router.post("/characters/from-photo", response_model=CharacterOut, status_code=201)
 def create_from_photo(body: CharacterFromPhoto, db: Session = Depends(get_db),
                       cur: CurrentUser = Depends(require_editor)):
-    """A studio character whose portrait is a clean studio edit of an uploaded photo (consent first)."""
-    name = " ".join(body.consent.name.split())
-    if not name:
-        raise HTTPException(422, "Using a photo of a real person needs a consent record: the person's name")
-    if " ".join(body.consent.statement.split()) != PHOTO_CONSENT:
-        raise HTTPException(422, f"The consent statement must read exactly: “{PHOTO_CONSENT}”")
-    item = db.get(MediaItem, body.media_id)
-    if item is None or item.workspace_id != cur.workspace_id:
-        raise HTTPException(404, "That photo isn't in the Library")
-    if item.kind != "image":
-        raise HTTPException(422, "The photo has to be an image")
-    photo = db.get(Generation, item.generation_id or "")
-    if photo is None or photo.status not in cs.FINISHED or not photo.file_path:
-        raise HTTPException(409, "That photo isn't finished yet")
+    """A studio character from an uploaded photo (consent first): a clean studio edit of it, or with
+    use=as_is the photo itself as the approved portrait."""
+    consent = _consent(cur, body.consent)
+    item, photo = cs.uploaded_image(db, cur.workspace_id, body.media_id, "photo")
+    pic = cs.open_picture(photo) if body.use == "as_is" else None
     c = Character(workspace_id=cur.workspace_id, project_id=None, name=body.name.strip(),
                   description=body.description.strip(), source="user", locked=bool(body.description.strip()),
-                  sheet={"photo": {"media_id": item.id, "generation_id": photo.id,
-                                   "consent": {"name": name[:120], "statement": PHOTO_CONSENT,
-                                               "at": utcnow().isoformat() + "Z", "user_id": cur.id}}})
+                  sheet={"photo": {"media_id": item.id, "generation_id": photo.id, "use": body.use,
+                                   "consent": consent}})
     db.add(c)
     db.flush()
+    if pic is not None:
+        cs.add_own(db, c, pic, params={"from_photo": item.id, "consent": consent})
+        db.commit()
+        return character_out(db, c, films=True)
     params = models_catalog.apply_image_choice({"reference_ids": [photo.id], "from_photo": item.id}, None)
     enqueue_generation(db, workspace_id=cur.workspace_id, project_id=None, target_type="character", target_id=c.id,
                        kind="portrait", prompt=PHOTO_PROMPT, params=params)
@@ -208,6 +212,22 @@ def delete_character(character_id: str, project_id: str | None = None, db: Sessi
     return Response(status_code=204)
 
 
+@router.post("/characters/{character_id}/portrait/upload", response_model=GenerationOut, status_code=201)
+def upload_portrait(character_id: str, body: OwnImageIn, db: Session = Depends(get_db),
+                    cur: CurrentUser = Depends(require_editor)):
+    """The user's own picture as a new portrait version; approved straight away only if nothing is yet."""
+    c = _character(db, cur, character_id)
+    params = {"consent": _consent(cur, body.consent)} if body.consent else {}
+    item, g = cs.uploaded_image(db, cur.workspace_id, body.media_id)
+    first = db.scalars(select(Generation.id).where(
+        Generation.target_type == "character", Generation.target_id == c.id, Generation.kind == "portrait",
+        Generation.status == "approved")).first() is None
+    out = cs.add_own(db, c, cs.open_picture(g), params={**params, "from_media": item.id}, approved=first)
+    c.updated_at = utcnow()
+    db.commit()
+    return gen_out(out)
+
+
 @router.post("/characters/{character_id}/ai/profile", response_model=JobOut, status_code=202)
 def ai_profile(character_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     """Fill the empty profile fields (and suggest props, accessories, wardrobe details) from the description."""
@@ -263,13 +283,53 @@ def regenerate_panel(character_id: str, key: str, body: PanelRegenerateIn | None
     return gen_out(g)
 
 
+@router.post("/characters/{character_id}/sheet/panels/{key}/upload", response_model=GenerationOut,
+             status_code=201)
+def upload_panel(character_id: str, key: str, body: OwnImageIn, db: Session = Depends(get_db),
+                 cur: CurrentUser = Depends(require_editor)):
+    """The user's own picture as this panel's approved version."""
+    c = _character(db, cur, character_id)
+    if key == "portrait" or cp.panel(key, cs.extras(c)) is None:
+        raise HTTPException(404, f"This sheet has no panel '{key}'")
+    params = {"consent": _consent(cur, body.consent)} if body.consent else {}
+    item, g = cs.uploaded_image(db, cur.workspace_id, body.media_id)
+    out = cs.add_own(db, c, cs.open_picture(g), panel=key, params={**params, "from_media": item.id})
+    db.commit()
+    return gen_out(out)
+
+
+@router.post("/characters/{character_id}/sheet/upload")
+def upload_sheet(character_id: str, body: OwnImageIn, db: Session = Depends(get_db),
+                 cur: CurrentUser = Depends(require_editor)):
+    """The user's own character sheet becomes the board as it is; panels can then be cut from it."""
+    c = _character(db, cur, character_id)
+    consent = _consent(cur, body.consent) if body.consent else None
+    item, _g = cs.uploaded_image(db, cur.workspace_id, body.media_id, "sheet")
+    cs.use_own_sheet(db, c, item)
+    if consent:
+        cs.put(c, own_sheet={**c.sheet["own_sheet"], "consent": consent})
+    c.updated_at = utcnow()
+    db.commit()
+    return cs.sheet_out(db, c)
+
+
+@router.post("/characters/{character_id}/sheet/crops")
+def cut_sheet(character_id: str, body: SheetCropsIn, db: Session = Depends(get_db),
+              cur: CurrentUser = Depends(require_editor)):
+    c = _character(db, cur, character_id)
+    made = cs.cut_panels(db, c, [x.model_dump() for x in body.crops])
+    db.commit()
+    return {**cs.sheet_out(db, c), "saved": len(made)}
+
+
 @router.post("/characters/{character_id}/sheet/board", response_model=JobOut, status_code=202)
 def make_board(character_id: str, body: BoardIn, db: Session = Depends(get_db),
                cur: CurrentUser = Depends(require_editor)):
+    """Lays out a board from the panels; this is also how an uploaded sheet gets replaced."""
     c = _character(db, cur, character_id)
     if not any(cs.current(v) for v in cs.panel_gens(db, c.id).values()):
         raise HTTPException(409, "No sheet panels are finished yet")
-    job = cs.queue_board(db, c, body.layout)
+    job = cs.queue_board(db, c, body.layout, replace_upload=True)
     db.commit()
     return job_out(job)
 
@@ -288,7 +348,9 @@ def download_board(character_id: str, format: str = Query("png", pattern="^(png|
     if format == "pdf":
         headers["Content-Disposition"] = f'attachment; filename="{stem} sheet.pdf"'
         return Response(cs.board_pdf(path), media_type="application/pdf", headers=headers)
-    return FileResponse(path, media_type="image/png", filename=f"{stem} sheet.png", headers=headers)
+    # an uploaded sheet goes back as the file it came in as
+    return FileResponse(path, media_type=g.media_type or "image/png", filename=f"{stem} sheet{path.suffix.lower()}",
+                        headers=headers)
 
 
 @router.get("/characters/{character_id}/pack")

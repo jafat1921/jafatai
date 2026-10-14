@@ -282,6 +282,8 @@ def catalogue_out() -> dict:
     """What the sheet picker needs to build presets and a live estimate on its own."""
     return {
         "sections": [{"key": k, "label": v} for k, v in SECTIONS.items()],
+        # every fixed panel, for the slots a crop of an uploaded sheet can fill
+        "panels": [{"key": p.key, "section": p.section, "label": p.label} for p in CATALOGUE.values()],
         "counts": {k: list(v) for k, v in COUNTS.items()},
         "lists": LISTS,
         "presets": {k: {"counts": v, "panels": len(panel_keys(k))} for k, v in PRESETS.items()},

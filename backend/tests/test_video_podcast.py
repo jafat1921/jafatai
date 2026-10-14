@@ -354,6 +354,20 @@ def test_uploaded_photo_needs_consent(client, fast_driver):
     assert host["consent"]["at"] and host["consent"]["user_id"]
 
 
+def test_uploaded_photo_as_the_portrait(client, fast_driver):
+    ep = _episode(client, fast_driver, mix=False)
+    vp = ok(client.post(f"/api/podcast/episodes/{ep['id']}/ai-video", json={}), 201)
+    photo = ok(upload(client, "ali.png", png_bytes(), "image/png"), 201)
+    hid = vp["hosts"][0]["host_id"]
+    choice = {"source": "photo", "media_id": photo["id"], "as_is": True,
+              "consent": {"name": "Ali Raza", "statement": vd.CONSENT}}
+    vp = ok(client.patch(f"/api/podcast/ai-video/{vp['id']}", json={"hosts": {hid: choice}}))
+    host = vp["hosts"][0]
+    # approved straight away, so the cast stage keeps it and only turns it for the sheet views
+    assert host["photo_as_is"] and host["portrait"]["status"] == "approved"
+    assert host["portrait"]["params"]["source"] == "upload" and host["portrait"]["params"]["vp_rev"] == 2
+
+
 # ---------------------------------------------------------------- the whole pipeline
 
 def _continue(client, vp, fast_driver):

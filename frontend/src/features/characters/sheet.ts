@@ -2,6 +2,12 @@ import type { SheetCatalogue, SheetListName, SheetPreset } from '@/lib/types'
 
 // contract-v25-character-sheets.md: what the sheet picker needs besides the server's catalogue
 
+// the server checks this exact sentence, like the voice clone consent
+export const PHOTO_CONSENT = 'I have the right to use this photo, and the person in it agreed to it being made into a character.'
+
+// crops smaller than this are refused by the server too
+export const MIN_CROP = 16
+
 export const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body'
 
 export const LISTS: { key: SheetListName; label: string; hint: string }[] = [

@@ -364,6 +364,29 @@ fetch() {  # $1 url, $2 dest, $3 bytes, $4 sha256 (may be empty)
   if [[ -n "$sha" ]]; then echo "downloaded (sha256 ok)"; else echo "downloaded (size ok, no published hash)"; fi
 }
 
+catvton_deps() {
+  # the release zip has no requirements.txt: its pipeline needs accelerate + diffusers, and the auto-masker
+  # needs DensePose from detectron2, which has no wheel for current torch, so it builds here (CPU ops only,
+  # no CUDA toolkit needed). torch/numpy stay pinned; detectron2 moves omegaconf back to 2.3.
+  local cons; cons="$(mktemp)"
+  "$PY" -m pip freeze 2>/dev/null | grep -iE '^(torch|torchvision|torchaudio|numpy|xformers|triton)==' > "$cons" || true
+  local need=()
+  "$PY" -c 'import accelerate' 2>/dev/null || need+=(accelerate)
+  "$PY" -c 'import diffusers' 2>/dev/null || need+=(diffusers)
+  if (( ${#need[@]} )); then
+    info "pip (into $COMFY_VENV): ${need[*]}"
+    if (( ! DRY )); then "$PY" -m pip install --quiet -c "$cons" "${need[@]}" || { rm -f "$cons"; return 1; }; CHANGED=1; fi
+  fi
+  if ! "$PY" -c 'import densepose' 2>/dev/null; then
+    info "build  detectron2 + DensePose (CPU ops, a few minutes)"
+    if (( ! DRY )); then
+      FORCE_CUDA=0 "$PY" -m pip install --quiet --no-build-isolation -c "$cons"         "git+https://github.com/facebookresearch/detectron2.git"         "git+https://github.com/facebookresearch/detectron2.git#subdirectory=projects/DensePose" || { rm -f "$cons"; return 1; }
+      CHANGED=1
+    fi
+  fi
+  rm -f "$cons"
+}
+
 patch_catvton_abn() {
   # SCHP's in-place batch norm JIT-compiles a CUDA extension on import, which needs the CUDA toolkit; swap in
   # a pure-PyTorch version so the node loads with just the driver and PyTorch
@@ -435,6 +458,7 @@ done
 if (( WANT_TRYON )); then
   if ! install_catvton_node; then STATUS[$CATVTON_DIR]="FAILED"; FAILED=1; warn "$CATVTON_DIR failed"; fi
   patch_catvton_abn
+  catvton_deps || { FAILED=1; warn "CatVTON's Python packages failed"; }
 fi
 
 # ---------------------------------------------------------------- models

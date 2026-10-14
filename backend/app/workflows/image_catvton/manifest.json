@@ -18,7 +18,7 @@
   "requires": {
     "pack": "ComfyUI-CatVTON.zip from the Zheng-Chong/CatVTON 'ComfyUI' release (2024-07-27)",
     "nodes": ["LoadCatVTONPipeline", "LoadAutoMasker", "AutoMasker", "CatVTON"],
-    "assumed": "class names from the release's catvton_workflow.json; input names (sd15_inpaint_path, catvton_path, mixed_precision, cloth_type, target_image, refer_image, mask_image, seed, steps, cfg) not yet checked against /object_info"
+    "verified": "class and input names checked against the GPU server's /object_info (2026-10-14); needs accelerate, diffusers and detectron2 + DensePose (install-image-tools.sh --tryon)"
   },
   "progress_weights": {"TryOn": 8, "Pipeline": 3, "AutoMask": 1}
 }

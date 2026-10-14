@@ -380,7 +380,10 @@ def templates() -> dict[str, dict]:
     for kind in ("video", "image", "audio"):
         data = json.loads((TEMPLATE_DIR / f"{kind}.json").read_text(encoding="utf-8"))
         for t in data["templates"]:
-            out[t["id"]] = {**t, "type": kind}
+            row = {**t, "type": kind}
+            if kind == "image":
+                row.setdefault("target", "image-generate")  # v2 cards predate edit templates
+            out[t["id"]] = row
     return out
 
 
@@ -398,9 +401,11 @@ def _template_out(t: dict) -> TemplateOut:
     f = preview_file(t["id"])
     # mtime in the URL so a re-rendered preview isn't stuck behind the cache
     url = f"/api/prompt-templates/{t['id']}/preview?v={int(f.stat().st_mtime)}" if f else None
-    return TemplateOut(**{k: t.get(k) for k in ("id", "type", "title", "description", "thumb", "defaults", "category")},
+    return TemplateOut(**{k: t.get(k) for k in ("id", "type", "title", "description", "thumb", "defaults", "category",
+                                                "target")},
                        tags=t.get("tags") or [], examples=t.get("examples") or {}, preview_url=url,
-                       requires_brand=bool(t.get("requires_brand")))
+                       requires_brand=bool(t.get("requires_brand")), refs_required=t.get("refs_required") or 0,
+                       ref_labels=t.get("ref_labels") or [], options=t.get("options") or [])
 
 
 @router.get("/templates", response_model=list[TemplateOut])
@@ -438,7 +443,14 @@ def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user
         raise HTTPException(404, "Prompt template not found")
     d = dict(t["defaults"])
     scaffold = d.pop("prompt_scaffold", "")
-    if t["type"] == "image":
+    if t.get("target") == "image-edit":
+        # opens Edit Image: the user still has to add the labelled pictures before anything runs
+        scaffold = d.get("instruction_scaffold", "")
+        prefill = {"instruction": scaffold, "model": d.get("model"), "count": d.get("count", 1),
+                   "aspect": d.get("aspect"), "refs_required": t.get("refs_required", 1),
+                   "ref_labels": t.get("ref_labels") or [], "options": t.get("options") or [], "template_id": t["id"]}
+        target = "image-edit"
+    elif t["type"] == "image":
         prefill = {"prompt": scaffold, "aspect": d.get("aspect", "1:1"), "count": d.get("count", 1),
                    "style": d.get("style"), "negative": d.get("negative"), "template_id": t["id"]}
         if d.get("model"):

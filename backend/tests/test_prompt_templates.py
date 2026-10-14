@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import library as lib_api
+from app import models_catalog
 from app.api.quick import QuickIn
 from app.library import ASPECTS, STYLES
 from app.main import app
@@ -31,6 +32,8 @@ def test_template_json_is_sound(kind, minimum):
         assert t["id"].startswith(f"{kind}-") and re.fullmatch(r"[a-z0-9-]+", t["id"])
         assert t["title"] and t["description"] and t["tags"]
         d = t["defaults"]
+        if t.get("target") == "image-edit":
+            continue  # test_edit_templates
         texts = [d.get("prompt_scaffold", ""), d.get("logline_hint", ""), t.get("preview_prompt", "")]
         slots = set(SLOT.findall(d["prompt_scaffold"]))
         assert 2 <= len(slots) <= 4, t["id"]
@@ -50,7 +53,7 @@ def test_ids_unique_and_text_templates_use_qwen():
     ids = [t["id"] for t in rows]
     assert len(ids) == len(set(ids))
     qwen = [t for t in rows if t["defaults"].get("model") == "qwen_image_2512"]
-    assert 1 <= len(qwen) <= 6 and all('"[' in t["defaults"]["prompt_scaffold"] for t in qwen)
+    assert 1 <= len(qwen) <= 16 and all('"[' in t["defaults"]["prompt_scaffold"] for t in qwen)
     urdu = [t for t in qwen if re.search(r"[؀-ۿ]", json.dumps(t["examples"], ensure_ascii=False))]
     assert len(urdu) >= 2
 
@@ -62,7 +65,7 @@ def test_preview_script_fills_every_template():
     for t in mod.load_templates():
         r = mod.recipe(t)
         assert "[" not in r["prompt"] and r["params"]["width"] % 64 == 0
-        assert r["model"] == ("qwen_image_2512" if t["defaults"].get("model") else "zimage_turbo")
+        assert r["model"] == ("qwen_image_2512" if t["defaults"].get("model") == "qwen_image_2512" else "zimage_turbo")
 
 
 def test_aliases_list_and_start(client):
@@ -110,3 +113,83 @@ def test_shipped_previews_are_small():
     ids = {t["id"] for t in _load("image")["templates"] + _load("video")["templates"]}
     assert {f.stem for f in files} <= ids
     assert sum(f.stat().st_size for f in files) < 3.5 * 1024 * 1024
+
+
+EDIT_IDS = {"image-edit-outfit-swap", "image-edit-hairstyle", "image-edit-hairstyle-grid", "image-edit-headshot",
+            "image-edit-retouch", "image-edit-remove-object", "image-edit-relight", "image-edit-product-scene",
+            "image-edit-line-art", "image-edit-giant-beach", "image-edit-helicopter", "image-edit-icy-plunge",
+            "image-edit-3d-billboard", "image-edit-miniature-factory", "image-edit-exploded-view",
+            "image-edit-photo-grid", "image-edit-across-time", "image-edit-front-page", "image-edit-mini-me",
+            "image-edit-tiny-me", "image-edit-pet-cover", "image-edit-style-breakdown", "image-edit-trend-collage"}
+
+
+def test_edit_templates():
+    rows = [t for t in _load("image")["templates"] if t.get("target") == "image-edit"]
+    assert {t["id"] for t in rows} == EDIT_IDS
+    for t in rows:
+        d = t["defaults"]
+        assert "prompt_scaffold" not in d and t["id"].startswith("image-edit-")
+        assert 1 <= t["refs_required"] <= len(t["ref_labels"]) <= 3, t["id"]
+        assert all(isinstance(x, str) and x for x in t["ref_labels"])
+        text = d["instruction_scaffold"]
+        assert "image 1" in text and len(text) <= 2000
+        slots = set(SLOT.findall(text))
+        assert len(slots) <= 4
+        assert not (slots | set(SLOT.findall(t["preview_prompt"]))) - set(t["examples"]), t["id"]
+        assert d.get("aspect") in (None, *ASPECTS) and 1 <= d["count"] <= 4
+        for o in t.get("options", []):
+            assert o["slot"] in slots and o["label"] and len(o["choices"]) >= 2, t["id"]
+            for c in o["choices"]:
+                assert c["label"] and c["value"] and "[" not in c["value"]
+                assert c.get("aspect") in (None, *ASPECTS)
+    outfit = next(t for t in rows if t["id"] == "image-edit-outfit-swap")
+    assert outfit["ref_labels"] == ["Person", "Garment"] and outfit["refs_required"] == 2
+    hair = next(t for t in rows if t["id"] == "image-edit-hairstyle")
+    assert all(len(o["choices"]) >= 12 for o in hair["options"])
+    grid = next(t for t in rows if t["id"] == "image-edit-hairstyle-grid")
+    assert grid["defaults"]["aspect"] == "3:4" and "3×4" in grid["defaults"]["instruction_scaffold"]
+    era = next(t for t in rows if t["id"] == "image-edit-across-time")["options"][0]["choices"]
+    assert {"Victorian", "1920s", "1950s", "1980s", "Futuristic"} <= {c["label"] for c in era}
+    assert next(t for t in rows if t["id"] == "image-edit-pet-cover")["ref_labels"] == ["Pet"]
+
+
+def test_every_template_loads_and_names_a_real_model():
+    rows = [t for t in lib_api.templates().values() if t["type"] == "image"]
+    assert len(rows) == 64 and sum(t["target"] == "image-edit" for t in rows) == len(EDIT_IDS)
+    for t in rows:
+        want = "edit" if t["target"] == "image-edit" else "image"
+        model = t["defaults"].get("model")
+        if t["target"] == "image-edit":
+            assert model, t["id"]
+        if model:
+            assert models_catalog.MODELS[model].type == want, t["id"]
+        lib_api.TemplateOut.model_validate(lib_api._template_out(t).model_dump())
+
+
+def test_list_back_compat_and_edit_fields(client):
+    rows = {t["id"]: t for t in client.get("/api/prompt-templates", params={"type": "image"}).json()}
+    old = rows["image-portrait"]
+    assert old["target"] == "image-generate" and old["refs_required"] == 0 and old["ref_labels"] == [] and old["options"] == []
+    swap = rows["image-edit-outfit-swap"]
+    assert swap["target"] == "image-edit" and swap["ref_labels"] == ["Person", "Garment"] and swap["refs_required"] == 2
+    assert rows["image-edit-hairstyle"]["options"][0]["slot"] == "hairstyle"
+    video = client.get("/api/prompt-templates", params={"type": "video"}).json()
+    assert all(t["target"] is None for t in video)
+
+
+def test_start_edit_template(client):
+    r = client.post("/api/prompt-templates/image-edit-outfit-swap/start").json()
+    assert r["target"] == "image-edit"
+    p = r["prefill"]
+    assert p["model"] == "qwen_image_edit_2511" and p["ref_labels"] == ["Person", "Garment"] and p["refs_required"] == 2
+    assert p["instruction"].startswith("Dress the person in image 1") and p["placeholders"] == []
+    assert "prompt" not in p and p["template_id"] == "image-edit-outfit-swap"
+
+    r = client.post("/api/prompt-templates/image-edit-headshot/start").json()
+    assert r["prefill"]["placeholders"] == ["attire", "background"] and r["prefill"]["aspect"] == "3:4"
+    assert [o["slot"] for o in r["prefill"]["options"]] == ["attire", "background"]
+    assert r["prefill"]["examples"]["attire"]
+
+    # generate cards are unchanged
+    r = client.post("/api/prompt-templates/image-cafe-menu/start").json()
+    assert r["target"] == "image" and r["prefill"]["model"] == "qwen_image_2512" and "[NAME]" in r["prefill"]["prompt"]

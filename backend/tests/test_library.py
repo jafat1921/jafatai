@@ -413,7 +413,12 @@ def test_templates(client):
             QuickIn(prompt=d["prompt_scaffold"], duration_s=d["duration_s"], aspect_ratio=d["aspect_ratio"],
                     style=d["style"], dialogue=d["dialogue"])
     for t in imgs:
-        assert t["defaults"]["aspect"] in ASPECTS and t["defaults"]["style"] in STYLES
+        d = t["defaults"]
+        if t.get("target", "image-generate") == "image-generate":
+            assert d["aspect"] in ASPECTS and d["style"] in STYLES
+        else:
+            # Edit Image has no style picker, and most edits keep the photo's own shape
+            assert d.get("aspect") is None or d["aspect"] in ASPECTS
     assert client.get("/api/images/options").json()["styles"]
 
 

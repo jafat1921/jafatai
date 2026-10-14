@@ -8,7 +8,7 @@ import { Chip } from '@/components/studio/chip'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { useStartTemplate, useTemplates } from '@/hooks/useStudio'
 import { splitPlaceholders } from '@/lib/images'
-import { localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
+import { isEditTemplate, localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
 import { AUDIO_ROUTE, audioKindOf, KIND_NOUN } from '@/lib/audio'
 import type { Template, TemplateStart, TemplateType } from '@/lib/types'
 import { formatRuntime } from '@/lib/utils'
@@ -39,16 +39,25 @@ function meta(t: Template) {
   if (aspect) bits.push(aspect)
   if (t.type === 'video') bits.push(d.authoring_mode && d.authoring_mode !== 'quick' ? 'Studio project' : 'Quick video')
   else if (t.type === 'audio') bits.push(KIND_NOUN[audioKindOf(t)].one)
+  else if (isEditTemplate(t)) bits.push(`Edit · needs ${(t.ref_labels ?? []).join(' + ') || 'a photo'}`)
   else if (typeof d.count === 'number') bits.push(`${d.count} variations`)
   if (d.model === 'qwen_image_2512') bits.push('Qwen text')
   return bits.join(' · ')
 }
 
+const scaffoldOf = (t: Template) => String(t.defaults?.prompt_scaffold ?? t.defaults?.instruction_scaffold ?? t.defaults?.logline_hint ?? '')
+
 const haystack = (t: Template) =>
-  [t.title, t.description, t.category, ...(t.tags ?? []), String(t.defaults?.prompt_scaffold ?? '')].join(' ').toLowerCase()
+  [t.title, t.description, t.category, ...(t.tags ?? []), ...(t.ref_labels ?? []), scaffoldOf(t)].join(' ').toLowerCase()
+
+type Mode = 'generate' | 'edit'
+const MODES: { value: Mode; label: string }[] = [
+  { value: 'generate', label: 'Generate' },
+  { value: 'edit', label: 'Edit my photo' },
+]
 
 function Card({ t, onStart, starting }: { t: Template; onStart: () => void; starting: boolean }) {
-  const prompt = String(t.defaults?.prompt_scaffold ?? t.defaults?.logline_hint ?? '')
+  const prompt = scaffoldOf(t)
   return (
     <article aria-labelledby={`tpl-${t.id}`} className="flex flex-col overflow-hidden rounded-[8px] border border-studio-border-strong bg-studio-panel shadow-card">
       <TemplatePreview t={t} className="aspect-[4/3] border-x-0 border-t-0" />
@@ -65,7 +74,7 @@ function Card({ t, onStart, starting }: { t: Template; onStart: () => void; star
         )}
         <p className="mt-auto font-mono text-[12px] text-studio-muted">{meta(t)}</p>
         <Button variant="primary" onClick={onStart} loading={starting} aria-label={`Use the ${t.title} prompt template`}>
-          Use prompt template
+          {isEditTemplate(t) ? 'Use with my photos' : 'Use prompt template'}
           <ArrowRight aria-hidden />
         </Button>
       </div>
@@ -86,14 +95,22 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
   const start = useStartTemplate()
   const [q, setQ] = useState('')
   const [category, setCategory] = useState<string | null>(null)
+  const [mode, setMode] = useState<Mode | null>(null)
 
   const all = templates.data
+  const hasEdits = !!all?.some(isEditTemplate)
+  const inMode = useMemo(() => (all ?? []).filter((t) => !mode || (mode === 'edit') === isEditTemplate(t)), [all, mode])
   // the server sends them in category order
-  const categories = useMemo(() => [...new Set((all ?? []).map((t) => t.category).filter((c): c is string => !!c))], [all])
+  const categories = useMemo(() => [...new Set(inMode.map((t) => t.category).filter((c): c is string => !!c))], [inMode])
   const shown = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean)
-    return (all ?? []).filter((t) => (!category || t.category === category) && words.every((w) => haystack(t).includes(w)))
-  }, [all, q, category])
+    return inMode.filter((t) => (!category || t.category === category) && words.every((w) => haystack(t).includes(w)))
+  }, [inMode, q, category])
+  const chooseMode = (m: Mode | null) => {
+    setMode(m)
+    // a category from the other mode would leave nothing on screen
+    if (category && !all?.some((t) => t.category === category && (!m || (m === 'edit') === isEditTemplate(t)))) setCategory(null)
+  }
 
   const open = (t: Template) =>
     start.mutate(t.id, {
@@ -126,6 +143,18 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
             <Input type="search" placeholder="Search prompt templates" aria-label="Search prompt templates" value={q} onChange={(e) => setQ(e.target.value)} className="w-64 pl-8" />
           </div>
         </header>
+        {hasEdits && (
+          <div role="group" aria-label="Generate or edit" className="flex flex-wrap gap-1">
+            <Chip selected={mode === null} onClick={() => chooseMode(null)}>
+              Everything
+            </Chip>
+            {MODES.map((m) => (
+              <Chip key={m.value} selected={mode === m.value} onClick={() => chooseMode(mode === m.value ? null : m.value)}>
+                {m.label}
+              </Chip>
+            ))}
+          </div>
+        )}
         {categories.length > 1 && (
           <div role="group" aria-label="Category" className="flex flex-wrap gap-1">
             <Chip selected={category === null} onClick={() => setCategory(null)}>
@@ -160,6 +189,7 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
                 onClick={() => {
                   setQ('')
                   setCategory(null)
+                  setMode(null)
                 }}
               >
                 Show all
@@ -167,7 +197,8 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
             }
           >
             No prompt template matches {q ? `"${q}"` : 'this filter'}
-            {category ? ` in ${category}` : ''}.
+            {category ? ` in ${category}` : ''}
+            {mode ? ` among the ${mode === 'edit' ? 'photo edits' : 'generate templates'}` : ''}.
           </EmptyState>
         ) : (
           <>

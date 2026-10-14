@@ -1,16 +1,24 @@
 {
-  "version": 2,
+  "version": 3,
   "categories": [
     "Portraits",
+    "Portrait fun",
     "Product & ads",
+    "Packaging",
     "Food",
+    "Menu",
     "Fashion",
     "Architecture & interiors",
     "Landscapes & travel",
     "Posters & text",
+    "Typography",
+    "Infographic",
+    "Comic",
     "Social media",
     "Illustration & art",
-    "Characters & concept"
+    "Surreal",
+    "Characters & concept",
+    "Edit a photo"
   ],
   "templates": [
     {
@@ -531,6 +539,1000 @@
         "count": 4,
         "style": "cinematic",
         "negative": "text, watermark, flat lighting, cluttered foreground"
+      }
+    },
+    {
+      "id": "image-balloon-lettering",
+      "category": "Typography",
+      "title": "Balloon lettering",
+      "description": "A short word spelled in glossy inflated foil-balloon letters. Uses Qwen-Image for the lettering; keep it to one or two words.",
+      "thumb": null,
+      "tags": ["typography", "3d", "balloon", "party", "text"],
+      "examples": {
+        "WORD": "HELLO",
+        "surface": "a pale pink seamless paper floor",
+        "finish": "rose-gold"
+      },
+      "defaults": {
+        "prompt_scaffold": "The word \"[WORD]\" spelled out in plump inflated foil-balloon letters, each letter puffy with soft seams and a little crinkle at the edges, floating just above [surface]. [finish] metallic finish with bright specular highlights and soft reflections, a few loose confetti flakes, clean studio backdrop, every letter correct and easy to read.",
+        "aspect": "3:2",
+        "count": 2,
+        "style": "product",
+        "negative": "garbled letters, extra letters, misspelled word, deflated shapes, watermark",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-neon-word",
+      "category": "Typography",
+      "title": "Neon sign",
+      "description": "A hand-bent neon word glowing on a wall at night. Uses Qwen-Image so the letters come out right.",
+      "thumb": null,
+      "tags": ["typography", "neon", "sign", "night", "text"],
+      "examples": {
+        "WORD": "OPEN LATE",
+        "neon colour": "warm pink",
+        "wall": "a rough exposed-brick wall"
+      },
+      "defaults": {
+        "prompt_scaffold": "A hand-bent neon sign spelling \"[WORD]\" in [neon colour] glass tubing, mounted on [wall]. The tubes glow with a soft halo and throw coloured light across the surface, small mounting clips and a thin cable visible, a dark moody room around it, shallow depth of field, every letter clean and legible.",
+        "aspect": "16:9",
+        "count": 2,
+        "style": "cinematic",
+        "negative": "garbled letters, misspelled word, extra words, blown-out glow, watermark",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-surreal-dreamscape",
+      "category": "Surreal",
+      "title": "Surreal dreamscape",
+      "description": "One impossible idea staged in a quiet, believable world.",
+      "thumb": null,
+      "tags": ["surreal", "dream", "fantasy", "art"],
+      "examples": {
+        "impossible scene": "a spiral staircase of open books rising into the clouds, a lone reader halfway up",
+        "setting": "an endless salt flat that mirrors the sky",
+        "palette": "dusty lilac and pale gold"
+      },
+      "defaults": {
+        "prompt_scaffold": "Surreal dreamscape: [impossible scene], set in [setting]. Long soft shadows, a low hush of fog at ground level, [palette] palette, painterly realism with crisp detail, still and a little uncanny, wide composition with one clear focal point.",
+        "aspect": "16:9",
+        "count": 4,
+        "style": "painterly",
+        "negative": "text, watermark, cluttered, muddy colours, extra limbs"
+      }
+    },
+    {
+      "id": "image-perfume-moss",
+      "category": "Product & ads",
+      "title": "Perfume on moss",
+      "description": "A luxury bottle on a bed of moss, caught in one shaft of light.",
+      "thumb": null,
+      "tags": ["product", "perfume", "luxury", "nature", "advert"],
+      "examples": {
+        "product": "a faceted amber-glass perfume bottle with a brushed brass cap",
+        "natural details": "lichen-covered stones and a few small white blossoms",
+        "setting": "a dim forest-floor set with mist drifting behind"
+      },
+      "defaults": {
+        "prompt_scaffold": "Luxury hero shot of [product] resting on a cushion of deep green moss with [natural details], in [setting]. A single shaft of soft light from above catches the glass and casts a gentle golden caustic onto the moss, fine dew droplets, shallow depth of field, rich jewel tones, clear space at the top for copy.",
+        "aspect": "3:4",
+        "count": 4,
+        "style": "product",
+        "negative": "text, warped label, duplicate bottle, plastic look, harsh flash",
+        "brand": true
+      }
+    },
+    {
+      "id": "image-packaging-mockup",
+      "category": "Packaging",
+      "title": "Packaging mockup",
+      "description": "A pack shot with your brand name and one line of label text. Uses Qwen-Image for the print; short English text works best.",
+      "thumb": null,
+      "tags": ["packaging", "mockup", "label", "brand", "text"],
+      "examples": {
+        "package": "a matte kraft-paper coffee pouch with a tin-tie top",
+        "BRAND": "HILLTOP ROAST",
+        "label line": "Single origin · Medium roast · 250 g",
+        "label style": "Minimal Scandinavian, with one line-drawn mountain"
+      },
+      "defaults": {
+        "prompt_scaffold": "Packaging mockup of [package] with the brand name \"[BRAND]\" printed large on the front label and the line \"[label line]\" beneath it in small clean type. [label style] label design, crisp print detail, standing on a plain light-grey surface, soft studio light and a gentle shadow, three-quarter view, all text sharp and spelled exactly.",
+        "aspect": "1:1",
+        "count": 2,
+        "style": "product",
+        "negative": "garbled text, misspelled words, warped label, duplicate package, watermark",
+        "model": "qwen_image_2512",
+        "brand": true
+      }
+    },
+    {
+      "id": "image-cutaway-diagram",
+      "category": "Infographic",
+      "title": "Labelled cutaway",
+      "description": "A clean technical cutaway with leader-line labels. Uses Qwen-Image; three to five short labels read best.",
+      "thumb": null,
+      "tags": ["diagram", "cutaway", "infographic", "education", "text"],
+      "examples": {
+        "subject": "a clay water pot (matka) showing how evaporation keeps the water cool",
+        "labels": "Porous clay, Water, Evaporation, Cool air",
+        "TITLE": "HOW A MATKA KEEPS WATER COOL"
+      },
+      "defaults": {
+        "prompt_scaffold": "Clean labelled cutaway illustration of [subject], sliced open to show the inside. Thin leader lines point to neat labels reading \"[labels]\", and a small title \"[TITLE]\" sits at the top. Technical-illustration style with flat colour fills, fine dark outlines, a plain white background and generous margins.",
+        "aspect": "4:3",
+        "count": 2,
+        "style": "illustration",
+        "negative": "garbled labels, misspelled words, photographic, cluttered, extra labels",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-howto-infographic",
+      "category": "Infographic",
+      "title": "How-to steps",
+      "description": "Four numbered panels that explain a task at a glance. Uses Qwen-Image; keep each caption to a few words.",
+      "thumb": null,
+      "tags": ["infographic", "how-to", "steps", "tutorial", "text"],
+      "examples": {
+        "TITLE": "BREW BETTER CHAI",
+        "steps": "1 Boil water with crushed cardamom, 2 Add black tea, 3 Pour in milk and sugar, 4 Simmer and strain",
+        "palette": "warm terracotta and cream"
+      },
+      "defaults": {
+        "prompt_scaffold": "Step-by-step how-to infographic titled \"[TITLE]\": four numbered panels in a tidy grid, each with a simple flat illustration and a short caption, in order: [steps]. Friendly rounded sans-serif type, [palette] palette, plenty of white space, one consistent icon style, easy to read on a phone.",
+        "aspect": "3:4",
+        "count": 2,
+        "style": "illustration",
+        "negative": "garbled text, misspelled words, wrong numbering, cluttered layout, photographic",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-comic-page",
+      "category": "Comic",
+      "title": "Four-panel comic",
+      "description": "A 2×2 comic page with two speech bubbles. Uses Qwen-Image; short lines in capitals letter best.",
+      "thumb": null,
+      "tags": ["comic", "panels", "speech bubbles", "story", "text"],
+      "examples": {
+        "story": "A small robot tries to water a houseplant: it fills the can, trips over the cat, soaks the floor, and the cat proudly nudges the plant out into the rain",
+        "first line": "TODAY I WILL BE HELPFUL",
+        "last line": "...GOOD TEAMWORK",
+        "art style": "Warm clear-line European comic style"
+      },
+      "defaults": {
+        "prompt_scaffold": "A four-panel comic page in a 2×2 grid with clean white gutters, telling this story: [story]. A speech bubble in panel 1 says \"[first line]\" and one in panel 4 says \"[last line]\", hand-lettered in clear capitals. [art style], the same characters in every panel, bold inking, flat colours.",
+        "aspect": "3:4",
+        "count": 2,
+        "style": "illustration",
+        "negative": "garbled text, extra speech bubbles, misspelled words, inconsistent characters, photographic",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-cafe-menu",
+      "category": "Menu",
+      "title": "Illustrated café menu",
+      "description": "A hand-drawn menu board with item names and prices. Uses Qwen-Image; four to six items keep it legible.",
+      "thumb": null,
+      "tags": ["menu", "café", "bakery", "restaurant", "text"],
+      "examples": {
+        "venue": "neighbourhood bakery",
+        "NAME": "THE CRUMB HOUSE",
+        "items": "Butter Croissant 3.50, Cardamom Bun 4.00, Sourdough Loaf 7.50, Flat White 3.80",
+        "look": "Vintage chalk-and-cream"
+      },
+      "defaults": {
+        "prompt_scaffold": "Illustrated menu for a [venue] called \"[NAME]\", the name in a decorative hand-drawn heading at the top. Below it a neat list of items with prices: [items]. Small ink-and-watercolour sketches of the food beside the list, [look] layout, warm paper texture, every word and price clear and spelled exactly.",
+        "aspect": "2:3",
+        "count": 2,
+        "style": "illustration",
+        "negative": "garbled text, wrong prices, misspelled words, extra items, cluttered layout",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-boxed-collectible",
+      "category": "Characters & concept",
+      "title": "Boxed collectible figure",
+      "description": "Your character as a vinyl toy in a window box with its name on the front. Uses Qwen-Image for the box print.",
+      "thumb": null,
+      "tags": ["collectible", "toy", "figure", "packaging", "text"],
+      "examples": {
+        "character": "a cheerful rickshaw driver with a tiny painted rickshaw beside him",
+        "NAME": "RAFIQ THE DRIVER",
+        "series line": "City Heroes · Series 1",
+        "box art": "bright truck-art florals"
+      },
+      "defaults": {
+        "prompt_scaffold": "Product photo of a collectible vinyl figure of [character], standing inside a retail window box. The box front shows the name \"[NAME]\" in bold lettering and \"[series line]\" in a small badge, with [box art] artwork around the clear plastic window. Soft studio light, faint reflections on the plastic, three-quarter view on a plain backdrop, crisp printed text.",
+        "aspect": "3:4",
+        "count": 2,
+        "style": "product",
+        "negative": "garbled text, misspelled words, broken box, extra figures, watermark",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-tilt-shift-miniature",
+      "category": "Landscapes & travel",
+      "title": "Tilt-shift miniature",
+      "description": "A real place seen from above that looks like a toy model.",
+      "thumb": null,
+      "tags": ["tilt-shift", "miniature", "city", "travel"],
+      "examples": {
+        "place": "a busy harbour in Istanbul",
+        "focus subject": "a white ferry pulling away from the pier"
+      },
+      "defaults": {
+        "prompt_scaffold": "Tilt-shift photograph of [place] from a high vantage point, made to look like a tiny model village: a narrow band of sharp focus across [focus subject], strong blur at the top and bottom of the frame, bright toy-like colours, crisp midday sun, people and vehicles that look like painted miniatures.",
+        "aspect": "3:2",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "text, watermark, haze, fisheye distortion, dull colours"
+      }
+    },
+    {
+      "id": "image-sticker-sheet",
+      "category": "Illustration & art",
+      "title": "Sticker sheet",
+      "description": "A sheet of die-cut stickers on one theme, ready to print or post.",
+      "thumb": null,
+      "tags": ["stickers", "cute", "illustration", "merch"],
+      "examples": {
+        "number": "nine",
+        "theme": "a sleepy shiba inu's lazy day",
+        "background": "light grey",
+        "art style": "Cute rounded cartoon"
+      },
+      "defaults": {
+        "prompt_scaffold": "A sheet of [number] die-cut vinyl stickers about [theme], each with a thick white border and a soft drop shadow, spaced evenly on a [background] background. [art style], bold clean outlines, flat bright colours, every sticker a different pose or object, no text.",
+        "aspect": "1:1",
+        "count": 4,
+        "style": "illustration",
+        "negative": "text, letters, overlapping stickers, blurry edges, watermark"
+      }
+    },
+    {
+      "id": "image-edit-outfit-swap",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Outfit swap",
+      "description": "Put the garment from one photo on the person in another. Small logos and fine prints may drift, so make two and pick.",
+      "thumb": null,
+      "tags": ["try-on", "outfit", "clothing", "fashion", "edit"],
+      "refs_required": 2,
+      "ref_labels": ["Person", "Garment"],
+      "examples": {},
+      "preview_prompt": "Full-length fashion photo of a young woman standing on a quiet city street, wearing a mustard-yellow trench coat with a houndstooth collar, soft overcast light, natural pose.",
+      "defaults": {
+        "instruction_scaffold": "Dress the person in image 1 in the garment shown in image 2. Keep the person's face, hair, skin tone, body shape and pose exactly as they are, and keep the background and lighting from image 1. Take the garment's cut, length, colour, pattern, fabric texture and any logos or prints from image 2, and fit it naturally to the body with realistic folds and shadows.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-hairstyle",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Hairstyle and colour",
+      "description": "Try a new cut or colour on your own photo. To compare many at once, use 12 hairstyles.",
+      "thumb": null,
+      "tags": ["hair", "hairstyle", "hair colour", "makeover", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "hairstyle": "a chin-length textured bob with soft curtain bangs",
+        "hair colour": "warm copper red"
+      },
+      "options": [
+        {
+          "slot": "hairstyle",
+          "label": "Hairstyle",
+          "choices": [
+            {"label": "Pixie cut", "value": "a short textured pixie cut"},
+            {"label": "Bob with bangs", "value": "a chin-length textured bob with soft curtain bangs"},
+            {"label": "Long layers", "value": "long flowing layers with face-framing pieces"},
+            {"label": "Beach waves", "value": "loose shoulder-length beach waves"},
+            {"label": "Natural curls", "value": "full, defined natural curls"},
+            {"label": "Braided crown", "value": "a braided crown with soft loose strands"},
+            {"label": "High ponytail", "value": "a sleek high ponytail"},
+            {"label": "Top knot", "value": "a relaxed top knot"},
+            {"label": "Shag cut", "value": "a choppy shag cut"},
+            {"label": "Buzz cut", "value": "a clean short buzz cut"},
+            {"label": "Slicked back", "value": "neatly slicked-back hair"},
+            {"label": "Side part", "value": "a classic short side-part cut"}
+          ]
+        },
+        {
+          "slot": "hair colour",
+          "label": "Colour",
+          "choices": [
+            {"label": "Keep natural", "value": "their current natural colour"},
+            {"label": "Jet black", "value": "glossy jet black"},
+            {"label": "Dark brown", "value": "rich dark brown"},
+            {"label": "Chestnut", "value": "warm chestnut brown"},
+            {"label": "Copper red", "value": "warm copper red"},
+            {"label": "Honey blonde", "value": "soft honey blonde"},
+            {"label": "Platinum", "value": "icy platinum blonde"},
+            {"label": "Silver grey", "value": "natural silver grey"},
+            {"label": "Burgundy", "value": "deep burgundy"},
+            {"label": "Pastel pink", "value": "pastel pink"},
+            {"label": "Ash balayage", "value": "a soft ash-brown balayage"},
+            {"label": "Midnight blue", "value": "midnight blue"}
+          ]
+        }
+      ],
+      "preview_prompt": "Head-and-shoulders portrait of a smiling young woman with [hairstyle] in [hair colour], soft studio light, plain warm grey backdrop.",
+      "defaults": {
+        "instruction_scaffold": "Restyle the hair of the person in image 1: [hairstyle], in [hair colour]. Keep their face, expression, skin, clothing, pose, background and lighting exactly the same, with a natural hairline and realistic strands.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-headshot",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Pro headshot from a selfie",
+      "description": "Turn a casual selfie into a clean studio headshot for a profile or CV.",
+      "thumb": null,
+      "tags": ["headshot", "profile", "linkedin", "portrait", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Selfie"],
+      "examples": {
+        "attire": "a tailored navy blazer over a white shirt",
+        "background": "a plain warm-grey studio backdrop"
+      },
+      "options": [
+        {
+          "slot": "attire",
+          "label": "Attire",
+          "choices": [
+            {"label": "Navy blazer", "value": "a tailored navy blazer over a white shirt"},
+            {"label": "Charcoal suit", "value": "a charcoal suit with a crisp shirt and no tie"},
+            {"label": "Smart casual", "value": "a smart casual knit sweater"},
+            {"label": "Kurta", "value": "a well-pressed plain kurta"},
+            {"label": "Black turtleneck", "value": "a fitted black turtleneck"},
+            {"label": "Keep their clothes", "value": "their own clothes, neatened"}
+          ]
+        },
+        {
+          "slot": "background",
+          "label": "Background",
+          "choices": [
+            {"label": "Warm grey studio", "value": "a plain warm-grey studio backdrop"},
+            {"label": "White studio", "value": "a clean bright white studio backdrop"},
+            {"label": "Deep navy", "value": "a deep navy painted backdrop"},
+            {"label": "Soft office", "value": "a softly blurred modern office"},
+            {"label": "Bookshelves", "value": "softly blurred wooden bookshelves"},
+            {"label": "Outdoor greenery", "value": "softly blurred green trees outdoors"}
+          ]
+        }
+      ],
+      "preview_prompt": "Professional head-and-shoulders headshot of a man in his thirties wearing [attire], in front of [background], soft flattering studio light, confident relaxed smile.",
+      "defaults": {
+        "instruction_scaffold": "Turn the selfie in image 1 into a professional headshot of the same person. Keep their face, features, skin tone and expression unchanged and recognisable. Dress them in [attire] and place them in front of [background], with soft flattering studio light, head-and-shoulders framing, eyes level with the camera and a natural 85 mm portrait look.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "3:4"
+      }
+    },
+    {
+      "id": "image-edit-retouch",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Natural portrait retouch",
+      "description": "A light-touch retouch that keeps real skin. For finer control afterwards, open the result in Photo → Restore → Faces or add Soften skin.",
+      "thumb": null,
+      "tags": ["retouch", "portrait", "skin", "beauty", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Portrait"],
+      "examples": {
+        "what to fix": "small blemishes and redness"
+      },
+      "options": [
+        {
+          "slot": "what to fix",
+          "label": "Fix",
+          "choices": [
+            {"label": "Blemishes and redness", "value": "small blemishes and redness"},
+            {"label": "Shine", "value": "shine on the forehead and nose"},
+            {"label": "Stray hairs", "value": "stray flyaway hairs"},
+            {"label": "Tired eyes", "value": "dark circles under the eyes"},
+            {"label": "Uneven tone", "value": "patchy, uneven skin tone"}
+          ]
+        }
+      ],
+      "preview_prompt": "Close portrait of a woman in her forties with [what to fix] gently cleaned up, natural skin texture and freckles visible, soft window light, neutral background.",
+      "defaults": {
+        "instruction_scaffold": "Retouch the portrait in image 1 naturally: gently clean up [what to fix], soften harsh shadows under the eyes and brighten the eyes a little. Keep real skin texture, pores and freckles, and keep the person's features exactly as they are: no plastic smoothing and no change to face shape, makeup or expression.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-remove-object",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Remove an object",
+      "description": "Name what should go and it's filled in from the surroundings. Works from your words; for a pixel-exact selection use Photo → Cut-out → Select first.",
+      "thumb": null,
+      "tags": ["remove", "cleanup", "erase", "object removal", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Photo"],
+      "examples": {
+        "object to remove": "the person walking in the background on the left"
+      },
+      "preview_prompt": "Empty sunlit beach at morning with gentle waves and a clean horizon, nobody in the frame, soft natural colours.",
+      "defaults": {
+        "instruction_scaffold": "Remove [object to remove] from image 1 and fill the space with what would naturally be behind it, matching the surrounding texture, perspective, light and grain. Change nothing else in the picture.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-relight",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Relight with a new background",
+      "description": "Keep the subject, swap the scene, and match the light so it looks shot there.",
+      "thumb": null,
+      "tags": ["relight", "background", "lighting", "composite", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Subject"],
+      "examples": {
+        "new background": "a rooftop in Lisbon at sunset with terracotta roofs behind",
+        "lighting": "warm golden-hour sun from behind with a soft rim on the hair"
+      },
+      "options": [
+        {
+          "slot": "lighting",
+          "label": "Lighting",
+          "choices": [
+            {"label": "Golden hour", "value": "warm golden-hour sun from behind with a soft rim on the hair"},
+            {"label": "Overcast", "value": "soft overcast daylight, gentle and even"},
+            {"label": "Window light", "value": "soft window light from the left with a gentle falloff"},
+            {"label": "Studio Rembrandt", "value": "classic studio Rembrandt light with a small triangle of light on the far cheek"},
+            {"label": "Hard noon sun", "value": "hard midday sun with crisp shadows"},
+            {"label": "Moonlight and lamp", "value": "cool blue moonlight with a warm lamp glowing on one side"},
+            {"label": "Neon night", "value": "neon city night, magenta and cyan edge light"},
+            {"label": "Candlelight", "value": "low warm candlelight from below"}
+          ]
+        }
+      ],
+      "preview_prompt": "Portrait of a young man on [new background], lit by [lighting], cinematic and natural.",
+      "defaults": {
+        "instruction_scaffold": "Keep the subject of image 1 exactly as they are, including face, body, clothing and pose, and place them in [new background]. Relight them to match: [lighting], with consistent shadows, colour spill and a contact shadow so they sit naturally in the scene.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-product-scene",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Product into a scene",
+      "description": "Drop a packshot into a lifestyle setting while the product and its label stay as they are.",
+      "thumb": null,
+      "tags": ["product", "lifestyle", "scene", "advert", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "scene": "a sunlit marble bathroom counter beside a folded linen towel and a sprig of eucalyptus"
+      },
+      "options": [
+        {
+          "slot": "scene",
+          "label": "Scene",
+          "choices": [
+            {"label": "Bathroom counter", "value": "a sunlit marble bathroom counter beside a folded linen towel and a sprig of eucalyptus"},
+            {"label": "Kitchen table", "value": "a rustic wooden kitchen table in morning light, with a bowl of fruit softly out of focus"},
+            {"label": "Desk setup", "value": "a tidy oak desk beside a laptop and a ceramic mug, soft afternoon light"},
+            {"label": "Outdoor picnic", "value": "a checked picnic blanket on grass in dappled sunlight"},
+            {"label": "Beach rocks", "value": "smooth wet rocks at the edge of a calm sea at golden hour"},
+            {"label": "Café window", "value": "a café windowsill with rain on the glass and warm lights behind"},
+            {"label": "Studio podium", "value": "a pale stone podium against a soft gradient backdrop"},
+            {"label": "Festive table", "value": "a festive table with brass lanterns and scattered rose petals"}
+          ]
+        }
+      ],
+      "preview_prompt": "Lifestyle product photo of a frosted glass skincare jar on [scene], shallow depth of field, natural light.",
+      "defaults": {
+        "instruction_scaffold": "Place the product from image 1 on [scene]. Keep the product's shape, proportions, colours, label text and logo exactly as in image 1; only the surroundings change. Match the scene's light and perspective, add a natural contact shadow and reflections, and keep the product as the sharp focal point.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-line-art",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Photo to line art",
+      "description": "Trace a photo into clean black outlines, from a children's colouring page to fine pen work.",
+      "thumb": null,
+      "tags": ["line art", "colouring page", "outline", "drawing", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Photo"],
+      "examples": {
+        "line style": "a colouring-book page for children, with bold even outlines and simple shapes"
+      },
+      "options": [
+        {
+          "slot": "line style",
+          "label": "Style",
+          "choices": [
+            {"label": "Colouring page", "value": "a colouring-book page for children, with bold even outlines and simple shapes"},
+            {"label": "Fine pen", "value": "fine-pen line art with varied line weight"},
+            {"label": "Single-weight", "value": "a clean single-weight technical line drawing"},
+            {"label": "Manga ink", "value": "a manga-style ink drawing with confident strokes"}
+          ]
+        }
+      ],
+      "preview_prompt": "Black and white line drawing of a cat sitting on a windowsill beside a potted plant, drawn as [line style], pure white background, no shading.",
+      "defaults": {
+        "instruction_scaffold": "Turn image 1 into [line style]: clean black outlines on pure white, no shading, no grey fills and no colour, closed shapes, keeping the composition and every main subject recognisable.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-hairstyle-grid",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "12 hairstyles",
+      "description": "See twelve haircuts on your own face at once, in a 3×4 grid.",
+      "thumb": null,
+      "tags": ["hair", "hairstyle", "grid", "makeover", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "hair colour": "rich dark brown"
+      },
+      "options": [
+        {
+          "slot": "hair colour",
+          "label": "Colour",
+          "choices": [
+            {"label": "Keep natural", "value": "their current natural colour"},
+            {"label": "Jet black", "value": "glossy jet black"},
+            {"label": "Dark brown", "value": "rich dark brown"},
+            {"label": "Chestnut", "value": "warm chestnut brown"},
+            {"label": "Copper red", "value": "warm copper red"},
+            {"label": "Honey blonde", "value": "soft honey blonde"},
+            {"label": "Platinum", "value": "icy platinum blonde"},
+            {"label": "Silver grey", "value": "natural silver grey"},
+            {"label": "Burgundy", "value": "deep burgundy"},
+            {"label": "Pastel pink", "value": "pastel pink"},
+            {"label": "Ash balayage", "value": "a soft ash-brown balayage"},
+            {"label": "Midnight blue", "value": "midnight blue"}
+          ]
+        }
+      ],
+      "preview_prompt": "A 3×4 grid of twelve head-and-shoulders portraits of the same young woman, each tile a different hairstyle in [hair colour], plain light backdrop, even studio light.",
+      "defaults": {
+        "instruction_scaffold": "Make a 3×4 grid of twelve portraits of the person in image 1, each tile a different hairstyle: pixie cut, chin-length bob, long layers, beach waves, defined curls, braids, high ponytail, top knot, shag, buzz cut, slicked back and a short side part, all in [hair colour]. Keep the same face, expression, framing and lighting in every tile, with thin even gutters.",
+        "model": "qwen_image_edit_2511",
+        "count": 1,
+        "aspect": "3:4"
+      }
+    },
+    {
+      "id": "image-edit-giant-beach",
+      "category": "Product & ads",
+      "target": "image-edit",
+      "title": "Giant on the beach",
+      "description": "Your product, building-sized, on a busy beach with tiny people around it.",
+      "thumb": null,
+      "tags": ["product", "giant", "beach", "advert", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "beach": "a wide sandy beach with turquoise water and leaning palm trees"
+      },
+      "preview_prompt": "A giant glass perfume bottle as tall as a building standing on [beach], tiny people around its base, bright daylight, wide advertising photo.",
+      "defaults": {
+        "instruction_scaffold": "Make the product from image 1 enormous, about as tall as a three-storey building, standing on [beach]. Tiny people stroll, sunbathe and take photos around its base for scale. Keep the product's shape, proportions, colours, label text and logo exactly as in image 1. Bright daylight, sand drifted softly against its base, true shadows, a wide travel-advert composition.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "16:9"
+      }
+    },
+    {
+      "id": "image-edit-helicopter",
+      "category": "Product & ads",
+      "target": "image-edit",
+      "title": "Helicopter drop",
+      "description": "Your product, scaled up and slung beneath a helicopter over a city skyline.",
+      "thumb": null,
+      "tags": ["product", "helicopter", "aerial", "advert", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "city": "the Dubai skyline",
+        "time of day": "golden hour"
+      },
+      "preview_prompt": "A giant sneaker hanging from cables beneath a helicopter flying over [city] at [time of day], aerial advertising photo.",
+      "defaults": {
+        "instruction_scaffold": "Show the product from image 1, scaled up to the size of a car, hanging from steel cables beneath a helicopter flying over [city] at [time of day]. Keep the product's shape, proportions, colours, label text and logo exactly as in image 1. Aerial photo look, a little motion blur on the rotor, haze over the skyline, dramatic advertising composition.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "16:9"
+      }
+    },
+    {
+      "id": "image-edit-icy-plunge",
+      "category": "Product & ads",
+      "target": "image-edit",
+      "title": "Icy plunge",
+      "description": "A frozen moment: your product splashing into clear ice-cold water, mountains behind.",
+      "thumb": null,
+      "tags": ["product", "splash", "water", "advert", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "backdrop": "snow-capped mountains under a pale sky"
+      },
+      "preview_prompt": "A soda can plunging into crystal-clear icy water, split view above and below the waterline, splash and bubbles, [backdrop] behind, high-speed photography.",
+      "defaults": {
+        "instruction_scaffold": "Show the product from image 1 plunging into crystal-clear icy water, frozen mid-splash with a crown of droplets and a trail of bubbles, in a split view half above and half below the waterline, with [backdrop] above the surface. Keep the product's shape, proportions, colours, label text and logo exactly as in image 1. Cold blue tones, crisp high-speed photography, bright rim light on the droplets.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "3:4"
+      }
+    },
+    {
+      "id": "image-edit-3d-billboard",
+      "category": "Product & ads",
+      "target": "image-edit",
+      "title": "3D billboard",
+      "description": "Your product bursting out of a giant curved street-corner screen.",
+      "thumb": null,
+      "tags": ["product", "billboard", "anamorphic", "city", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "street": "a Haussmann-style street corner in Paris",
+        "time of day": "early evening, the screen glowing"
+      },
+      "preview_prompt": "A giant anamorphic 3D billboard of a pair of headphones bursting out of a curved screen on [street], [time of day], pedestrians below, street photography.",
+      "defaults": {
+        "instruction_scaffold": "Turn the product from image 1 into a giant anamorphic 3D billboard on the corner of a building on [street], the product appearing to lean out of the curved screen over the street. Keep the product's shape, proportions, colours, label text and logo exactly as in image 1. Pedestrians and traffic below for scale, [time of day], realistic street photography from across the road.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "3:4"
+      }
+    },
+    {
+      "id": "image-edit-miniature-factory",
+      "category": "Product & ads",
+      "target": "image-edit",
+      "title": "Miniature factory",
+      "description": "A cutaway of your product with a tiny factory busy inside it.",
+      "thumb": null,
+      "tags": ["product", "miniature", "cutaway", "factory", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "factory detail": "tiny forklifts stacking boxes and workers in hard hats"
+      },
+      "preview_prompt": "Cutaway of a coffee machine revealing a tiny factory inside with conveyor belts and [factory detail], warm light, tilt-shift macro photo.",
+      "defaults": {
+        "instruction_scaffold": "Show the product from image 1 as a cutaway, its casing sliced open to reveal a tiny busy factory inside: conveyor belts, little machines and [factory detail], all at work making the product. Keep the outside of the product, its colours, label text and logo exactly as in image 1. Warm workshop light inside, tilt-shift depth of field, playful and detailed.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "1:1"
+      }
+    },
+    {
+      "id": "image-edit-exploded-view",
+      "category": "Product & ads",
+      "target": "image-edit",
+      "title": "Product exploded view",
+      "description": "A clean technical exploded view of your product's parts on white.",
+      "thumb": null,
+      "tags": ["product", "exploded view", "technical", "catalogue", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "layout": "stacked along one vertical axis with even gaps between the parts"
+      },
+      "options": [
+        {
+          "slot": "layout",
+          "label": "Layout",
+          "choices": [
+            {"label": "Vertical stack", "value": "stacked along one vertical axis with even gaps between the parts"},
+            {"label": "Angled from above", "value": "fanned out at a three-quarter angle seen slightly from above"},
+            {"label": "Side to side", "value": "spread left to right along one horizontal axis"}
+          ]
+        }
+      ],
+      "preview_prompt": "Technical exploded view of a wireless earbud and its case, parts [layout], pure white background, crisp studio light.",
+      "defaults": {
+        "instruction_scaffold": "Create a technical exploded view of the product from image 1: its parts separated and floating in assembly order, [layout], each part true to the product's real materials and colours, with the label and logo kept as in image 1. Pure white background, soft even studio light, gentle shadows, crisp catalogue detail.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "1:1"
+      }
+    },
+    {
+      "id": "image-edit-photo-grid",
+      "category": "Portrait fun",
+      "target": "image-edit",
+      "title": "Photo grid",
+      "description": "A grid of studio portraits of one person, each with a different pose and expression.",
+      "thumb": null,
+      "tags": ["portrait", "grid", "poses", "studio", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "grid": "3×3",
+        "backdrop": "warm grey"
+      },
+      "options": [
+        {
+          "slot": "grid",
+          "label": "Grid",
+          "choices": [
+            {"label": "3×3", "value": "3×3", "aspect": "1:1"},
+            {"label": "2×3", "value": "2-column, 3-row", "aspect": "2:3"}
+          ]
+        },
+        {
+          "slot": "backdrop",
+          "label": "Backdrop",
+          "choices": [
+            {"label": "Warm grey", "value": "warm grey"},
+            {"label": "White", "value": "bright white"},
+            {"label": "Navy", "value": "deep navy"},
+            {"label": "Terracotta", "value": "terracotta"}
+          ]
+        }
+      ],
+      "preview_prompt": "A [grid] grid of studio portraits of the same young man in different poses and expressions, plain [backdrop] backdrop, soft light.",
+      "defaults": {
+        "instruction_scaffold": "Make a [grid] grid of studio portraits of the person in image 1, each tile a different pose and expression: laughing, thoughtful, glancing over the shoulder, arms crossed, caught mid-movement and so on. Keep the same face, hair and outfit in every tile, a plain [backdrop] backdrop, soft consistent studio light and thin even gutters.",
+        "model": "qwen_image_edit_2511",
+        "count": 1,
+        "aspect": "1:1"
+      }
+    },
+    {
+      "id": "image-edit-across-time",
+      "category": "Portrait fun",
+      "target": "image-edit",
+      "title": "Across time",
+      "description": "See yourself photographed in another era, from the 1880s to the far future.",
+      "thumb": null,
+      "tags": ["portrait", "era", "vintage", "costume", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "era": "the 1920s, in a jazz-age outfit, on soft sepia film with fine grain"
+      },
+      "options": [
+        {
+          "slot": "era",
+          "label": "Era",
+          "choices": [
+            {"label": "Victorian", "value": "the Victorian 1880s, in a high-collared outfit, as an albumen print with a painted studio backdrop"},
+            {"label": "1920s", "value": "the 1920s, in a jazz-age outfit, on soft sepia film with fine grain"},
+            {"label": "1950s", "value": "the 1950s, in a smart mid-century outfit, on warm faded colour film"},
+            {"label": "1970s", "value": "the 1970s, in flared denim and a wide collar, on warm grainy film"},
+            {"label": "1980s", "value": "the 1980s, with big hair and bold neon colours, on punchy flash-lit film"},
+            {"label": "Futuristic", "value": "a sleek future city, in a minimal metallic outfit, with cool cinematic light"}
+          ]
+        }
+      ],
+      "preview_prompt": "Portrait of a woman photographed in [era].",
+      "defaults": {
+        "instruction_scaffold": "Show the person in image 1 as if photographed in [era]. Change the clothing, hairstyle, setting, props and photographic look to match that time, and keep their face and features recognisable and unchanged.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-front-page",
+      "category": "Portrait fun",
+      "target": "image-edit",
+      "title": "Vintage front page",
+      "description": "You on the front page of an old broadsheet. Short English headlines letter best.",
+      "thumb": null,
+      "tags": ["newspaper", "vintage", "portrait", "headline", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "MASTHEAD": "THE DAILY CHRONICLE",
+        "HEADLINE": "LOCAL HERO SAVES THE DAY"
+      },
+      "preview_prompt": "A yellowed 1920s newspaper front page with the masthead \"[MASTHEAD]\" and the headline \"[HEADLINE]\", a large halftone portrait photo in the middle, columns of small text.",
+      "defaults": {
+        "instruction_scaffold": "Make a yellowed vintage newspaper front page with the masthead \"[MASTHEAD]\" and the big headline \"[HEADLINE]\". Put the person from image 1 in a large black-and-white halftone photo in the middle, their face unchanged, with columns of small body text, a date line and creases in the paper around it. 1920s broadsheet layout, slightly uneven ink.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "3:4"
+      }
+    },
+    {
+      "id": "image-edit-mini-me",
+      "category": "Portrait fun",
+      "target": "image-edit",
+      "title": "Mini-me figure",
+      "description": "You, holding a hand-painted figurine of yourself in the same outfit.",
+      "thumb": null,
+      "tags": ["figurine", "mini me", "collectible", "portrait", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "setting": "in a cosy studio with shelves of paint pots behind"
+      },
+      "preview_prompt": "A smiling man holding a small hand-painted figurine of himself in the same outfit, [setting], soft light, the figurine in focus.",
+      "defaults": {
+        "instruction_scaffold": "Show the person from image 1 holding, in their open hand, a hand-painted figurine of themselves about 15 cm tall: the same face, hair and outfit as in image 1, sculpted and painted with visible brush strokes on a small round base. Keep the person's face and clothing unchanged, [setting], soft natural light, the figurine in sharp focus.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-tiny-me",
+      "category": "Portrait fun",
+      "target": "image-edit",
+      "title": "Tiny me",
+      "description": "Shrink yourself into an everyday scene where things look giant.",
+      "thumb": null,
+      "tags": ["miniature", "tiny", "macro", "fun", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "scene": "standing on a giant smartphone screen on a wooden desk"
+      },
+      "options": [
+        {
+          "slot": "scene",
+          "label": "Scene",
+          "choices": [
+            {"label": "On a smartphone", "value": "standing on a giant smartphone screen on a wooden desk"},
+            {"label": "City pavement", "value": "walking along a city pavement beside a huge takeaway coffee cup"},
+            {"label": "Teacup rim", "value": "sitting on the rim of a steaming teacup"},
+            {"label": "Stack of books", "value": "climbing a tall stack of books"},
+            {"label": "Keyboard", "value": "leaning on a key of a laptop keyboard"}
+          ]
+        }
+      ],
+      "preview_prompt": "A tiny 5 cm tall woman [scene], macro photography, shallow depth of field.",
+      "defaults": {
+        "instruction_scaffold": "Shrink the person from image 1 to about 5 cm tall and place them in a real scene, [scene]. Keep their face, outfit and pose recognisable, with true-to-life scale, a soft contact shadow and macro-lens depth of field so the everyday objects look huge.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
+      "id": "image-edit-pet-cover",
+      "category": "Portrait fun",
+      "target": "image-edit",
+      "title": "Pet cover star",
+      "description": "Your pet styled for a fashion-magazine cover portrait.",
+      "thumb": null,
+      "tags": ["pet", "dog", "cat", "magazine", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Pet"],
+      "examples": {
+        "scarf": "navy-and-gold paisley silk scarf",
+        "city": "Paris"
+      },
+      "preview_prompt": "Fashion magazine portrait of a corgi wearing a [scarf], softly blurred [city] street behind, editorial lighting.",
+      "defaults": {
+        "instruction_scaffold": "Turn the pet in image 1 into the cover star of a fashion magazine: a portrait with a [scarf] tied loosely around its neck, a softly blurred [city] street behind, polished editorial lighting. Keep the pet's breed, markings, fur colour and face exactly as in image 1, and leave clean space at the top for a masthead.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "3:4"
+      }
+    },
+    {
+      "id": "image-edit-style-breakdown",
+      "category": "Fashion",
+      "target": "image-edit",
+      "title": "Style breakdown",
+      "description": "Turn an outfit into a designer's sheet: angles, fabric swatches, accessories and hair.",
+      "thumb": null,
+      "tags": ["fashion", "design sheet", "outfit", "flat sketch", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Outfit or person"],
+      "examples": {
+        "sheet style": "Fashion-illustration style in marker and fine liner"
+      },
+      "preview_prompt": "Fashion design sheet of a trench-coat outfit from front, side and back, fabric swatches, accessories and hairstyle sketches, [sheet style], off-white paper.",
+      "defaults": {
+        "instruction_scaffold": "Turn the look in image 1 into a fashion design sheet: the full outfit drawn from the front, side and back, swatches of each fabric with small notes, the accessories laid out separately and two matching hairstyle sketches. [sheet style], a clean layout on off-white paper, colours and patterns true to image 1.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "4:3"
+      }
+    },
+    {
+      "id": "image-edit-trend-collage",
+      "category": "Portrait fun",
+      "target": "image-edit",
+      "title": "Single cover collage",
+      "description": "A bold music single cover built from your photo, with a big title. Keep the title short and in English.",
+      "thumb": null,
+      "tags": ["album cover", "k-pop", "collage", "music", "edit"],
+      "refs_required": 1,
+      "ref_labels": ["Person"],
+      "examples": {
+        "palette": "hot pink and electric blue",
+        "TITLE": "MIDNIGHT"
+      },
+      "preview_prompt": "Square pop single cover collage of a young singer in several cut-out poses, stickers, torn paper, [palette] colour blocks, the title \"[TITLE]\" in big chunky letters.",
+      "defaults": {
+        "instruction_scaffold": "Make a bold music single cover from the person in image 1: a square collage with cut-out photos of them in several poses, stickers, torn paper and [palette] colour blocks, and the title \"[TITLE]\" in big chunky letters across it. Keep their face and hair recognisable. Glossy, graphic pop-single energy.",
+        "model": "qwen_image_edit_2511",
+        "count": 2,
+        "aspect": "1:1"
+      }
+    },
+    {
+      "id": "image-science-plate",
+      "category": "Infographic",
+      "title": "Science illustration",
+      "description": "A vintage botanical or scientific plate with labelled parts. Uses Qwen-Image for the labels.",
+      "thumb": null,
+      "tags": ["botanical", "scientific", "vintage", "infographic", "text"],
+      "examples": {
+        "subject": "a pomegranate shown whole, halved and as a flowering branch",
+        "labels": "Calyx, Aril, Seed, Rind",
+        "TITLE": "PUNICA GRANATUM"
+      },
+      "defaults": {
+        "prompt_scaffold": "Vintage scientific plate of [subject], drawn as a detailed hand-coloured engraving on aged cream paper. Fine numbered leader lines point to small labels reading \"[labels]\", and an elegant serif title \"[TITLE]\" sits at the top. Muted natural colours, delicate cross-hatching, a thin ruled border, museum-print quality.",
+        "aspect": "3:4",
+        "count": 2,
+        "style": "illustration",
+        "negative": "garbled labels, misspelled words, photographic, modern design, watermark",
+        "model": "qwen_image_2512"
+      }
+    },
+    {
+      "id": "image-book-nook",
+      "category": "Surreal",
+      "title": "Tiny world in a book",
+      "description": "A handmade miniature world rising out of an open book, shot tilt-shift.",
+      "thumb": null,
+      "tags": ["miniature", "diorama", "book", "tilt-shift"],
+      "examples": {
+        "miniature world": "a narrow lantern-lit alley of an old bazaar",
+        "room": "cosy library at night"
+      },
+      "defaults": {
+        "prompt_scaffold": "A tiny world built inside an open book: [miniature world] rising out of the pages as a handmade diorama, with paper buildings, little figures and warm fairy lights. Tilt-shift macro photography, a narrow band of focus, soft bokeh of a [room] behind.",
+        "aspect": "4:3",
+        "count": 4,
+        "style": "photoreal",
+        "negative": "text, watermark, flat lighting, blurry subject"
+      }
+    },
+    {
+      "id": "image-food-exploded",
+      "category": "Infographic",
+      "title": "Food exploded view",
+      "description": "A dish taken apart into floating layers, each one labelled. Uses Qwen-Image for the labels.",
+      "thumb": null,
+      "tags": ["food", "exploded view", "ingredients", "infographic", "text"],
+      "examples": {
+        "dish": "a chicken shawarma wrap",
+        "labels": "Flatbread, Garlic sauce, Chicken, Pickles, Fries",
+        "background": "warm cream"
+      },
+      "defaults": {
+        "prompt_scaffold": "Exploded view of [dish]: every ingredient floating in neat layers above a plate, in the order they're stacked, with small clean labels reading \"[labels]\" beside the layers. Plain [background] background, soft studio light, crisp detail, food-magazine infographic style.",
+        "aspect": "3:4",
+        "count": 2,
+        "style": "product",
+        "negative": "garbled labels, misspelled words, messy, extra ingredients, watermark",
+        "model": "qwen_image_2512"
       }
     }
   ]

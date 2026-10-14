@@ -98,6 +98,28 @@ export function addSources(current: string[], incoming: string[], max = MAX_EDIT
   return { ids, dropped }
 }
 
+/**
+ * addSources for an edit template's labelled slots: '' marks an empty slot, which is filled first
+ * (or the slot `at`, when the user clicked that one) so each picture stays under its label.
+ */
+export function placeSources(current: string[], incoming: string[], max = MAX_EDIT_SOURCES, at?: number): { ids: string[]; dropped: number } {
+  const ids = [...current]
+  let dropped = 0
+  for (const id of incoming) {
+    if (ids.includes(id)) continue
+    let i = at !== undefined && !ids[at] ? at : ids.indexOf('')
+    if (i < 0) i = ids.length
+    at = undefined
+    if (i >= max) {
+      dropped++
+      continue
+    }
+    while (ids.length < i) ids.push('')
+    ids[i] = id
+  }
+  return { ids, dropped }
+}
+
 // "[product]" style slots in template prompts; the user swaps them for their own words.
 // An @-mention token, @[Mara](character:id), is not a slot.
 const SLOT = /(?<!@)\[[^\]\n]{1,40}\](?!\()/g

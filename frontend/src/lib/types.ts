@@ -971,10 +971,22 @@ export interface Template {
   examples?: Record<string, string>
   preview_url?: string | null
   requires_brand?: boolean
+  // v29: image templates that open Edit Image, with the pictures they need
+  target?: 'image-generate' | 'image-edit' | null
+  refs_required?: number
+  ref_labels?: string[]
+  options?: TemplateOption[]
+}
+
+/** A picker that fills one [slot] of a template's prompt or instruction. */
+export interface TemplateOption {
+  slot: string
+  label: string
+  choices: { label: string; value: string; aspect?: ImageAspect }[]
 }
 
 export interface TemplateStart {
-  target: 'quick' | 'studio' | 'image' | 'audio'
+  target: 'quick' | 'studio' | 'image' | 'image-edit' | 'audio'
   prefill: Record<string, unknown>
 }
 

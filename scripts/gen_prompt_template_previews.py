@@ -6,7 +6,8 @@
 Each scaffold is filled with the template's own `examples`, styled the way the app styles it, and run
 through the same graph builder the worker uses (Z-Image Turbo; Qwen-Image 2512 Lightning when the
 template asks for Qwen because it renders text). Video templates get a still "poster" at the video
-aspect from their `preview_prompt`. Results land in backend/app/templates/previews/<id>.webp
+aspect from their `preview_prompt`; so do image edit templates, which have no picture of their own
+to edit, so their card shows a typical result instead. Results land in backend/app/templates/previews/<id>.webp
 (long side 640). Existing previews are kept unless --force.
 
 The GPU is shared with live users: before each prompt we wait (up to --wait seconds) for anyone
@@ -61,7 +62,11 @@ def recipe(t: dict) -> dict:
     """What we send for one template: prompt, size, model."""
     d = t["defaults"]
     ex = t.get("examples") or {}
-    if t["type"] == "image":
+    if t.get("target") == "image-edit":
+        prompt = fill(t["preview_prompt"], ex)
+        aspect = d.get("aspect") or "1:1"
+        negative = "text, watermark, distorted hands, extra fingers"
+    elif t["type"] == "image":
         prompt = styled_prompt(fill(d["prompt_scaffold"], ex), d.get("style"))
         aspect = d.get("aspect", "1:1")
         negative = d.get("negative") or ""

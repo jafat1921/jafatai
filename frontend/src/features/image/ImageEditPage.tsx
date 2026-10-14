@@ -1,8 +1,9 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { Brush, Images } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PlaceholderHint } from '@/components/studio/placeholder-hint'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { AspectChip, BrandDockChip, CountChip, ModelChip } from '@/components/generate/DockChips'
 import { GenerateButton } from '@/components/generate/GenerateButton'
@@ -16,16 +17,19 @@ import { useGenEstimate } from '@/hooks/useGenEstimate'
 import { flatItems, useImageEdit, useMediaList } from '@/hooks/useMedia'
 import { withBrand } from '@/lib/brand'
 import { localEstimate } from '@/lib/estimate'
-import { addSources, editPayload, MAX_EDIT_SOURCES } from '@/lib/images'
+import { addSources, editPayload, MAX_EDIT_SOURCES, placeholdersIn, placeSources } from '@/lib/images'
 import { normalizeModelId } from '@/lib/models'
-import type { ImageAspect, ImageEditRequest, MediaItem } from '@/lib/types'
+import { editFormFrom, fillSlot, type TemplatePrefill } from '@/lib/templates'
+import type { ImageAspect, ImageEditRequest, MediaItem, TemplateOption } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { CountPicker, ImageAspectTiles } from './controls'
 import { EditSources } from './EditSources'
+import { TemplateChoices } from './TemplateChoices'
 
 const PAGE = 'image-edit'
 const idsFrom = (raw: string | null) => (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+const listOf = (words: string[]) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`)
 
 interface EditRun {
   ids: string[]
@@ -43,38 +47,73 @@ export function ImageEditPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const location = useLocation()
-  const fromState = (location.state as { sources?: string[] } | null)?.sources ?? []
-  // ?sources=a,b from a tile's Edit button or the References page; never more than three
+  const state = location.state as { sources?: string[]; template?: TemplatePrefill } | null
+  const fromState = state?.sources ?? []
+  // an edit template: its instruction, model, and the labelled pictures it needs (fixed for this visit)
+  const [tpl] = useState(() => (state?.template ? { title: state.template.templateTitle, ...editFormFrom(state.template.prefill) } : null))
+  const labels = tpl?.labels ?? []
+  // ?sources=a,b from a tile's Edit button or the References page; never more than three.
+  // With a template, '' holds an empty labelled slot open.
   const [ids, setIds] = useState<string[]>(() => addSources([], [...idsFrom(params.get('sources')), ...fromState]).ids)
+  const sources = ids.filter(Boolean)
   const [notice, setNotice] = useState<string | null>(null)
-  const [instruction, setInstruction] = useState('')
-  const [count, setCount] = useState(1)
-  const [aspect, setAspect] = useState<ImageAspect | null>(null)
+  const [instruction, setInstruction] = useState(tpl?.instruction ?? '')
+  const [picked, setPicked] = useState<Record<string, number>>({})
+  const field = useRef<HTMLTextAreaElement>(null)
+  const [count, setCount] = useState(tpl?.count ?? 1)
+  const [aspect, setAspect] = useState<ImageAspect | null>(tpl?.aspect ?? null)
   const [seed, setSeed] = useState('')
   const wanted = normalizeModelId(params.get('model'))
-  const [modelId, setModelId] = useState<string | undefined>(wanted ?? undefined)
+  const [modelId, setModelId] = useState<string | undefined>(wanted ?? tpl?.model)
   const edit = useImageEdit()
   const results = useMediaList({ kind: 'image', origin: 'generated' })
   const brand = useBrandChoice()
   const record = useRecordRun<EditRun>(PAGE)
   const { models, model, send, effective } = useDockModels('edit', modelId)
   const max = effective?.max_refs ?? MAX_EDIT_SOURCES
-  const over = Math.max(0, ids.length - max)
+  const over = Math.max(0, sources.length - max)
   const estimate = useGenEstimate(effective ? { kind: 'image', model: effective.id, count } : null, localEstimate(effective, { count }))
   const name = model?.label ?? 'This model'
 
-  const add = (items: MediaItem[]) => {
-    const next = addSources(ids, items.map((m) => m.id), max)
+  const add = (items: MediaItem[], at?: number) => {
+    const next = placeSources(ids, items.map((m) => m.id), max, at)
     setIds(next.ids)
     setNotice(next.dropped ? `${name} takes ${max === 1 ? '1 image' : `up to ${max} images`}, so ${next.dropped === 1 ? "1 image wasn't" : `${next.dropped} images weren't`} added.` : null)
   }
+  const remove = (id: string) => {
+    setIds((cur) => {
+      const at = cur.indexOf(id)
+      // a labelled slot stays where it is, empty, so the other pictures keep their labels
+      const next = at < labels.length ? cur.map((x) => (x === id ? '' : x)) : cur.filter((x) => x !== id)
+      while (next.length && !next[next.length - 1]) next.pop()
+      return next
+    })
+    setNotice(null)
+  }
+
+  const pick = (o: TemplateOption, i: number) => {
+    const before = picked[o.slot] === undefined ? undefined : o.choices[picked[o.slot]]
+    const choice = o.choices[i]
+    setInstruction((text) => fillSlot(text, o.slot, choice.value, before?.value))
+    setPicked((p) => ({ ...p, [o.slot]: i }))
+    // e.g. the 3×3 grid wants a square; going back to a plain choice restores the template's shape
+    if (choice.aspect) setAspect(choice.aspect)
+    else if (before?.aspect) setAspect(tpl?.aspect ?? null)
+  }
+
+  const missing = labels.slice(0, tpl?.required ?? 0).filter((_, i) => !ids[i])
+  const slots = placeholdersIn(instruction)
   const blocked = over
     ? `Too many source images for ${name}.`
-    : !ids.length
-      ? 'Add at least one source image.'
-      : instruction.trim().length < 3
-        ? 'Say what should change.'
-        : null
+    : missing.length
+      ? `Add the ${listOf(missing.map((l) => l.toLowerCase()))} ${missing.length > 1 ? 'pictures' : 'picture'} first.`
+      : !sources.length
+        ? 'Add at least one source image.'
+        : slots.length
+          ? `Replace ${slots.join(', ')} first.`
+          : instruction.trim().length < 3
+            ? 'Say what should change.'
+            : null
 
   const run = (r: EditRun) =>
     edit.mutate(r.body, {
@@ -87,11 +126,11 @@ export function ImageEditPage() {
   const submit = () => {
     if (blocked || edit.isPending) return
     // images/edit has no magic prompt: an instruction is already specific
-    const base = editPayload(ids, instruction, count, aspect, send && { id: send.id, max_refs: max })
+    const base = editPayload(sources, instruction, count, aspect, send && { id: send.id, max_refs: max })
     const n = Number.parseInt(seed, 10)
     const body = withBrand({ ...base, ...(Number.isFinite(n) && n >= 0 ? { seed: n } : {}) }, brand.sendId)
-    const summary = [model?.label, plural(ids.length, 'source'), aspect ?? 'source shape', plural(count, 'result')].filter(Boolean).join(' · ')
-    run({ ids, instruction, count, aspect, model: model?.id, seed, body, summary })
+    const summary = [model?.label, plural(sources.length, 'source'), aspect ?? 'source shape', plural(count, 'result')].filter(Boolean).join(' · ')
+    run({ ids: sources, instruction, count, aspect, model: model?.id, seed, body, summary })
   }
 
   const refill = (r: Partial<EditRun>) => {
@@ -116,24 +155,33 @@ export function ImageEditPage() {
         into="image"
         title="Edit Image"
         icon={<Brush aria-hidden className="size-4 text-studio-accent-hover" />}
+        headerExtra={tpl && <span className="rounded-full border border-studio-gold/70 bg-studio-gold/10 px-2 text-small">Prompt template: {tpl.title}</span>}
         refs={
           <EditSources
             ids={ids}
             max={max}
+            labels={labels}
+            required={tpl?.required}
             notice={over ? `${name} takes ${max === 1 ? '1 image' : `up to ${max} images`}. Remove ${over === 1 ? '1 image' : `${over} images`} or pick another model.` : notice}
             onAdd={add}
-            onRemove={(id) => {
-              setIds((cur) => cur.filter((x) => x !== id))
-              setNotice(null)
-            }}
+            onRemove={remove}
           />
         }
         promptLabel="What should change?"
         prompt={instruction}
         onPrompt={setInstruction}
-        mentions={{ refBudget: max, refsUsed: ids.length }}
+        promptRef={field}
+        belowPrompt={
+          tpl && (
+            <div className="flex flex-col gap-2">
+              <TemplateChoices options={tpl.options} picked={picked} onPick={pick} />
+              <PlaceholderHint text={instruction} field={field} examples={tpl.examples} />
+            </div>
+          )
+        }
+        mentions={{ refBudget: max, refsUsed: sources.length }}
         maxLength={2000}
-        placeholder={ids.length > 1 ? 'e.g. Put the woman from image 1 in the jacket from image 2, on the street from image 3' : 'What should change? e.g. Make it night, with rain on the window'}
+        placeholder={sources.length > 1 ? 'e.g. Put the woman from image 1 in the jacket from image 2, on the street from image 3' : 'What should change? e.g. Make it night, with rain on the window'}
         chips={
           <>
             <ModelChip models={models} model={model} onChange={setModelId} highlighted={!!wanted} />

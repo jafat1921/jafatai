@@ -1175,10 +1175,15 @@ class TemplateOut(BaseModel):
     tags: list[str] = []
     examples: dict[str, str] = {}  # placeholder -> sample value (hint text, and what the preview shows)
     preview_url: str | None = None
+    # image templates only (v29): which page runs it, and for edits the reference slots it needs
+    target: Literal["image-generate", "image-edit"] | None = None
+    refs_required: int = 0
+    ref_labels: list[str] = []
+    options: list[dict[str, Any]] = []  # [{slot, label, choices: [{label, value, aspect?}]}]
 
 
 class TemplateStartOut(BaseModel):
-    target: Literal["quick", "studio", "image", "audio"]
+    target: Literal["quick", "studio", "image", "image-edit", "audio"]
     prefill: dict[str, Any]
 
 

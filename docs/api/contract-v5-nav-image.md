@@ -84,3 +84,37 @@ Uploads create a `Generation(kind="upload", status="ready", target_type="media")
 - **Templates:** `start` prefill: quick → `{prompt, duration_s, aspect_ratio, style, dialogue, template_id, placeholders}`; studio → `{title:"", authoring_mode, logline:"", logline_hint, target_runtime_s, aspect_ratio, brief, template_id, placeholders}`; image → `{prompt, aspect, count, style, negative, template_id, placeholders}`. `placeholders` lists the `[bracketed]` words in the scaffold.
 - **Dashboard:** `recent_videos` includes project renders, while `recent_images` is standalone items only (approved frames would crowd it). `running_jobs` holds the newest 20 queued or running jobs. `quick_recent` holds the newest 4 entries of `/quick/recent`.
 - **Events:** `media` fires on create, on PATCH, when a new version is queued, and when a version finishes or fails.
+
+## Edit templates and the bigger gallery (v29, 2026-10-14)
+
+Image prompt templates can now open **Edit Image** instead of Create Image. Research and licence notes:
+`docs/research/image-templates-fal-atlas-2026-10-14.md` (try-on is Qwen-Image-Edit only; CatVTON, IDM-VTON,
+OOTDiffusion, FitDiT and Leffa are not used).
+
+**Template fields** (all optional, older servers and clients keep working):
+
+| Field | On | Meaning |
+|---|---|---|
+| `target` | image templates | `"image-generate"` (default, filled in by the server for older cards) or `"image-edit"`. `null` on video and audio |
+| `refs_required` | edit | Pictures that must be added before the edit can run (1–3) |
+| `ref_labels` | edit | One label per slot, in the order the instruction calls them "image 1", "image 2"… e.g. `["Person", "Garment"]` |
+| `options` | edit | `[{slot, label, choices: [{label, value, aspect?}]}]`. Picking a choice writes `value` over `[slot]` in the instruction; `aspect` (if any) sets the output shape |
+| `defaults.instruction_scaffold` | edit | The instruction, with `[placeholders]` like `prompt_scaffold` |
+| `defaults.model` | both | Edit cards name `qwen_image_edit_2511`; text-heavy generate cards name `qwen_image_2512` |
+| `preview_prompt` | edit | Text-to-image prompt for the card picture (`scripts/gen_prompt_template_previews.py` renders it on Z-Image, since an edit card has no picture of its own). Cards without a rendered WebP show the kind icon |
+
+`POST /prompt-templates/{id}/start` on an edit card returns `target: "image-edit"` and
+`prefill: {instruction, model, count, aspect|null, refs_required, ref_labels, options, template_id, placeholders, examples}`.
+Nothing runs: the frontend opens `/image/edit` with labelled reference slots, and the Edit button stays disabled
+("Add the person and garment pictures first.", then "Replace [slot] first.") until the required slots are filled and
+the placeholders replaced. The edit itself is the normal `POST /images/edit`; source order follows the slots. There is
+no mask parameter: "Remove an object" works from the instruction (Photo → Cut-out → Select is the pixel-exact route).
+
+**Gallery:** search (title, description, tags, labels, prompt), a Generate / Edit my photo filter, and category
+chips. New categories: Portrait fun, Packaging, Menu, Typography, Infographic, Comic, Surreal, Edit a photo.
+Previews are lazy-loaded. The Create Image template picker leaves edit cards out.
+
+**Shipped cards:** 64 image templates (26 earlier + 38 new: 15 generate, 23 edit). Urdu and Arabic lettering stays with
+the two Urdu poster cards; the new text cards ask for short English text.
+
+**MCP:** no change. `edit_image` already takes any instruction and 1–3 source ids.

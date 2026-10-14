@@ -27,7 +27,7 @@ import { localEstimate } from '@/lib/estimate'
 import { IMAGE_ASPECTS, IMAGE_STYLES, imagePayload, placeholdersIn, type ImageForm } from '@/lib/images'
 import { defaultSpeed, has } from '@/lib/models'
 import { MENTION_REFS } from '@/lib/mentions'
-import { imageFormFrom } from '@/lib/templates'
+import { imageFormFrom, isEditTemplate } from '@/lib/templates'
 import { TemplatePreview } from '@/features/templates/TemplatePreview'
 import type { ImageGenerateRequest } from '@/lib/types'
 import { plural } from '@/lib/utils'
@@ -94,7 +94,8 @@ export function ImageGenerateForm({ initial, templateTitle, modelPicked, onRun, 
         <DropdownMenuLabel>Image prompt templates</DropdownMenuLabel>
         {templates.isPending && <p className="px-2 py-1.5 text-small text-studio-muted">Loading…</p>}
         {templates.isError && <p className="px-2 py-1.5 text-small text-studio-muted">Prompt templates aren't available right now.</p>}
-        {templates.data?.map((t) => (
+        {/* edit templates need pictures; they open Edit Image from the gallery instead */}
+        {templates.data?.filter((t) => !isEditTemplate(t)).map((t) => (
           <DropdownMenuItem
             key={t.id}
             onSelect={() => {

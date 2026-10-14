@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import cast as film_cast
 from app import dialogue as dl
 from app import voices as vc
 from app.db import get_db
@@ -119,7 +120,7 @@ def import_project(script_id: str, body: ImportIn, db: Session = Depends(get_db)
     if not scenes:
         raise HTTPException(422, "That project has no scenes to import")
     cast = dl.clean_cast(s.cast)
-    new = dl.import_scenes(scenes, cast, body.include_action)
+    new = dl.import_scenes(scenes, cast, body.include_action, film_cast.project_cast(db, project.id))
     if not new:
         raise HTTPException(422, "Those scenes have no dialogue yet" if not body.include_action
                                  else "Those scenes have no script text yet")

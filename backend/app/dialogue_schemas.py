@@ -15,6 +15,8 @@ class CastMember(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     voice_id: str | None = None
     color: str | None = Field(None, max_length=9)
+    # contract v26: the film character this speaker was imported from
+    character_id: str | None = Field(None, max_length=36)
 
 
 class LineIn(BaseModel):

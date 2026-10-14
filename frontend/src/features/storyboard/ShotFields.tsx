@@ -10,8 +10,9 @@ import type { Shot, ShotPatch, ShotType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LocationPicker } from '@/features/workspace/LocationPicker'
 import { BrandPlacements } from './BrandPlacements'
+import { ShotDialogue } from './ShotDialogue'
 
-// Inline shot details on a Storyboard row: type, duration, description, cast and location.
+// Inline shot details on a Storyboard row: type, duration, description, cast, location and dialogue.
 export function ShotFields({ shot, label }: { shot: Shot; label: string }) {
   const update = useUpdateShot(shot.project_id)
   const { data: cast } = useCharacters(shot.project_id)
@@ -99,6 +100,7 @@ export function ShotFields({ shot, label }: { shot: Shot; label: string }) {
           ))}
         </div>
       )}
+      <ShotDialogue shot={shot} label={label} cast={cast ?? []} />
       <BrandPlacements shot={shot} label={label} />
       {update.isError && (
         <p role="alert" className="text-small text-studio-danger">

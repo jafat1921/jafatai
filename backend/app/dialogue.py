@@ -23,7 +23,7 @@ from app import audio_edit as ae
 from app import library as lib
 from app import voices as vc
 from app.mixdown import safe_stem
-from app.models import Generation, Job, MediaItem, Scene, VoiceProfile, VoiceScript, new_id, utcnow
+from app.models import Character, Generation, Job, MediaItem, Scene, VoiceProfile, VoiceScript, new_id, utcnow
 from app.services import generation_file, job_out, media_url, new_seed, next_version
 from app.storyboard import screenplay_lines
 
@@ -85,6 +85,9 @@ def clean_cast(cast: list[dict] | None) -> list[dict]:
         seen.add(cid)
         row = {"id": cid, "name": _norm(c.get("name") or "")[:80] or "Unnamed", "voice_id": c.get("voice_id") or None,
                "color": c.get("color") or None}
+        if c.get("character_id"):
+            # imported from a film (contract v26): the cast row stays tied to its character
+            row["character_id"] = str(c["character_id"])[:36]
         if cid == NARRATOR:
             narrator = row
         else:
@@ -99,11 +102,13 @@ def clean_cast(cast: list[dict] | None) -> list[dict]:
     return [narrator, *out]
 
 
-def speaker_for(cast: list[dict], name: str) -> str:
+def speaker_for(cast: list[dict], name: str, aliases: dict[str, str] | None = None) -> str:
     """The cast id for a name from a cue or a NAME: prefix, adding the character when it's new."""
     key = _norm(name).casefold()
     if key in ("narrator", "narration", "v.o.", "vo"):
         return NARRATOR
+    if aliases and key in aliases:
+        return aliases[key]
     for c in cast:
         if c["name"].casefold() == key:
             return c["id"]
@@ -156,7 +161,8 @@ def _line(speaker_id: str, text: str, *, emotion: str | None = None, para: bool 
             "emotion": emotion, "pause_after_s": None, "para": para}
 
 
-def _utterances_screenplay(text: str, cast: list[dict], include_action: bool, default: str) -> list[dict]:
+def _utterances_screenplay(text: str, cast: list[dict], include_action: bool, default: str,
+                           aliases: dict[str, str] | None = None) -> list[dict]:
     """(speaker, text, emotion, para) from a flush-left screenplay: one utterance per dialogue block or
     action paragraph."""
     out: list[dict] = []
@@ -178,7 +184,7 @@ def _utterances_screenplay(text: str, cast: list[dict], include_action: bool, de
             continue
         if kind == "cue":
             flush()
-            who, emotion, kind_now = speaker_for(cast, cue), None, "dialogue"
+            who, emotion, kind_now = speaker_for(cast, cue, aliases), None, "dialogue"
             continue
         if kind == "paren":
             if kind_now == "dialogue":
@@ -236,10 +242,44 @@ def split(text: str, mode: str, cast: list[dict], speaker_id: str | None = None,
     return lines
 
 
-def import_scenes(scenes: list[Scene], cast: list[dict], include_action: bool) -> list[dict]:
+def _film_character(cue: str, characters: list[Character]) -> Character | None:
+    # cues are usually a first name in capitals: MAYA is Maya Khan
+    key = _norm(cue).casefold()
+    return next((c for c in characters if _norm(c.name).casefold() == key), None) or next(
+        (c for c in characters if key in _norm(c.name).casefold().split()), None)
+
+
+def bind_characters(scenes: list[Scene], cast: list[dict], characters: list[Character]) -> dict[str, str]:
+    """Ties the scenes' speakers to the film's characters (contract v26): their cast row is found by
+    character_id (a rename in either place doesn't split them) and takes the character's voice when it has
+    none of its own. Returns cue -> cast id."""
+    aliases: dict[str, str] = {}
+    for sc in scenes:
+        for kind, cue, _ in screenplay_lines(sc.script_text or ""):
+            if kind != "cue" or cue.casefold() in aliases:
+                continue
+            c = _film_character(cue, characters)
+            if c is None:
+                continue
+            row = next((r for r in cast if r.get("character_id") == c.id), None) or next(
+                (r for r in cast if not r.get("character_id") and r["name"].casefold() in (cue.casefold(), c.name.casefold())),
+                None)
+            if row is None:
+                used = {r["color"] for r in cast if r.get("color")}
+                row = {"id": _short("c_"), "name": c.name[:80], "voice_id": None, "color": color_for(c.name, used)}
+                cast.append(row)
+            row["character_id"] = c.id
+            row["voice_id"] = row.get("voice_id") or c.voice_id
+            aliases[cue.casefold()] = row["id"]
+    return aliases
+
+
+def import_scenes(scenes: list[Scene], cast: list[dict], include_action: bool,
+                  characters: list[Character] | None = None) -> list[dict]:
+    aliases = bind_characters(scenes, cast, characters) if characters else None
     lines: list[dict] = []
     for sc in scenes:
-        utts = _utterances_screenplay(sc.script_text or "", cast, include_action, NARRATOR)
+        utts = _utterances_screenplay(sc.script_text or "", cast, include_action, NARRATOR, aliases)
         for u in utts:
             lines.append(_line(u["speaker_id"], _norm(u["text"]), emotion=u["emotion"], para=u["para"]))
         if lines:

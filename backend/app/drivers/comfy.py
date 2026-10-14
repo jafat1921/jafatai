@@ -222,6 +222,10 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
             return i2i_plan(size)
         return edit_plan(ref_ids, prompt, size) if ref_ids else t2i_plan(size)
 
+    if kind == "video" and params.get("speech_audio"):
+        # a Character Studio test clip: a Library "video" with a voice (contract v26), lip-synced like a take
+        return lipsync_plan(prompt, params, seed, lookup, negative, loras)
+
     if kind == "video":
         return clip_plan(prompt, params, seed, lookup, negative, loras)
 

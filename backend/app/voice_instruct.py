@@ -104,3 +104,28 @@ def normalise(description: str | None) -> Instruct:
         picked["age"] = "child"
     items = [picked[s] for s in SLOTS if s in picked]
     return Instruct(", ".join(items) or None, understood=items, ignored=ignored, speed=speed)
+
+
+def _age_word(age: str) -> str:
+    # profiles say "34", "mid-30s" or "elderly"; OmniVoice knows five age bands
+    m = re.search(r"\d+", age)
+    if not m:
+        return age
+    n = int(m[0])
+    return "child" if n < 13 else "teenager" if n < 20 else "young adult" if n < 36 else \
+        "middle-aged" if n < 60 else "elderly"
+
+
+def from_profile(profile: dict | None, extra: str = "") -> tuple[str, Instruct]:
+    """A character's voice (contract v26): gender, age and accent from the Character Studio profile, plus
+    anything the user adds ("deep, slow"). Returns what was read and the OmniVoice instruct made of it."""
+    p = profile or {}
+    bits = [str(p.get("gender") or "").strip(), _age_word(str(p.get("age") or "").strip())]
+    accent = str(p.get("accent") or "").strip()
+    if accent:
+        bits.append(accent if "accent" in accent.lower() else f"{accent} accent")
+    elif p.get("nationality"):
+        bits.append(f"{str(p['nationality']).strip()} accent")
+    bits.append(" ".join((extra or "").split()))
+    raw = ", ".join(b for b in bits if b)
+    return raw, normalise(raw)

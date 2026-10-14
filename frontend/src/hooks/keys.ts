@@ -12,6 +12,7 @@ export const qk = {
   character: (id: string) => ['character', id] as const,
   characterSheet: (id: string) => ['character-sheet', id] as const,
   sheetCatalogue: ['character-sheet-catalogue'] as const,
+  testClip: (id: string) => ['character-test-clip', id] as const,
   shotRefs: (shotId: string) => ['shot-refs', shotId] as const,
   locations: (projectId: string) => ['locations', projectId] as const,
   // one project-wide list; scenes filter it client-side so SSE patches land in one place

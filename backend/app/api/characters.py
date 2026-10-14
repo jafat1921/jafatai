@@ -4,11 +4,13 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app import cast, character_pack, character_panels as cp, character_sheet as cs, models_catalog, voices
+from app import library as lib, shot_speech, voice_instruct
 from app.ai_jobs import enqueue_ai
 from app.db import get_db
-from app.models import Character, Generation, Job, MediaItem, Project, utcnow
+from app.models import Character, Generation, Job, MediaItem, Project, VoiceProfile, utcnow
 from app.schemas import (BoardIn, CastLinkIn, CharacterCreate, CharacterFromPhoto, CharacterOut, CharacterPatch,
-                         GenerationOut, JobOut, PanelRegenerateIn, SheetIn, SheetPatch)
+                         CharacterVoiceDesignIn, CharacterVoiceDesignOut, GenerationOut, JobOut, PanelRegenerateIn,
+                         SheetIn, SheetPatch, TestClipIn, TestClipOut, VoiceOut)
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import character_out, enqueue_generation, gen_out, generation_file, get_owned, job_out
 
@@ -297,3 +299,61 @@ def export_pack(character_id: str, db: Session = Depends(get_db), cur: CurrentUs
     return Response(data, media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{stem}.mixchar.zip"',
                              "Cache-Control": "private, no-store"})
+
+
+# ---------------------------------------------------------------- voice (contract v26)
+
+def _profile_language(profile: dict) -> str:
+    # "Urdu, English" speaks Urdu first; nothing recognisable falls back to English
+    text = str((profile or {}).get("languages") or "").casefold()
+    found = [(text.find(name.casefold()), code) for code, name in voices.LANG_NAMES.items()
+             if name.casefold() in text]
+    return min(found)[1] if found else "en"
+
+
+@router.post("/characters/{character_id}/voice/design", response_model=CharacterVoiceDesignOut, status_code=201)
+def design_voice(character_id: str, body: CharacterVoiceDesignIn | None = None, db: Session = Depends(get_db),
+                 cur: CurrentUser = Depends(require_editor)):
+    """A designed OmniVoice voice from the profile's gender, age and accent, saved to Voices and given to the
+    character."""
+    body = body or CharacterVoiceDesignIn()
+    c = _character(db, cur, character_id)
+    raw, ins = voice_instruct.from_profile(c.profile, body.extra)
+    if not ins.text:
+        raise HTTPException(422, "The profile doesn't say enough about the voice yet. Add a gender, an age or an "
+                                 "accent on the Profile tab, or describe it in the box.")
+    gender = next((g for g in ("male", "female") if g in ins.understood), None)
+    v = VoiceProfile(workspace_id=cur.workspace_id, name=(body.name or f"{c.name}'s voice").strip()[:120],
+                     kind="design", language=(body.language or _profile_language(c.profile)).lower(),
+                     notes=f"Designed for {c.name} from their profile: {raw}"[:2000], gender_hint=gender, uses=0,
+                     design=voices.clean_design({"description": ins.text, "engine": "omnivoice"}))
+    db.add(v)
+    db.flush()
+    c.voice_id = v.id
+    c.updated_at = utcnow()
+    db.commit()
+    return CharacterVoiceDesignOut(character=character_out(db, c, films=True), voice=VoiceOut(**voices.voice_out(db, v)),
+                                   description=raw, understood=ins.understood, ignored=ins.ignored)
+
+
+def _test_clip_out(db: Session, c: Character, **extra) -> TestClipOut:
+    rec = (c.sheet or {}).get("test_clip") or {}
+    item = db.get(MediaItem, rec.get("media_id") or "")
+    if item is None or item.workspace_id != c.workspace_id:
+        return TestClipOut()
+    return TestClipOut(item=lib.item_out(db, item), text=rec.get("text") or "", panel=rec.get("panel"), **extra)
+
+
+@router.get("/characters/{character_id}/test-clip", response_model=TestClipOut)
+def get_test_clip(character_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    return _test_clip_out(db, _character(db, cur, character_id))
+
+
+@router.post("/characters/{character_id}/test-clip", response_model=TestClipOut, status_code=202)
+def make_test_clip(character_id: str, body: TestClipIn, db: Session = Depends(get_db),
+                   cur: CurrentUser = Depends(require_editor)):
+    """A 5-10 s lip-synced clip of the character saying the line, from the close-up panel (or the portrait)."""
+    c = _character(db, cur, character_id)
+    out = shot_speech.queue_test_clip(db, cur, c, body.text)
+    db.commit()
+    return _test_clip_out(db, c, job=out["job"], speech_jobs=out["speech_jobs"])

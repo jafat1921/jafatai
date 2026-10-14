@@ -29,6 +29,10 @@ KIND_LABELS = {"portrait": "Portrait", "establishing": "Establishing", "keyframe
                "keyframe_mid": "Mid frame", "keyframe_end": "End frame"}
 MAX_LIMIT = 100
 TAKE_TAG = "script:"
+# working files hidden like dialogue takes: a shot's spoken lines and a character test clip's line (contract v26)
+SHOT_TAG = "shot:"
+CLIP_TAG = "clip:"
+HIDDEN_TAGS = (TAKE_TAG, SHOT_TAG, CLIP_TAG)
 
 
 @dataclass
@@ -331,10 +335,11 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
             # tags are stored lower-case and quote-free, so the JSON text match is exact enough
             t = (clean_tags([tag]) or [tag])[0]
             stmt = stmt.where(cast(MediaItem.tags, String).like(f'%"{t}"%'))
-        if not (tag or "").lower().startswith(TAKE_TAG):
-            # dialogue line takes (contract v17) are working files of their script; asking for the
-            # script's own tag is the one way to list them
-            stmt = stmt.where(~cast(MediaItem.tags, String).like(f'%"{TAKE_TAG}%'))
+        if not (tag or "").lower().startswith(HIDDEN_TAGS):
+            # dialogue line takes (contract v17) and a shot's spoken lines (v26) are working files of their
+            # script or shot; asking for the owner's own tag is the one way to list them
+            for hidden in HIDDEN_TAGS:
+                stmt = stmt.where(~cast(MediaItem.tags, String).like(f'%"{hidden}%'))
         if after:
             stmt = stmt.where(or_(MediaItem.created_at < after[0],
                                   (MediaItem.created_at == after[0]) & (MediaItem.id < after[1])))

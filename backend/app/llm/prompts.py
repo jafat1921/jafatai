@@ -399,6 +399,11 @@ class PlacementIdea(BaseModel):
         return "hero" if str(v or "").strip().lower() in ("hero", "foreground", "primary", "main") else "background"
 
 
+class DialogueIdea(BaseModel):
+    character: str = ""
+    text: str = ""
+
+
 class ShotIdea(BaseModel):
     shot_type: str = "medium"
     duration_s: float = 4.0
@@ -410,6 +415,7 @@ class ShotIdea(BaseModel):
     handoff: str = ""
     continuous: bool = False
     brand_placements: list[PlacementIdea] = []
+    dialogue: list[DialogueIdea] = []
 
     @field_validator("shot_type", mode="before")
     @classmethod
@@ -441,6 +447,7 @@ class SceneFrames(FramePrompts):
     camera: str = ""
     characters: list[str] = []
     brand_placements: list[PlacementIdea] = []
+    dialogue: list[DialogueIdea] = []
 
     @field_validator("shot_type", mode="before")
     @classmethod
@@ -492,6 +499,21 @@ def _style(project) -> str:
             else "Style: photorealistic cinematic film still, natural colour, shallow depth of field.")
 
 
+def dialogue_ask(scene, many: bool) -> str:
+    """The storyboard's dialogue lines (contract v26): what is said on screen, word for word from the script,
+    so it can be spoken in the characters' voices and lip-synced."""
+    where = "each shot" if many else "the shot"
+    rule = aerab.writing_rule(None, scene.script_text or "")
+    ask = (f"Also give {where} dialogue: the lines spoken on screen in it, in order, as a list of "
+           '{"character": the speaker\'s name exactly as in the cast list, "text": the words exactly as the script '
+           "has them, in the script's own language}. No parentheticals, no stage directions, no voice-over or "
+           "narration; an empty list where nobody speaks.")
+    if many:
+        ask += (" Put every line in the shot where it is spoken. Lip sync works best with one visible speaker, so "
+                "favour singles and over-the-shoulder shots for talk.")
+    return ask + (f"\nDialogue text: {rule}" if rule else "")
+
+
 SHOTLIST_SYSTEM = (
     "You are a film director planning coverage. You break a scene into a short list of shots a small AI production "
     "can render: each shot is one continuous camera take between a start frame and an end frame. "
@@ -499,7 +521,8 @@ SHOTLIST_SYSTEM = (
 )
 
 
-def suggest_shots_messages(project, characters, scene, max_shots: int, previous=None, brand: str = "") -> list[dict]:
+def suggest_shots_messages(project, characters, scene, max_shots: int, previous=None, brand: str = "",
+                           dialogue: bool = False) -> list[dict]:
     before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}" if previous else ""
     user = (
         f"{film_block(project, characters)}\n\nScene: {scene.heading or '(no heading)'}\n---\n"
@@ -511,6 +534,8 @@ def suggest_shots_messages(project, characters, scene, max_shots: int, previous=
         "carries over from the previous shot: a prop, a look, an emotion; empty for the first shot), and continuous "
         "(true only when the action flows straight on from the previous shot with no jump in time or place)."
     )
+    if dialogue:
+        user += "\n\n" + dialogue_ask(scene, True)
     if brand:
         user += "\n\n" + brand + "\nGive each shot brand_placements (an empty list where the brand doesn't fit)."
     return [{"role": "system", "content": SHOTLIST_SYSTEM}, {"role": "user", "content": user}]
@@ -604,7 +629,7 @@ def extend_messages(project, scene, shot, characters, location, duration_s: floa
 
 
 def scene_frames_messages(project, characters, scene, location, duration_s: float, previous=None,
-                          brand: str = "") -> list[dict]:
+                          brand: str = "", dialogue: bool = False) -> list[dict]:
     before = ""
     if previous is not None:
         before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}"
@@ -616,6 +641,8 @@ def scene_frames_messages(project, characters, scene, location, duration_s: floa
         "only those on screen), start_prompt = the frame the scene OPENS on, end_prompt = the frame it ENDS on, and "
         f"motion_prompt = what happens in between.\n\n{_style(project)}\n\n{FRAME_RULES}"
     )
+    if dialogue:
+        user += "\n\n" + dialogue_ask(scene, False)
     if brand:
         user += ("\n\n" + brand + "\nAlso give brand_placements for this shot (an empty list if the brand doesn't "
                  "fit here), and describe those objects in the start and end prompts.")

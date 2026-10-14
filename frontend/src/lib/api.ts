@@ -18,6 +18,8 @@ import type {
   Character,
   CharacterProfile,
   CharacterSheet,
+  CharacterVoiceDesign,
+  TestClip,
   SheetCatalogue,
   SheetRequest,
   SheetTextPatch,
@@ -377,6 +379,11 @@ export const api = {
     catalogue: () => get<SheetCatalogue>('/character-sheet/catalogue'),
     boardUrl: (id: string, format: 'png' | 'pdf') => `${API_BASE}/characters/${id}/sheet/board/download?format=${format}`,
     packUrl: (id: string) => `${API_BASE}/characters/${id}/pack`,
+    // contract-v26-character-voices.md
+    designVoice: (id: string, body: { extra?: string; language?: string; name?: string } = {}) =>
+      post<CharacterVoiceDesign>(`/characters/${id}/voice/design`, body),
+    testClip: (id: string) => get<TestClip>(`/characters/${id}/test-clip`),
+    makeTestClip: (id: string, text: string) => post<TestClip>(`/characters/${id}/test-clip`, { text }),
   },
   locations: {
     list: (projectId: string) => get<Location[]>(`/projects/${projectId}/locations`),

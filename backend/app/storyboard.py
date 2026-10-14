@@ -126,6 +126,9 @@ def shots_out(db: Session, shots: list[Shot]) -> list[ShotOut]:
         if rec.get("shot_id"):
             closing[rec["shot_id"]] = rec.get("mode")
 
+    from app import shot_speech
+
+    voices: dict = {}
     out = []
     for s in shots:
         mine = gens.get(s.id, [])
@@ -151,6 +154,8 @@ def shots_out(db: Session, shots: list[Shot]) -> list[ShotOut]:
         o.takes_count = len(takes)
         o.status = derive_status(start_ok, bool(end and end.status == "approved"), takes)
         o.activity = activity(mine)
+        o.dialogue = shot_speech.public(s.dialogue)
+        o.dialogue_notice = shot_speech.notice_for(db, s, voices) if s.dialogue else None
         out.append(o)
     return out
 
@@ -398,6 +403,10 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
             for k in ("longtake", "chunks", "assembly", "continuity", "context_frames", "longtake_stats"):
                 params.pop(k, None)
         models_catalog.apply_take_quality(params, project.settings, long_take=longtake.is_long(duration))
+        from app import shot_speech
+
+        # the shot's lines in its characters' voices (contract v26); the worker speaks them before the take
+        shot_speech.attach(db, shot, params)
         steady = bm.hero_motion(db, shot, project)
         if steady:
             params["brand_prompt"] = steady

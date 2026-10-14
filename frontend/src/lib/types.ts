@@ -319,9 +319,35 @@ export interface Shot {
   camera_rack?: CameraSetting
   // contract-v25: {character_id: sheet panel} picked by hand over the automatic reference
   ref_panels?: Record<string, string>
+  // contract-v26: spoken in each character's voice and lip-synced; the notice names speakers without a voice
+  dialogue?: DialogueLine[]
+  dialogue_notice?: string | null
 
   created_at: string
   updated_at: string
+}
+
+// contract-v26-character-voices.md
+export interface DialogueLine {
+  character_id: string
+  text: string
+  pause_after_s?: number | null
+}
+
+export interface CharacterVoiceDesign {
+  character: Character
+  voice: Voice
+  description: string
+  understood: string[]
+  ignored: string[]
+}
+
+export interface TestClip {
+  item: MediaItem | null
+  text: string
+  panel?: string | null
+  job?: Job | null
+  speech_jobs?: Job[]
 }
 
 export interface ShotActivity {
@@ -352,6 +378,7 @@ export type ShotPatch = Partial<
     | 'brand_placements'
     | 'camera_rack'
     | 'ref_panels'
+    | 'dialogue'
   >
 >
 

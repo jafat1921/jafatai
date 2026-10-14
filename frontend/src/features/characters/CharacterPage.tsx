@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, Download, IdCard, ImageIcon, LayoutGrid, Mic, Trash2 } from 'lucide-react'
+import { ArrowLeft, Clapperboard, Download, IdCard, ImageIcon, LayoutGrid, Mic, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,6 +13,7 @@ import { announce } from '@/stores/ui'
 import { PortraitSection } from './PortraitSection'
 import { ProfileForm } from './ProfileForm'
 import { SheetTab } from './SheetTab'
+import { TestClipTab } from './TestClipTab'
 import { VoiceTab } from './VoiceTab'
 
 function deleteText(c: Character) {
@@ -97,6 +98,10 @@ export function CharacterPage() {
               <Mic aria-hidden />
               Voice
             </TabsTrigger>
+            <TabsTrigger value="test-clip">
+              <Clapperboard aria-hidden />
+              Test clip
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="profile">
             <ProfileForm character={c} />
@@ -110,7 +115,10 @@ export function CharacterPage() {
             <SheetTab character={c} />
           </TabsContent>
           <TabsContent value="voice">
-            <VoiceTab key={c.voice_id ?? ''} character={c} />
+            <VoiceTab character={c} />
+          </TabsContent>
+          <TabsContent value="test-clip">
+            <TestClipTab character={c} />
           </TabsContent>
         </Tabs>
       </div>

@@ -643,6 +643,39 @@ def _char_ids(names: list[str], chars: list[Character]) -> list[str]:
     return out
 
 
+def has_dialogue(scene: Scene) -> bool:
+    return any(kind == "dialogue" for kind, _, _ in sb.screenplay_lines(scene.script_text or ""))
+
+
+def _dialogue_rows(ideas, chars: list[Character], cast_ids: list[str]) -> list[dict]:
+    """The planner's lines as shot.dialogue rows (contract v26). A line nobody in the cast speaks (narration,
+    a voice-over) can't be lip-synced and is left out; a speaker missing from the shot's cast is added."""
+    from app.shot_speech import LINE_MAX, MAX_LINES
+
+    rows = []
+    for d in ideas or []:
+        text = " ".join((d.text or "").split())
+        ids = _char_ids([d.character], chars) if text else []
+        if not ids:
+            continue
+        rows.append({"character_id": ids[0], "text": text[:LINE_MAX]})
+        if ids[0] not in cast_ids:
+            cast_ids.append(ids[0])
+    return rows[:MAX_LINES]
+
+
+def _mark_dialogue(run: "AiRun", plans: list[dict], frac: float) -> None:
+    """The verified aerab pass over the planned lines; the planner was asked for the marks already."""
+    rows = [r for p in plans for r in p.get("dialogue") or []]
+    if not rows or not aerab.applies(None, "\n".join(r["text"] for r in rows)):
+        return
+    run.ctx.progress(frac, "Adding aerab to the dialogue…")
+    done = aerab.finish_lines_sync([r["text"] for r in rows], what="shot dialogue",
+                                   tick=lambda: run.ctx.progress(frac, "Adding aerab to the dialogue…"))
+    for r, text in zip(rows, done):
+        r["text"] = text
+
+
 def _closing_id(db: Session, project_id: str) -> str | None:
     return bm.closing_record(db.get(Project, project_id)).get("shot_id")
 
@@ -660,6 +693,7 @@ def replace_shots(db: Session, scene: Scene, plans: list[dict], *, source: str =
                     **{k: plan[k] for k in PLAN_FIELDS if plan.get(k) is not None})
         shot.character_ids = list(plan.get("character_ids") or [])
         shot.brand_placements = list(plan.get("brand_placements") or [])
+        shot.dialogue = list(plan.get("dialogue") or [])
         shots.append(shot)
     db.add_all(shots)
     db.flush()
@@ -701,23 +735,29 @@ def _previous_scene(db: Session, scene: Scene) -> Scene | None:
 
 
 def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_shots: int, frac: float,
-                first_seam: str = "cut") -> list[dict]:
+                first_seam: str = "cut", dialogue: bool = True) -> list[dict]:
     chars = _characters(db, project.id)
     kit = bm.project_kit(db, project)
+    talk = dialogue and has_dialogue(scene)
     ideas = run.call(f"Planning shots for {scene.heading or 'the scene'}", frac, "reasoning",
                      P.suggest_shots_messages(project, chars, scene, max_shots, _previous_scene(db, scene),
-                                              brand=bm.planner_brief(kit) if kit else ""),
+                                              brand=bm.planner_brief(kit) if kit else "", dialogue=talk),
                      schema=P.ShotList, temperature=0.5, max_tokens=5000).data.shots[:max_shots]
     plans = []
     for i, idea in enumerate(ideas):
         seam = first_seam if i == 0 else ("continue" if idea.continuous else "cut")
+        cast_ids = _char_ids(idea.characters, chars)
         plans.append({
             "shot_type": idea.shot_type, "duration_s": idea.duration_s, "description": idea.description.strip(),
-            "camera": idea.camera.strip()[:300], "character_ids": _char_ids(idea.characters, chars),
-            "location_id": scene.location_id, "seam_in": seam, "handoff_text": idea.handoff.strip() if i else "",
+            "camera": idea.camera.strip()[:300], "location_id": scene.location_id, "seam_in": seam,
+            "handoff_text": idea.handoff.strip() if i else "",
             "start_prompt": _text(idea.start_visual), "end_prompt": _text(idea.end_visual), "motion_prompt": "",
             "brand_placements": bm.placements_from(kit, idea.brand_placements) if kit else [],
+            "dialogue": _dialogue_rows(idea.dialogue, chars, cast_ids) if talk else [],
+            "character_ids": cast_ids,
         })
+    if talk:
+        _mark_dialogue(run, plans, frac)
     return plans
 
 
@@ -866,25 +906,32 @@ def queue_frames(db: Session, shot: Shot) -> list:
     return gens
 
 
-def _scene_plan(run: AiRun, db: Session, project: Project, scene: Scene, frac: float, seam: str) -> dict:
+def _scene_plan(run: AiRun, db: Session, project: Project, scene: Scene, frac: float, seam: str,
+                dialogue: bool = True) -> dict:
     chars = _characters(db, project.id)
     location = db.get(Location, scene.location_id) if scene.location_id else None
     duration = sb.script_duration(scene.script_text)
     kit = bm.project_kit(db, project)
+    talk = dialogue and has_dialogue(scene)
     d: P.SceneFrames = run.call(
         f"Writing first and last frames for {scene.heading or 'the scene'}", frac, "creative",
         P.scene_frames_messages(project, chars, scene, location, duration, _previous_scene(db, scene),
-                                brand=bm.planner_brief(kit) if kit else ""),
+                                brand=bm.planner_brief(kit) if kit else "", dialogue=talk),
         schema=P.SceneFrames, temperature=0.5, max_tokens=1800,
     ).data
-    return {
+    cast_ids = _char_ids(d.characters, chars)
+    plan = {
         "shot_type": d.shot_type, "duration_s": duration,
         "description": (d.description or scene.logline or scene.summary).strip(),
-        "camera": d.camera.strip()[:300], "character_ids": _char_ids(d.characters, chars),
-        "location_id": scene.location_id, "seam_in": seam, "handoff_text": "",
+        "camera": d.camera.strip()[:300], "location_id": scene.location_id, "seam_in": seam, "handoff_text": "",
         "start_prompt": _text(d.start_prompt), "end_prompt": _text(d.end_prompt), "motion_prompt": _text(d.motion_prompt),
         "brand_placements": bm.placements_from(kit, d.brand_placements) if kit else [],
+        "dialogue": _dialogue_rows(d.dialogue, chars, cast_ids) if talk else [],
+        "character_ids": cast_ids,
     }
+    if talk:
+        _mark_dialogue(run, [plan], frac)
+    return plan
 
 
 def handle_storyboard(ctx) -> dict:
@@ -911,10 +958,13 @@ def handle_storyboard(ctx) -> dict:
             done["skipped_scene_ids"].append(scene.id)
             continue
         seam = "continue" if chain else "cut"
+        # contract v26: the planner hands each shot its spoken lines unless the film has no dialogue
+        talk = p.get("dialogue", True) is not False
         if mode == "shots":
-            plans = _plan_shots(run, db, project, scene, int(p.get("max_shots") or 6), frac, first_seam=seam)
+            plans = _plan_shots(run, db, project, scene, int(p.get("max_shots") or 6), frac, first_seam=seam,
+                                dialogue=talk)
         else:
-            plans = [_scene_plan(run, db, project, scene, frac, seam)]
+            plans = [_scene_plan(run, db, project, scene, frac, seam, dialogue=talk)]
         shots, sug = apply_shot_plan(db, scene, plans, action="storyboard", job_id=job.id)
         if sug:
             done["suggestion_ids"].append(sug)

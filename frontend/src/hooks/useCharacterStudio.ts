@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { BoardLayout, Character, CharacterSheet, SheetRequest, SheetTextPatch } from '@/lib/types'
+import type { BoardLayout, Character, CharacterSheet, SheetRequest, SheetTextPatch, TestClip } from '@/lib/types'
 import { qk } from './keys'
 import { upsertGeneration } from './useGenerations'
+import { upsertJob } from './useJobs'
 
 // contract-v25-character-sheets.md
 
@@ -121,5 +122,45 @@ export function useShotRefs(shotId: string | undefined, version?: string) {
     queryKey: [...qk.shotRefs(shotId ?? ''), version ?? ''],
     queryFn: () => api.shots.refs(shotId!),
     enabled: !!shotId,
+  })
+}
+
+// contract-v26-character-voices.md
+
+/** "Design a voice for this character": a new Voices entry from the profile, set as the character's voice. */
+export function useDesignCharacterVoice(id: string) {
+  const qc = useQueryClient()
+  const put = useCharacterCache()
+  return useMutation({
+    mutationFn: (body: { extra?: string } = {}) => api.characters.designVoice(id, body),
+    onSuccess: (res) => {
+      put(res.character)
+      qc.invalidateQueries({ queryKey: qk.voiceLists })
+    },
+  })
+}
+
+const CLIP_LIVE = new Set(['queued', 'generating'])
+
+/** The latest test clip; polled while its speech and its lip-synced render are still being made. */
+export function useTestClip(id: string) {
+  return useQuery({
+    queryKey: qk.testClip(id),
+    queryFn: () => api.characters.testClip(id),
+    refetchInterval: (q) => {
+      const status = (q.state.data as TestClip | undefined)?.item?.status
+      return status && CLIP_LIVE.has(status) ? 3000 : false
+    },
+  })
+}
+
+export function useMakeTestClip(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (text: string) => api.characters.makeTestClip(id, text),
+    onSuccess: (res) => {
+      qc.setQueryData(qk.testClip(id), res)
+      ;[res.job, ...(res.speech_jobs ?? [])].forEach((j) => j && upsertJob(qc, j))
+    },
   })
 }

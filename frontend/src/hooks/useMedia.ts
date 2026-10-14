@@ -52,6 +52,18 @@ export function useMediaItem(id: string | null | undefined) {
   return useQuery({ queryKey: qk.mediaItem(id ?? ''), queryFn: () => api.media.get(id!), enabled: !!id })
 }
 
+const LIVE_ITEM = new Set(['queued', 'generating'])
+
+/** useMediaItem that keeps asking while the item is still being made, for a preview that plays when it lands. */
+export function useLiveMediaItem(id: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.mediaItem(id ?? ''),
+    queryFn: () => api.media.get(id!),
+    enabled: !!id,
+    refetchInterval: (q) => (LIVE_ITEM.has(q.state.data?.status ?? '') ? 2000 : false),
+  })
+}
+
 // would the server have put this item in that list? (text and tag searches are left to the server)
 function belongs(filter: MediaFilter, item: MediaItem) {
   if (filter.q || filter.tag || filter.favourite) return false

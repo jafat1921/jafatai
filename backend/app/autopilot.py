@@ -773,7 +773,8 @@ class Autopilot:
             raise StageFailed("There's no script to storyboard")
         if any(not sb.scene_shots(db, s.id) for s in scenes):
             self.run_inline("ai_storyboard", {"project_id": project.id, "mode": "scene", "chain": True,
-                                              "generate_frames": False, "overwrite": False, "scene_ids": []},
+                                              "generate_frames": False, "overwrite": False, "scene_ids": [],
+                                              "dialogue": bool(self.p.get("dialogue", True))},
                             "Planning the shots")
             durations = (self.r.get("outline") or {}).get("durations") or {}
             cap = self.s.longtake_max_s

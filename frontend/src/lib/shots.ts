@@ -1,5 +1,5 @@
 import { isLongTakeDuration } from './duration'
-import type { Generation, Scene, Shot, ShotType, StoryboardRequest } from './types'
+import type { DialogueLine, Generation, Scene, Shot, ShotType, StoryboardRequest } from './types'
 
 export const SHOT_TYPES: { value: ShotType; label: string; disabled?: boolean }[] = [
   { value: 'establishing', label: 'Establishing' },
@@ -159,4 +159,12 @@ export function buildUnits(view: 'scenes' | 'shots', groups: SceneShots[], scene
     shotIndex: i,
     shotCount: g.shots.length,
   }))
+}
+
+// shot dialogue as the server stores it (contract-v26): blank lines dropped, spaces collapsed, no empty pause
+export function cleanLines(rows: DialogueLine[]): DialogueLine[] {
+  return rows
+    .map((r) => ({ ...r, text: r.text.split(/\s+/).filter(Boolean).join(' ') }))
+    .filter((r) => r.text)
+    .map((r) => (r.pause_after_s == null ? { character_id: r.character_id, text: r.text } : { character_id: r.character_id, text: r.text, pause_after_s: r.pause_after_s }))
 }

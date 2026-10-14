@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app import brand_moments as bm
 from app import cast, character_panels as cp
 from app import camera as cam
-from app import longtake
+from app import longtake, shot_speech
 from app import storyboard as sb
 from app.ai_jobs import active_job, enqueue_ai
 from app.config import get_settings
@@ -145,6 +145,14 @@ def patch_shot(shot_id: str, body: ShotPatch, db: Session = Depends(get_db), cur
         merged = {**(shot.ref_panels or {}), **picks}
         # a blank or "auto" pick goes back to the automatic choice
         shot.ref_panels = {k: v for k, v in merged.items() if v and v != "auto" and cp.panel(v) is not None}
+    if "dialogue" in changes:
+        lines = changes.pop("dialogue")
+        if lines is not None:
+            speakers = changes.get("character_ids") if changes.get("character_ids") is not None else shot.character_ids
+            new = shot_speech.clean_lines(lines, speakers)
+            if new != (shot.dialogue or []) and sb.has_gens(db, shot.id, ("take",)):
+                shot.stale = True
+            shot.dialogue = new
     if "beats" in changes:
         beats = changes.pop("beats")
         if beats is not None:
@@ -162,6 +170,8 @@ def patch_shot(shot_id: str, body: ShotPatch, db: Session = Depends(get_db), cur
         if value != getattr(shot, field):
             edited.add(field)
         setattr(shot, field, value)
+    if "character_ids" in edited:
+        shot_speech.keep_speakers(shot)
 
     # same lock rule as scenes: the user's words are never silently replaced by AI
     if edited & set(LOCK_FIELDS):
@@ -238,11 +248,14 @@ def _take_count(body: TakesIn | None, project: Project, long: bool) -> int:
     return 1 if long else project.takes_per_shot
 
 
-def _queue_takes(db: Session, shot: Shot, count: int, duration_s: float | None = None,
+def _queue_takes(db: Session, shot: Shot, count: int, cur: CurrentUser, duration_s: float | None = None,
                  render: dict | None = None) -> list[Job]:
     params = {"duration_s": duration_s} if duration_s else {}
     params.update({k: v for k, v in (render or {}).items() if v is not None})
     prompt, params = sb.prepare_shot_generation(db, shot, "take", "", params)
+    # the shot's lines are spoken first and shared by every take (contract v26)
+    shot_speech.queue_lines(db, cur, params)
+    params["created_by"] = {"user_id": cur.id, "flow": "shot_take"}
     jobs = []
     for _ in range(count):
         # one seed each, queued back to back so LTX stays loaded between them
@@ -266,7 +279,7 @@ def queue_takes(shot_id: str, body: TakesIn | None = None, db: Session = Depends
         return [job_out(db.get(Job, g.job_id))] if g.job_id else []
     duration = (body.duration_s if body else None) or shot.duration_s
     count = _take_count(body, db.get(Project, shot.project_id), longtake.is_long(duration))
-    jobs = _queue_takes(db, shot, count, duration, _render_choice(body))
+    jobs = _queue_takes(db, shot, count, cur, duration, _render_choice(body))
     db.commit()
     return [job_out(j) for j in jobs]
 
@@ -292,7 +305,7 @@ def render_scene(scene_id: str, body: TakesIn | None = None, db: Session = Depen
             if long:
                 # a scene-wide HQ request shouldn't 422 because one shot is a long take
                 render = {}
-            jobs += _queue_takes(db, shot, count, render=render)
+            jobs += _queue_takes(db, shot, count, cur, render=render)
     if not jobs:
         raise HTTPException(409, "No shot in this scene has an approved START frame yet")
     db.commit()
@@ -413,7 +426,8 @@ def rerender_shot(shot_id: str, body: ShotRerenderIn | None = None, db: Session 
     _, nxt = sb.neighbours(db, shot)
     if body.what == "takes":
         project = db.get(Project, shot.project_id)
-        jobs = _queue_takes(db, shot, _take_count(TakesIn(count=body.count), project, longtake.is_long(shot.duration_s)))
+        jobs = _queue_takes(db, shot, _take_count(TakesIn(count=body.count), project, longtake.is_long(shot.duration_s)),
+                            cur)
         linked = None
     else:
         prev, _ = sb.neighbours(db, shot)

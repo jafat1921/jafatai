@@ -314,6 +314,13 @@ def handle_generate(ctx: JobContext) -> dict:
 
         run_in_job(ctx, gen)
 
+    if gen.kind in ("take", "video") and ((gen.params or {}).get("dialogue") or {}).get("status") == "pending":
+        # character voices (contract v26): the lines are spoken and laid on a track first, or the take
+        # goes back to the queue until they are
+        from app import shot_speech
+
+        shot_speech.run_in_job(ctx, gen)
+
     if get_settings().urdu_aerab and (gen.kind in VIDEO_KINDS or gen.kind in ("song", "speech")):
         _add_aerab(ctx, gen)
 

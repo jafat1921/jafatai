@@ -429,6 +429,10 @@ class ShotOut(Out):
     camera_rack: dict[str, Any] = {}
     # M12a: {character_id: sheet panel key} picked by hand over the automatic reference choice
     ref_panels: dict[str, str] = {}
+    # contract v26: [{character_id, text, pause_after_s?}], spoken in each character's voice and lip-synced;
+    # the notice says when a speaker has no voice, so the take falls back to the video model's own audio
+    dialogue: list[dict[str, Any]] = []
+    dialogue_notice: str | None = None
     # P3 shot cards: generations in flight and kinds whose newest try failed ({id, kind, status, job_id, version})
     activity: list[dict[str, Any]] = []
     created_at: Utc
@@ -477,6 +481,14 @@ class ShotPatch(BaseModel):
     brand_placements: list["BrandPlacement"] | None = Field(None, max_length=12)
     # contract v25: {character_id: panel key}; "auto" or "" goes back to the automatic pick
     ref_panels: dict[str, str] | None = None
+    # contract v26: the whole list of lines; each speaker must be one of the shot's characters
+    dialogue: list["DialogueLineIn"] | None = Field(None, max_length=12)
+
+
+class DialogueLineIn(BaseModel):
+    character_id: str = Field(max_length=36)
+    text: str = Field(max_length=600)
+    pause_after_s: float | None = Field(None, ge=0, le=10)
 
 
 class BrandPlacement(BaseModel):
@@ -1288,3 +1300,32 @@ class SpeakOut(BaseModel):
     # OmniVoice design: the attributes it was given, and the words of the description it can't use
     understood: list[str] | None = None
     ignored: list[str] | None = None
+
+
+# character voices (contract v26)
+class CharacterVoiceDesignIn(BaseModel):
+    # words added to what the profile says, e.g. "deep, slow"
+    extra: str = Field("", max_length=200)
+    language: LangCode | None = None
+    name: str | None = Field(None, min_length=1, max_length=120)
+
+
+class CharacterVoiceDesignOut(BaseModel):
+    character: CharacterOut
+    voice: VoiceOut
+    # what was read from the profile, and how OmniVoice took it
+    description: str
+    understood: list[str] = []
+    ignored: list[str] = []
+
+
+class TestClipIn(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+
+
+class TestClipOut(BaseModel):
+    item: MediaItemOut | None = None
+    text: str = ""
+    panel: str | None = None
+    job: JobOut | None = None
+    speech_jobs: list[JobOut] = []

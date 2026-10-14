@@ -73,7 +73,7 @@ def speaker_embed(src: Path, spans: list[tuple[float, float]], progress, lane: s
 def speak_many(params: dict, texts: list[str], outs: list[Path], seed: int | None, progress,
                lane: str | None = None, run=None) -> list[float]:
     """Every line of one voice in one runner call; each comes back as its own FLAC."""
-    e = voices.get_engine(params.get("engine") or voices.DEFAULT_ENGINE)
+    e = voices.get_engine(params.get("engine") or voices.default_engine())
     work = outs[0].parent / f".batch-{outs[0].stem}"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)

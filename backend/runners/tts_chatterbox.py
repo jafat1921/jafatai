@@ -25,8 +25,12 @@ def run(job: dict) -> dict:
     if job.get("ref_audio"):
         kw["audio_prompt_path"] = job["ref_audio"]
 
-    def synth(text):
-        rio.seed_all(job.get("seed"))
+    def synth(text, seg=None):
+        # a story batch (per_segment) carries each line's own seed and emotion intensity
+        seg = seg or {}
+        rio.seed_all(seg.get("seed", job.get("seed")))
+        if seg.get("exaggeration") is not None:
+            return model.generate(text, **{**kw, "exaggeration": float(seg["exaggeration"])})
         return model.generate(text, **kw)
 
     return rio.speak_all(job, synth, lambda: int(model.sr))

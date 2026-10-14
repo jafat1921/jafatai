@@ -240,7 +240,7 @@ def speech_estimate(*, model: str | None = None, count: int = 1, chars: int | No
                     duration_s: float | None = None) -> dict:
     from app import voices
 
-    engine = voices.DEFAULT_ENGINE if not model or model == "auto" else model
+    engine = voices.default_engine() if not model or model == "auto" else model
     if engine not in voices.ENGINES:
         raise HTTPException(422, f"'{model}' isn't a speech engine")
     if chars is None:

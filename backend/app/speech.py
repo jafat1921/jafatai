@@ -85,7 +85,7 @@ def runner_job(params: dict, e: voices.Engine, texts: list[str], work: Path, see
 
 def synthesise(params: dict, seed: int | None, out_path: Path, progress_cb: ProgressCallback,
                lane: str | None = None, run=None) -> DriverResult:
-    e = voices.get_engine(params.get("engine") or voices.DEFAULT_ENGINE)
+    e = voices.get_engine(params.get("engine") or voices.default_engine())
     text = params.get("text") or ""
     segs = voices.segments(text, e)
     texts = [str(v) for k, v in segs if k == "text"]

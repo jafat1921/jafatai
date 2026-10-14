@@ -390,7 +390,7 @@ def design_voice(character_id: str, body: CharacterVoiceDesignIn | None = None, 
     v = VoiceProfile(workspace_id=cur.workspace_id, name=(body.name or f"{c.name}'s voice").strip()[:120],
                      kind="design", language=(body.language or _profile_language(c.profile)).lower(),
                      notes=f"Designed for {c.name} from their profile: {raw}"[:2000], gender_hint=gender, uses=0,
-                     design=voices.clean_design({"description": ins.text, "engine": "omnivoice"}))
+                     design=voices.clean_design({"description": ins.text, "engine": voices.default_engine()}))
     db.add(v)
     db.flush()
     c.voice_id = v.id

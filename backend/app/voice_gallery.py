@@ -111,8 +111,17 @@ def catalogue() -> dict[str, dict]:
     return {v["id"]: v for v in raw()}
 
 
+def available(v: dict) -> bool:
+    # OmniVoice voices go when its non-commercial weights are switched off
+    from app import voices as vc
+
+    e = vc.ENGINES.get(v.get("engine") or "")
+    return e is not None and vc.allowed(e)
+
+
 def get(gallery_id: str) -> dict | None:
-    return catalogue().get(gallery_id)
+    v = catalogue().get(gallery_id)
+    return v if v is not None and available(v) else None
 
 
 def parse(voice_id: str | None) -> str | None:
@@ -183,7 +192,7 @@ def _matches_q(v: dict, q: str) -> bool:
 
 def search(q: str | None = None, **filters: str | None) -> dict:
     """{items, total, facets}; each facet counts with every other filter applied."""
-    rows = [v for v in catalogue().values() if not q or _matches_q(v, q)]
+    rows = [v for v in catalogue().values() if available(v) and (not q or _matches_q(v, q))]
     wanted = {k: (val or "").strip().lower() for k, val in filters.items() if k in FACETS and val}
 
     def keep(v, skip=None):

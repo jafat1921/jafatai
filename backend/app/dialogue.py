@@ -597,7 +597,7 @@ def queue_render(db: Session, cur, s: VoiceScript, line_ids: list[str] | None) -
         item.tags = [take_tag(s.id)]
         g = db.get(Generation, item.generation_id)
         params = {**(g.params or {}), "script": {"script_id": s.id, "line_id": ln["id"]}}
-        if emotion and engine != "chatterbox" and "design" in vc.ENGINES.get(engine, vc.ENGINES[vc.DEFAULT_ENGINE]).features:
+        if emotion and engine != "chatterbox" and "design" in vc.ENGINES.get(engine, vc.default()).features:
             params["emotion"] = emotion
         g.params = params
         row = by_id[ln["id"]]

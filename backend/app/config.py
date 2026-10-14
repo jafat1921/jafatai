@@ -86,8 +86,9 @@ class Settings(BaseSettings):
     image_upscale_max_mp: float = 8.4  # redraw / faithful image outputs; 3840x2160 is 8.3
     # SUPIR weights are non-commercial only; the owner turns this on for private/research use
     photo_allow_noncommercial: bool = False
-    # MiniMax-Music3 has its own community licence (revenue cap), so it stays hidden until the owner opts in
-    audio_allow_noncommercial: bool = False
+    # MiniMax-Music3 (revenue-capped community licence) and OmniVoice (CC-BY-NC weights). On while the owner
+    # tests; false hides both, refuses them with a 422 and makes VoxCPM2 the default speech engine
+    audio_allow_noncommercial: bool = True
     # aerab for Arabic-script languages (contract v23): the master switch keeps its old name so existing
     # .env files carry on; aerab_languages says which languages it covers
     urdu_aerab: bool = True

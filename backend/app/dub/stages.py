@@ -249,7 +249,7 @@ def _mark_lines(ctx, dub: DubProject, segs: list[dict], ids: list[str], lang: st
 def default_design(dub: DubProject, spk: dict) -> dict:
     # a stable made-up voice per speaker until the user casts one, so a speaker never changes voice mid-film
     return {"description": "A clear, natural adult voice with a neutral accent",
-            "seed": zlib.crc32(f"{dub.id}:{spk['id']}".encode()) % 2**31, "engine": voices.DEFAULT_ENGINE}
+            "seed": zlib.crc32(f"{dub.id}:{spk['id']}".encode()) % 2**31, "engine": voices.default_engine()}
 
 
 def stage_cast(ctx, dub: DubProject, run: dict) -> dict:
@@ -303,7 +303,7 @@ def _voice(db, dub: DubProject, voice_id: str | None, spk: dict, lang: str) -> t
 
 
 def _spoken(text: str, engine: str) -> str:
-    e = voices.ENGINES.get(engine, voices.ENGINES[voices.DEFAULT_ENGINE])
+    e = voices.ENGINES.get(engine, voices.default())
     return " ".join(str(v) for k, v in voices.segments(text, e) if k == "text")
 
 

@@ -150,8 +150,10 @@ def visible_len(text: str) -> int:
     return sum(1 for ch in text if not aerab.is_mark(ch) and unicodedata.category(ch) not in _HIDDEN)
 
 
-def width_for(language: str | None, text: str = "") -> int:
-    return NASTALIQ_CHARS if font_for(language, text) == NASTALIQ else MAX_CHARS
+def width_for(language: str | None, text: str = "", chars: int | None = None) -> int:
+    # `chars` narrows the Latin line (a 9:16 frame); Nastaliq keeps its usual ratio to it
+    chars = chars or MAX_CHARS
+    return NASTALIQ_CHARS * chars // MAX_CHARS if font_for(language, text) == NASTALIQ else chars
 
 
 def wrap(text: str, width: int | None = None, language: str | None = None) -> list[str] | None:
@@ -172,12 +174,12 @@ def wrap(text: str, width: int | None = None, language: str | None = None) -> li
     return best[1] if best else None
 
 
-def lines_for(text: str, language: str | None = None) -> list[str]:
+def lines_for(text: str, language: str | None = None, chars: int | None = None) -> list[str]:
     """`wrap`, or a greedy split when the cue is too long for two lines (better three lines than lost words)."""
-    got = wrap(text, language=language)
+    width = width_for(language, text, chars)
+    got = wrap(text, width, language=language)
     if got:
         return got
-    width = width_for(language, text)
     out, cur = [], ""
     for word in text.split():
         cand = f"{cur} {word}".strip()
@@ -234,8 +236,8 @@ def soft_track_args(index: int, language: str, title: str) -> list[str]:
 
 # ---------------------------------------------------------------- ASS
 
-def line_px(family: str, height: int) -> int:
-    return max(12, round(height * SIZE.get(family, DEFAULT_SIZE)))
+def line_px(family: str, height: int, scale: float = 1.0) -> int:
+    return max(12, round(height * SIZE.get(family, DEFAULT_SIZE) * scale))
 
 
 def _ass_time(t: float) -> str:
@@ -251,8 +253,8 @@ def ass_escape(text: str) -> str:
     return text.replace("\\", "\\\u2060").replace("{", "\\{").replace("}", "\\}")
 
 
-def _style(family: str, width: int, height: int) -> str:
-    size = line_px(family, height)
+def _style(family: str, width: int, height: int, scale: float = 1.0) -> str:
+    size = line_px(family, height, scale)
     box = f"&H{BOX_ALPHA:02X}000000"
     # Encoding -1 lets libass find each line's base direction, so a full stop lands at the left end of Urdu
     enc = -1 if family in (NASTALIQ, NASKH) else 1
@@ -261,7 +263,8 @@ def _style(family: str, width: int, height: int) -> str:
             f"{round(height * MARGIN_V)},{enc}")
 
 
-def ass_text(cues, width: int, height: int, language: str | None = None) -> str:
+def ass_text(cues, width: int, height: int, language: str | None = None, scale: float = 1.0,
+             chars: int | None = None) -> str:
     items = as_cues(cues)
     families = sorted({font_for(language, c.text) for c in items} or {LATIN})
     out = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}", "WrapStyle: 2",
@@ -269,12 +272,12 @@ def ass_text(cues, width: int, height: int, language: str | None = None) -> str:
            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, "
            "Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
            "Alignment, MarginL, MarginR, MarginV, Encoding"]
-    out += [_style(f, width, height) for f in families]
+    out += [_style(f, width, height, scale) for f in families]
     out += ["", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
     for c in items:
         fam = font_for(language, c.text)
         # logical order: libass runs FriBidi itself, pre-reversed text would come out backwards
-        text = "\\N".join(ass_escape(ln) for ln in lines_for(c.text, language))
+        text = "\\N".join(ass_escape(ln) for ln in lines_for(c.text, language, chars))
         name = (c.speaker or "").replace(",", " ")
         out.append(f"Dialogue: 0,{_ass_time(c.start)},{_ass_time(c.end)},{_STYLE_NAMES[fam]},{name},0,0,0,,{text}")
     return "\n".join(out) + "\n"
@@ -333,8 +336,9 @@ def _out_args(dst: Path, encode: list[str] | None) -> list[str]:
     return ["-map", "0:a?", *(encode or VIDEO_REENCODE), "-c:a", "copy", *tail, str(dst)]
 
 
-def _burn_ass(src: Path, dst: Path, items, language, width, height, work: Path, timeout, encode) -> None:
-    (work / "subs.ass").write_text(ass_text(items, width, height, language), encoding="utf-8")
+def _burn_ass(src: Path, dst: Path, items, language, width, height, work: Path, timeout, encode, scale=1.0,
+              chars=None) -> None:
+    (work / "subs.ass").write_text(ass_text(items, width, height, language, scale, chars), encoding="utf-8")
     _, shaping = ass_support()
     # a bare file name in the working dir dodges the escaping a Windows path would need
     vf = "ass=filename=subs.ass"
@@ -362,11 +366,12 @@ def _metrics(font) -> tuple[int, int]:
     return lh, max(4, round(lh * 0.22))
 
 
-def _layout(c: Cue, language: str | None, width: int, height: int, probe: ImageDraw.ImageDraw):
+def _layout(c: Cue, language: str | None, width: int, height: int, probe: ImageDraw.ImageDraw, scale: float = 1.0,
+            chars: int | None = None):
     fam = font_for(language, c.text)
     path = font_file(fam)
-    px = line_px(fam, height)
-    lines = lines_for(c.text, language)
+    px = line_px(fam, height, scale)
+    lines = lines_for(c.text, language, chars)
     while True:
         font = _pil_font(str(path) if path else None, px)
         _, pad = _metrics(font)
@@ -400,9 +405,9 @@ def cue_image(lines: tuple[str, ...] | list[str], font, width: int, strip_h: int
 
 
 def _burn_pillow(src: Path, dst: Path, items: list[Cue], language, width, height, work: Path, timeout,
-                 encode) -> None:
+                 encode, scale=1.0, chars=None) -> None:
     probe = ImageDraw.Draw(Image.new("RGBA", (8, 8)))
-    laid = [_layout(c, language, width, height, probe) for c in items]
+    laid = [_layout(c, language, width, height, probe, scale, chars) for c in items]
     strip_h = max(_metrics(font)[0] * len(lines) + 2 * _metrics(font)[1] for _, font, lines in laid)
     strip_h += strip_h % 2
     Image.new("RGBA", (width, strip_h), (0, 0, 0, 0)).save(work / "blank.png")
@@ -443,8 +448,10 @@ def _burn_pillow(src: Path, dst: Path, items: list[Cue], language, width, height
 # ---------------------------------------------------------------- the one entry point
 
 def burn(src_video: Path, dst: Path, cues, *, language: str | None = None, width: int | None = None,
-         height: int | None = None, timeout: int = 7200, encode: list[str] | None = None) -> dict:
-    """Burn `cues` into `src_video`, writing `dst`; the audio is copied untouched.
+         height: int | None = None, timeout: int = 7200, encode: list[str] | None = None, scale: float = 1.0,
+         chars: int | None = None) -> dict:
+    """Burn `cues` into `src_video`, writing `dst`; the audio is copied untouched. `scale` sizes the type
+    against the usual and `chars` caps a line (story videos: bigger captions, a narrower line on 9:16).
 
     Returns {"renderer": "ass" | "pillow" | "none", "fonts_missing": [family, ...]}.
     """
@@ -465,12 +472,12 @@ def burn(src_video: Path, dst: Path, cues, *, language: str | None = None, width
     try:
         if renderer == "ass":
             try:
-                _burn_ass(src, dst, items, language, width, height, work, timeout, encode)
+                _burn_ass(src, dst, items, language, width, height, work, timeout, encode, scale, chars)
             except BurnError as e:
                 log.warning("libass couldn't burn the subtitles, drawing them with Pillow: %s", e)
                 renderer = "pillow"
         if renderer == "pillow":
-            _burn_pillow(src, dst, items, language, width, height, work, timeout, encode)
+            _burn_pillow(src, dst, items, language, width, height, work, timeout, encode, scale, chars)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     return {"renderer": renderer, "fonts_missing": missing}

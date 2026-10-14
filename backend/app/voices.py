@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import library as lib, voice_gallery
+from app.config import get_settings
 from app.models import Generation, Job, MediaItem, VoiceProfile, new_id, utcnow
 from app.services import enqueue_generation, generation_file, job_out, media_url, new_seed
 
@@ -67,6 +68,8 @@ class Engine:
     note: str = ""
     default_for: tuple[str, ...] = ()
     presets: tuple[Preset, ...] = field(default_factory=tuple)
+    # weights that may not be used commercially: hidden and refused unless AUDIO_ALLOW_NONCOMMERCIAL
+    noncommercial: bool = False
 
 
 # every Kokoro voice, from the gallery catalogue (contract v19), so the two lists can't drift apart
@@ -74,11 +77,13 @@ KOKORO_PRESETS = tuple(Preset(v["preset"], v["name"], v["languages"][0], v["gend
                        for v in voice_gallery.kokoro_rows())
 
 ENGINES: dict[str, Engine] = {e.id: e for e in (
-    Engine("omnivoice", "OmniVoice", ("clone", "design", "tags"), tuple(LANG_NAMES), "Apache-2.0",
+    # the code is Apache-2.0 but the model card puts the pre-trained weights under CC-BY-NC
+    Engine("omnivoice", "OmniVoice", ("clone", "design", "tags"), tuple(LANG_NAMES),
+           "CC-BY-NC (weights, non-commercial); code Apache-2.0",
            "tts-omnivoice", "tts_omnivoice", 6.0, tags=frozenset({"laughter", "sigh"}), native_speed=True,
            native_duration=True, open_languages=True,
            note="Speaks 600+ languages; the list shows the common ones and any other language code works.",
-           default_for=("ur", "pa", "sd", "ps")),
+           default_for=("ur", "pa", "sd", "ps"), noncommercial=True),
     Engine("voxcpm", "VoxCPM2", ("clone", "design"),
            ("zh", "ja", "ko", "my", "id", "km", "lo", "ms", "tl", "th", "vi", "ar", "he", "hi", "tr", "da", "nl",
             "en", "fi", "fr", "de", "el", "it", "no", "pl", "pt", "ru", "es", "sv", "sw"),
@@ -91,6 +96,8 @@ ENGINES: dict[str, Engine] = {e.id: e for e in (
            "Apache-2.0", "tts-kokoro", "tts_kokoro", 1.0, native_speed=True, presets=KOKORO_PRESETS),
 )}
 DEFAULT_ENGINE = "omnivoice"
+# what "auto" falls back to when OmniVoice is switched off
+COMMERCIAL_DEFAULT = "voxcpm"
 WHISPER = {"venv": "stt-whisperx", "runner": "stt_whisper", "vram_gb": 5.0}
 KOKORO_DEFAULT = {"en": "af_heart", "es": "ef_dora", "fr": "ff_siwis", "hi": "hf_alpha", "it": "if_sara",
                   "ja": "jf_alpha", "pt": "pf_dora", "zh": "zf_xiaobei"}
@@ -119,9 +126,23 @@ class VoiceError(ValueError):
     pass
 
 
+def allowed(e: Engine) -> bool:
+    return not e.noncommercial or get_settings().audio_allow_noncommercial
+
+
+def default_engine() -> str:
+    return DEFAULT_ENGINE if allowed(ENGINES[DEFAULT_ENGINE]) else COMMERCIAL_DEFAULT
+
+
+def default() -> Engine:
+    return ENGINES[default_engine()]
+
+
 def engine_out(e: Engine) -> dict:
     out = {"id": e.id, "label": e.label, "features": list(e.features),
            "languages": [{"code": c, "name": lang_name(c)} for c in e.languages], "licence": e.licence}
+    if e.noncommercial:
+        out["noncommercial"] = True
     if e.note:
         out["note"] = e.note
     if e.default_for:
@@ -132,13 +153,17 @@ def engine_out(e: Engine) -> dict:
 
 
 def engines_out() -> list[dict]:
-    return [engine_out(e) for e in ENGINES.values()]
+    return [engine_out(e) for e in ENGINES.values() if allowed(e)]
 
 
 def get_engine(engine_id: str) -> Engine:
     e = ENGINES.get(engine_id)
     if e is None:
-        raise VoiceError(f"Unknown speech engine '{engine_id}' (expected {', '.join(ENGINES)} or auto)")
+        names = ", ".join(x.id for x in ENGINES.values() if allowed(x))
+        raise VoiceError(f"Unknown speech engine '{engine_id}' (expected {names} or auto)")
+    if not allowed(e):
+        raise VoiceError(f"{e.label} is turned off on this server: its weights are CC-BY-NC, which rules out "
+                         "commercial use (the owner can allow it with AUDIO_ALLOW_NONCOMMERCIAL)")
     return e
 
 
@@ -147,14 +172,14 @@ def kokoro_preset(voice: str) -> Preset | None:
 
 
 def _who_can(feature: str) -> str:
-    names = [e.label for e in ENGINES.values() if feature in e.features]
+    names = [e.label for e in ENGINES.values() if feature in e.features and allowed(e)]
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
 
 
 def check_language(e: Engine, language: str) -> None:
     if language in e.languages or e.open_languages:
         return
-    best = next((x.label for x in ENGINES.values() if language in x.languages), ENGINES[DEFAULT_ENGINE].label)
+    best = next((x.label for x in ENGINES.values() if language in x.languages and allowed(x)), default().label)
     raise VoiceError(f"{e.label} doesn't speak {lang_name(language)}. Use {best}.")
 
 
@@ -165,9 +190,9 @@ def resolve_engine(requested: str | None, voice: VoiceProfile | None, design: di
         e = get_engine((voice.preset or {}).get("engine") or "kokoro")
     elif voice is not None and voice.kind == "design":
         # a designed voice is a description *and* a seed for one engine; another engine is another voice
-        e = get_engine((voice.design or {}).get("engine") or DEFAULT_ENGINE)
+        e = get_engine((voice.design or {}).get("engine") or default_engine())
     else:
-        e = ENGINES[DEFAULT_ENGINE]
+        e = default()
     if voice is not None:
         need = {"clone": "clone", "design": "design", "preset": "preset_voices"}[voice.kind]
         if need not in e.features:
@@ -300,7 +325,7 @@ def clean_design(design: dict | None) -> dict:
     desc = " ".join(str(d.get("description") or "").split())
     if not desc:
         raise HTTPException(422, "A designed voice needs a description")
-    engine = d.get("engine") or DEFAULT_ENGINE
+    engine = d.get("engine") or default_engine()
     try:
         if "design" not in get_engine(engine).features:
             raise VoiceError(f"{get_engine(engine).label} can't design a voice. Use {_who_can('design')}.")

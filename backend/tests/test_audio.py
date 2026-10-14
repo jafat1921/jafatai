@@ -135,7 +135,9 @@ def test_each_kind_gets_its_default_model_and_count_makes_takes(client, kind, mo
     assert len(rows) == 2 and all(x["media_type"] == "audio/flac" for x in rows)
 
 
-def test_generate_errors_are_readable(client, db):
+def test_generate_errors_are_readable(client, db, monkeypatch):
+    monkeypatch.setattr(get_settings(), "audio_allow_noncommercial", False)
+
     def detail(**body):
         r = gen(client, **body)
         assert r.status_code == 422, r.text
@@ -168,6 +170,7 @@ def test_timbre_reference_is_recorded(client, tmp_path, fast_driver):
 
 
 def test_minimax_hidden_unless_allowed(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "audio_allow_noncommercial", False)
     ids = [m["id"] for m in client.get("/api/models", params={"type": "audio"}).json()]
     assert ids == ["auto", "ace15_turbo", "yue2", "sa3_small_music", "sa3_medium", "sa3_small_sfx"]
 

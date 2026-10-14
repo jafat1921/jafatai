@@ -55,6 +55,8 @@ def test_every_registered_job_type_has_a_lane():
         "video_podcast": "general", "video_podcast_assemble": "general",
         # character sheets: the board is Pillow; its panels are generate jobs on the image lane
         "character_board": "general",
+        # story books: the narration speaks and checks on a GPU; the video is ffmpeg
+        "story_audio": "audio", "story_video": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

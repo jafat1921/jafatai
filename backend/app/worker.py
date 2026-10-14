@@ -270,7 +270,7 @@ def _add_aerab(ctx: JobContext, gen: Generation) -> None:
             if r.marked:
                 from app import voices
 
-                e = voices.ENGINES.get(p.get("engine") or "", voices.ENGINES[voices.DEFAULT_ENGINE])
+                e = voices.ENGINES.get(p.get("engine") or "", voices.default())
                 gen.params = {**p, "text": r.text, "text_written": text, "text_spoken": voices.spoken_text(r.text, e)}
         elif aerab.quoted_spoken(gen.prompt or ""):
             ctx.progress(0.01, "Adding aerab to the dialogue")
@@ -461,6 +461,12 @@ from app import character_sheet  # noqa: E402
 HANDLERS[character_sheet.BOARD_JOB] = character_sheet.handle_board
 FINISHED_HOOKS.append(character_sheet.on_job_finished)
 CPU_JOB_LEDGER[character_sheet.BOARD_JOB] = "export"
+from app import stories  # noqa: E402
+
+# the narration is GPU time (TTS, Whisper); the video is ffmpeg on the general lane
+HANDLERS[stories.AUDIO_JOB] = stories.handle_audio
+HANDLERS[stories.VIDEO_JOB] = stories.handle_video
+CPU_JOB_LEDGER[stories.VIDEO_JOB] = "assembly"
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

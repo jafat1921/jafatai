@@ -179,7 +179,7 @@ class MockDriver:
             return float(params["duration_s"])
         from app import voices
 
-        e = voices.ENGINES.get(params.get("engine") or "", voices.ENGINES[voices.DEFAULT_ENGINE])
+        e = voices.ENGINES.get(params.get("engine") or "", voices.default())
         segs = voices.segments(params.get("text") or "", e)
         words = sum(len(str(v).split()) for k, v in segs if k == "text")
         pauses = sum(float(v) for k, v in segs if k == "pause")

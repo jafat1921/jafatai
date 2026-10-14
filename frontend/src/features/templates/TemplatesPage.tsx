@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Chip } from '@/components/studio/chip'
 import { EmptyState, ErrorState } from '@/components/studio/states'
+import { useImageTools } from '@/hooks/useMedia'
 import { useStartTemplate, useTemplates } from '@/hooks/useStudio'
 import { splitPlaceholders } from '@/lib/images'
 import { isEditTemplate, localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
@@ -72,6 +73,12 @@ function Card({ t, onStart, starting }: { t: Template; onStart: () => void; star
             <Highlighted text={prompt} examples={t.examples} />
           </p>
         )}
+        {t.tool && (
+          <p className="text-[12px] text-studio-muted">
+            Runs on {t.tool.engine}
+            {t.tool.fallback ? ' when installed' : ''} · {t.tool.noncommercial ? 'non-commercial licence' : t.tool.licence}
+          </p>
+        )}
         <p className="mt-auto font-mono text-[12px] text-studio-muted">{meta(t)}</p>
         <Button variant="primary" onClick={onStart} loading={starting} aria-label={`Use the ${t.title} prompt template`}>
           {isEditTemplate(t) ? 'Use with my photos' : 'Use prompt template'}
@@ -97,7 +104,13 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
   const [category, setCategory] = useState<string | null>(null)
   const [mode, setMode] = useState<Mode | null>(null)
 
-  const all = templates.data
+  const tools = useImageTools(type === 'image')
+  // a tool-only card (try-on, depth map) whose tool this server can't run is left out; the server already
+  // drops the ones switched off by licence. Until the tool list answers, cards stay.
+  const all = useMemo(
+    () => templates.data?.filter((t) => !t.tool || t.tool.fallback || !tools.isSuccess || tools.data.some((x) => x.id === t.tool?.id && x.available)),
+    [templates.data, tools.isSuccess, tools.data],
+  )
   const hasEdits = !!all?.some(isEditTemplate)
   const inMode = useMemo(() => (all ?? []).filter((t) => !mode || (mode === 'edit') === isEditTemplate(t)), [all, mode])
   // the server sends them in category order
@@ -203,7 +216,7 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
         ) : (
           <>
             <p className="sr-only" role="status">
-              {shown.length} of {templates.data.length} prompt templates
+              {shown.length} of {all?.length ?? 0} prompt templates
             </p>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
               {shown.map((t) => (

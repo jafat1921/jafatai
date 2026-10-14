@@ -1,0 +1,66 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Source"
+    },
+    "inputs": {
+      "image": "example.png"
+    }
+  },
+  "2": {
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Fit"
+    },
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": 1024,
+      "height": 1024,
+      "crop": "disabled"
+    }
+  },
+  "3": {
+    "class_type": "LineArtPreprocessor",
+    "_meta": {
+      "title": "Detect"
+    },
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "coarse": "disable",
+      "resolution": 1024
+    }
+  },
+  "4": {
+    "class_type": "ImageInvert",
+    "_meta": {
+      "title": "Invert"
+    },
+    "inputs": {
+      "image": [
+        "3",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save"
+    },
+    "inputs": {
+      "images": [
+        "4",
+        0
+      ],
+      "filename_prefix": "mixai/tool"
+    }
+  }
+}

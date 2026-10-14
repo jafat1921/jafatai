@@ -117,6 +117,10 @@ function useBatch<B>(fn: (body: B) => ReturnType<typeof api.images.generate>) {
 }
 
 export const useImageGenerate = () => useBatch((body: ImageGenerateRequest) => api.images.generate(withInto('image', body)))
+// contract v30: which Edit Image tools this server can run (switched-off ones aren't listed)
+export const useImageTools = (enabled = true) =>
+  useQuery({ queryKey: ['images', 'tools'], queryFn: api.images.tools, staleTime: 60_000, enabled, select: (d) => (Array.isArray(d?.tools) ? d.tools : []) })
+
 export const useImageEdit = () => useBatch((body: ImageEditRequest) => api.images.edit(withInto('image', body)))
 export const useImg2Img = () => useBatch((body: Img2ImgRequest) => api.images.img2img(withInto('image', body)))
 

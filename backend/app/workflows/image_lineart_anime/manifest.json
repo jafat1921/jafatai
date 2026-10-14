@@ -1,0 +1,82 @@
+{
+  "name": "image_lineart_anime",
+  "family": "controlnet_aux",
+  "description": "Anime-style line art (comfyui_controlnet_aux AnimeLineArtPreprocessor, netG.pth), inverted to black on white. Weights from lllyasviel/Annotators, licence unverified: gated by IMAGE_ALLOW_NONCOMMERCIAL.",
+  "inputs": {
+    "image": {
+      "type": "image",
+      "required": true,
+      "targets": [
+        [
+          "Source",
+          "image"
+        ]
+      ]
+    },
+    "width": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "width"
+        ]
+      ]
+    },
+    "height": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "height"
+        ]
+      ]
+    },
+    "resolution": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 64,
+      "targets": [
+        [
+          "Detect",
+          "resolution"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/tool",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "image": {
+      "node": "Save",
+      "kind": "image"
+    }
+  },
+  "requires": {
+    "pack": "comfyui_controlnet_aux (Fannovel16) @ a587a4c1594524c1d2de5cd1a86cd868ff448e1c",
+    "nodes": [
+      "AnimeLineArtPreprocessor",
+      "ImageInvert"
+    ],
+    "assumed": "AnimeLineArtPreprocessor inputs image / resolution (read from the pinned commit)"
+  },
+  "progress_weights": {
+    "Detect": 4
+  },
+  "models": {
+    "custom_nodes/comfyui_controlnet_aux": [
+      "ckpts/lllyasviel/Annotators/netG.pth"
+    ]
+  }
+}

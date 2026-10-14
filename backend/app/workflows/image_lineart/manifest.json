@@ -1,0 +1,93 @@
+{
+  "name": "image_lineart",
+  "family": "controlnet_aux",
+  "description": "Realistic line art from a photo (comfyui_controlnet_aux LineArtPreprocessor, Informative Drawings sk_model.pth), inverted to black lines on white so it reads as a colouring page. Weights come from lllyasviel/Annotators, licence 'other': gated by IMAGE_ALLOW_NONCOMMERCIAL until confirmed.",
+  "inputs": {
+    "image": {
+      "type": "image",
+      "required": true,
+      "targets": [
+        [
+          "Source",
+          "image"
+        ]
+      ]
+    },
+    "width": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "width"
+        ]
+      ]
+    },
+    "height": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "height"
+        ]
+      ]
+    },
+    "resolution": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 64,
+      "targets": [
+        [
+          "Detect",
+          "resolution"
+        ]
+      ]
+    },
+    "coarse": {
+      "type": "str",
+      "default": "disable",
+      "targets": [
+        [
+          "Detect",
+          "coarse"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/tool",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "image": {
+      "node": "Save",
+      "kind": "image"
+    }
+  },
+  "requires": {
+    "pack": "comfyui_controlnet_aux (Fannovel16) @ a587a4c1594524c1d2de5cd1a86cd868ff448e1c",
+    "nodes": [
+      "LineArtPreprocessor",
+      "ImageInvert"
+    ],
+    "assumed": "LineArtPreprocessor inputs image / coarse, resolution (read from the pinned commit)"
+  },
+  "progress_weights": {
+    "Detect": 4
+  },
+  "models": {
+    "custom_nodes/comfyui_controlnet_aux": [
+      "ckpts/lllyasviel/Annotators/sk_model.pth",
+      "ckpts/lllyasviel/Annotators/sk_model2.pth"
+    ]
+  }
+}

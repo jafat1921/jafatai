@@ -814,6 +814,38 @@
       }
     },
     {
+      "id": "image-edit-virtual-tryon",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Virtual try-on (CatVTON)",
+      "description": "A dedicated try-on model: keeps prints, logos and fabric closer than Outfit swap. Non-commercial weights, for testing only.",
+      "thumb": null,
+      "tags": ["try-on", "outfit", "clothing", "fashion", "catvton", "tool"],
+      "refs_required": 2,
+      "ref_labels": ["Person", "Garment"],
+      "tool": "tryon",
+      "examples": {
+        "garment type": "upper-body"
+      },
+      "options": [
+        {
+          "slot": "garment type",
+          "label": "Garment",
+          "choices": [
+            {"label": "Top or jacket", "value": "upper-body"},
+            {"label": "Trousers or skirt", "value": "lower-body"},
+            {"label": "Dress or full outfit", "value": "full-length"}
+          ]
+        }
+      ],
+      "preview_prompt": "Full-length fashion photo of a man on a plain studio backdrop wearing a navy [garment type] linen outfit, soft even light, natural pose.",
+      "defaults": {
+        "instruction_scaffold": "Dress the person in image 1 in the [garment type] garment from image 2, keeping their face, pose and background.",
+        "model": "qwen_image_edit_2511",
+        "count": 2
+      }
+    },
+    {
       "id": "image-edit-hairstyle",
       "category": "Edit a photo",
       "target": "image-edit",
@@ -958,11 +990,12 @@
       "category": "Edit a photo",
       "target": "image-edit",
       "title": "Remove an object",
-      "description": "Name what should go and it's filled in from the surroundings. Works from your words; for a pixel-exact selection use Photo → Cut-out → Select first.",
+      "description": "Paint over what should go, or pick a Photo Studio selection, and LaMa fills exactly that area from the surroundings. Without a mask, name it and the edit model removes it.",
       "thumb": null,
-      "tags": ["remove", "cleanup", "erase", "object removal", "edit"],
+      "tags": ["remove", "cleanup", "erase", "object removal", "inpaint", "edit"],
       "refs_required": 1,
       "ref_labels": ["Photo"],
+      "tool": "inpaint",
       "examples": {
         "object to remove": "the person walking in the background on the left"
       },
@@ -978,11 +1011,13 @@
       "category": "Edit a photo",
       "target": "image-edit",
       "title": "Relight with a new background",
-      "description": "Keep the subject, swap the scene, and match the light so it looks shot there.",
+      "description": "Keep the subject, swap the scene, and match the light so it looks shot there. Add a second picture to use it as the background.",
       "thumb": null,
       "tags": ["relight", "background", "lighting", "composite", "edit"],
       "refs_required": 1,
-      "ref_labels": ["Subject"],
+      "ref_labels": ["Subject", "Background"],
+      "tool": "relight",
+      "tool_prompt": "a person in [new background], [lighting], detailed face, natural skin, best quality",
       "examples": {
         "new background": "a rooftop in Lisbon at sunset with terracotta roofs behind",
         "lighting": "warm golden-hour sun from behind with a soft rim on the hair"
@@ -1050,12 +1085,13 @@
       "id": "image-edit-line-art",
       "category": "Edit a photo",
       "target": "image-edit",
-      "title": "Photo to line art",
+      "title": "Photo to line art / colouring page",
       "description": "Trace a photo into clean black outlines, from a children's colouring page to fine pen work.",
       "thumb": null,
       "tags": ["line art", "colouring page", "outline", "drawing", "edit"],
       "refs_required": 1,
       "ref_labels": ["Photo"],
+      "tool": "lineart",
       "examples": {
         "line style": "a colouring-book page for children, with bold even outlines and simple shapes"
       },
@@ -1076,6 +1112,56 @@
         "instruction_scaffold": "Turn image 1 into [line style]: clean black outlines on pure white, no shading, no grey fills and no colour, closed shapes, keeping the composition and every main subject recognisable.",
         "model": "qwen_image_edit_2511",
         "count": 2
+      }
+    },
+    {
+      "id": "image-edit-depth-map",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Depth map",
+      "description": "A greyscale depth map of your photo, near things bright and far things dark. Handy for ControlNet, 3D parallax and compositing.",
+      "thumb": null,
+      "tags": ["depth", "depth map", "controlnet", "3d", "tool"],
+      "refs_required": 1,
+      "ref_labels": ["Photo"],
+      "tool": "depth",
+      "examples": {},
+      "preview_prompt": "Greyscale depth map of a forest path, the near ground glowing white and the distant trees fading into black, smooth gradients.",
+      "defaults": {
+        "instruction_scaffold": "Make a depth map of image 1: near things bright, far things dark, smooth greyscale.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-edit-edge-map",
+      "category": "Edit a photo",
+      "target": "image-edit",
+      "title": "Edge map",
+      "description": "White outlines of every edge on black, crisp or soft. A guide picture for ControlNet and stylised redraws.",
+      "thumb": null,
+      "tags": ["edges", "canny", "soft edge", "controlnet", "tool"],
+      "refs_required": 1,
+      "ref_labels": ["Photo"],
+      "tool": "canny",
+      "examples": {
+        "edge style": "crisp Canny edges"
+      },
+      "options": [
+        {
+          "slot": "edge style",
+          "label": "Edges",
+          "choices": [
+            {"label": "Crisp (Canny)", "value": "crisp Canny edges"},
+            {"label": "Soft (HED)", "value": "soft HED edges"}
+          ]
+        }
+      ],
+      "preview_prompt": "Thin white outline drawing of a city street with cars and shopfronts on a pure black background, drawn as [edge style].",
+      "defaults": {
+        "instruction_scaffold": "Trace image 1 as [edge style], white on black.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
       }
     },
     {

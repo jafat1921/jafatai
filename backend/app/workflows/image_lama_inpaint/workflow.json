@@ -1,0 +1,12 @@
+{
+  "1": {"class_type": "LoadImage", "_meta": {"title": "Source"}, "inputs": {"image": "example.png"}},
+  "2": {"class_type": "ImageScale", "_meta": {"title": "Fit"},
+        "inputs": {"image": ["1", 0], "upscale_method": "lanczos", "width": 1024, "height": 1024, "crop": "disabled"}},
+  "3": {"class_type": "LoadImageMask", "_meta": {"title": "Mask"}, "inputs": {"image": "mask.png", "channel": "red"}},
+  "4": {"class_type": "GrowMask", "_meta": {"title": "Grow"},
+        "inputs": {"mask": ["3", 0], "expand": 8, "tapered_corners": true}},
+  "5": {"class_type": "INPAINT_LoadInpaintModel", "_meta": {"title": "Model"}, "inputs": {"model_name": "big-lama.pt"}},
+  "6": {"class_type": "INPAINT_InpaintWithModel", "_meta": {"title": "Inpaint"},
+        "inputs": {"inpaint_model": ["5", 0], "image": ["2", 0], "mask": ["4", 0], "seed": 0}},
+  "7": {"class_type": "SaveImage", "_meta": {"title": "Save"}, "inputs": {"images": ["6", 0], "filename_prefix": "mixai/tool"}}
+}

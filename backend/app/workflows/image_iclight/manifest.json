@@ -1,0 +1,35 @@
+{
+  "name": "image_iclight",
+  "family": "iclight",
+  "description": "IC-Light v1 relight (Apache-2.0) via kijai/ComfyUI-IC-Light on Realistic Vision 5.1 (SD1.5). The subject is cut out with BiRefNet (the same core node Photo cut-out uses, instead of the non-commercial RMBG-1.4) and laid on mid grey, as IC-Light expects. Text-conditioned (fc) by default; with a background picture the plan swaps in the fbc model and keeps the Background branch. LightSource paints the light direction into the start latent; direction 'none' runs at denoise 1.0, which ignores it.",
+  "inputs": {
+    "image":  {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "background": {"type": "image", "targets": [["Background", "image"]],
+                   "if_missing": {"drop": ["Background", "BgFit", "BgLatent"]}},
+    "iclight_model": {"type": "str", "default": "iclight_sd15_fc.safetensors", "targets": [["ICLight", "model_path"]]},
+    "width":  {"type": "int", "default": 768, "multiple_of": 64,
+               "targets": [["Fit", "width"], ["Grey", "width"], ["BgFit", "width"], ["Light", "width"]]},
+    "height": {"type": "int", "default": 1024, "multiple_of": 64,
+               "targets": [["Fit", "height"], ["Grey", "height"], ["BgFit", "height"], ["Light", "height"]]},
+    "prompt": {"type": "str", "default": "best quality, natural lighting", "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "lowres, bad anatomy, bad hands, cropped, worst quality",
+                 "targets": [["Negative", "text"]]},
+    "light":  {"type": "str", "default": "Left Light", "targets": [["Light", "light_position"]]},
+    "denoise": {"type": "float", "default": 0.9, "targets": [["Sampler", "denoise"]]},
+    "steps":  {"type": "int", "default": 25, "targets": [["Sampler", "steps"]]},
+    "seed":   {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/tool", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "checkpoints": ["Realistic_Vision_V5.1_fp16-no-ema.safetensors"],
+    "unet": ["iclight_sd15_fc.safetensors", "iclight_sd15_fbc.safetensors"],
+    "background_removal": ["birefnet.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI-IC-Light (kijai) @ 22811d903af8a90100dccef1c4b579526649a6ab",
+    "nodes": ["LoadAndApplyICLightUnet", "ICLightConditioning", "LightSource", "EmptyImage", "ImageCompositeMasked"],
+    "assumed": "LoadAndApplyICLightUnet lists models/unet; LightSource positions and ICLightConditioning inputs read from the pinned commit"
+  },
+  "progress_weights": {"Sampler": 8, "Checkpoint": 2, "ICLight": 2, "Detect": 1}
+}

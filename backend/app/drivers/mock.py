@@ -90,6 +90,9 @@ class MockDriver:
         meta = {"width": _size(params)[0], "height": _size(params)[1]}
         if params.get("model"):
             meta["model"] = params["model"]  # whatever the catalog picked; the placeholder looks the same
+        if params.get("image_tool"):
+            # an image tool: the placeholder at the tool's working size, with the template the comfy driver would use
+            meta["template"] = params["image_tool"]["template"]
         return DriverResult(out_path, "image/png", meta)
 
     def generate_video(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:

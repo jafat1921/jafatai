@@ -14,7 +14,8 @@
       "stable_audio_3_medium.safetensors",
       "stable_audio_3_small_music.safetensors",
       "stable_audio_3_small_sfx.safetensors",
-      "yue2_3b_int8_convrot.safetensors"
+      "yue2_3b_int8_convrot.safetensors",
+      "Realistic_Vision_V5.1_fp16-no-ema.safetensors"
      ],
      {
       "tooltip": "The name of the checkpoint (model) to load."
@@ -3755,5 +3756,533 @@
   ],
   "name": "SetLatentNoiseMask",
   "category": "latent/inpaint"
+ },
+ "LineArtPreprocessor": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   },
+   "optional": {
+    "coarse": [
+     [
+      "disable",
+      "enable"
+     ],
+     {
+      "default": "disable"
+     }
+    ],
+    "resolution": [
+     "INT",
+     {
+      "default": 512,
+      "min": 64,
+      "max": 16384,
+      "step": 64
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "AnimeLineArtPreprocessor": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   },
+   "optional": {
+    "resolution": [
+     "INT",
+     {
+      "default": 512,
+      "min": 64,
+      "max": 16384,
+      "step": 64
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "DepthAnythingV2Preprocessor": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   },
+   "optional": {
+    "ckpt_name": [
+     [
+      "depth_anything_v2_vitg.pth",
+      "depth_anything_v2_vitl.pth",
+      "depth_anything_v2_vitb.pth",
+      "depth_anything_v2_vits.pth"
+     ],
+     {
+      "default": "depth_anything_v2_vitl.pth"
+     }
+    ],
+    "resolution": [
+     "INT",
+     {
+      "default": 512,
+      "min": 64,
+      "max": 16384,
+      "step": 64
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "CannyEdgePreprocessor": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   },
+   "optional": {
+    "low_threshold": [
+     "INT",
+     {
+      "default": 100,
+      "min": 0,
+      "max": 255
+     }
+    ],
+    "high_threshold": [
+     "INT",
+     {
+      "default": 200,
+      "min": 0,
+      "max": 255
+     }
+    ],
+    "resolution": [
+     "INT",
+     {
+      "default": 512,
+      "min": 64,
+      "max": 16384,
+      "step": 64
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "HEDPreprocessor": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   },
+   "optional": {
+    "safe": [
+     [
+      "enable",
+      "disable"
+     ],
+     {
+      "default": "enable"
+     }
+    ],
+    "resolution": [
+     "INT",
+     {
+      "default": 512,
+      "min": 64,
+      "max": 16384,
+      "step": 64
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "ImageInvert": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE"
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "LoadImageMask": {
+  "input": {
+   "required": {
+    "image": [
+     [
+      "example.png"
+     ],
+     {
+      "image_upload": true
+     }
+    ],
+    "channel": [
+     [
+      "alpha",
+      "red",
+      "green",
+      "blue"
+     ]
+    ]
+   }
+  },
+  "output": [
+   "MASK"
+  ]
+ },
+ "GrowMask": {
+  "input": {
+   "required": {
+    "mask": [
+     "MASK"
+    ],
+    "expand": [
+     "INT",
+     {
+      "default": 0
+     }
+    ],
+    "tapered_corners": [
+     "BOOLEAN",
+     {
+      "default": true
+     }
+    ]
+   }
+  },
+  "output": [
+   "MASK"
+  ]
+ },
+ "EmptyImage": {
+  "input": {
+   "required": {
+    "width": [
+     "INT"
+    ],
+    "height": [
+     "INT"
+    ],
+    "batch_size": [
+     "INT"
+    ],
+    "color": [
+     "INT"
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "ImageCompositeMasked": {
+  "input": {
+   "required": {
+    "destination": [
+     "IMAGE"
+    ],
+    "source": [
+     "IMAGE"
+    ],
+    "x": [
+     "INT"
+    ],
+    "y": [
+     "INT"
+    ],
+    "resize_source": [
+     "BOOLEAN",
+     {
+      "default": false
+     }
+    ]
+   },
+   "optional": {
+    "mask": [
+     "MASK"
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "INPAINT_LoadInpaintModel": {
+  "input": {
+   "required": {
+    "model_name": [
+     "COMBO",
+     {
+      "multiselect": false,
+      "options": [
+       "big-lama.pt"
+      ]
+     }
+    ]
+   }
+  },
+  "output": [
+   "INPAINT_MODEL"
+  ]
+ },
+ "INPAINT_InpaintWithModel": {
+  "input": {
+   "required": {
+    "inpaint_model": [
+     "INPAINT_MODEL"
+    ],
+    "image": [
+     "IMAGE"
+    ],
+    "mask": [
+     "MASK"
+    ],
+    "seed": [
+     "INT",
+     {
+      "default": 0
+     }
+    ]
+   },
+   "optional": {
+    "optional_upscale_model": [
+     "UPSCALE_MODEL"
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "LoadAndApplyICLightUnet": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "model_path": [
+     [
+      "iclight_sd15_fbc.safetensors",
+      "iclight_sd15_fc.safetensors"
+     ]
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ]
+ },
+ "ICLightConditioning": {
+  "input": {
+   "required": {
+    "positive": [
+     "CONDITIONING"
+    ],
+    "negative": [
+     "CONDITIONING"
+    ],
+    "vae": [
+     "VAE"
+    ],
+    "foreground": [
+     "LATENT"
+    ],
+    "multiplier": [
+     "FLOAT",
+     {
+      "default": 0.18215
+     }
+    ]
+   },
+   "optional": {
+    "opt_background": [
+     "LATENT"
+    ]
+   }
+  },
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ]
+ },
+ "LightSource": {
+  "input": {
+   "required": {
+    "light_position": [
+     [
+      "Left Light",
+      "Right Light",
+      "Top Light",
+      "Bottom Light",
+      "Top Left Light",
+      "Top Right Light",
+      "Bottom Left Light",
+      "Bottom Right Light"
+     ]
+    ],
+    "multiplier": [
+     "FLOAT",
+     {
+      "default": 1.0
+     }
+    ],
+    "start_color": [
+     "STRING",
+     {
+      "default": "#FFFFFF"
+     }
+    ],
+    "end_color": [
+     "STRING",
+     {
+      "default": "#000000"
+     }
+    ],
+    "width": [
+     "INT"
+    ],
+    "height": [
+     "INT"
+    ]
+   },
+   "optional": {
+    "batch_size": [
+     "INT"
+    ],
+    "prev_image": [
+     "IMAGE"
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
+ },
+ "LoadCatVTONPipeline": {
+  "input": {
+   "required": {
+    "sd15_inpaint_path": [
+     "STRING",
+     {
+      "default": "runwayml/stable-diffusion-inpainting"
+     }
+    ],
+    "catvton_path": [
+     "STRING",
+     {
+      "default": "zhengchong/CatVTON"
+     }
+    ],
+    "mixed_precision": [
+     [
+      "fp32",
+      "fp16",
+      "bf16"
+     ]
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ]
+ },
+ "LoadAutoMasker": {
+  "input": {
+   "required": {
+    "catvton_path": [
+     "STRING",
+     {
+      "default": "zhengchong/CatVTON"
+     }
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ]
+ },
+ "AutoMasker": {
+  "input": {
+   "required": {
+    "pipe": [
+     "MODEL"
+    ],
+    "target_image": [
+     "IMAGE"
+    ],
+    "cloth_type": [
+     [
+      "upper",
+      "lower",
+      "overall"
+     ]
+    ]
+   }
+  },
+  "output": [
+   "IMAGE",
+   "IMAGE"
+  ]
+ },
+ "CatVTON": {
+  "input": {
+   "required": {
+    "pipe": [
+     "MODEL"
+    ],
+    "target_image": [
+     "IMAGE"
+    ],
+    "refer_image": [
+     "IMAGE"
+    ],
+    "mask_image": [
+     "IMAGE"
+    ],
+    "seed": [
+     "INT"
+    ],
+    "steps": [
+     "INT",
+     {
+      "default": 50
+     }
+    ],
+    "cfg": [
+     "FLOAT",
+     {
+      "default": 2.5
+     }
+    ]
+   }
+  },
+  "output": [
+   "IMAGE"
+  ]
  }
 }

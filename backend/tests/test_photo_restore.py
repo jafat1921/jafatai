@@ -68,10 +68,14 @@ def read(g: Generation) -> Image.Image:
 # ------------------------------------------------------------------ catalogue
 
 def test_tools_list_groups_and_licence(client, monkeypatch):
+    # test mode: SUPIR is on by default (PHOTO_ALLOW_NONCOMMERCIAL=true) and says what its licence is
+    assert type(get_settings()).model_fields["photo_allow_noncommercial"].default is True
+    monkeypatch.setattr(get_settings(), "photo_allow_noncommercial", False)
     tools = {t["id"]: t for t in client.get("/api/photo/tools").json()["tools"]}
     assert {"repair", "scratches", "jpeg", "denoise", "deblur", "faces", "colourise", "deyellow", "polish", "fix",
             "stylise", "cutout", "select", "background", "heavy"} <= set(tools)
     assert tools["heavy"]["available"] is False and "non-commercial" in tools["heavy"]["reason"]
+    assert "Non-commercial" in tools["heavy"]["licence"] and tools["denoise"]["licence"] is None
     assert [v["id"] for v in tools["colourise"]["variants"]] == ["natural", "vivid"]
     assert tools["deyellow"]["gpu"] is False and tools["faces"]["gpu"] is True
     monkeypatch.setattr(get_settings(), "photo_allow_noncommercial", True)
@@ -110,7 +114,8 @@ def test_denoise_version_keeps_size_alpha_and_blends(client, fast_driver):
     assert hist["versions"][0]["edit"] == "restore" and hist["versions"][0]["restore"]["tool"] == "denoise"
 
 
-def test_restore_validation(client):
+def test_restore_validation(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "photo_allow_noncommercial", False)
     ids = upload(client, picture())
     post = lambda body: client.post(f"/api/photo/{ids['item']}/restore", json=body)  # noqa: E731
     assert post({"tool": "teleport"}).status_code == 422

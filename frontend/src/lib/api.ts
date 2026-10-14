@@ -68,6 +68,7 @@ import type {
   Dashboard,
   ImageEditRequest,
   ImageGenerateRequest,
+  ImageToolInfo,
   LlmCheck,
   MediaBatch,
   MediaDetail,
@@ -553,6 +554,7 @@ export const api = {
     generate: (body: ImageGenerateRequest) => post<MediaBatch>('/images/generate', body),
     edit: (body: ImageEditRequest) => post<MediaBatch>('/images/edit', body),
     img2img: (body: Img2ImgRequest) => post<MediaBatch>('/images/img2img', body),
+    tools: () => get<{ tools: ImageToolInfo[] }>('/images/tools'),
   },
   // contract-v6
   models: {

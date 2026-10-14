@@ -250,6 +250,8 @@ export interface RestoreTool {
   strength: boolean
   prompt: 'required' | 'optional' | null
   noncommercial: boolean
+  // v30: the weights' licence where it matters (SUPIR)
+  licence?: string | null
   variants: { id: string; label: string }[]
   default_variant: string | null
   available: boolean

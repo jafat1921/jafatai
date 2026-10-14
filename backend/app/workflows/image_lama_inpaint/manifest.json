@@ -1,0 +1,22 @@
+{
+  "name": "image_lama_inpaint",
+  "family": "lama",
+  "description": "Mask-exact object removal with big-lama (Apache-2.0) through Acly's comfyui-inpaint-nodes. The backend writes the mask (white = remove) at the working size, so Fit and Mask always agree; GrowMask widens it a little so no outline is left behind. The node only changes pixels under the mask.",
+  "inputs": {
+    "image":  {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "mask":   {"type": "image", "required": true, "targets": [["Mask", "image"]]},
+    "width":  {"type": "int", "default": 1024, "multiple_of": 8, "targets": [["Fit", "width"]]},
+    "height": {"type": "int", "default": 1024, "multiple_of": 8, "targets": [["Fit", "height"]]},
+    "grow":   {"type": "int", "default": 8, "targets": [["Grow", "expand"]]},
+    "seed":   {"type": "int", "default": 0, "targets": [["Inpaint", "seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/tool", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"inpaint": ["big-lama.pt"]},
+  "requires": {
+    "pack": "comfyui-inpaint-nodes (Acly) @ 5b7681746fe19e563113d27366ba85236bc1ba5b",
+    "nodes": ["INPAINT_LoadInpaintModel", "INPAINT_InpaintWithModel", "LoadImageMask", "GrowMask"],
+    "assumed": "node ids and inputs read from the pinned commit (model_name; inpaint_model, image, mask, seed)"
+  },
+  "progress_weights": {"Inpaint": 4, "Model": 1}
+}

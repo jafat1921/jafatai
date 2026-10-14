@@ -120,7 +120,8 @@ EDIT_IDS = {"image-edit-outfit-swap", "image-edit-hairstyle", "image-edit-hairst
             "image-edit-line-art", "image-edit-giant-beach", "image-edit-helicopter", "image-edit-icy-plunge",
             "image-edit-3d-billboard", "image-edit-miniature-factory", "image-edit-exploded-view",
             "image-edit-photo-grid", "image-edit-across-time", "image-edit-front-page", "image-edit-mini-me",
-            "image-edit-tiny-me", "image-edit-pet-cover", "image-edit-style-breakdown", "image-edit-trend-collage"}
+            "image-edit-tiny-me", "image-edit-pet-cover", "image-edit-style-breakdown", "image-edit-trend-collage",
+            "image-edit-virtual-tryon", "image-edit-depth-map", "image-edit-edge-map"}
 
 
 def test_edit_templates():
@@ -155,7 +156,7 @@ def test_edit_templates():
 
 def test_every_template_loads_and_names_a_real_model():
     rows = [t for t in lib_api.templates().values() if t["type"] == "image"]
-    assert len(rows) == 64 and sum(t["target"] == "image-edit" for t in rows) == len(EDIT_IDS)
+    assert len(rows) == 67 and sum(t["target"] == "image-edit" for t in rows) == len(EDIT_IDS)
     for t in rows:
         want = "edit" if t["target"] == "image-edit" else "image"
         model = t["defaults"].get("model")

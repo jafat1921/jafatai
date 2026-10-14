@@ -1,7 +1,7 @@
 import { audioKindOf } from './audio'
 import { DEFAULT_IMAGE_FORM, IMAGE_ASPECTS, type ImageForm } from './images'
 import { QUICK_ASPECTS, QUICK_STYLES, type QuickForm } from './quick'
-import type { ImageAspect, ProjectCreate, QuickAspect, QuickStyle, Template, TemplateOption, TemplateStart } from './types'
+import type { ImageAspect, ProjectCreate, QuickAspect, QuickStyle, Template, TemplateOption, TemplateStart, TemplateTool } from './types'
 
 type Prefill = Record<string, unknown>
 
@@ -41,7 +41,7 @@ export function localStart(t: Template): TemplateStart {
     const { instruction_scaffold, ...rest } = d
     return {
       target: 'image-edit',
-      prefill: { ...rest, instruction: instruction_scaffold, refs_required: t.refs_required, ref_labels: t.ref_labels, options: t.options },
+      prefill: { ...rest, instruction: instruction_scaffold, refs_required: t.refs_required, ref_labels: t.ref_labels, options: t.options, tool: t.tool, template_id: t.id },
     }
   }
   if (t.type === 'image') return { target: 'image', prefill: d }
@@ -103,7 +103,11 @@ export interface EditTemplateForm {
   required: number
   options: TemplateOption[]
   examples?: Record<string, string>
+  // v30: the tool that can run this card instead of the edit model
+  tool?: TemplateTool
 }
+
+const isTool = (t: unknown): t is TemplateTool => !!t && typeof t === 'object' && typeof (t as TemplateTool).id === 'string'
 
 const isOption = (o: unknown): o is TemplateOption =>
   !!o && typeof o === 'object' && typeof (o as TemplateOption).slot === 'string' && Array.isArray((o as TemplateOption).choices)
@@ -121,6 +125,7 @@ export function editFormFrom(p: Prefill): EditTemplateForm {
     required: Math.min(labels.length || 3, num(p.refs_required) ?? 1),
     options: Array.isArray(p.options) ? p.options.filter(isOption) : [],
     examples: examplesOf(p.examples),
+    tool: isTool(p.tool) ? p.tool : undefined,
   }
 }
 

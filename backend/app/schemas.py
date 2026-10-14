@@ -910,7 +910,8 @@ class ImageEditIn(BaseModel):
     # the catalog's max_refs is checked in the route, so the message names the model
     source_ids: list[str] = Field(min_length=1, max_length=8, description="Library item or generation ids of "
                                                                          "finished images; the first is edited")
-    instruction: str = Field(min_length=1, max_length=4000, description="What to change")
+    # may be empty when an image tool does the work (depth map, edge map, LaMa with a mask)
+    instruction: str = Field("", max_length=4000, description="What to change")
     aspect: ImageAspect | None = Field(None, description="Empty keeps the first picture's shape")
     count: int = Field(1, ge=1, le=4)
     seed: int | None = Field(None, ge=0, le=2**31 - 1, description=_SEED)
@@ -918,6 +919,19 @@ class ImageEditIn(BaseModel):
     model: str | None = Field(None, max_length=60, description=_MODEL)
     brand_kit_id: str | None = Field(None, description="Also adds the kit's product pictures while there's room")
     folder_id: str | None = Field(None, description=_FOLDER)
+    # image tools (contract v30)
+    template_id: str | None = Field(None, max_length=80, description="The Edit template this came from; a template "
+                                                                     "with a tool (LaMa, IC-Light...) can run on it")
+    tool: str | None = Field(None, max_length=30, description="Run this image tool (GET /images/tools) instead of the "
+                                                              "template's own")
+    engine: Literal["auto", "tool", "edit"] = Field("auto", description="auto: the tool when it can run, else the edit "
+                                                                        "model; tool: the tool or 422; edit: never the tool")
+    tool_options: dict[str, Any] = Field(default_factory=dict, description="light (none|left|right|top|bottom), "
+                                                                           "garment_type (upper|lower|overall), "
+                                                                           "low_threshold / high_threshold")
+    mask: str | None = Field(None, max_length=12_000_000, description="LaMa: a PNG data URL, white or opaque = "
+                                                                      "remove. Without it a Photo Studio selection "
+                                                                      "source is used")
 
 
 VideoAspect = Literal["16:9", "9:16", "1:1", "4:3", "2.39:1"]
@@ -982,6 +996,9 @@ class ImageBatchOut(BaseModel):
     jobs: list[JobOut]
     model_resolved: str | None = None  # what "auto" (or the default) turned into
     magic_prompt: dict | None = None
+    # /images/edit with a template tool (v30): the tool that ran, or why the edit model ran instead
+    tool_resolved: str | None = None
+    tool_fallback: str | None = None
 
 
 AudioKind = Literal["song", "music", "sfx"]
@@ -1180,6 +1197,8 @@ class TemplateOut(BaseModel):
     refs_required: int = 0
     ref_labels: list[str] = []
     options: list[dict[str, Any]] = []  # [{slot, label, choices: [{label, value, aspect?}]}]
+    # v30: the image tool behind the card ({id, label, engine, licence, noncommercial, fallback, needs_mask})
+    tool: dict[str, Any] | None = None
 
 
 class TemplateStartOut(BaseModel):

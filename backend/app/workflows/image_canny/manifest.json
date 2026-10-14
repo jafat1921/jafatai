@@ -1,0 +1,96 @@
+{
+  "name": "image_canny",
+  "family": "controlnet_aux",
+  "description": "Canny edge map, white edges on black (comfyui_controlnet_aux CannyEdgePreprocessor, OpenCV; no weights).",
+  "inputs": {
+    "image": {
+      "type": "image",
+      "required": true,
+      "targets": [
+        [
+          "Source",
+          "image"
+        ]
+      ]
+    },
+    "width": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "width"
+        ]
+      ]
+    },
+    "height": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "height"
+        ]
+      ]
+    },
+    "resolution": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 64,
+      "targets": [
+        [
+          "Detect",
+          "resolution"
+        ]
+      ]
+    },
+    "low_threshold": {
+      "type": "int",
+      "default": 100,
+      "targets": [
+        [
+          "Detect",
+          "low_threshold"
+        ]
+      ]
+    },
+    "high_threshold": {
+      "type": "int",
+      "default": 200,
+      "targets": [
+        [
+          "Detect",
+          "high_threshold"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/tool",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "image": {
+      "node": "Save",
+      "kind": "image"
+    }
+  },
+  "requires": {
+    "pack": "comfyui_controlnet_aux (Fannovel16) @ a587a4c1594524c1d2de5cd1a86cd868ff448e1c",
+    "nodes": [
+      "CannyEdgePreprocessor"
+    ],
+    "assumed": "CannyEdgePreprocessor inputs image / low_threshold, high_threshold, resolution (read from the pinned commit)"
+  },
+  "progress_weights": {
+    "Detect": 4
+  }
+}

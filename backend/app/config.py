@@ -84,8 +84,12 @@ class Settings(BaseSettings):
     upscale_default_engine: str = "best"  # best | fast | quick
     upscale_seedvr2_model: str = "3b"  # 3b | 7b
     image_upscale_max_mp: float = 8.4  # redraw / faithful image outputs; 3840x2160 is 8.3
-    # SUPIR weights are non-commercial only; the owner turns this on for private/research use
-    photo_allow_noncommercial: bool = False
+    # SUPIR weights are non-commercial only. On while the owner tests; false hides Heavy restore and refuses it
+    photo_allow_noncommercial: bool = True
+    # image tools (contract v30) whose weights are non-commercial or unverified: CatVTON try-on and the
+    # Annotators line art / soft edge models. On while testing; false hides them and the templates fall back
+    # to Qwen-Image-Edit
+    image_allow_noncommercial: bool = True
     # MiniMax-Music3 (revenue-capped community licence) and OmniVoice (CC-BY-NC weights). On while the owner
     # tests; false hides both, refuses them with a 422 and makes VoxCPM2 the default speech engine
     audio_allow_noncommercial: bool = True

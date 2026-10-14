@@ -1,0 +1,54 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Source"
+    },
+    "inputs": {
+      "image": "example.png"
+    }
+  },
+  "2": {
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Fit"
+    },
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": 1024,
+      "height": 1024,
+      "crop": "disabled"
+    }
+  },
+  "3": {
+    "class_type": "HEDPreprocessor",
+    "_meta": {
+      "title": "Detect"
+    },
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "safe": "enable",
+      "resolution": 1024
+    }
+  },
+  "4": {
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save"
+    },
+    "inputs": {
+      "images": [
+        "3",
+        0
+      ],
+      "filename_prefix": "mixai/tool"
+    }
+  }
+}

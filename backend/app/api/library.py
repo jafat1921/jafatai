@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app import brand
+from app import image_tools as it
 from app import library as lib
 from app import mentions as mn
 from app import models_catalog as mc
@@ -283,14 +284,79 @@ def _edit_source(db: Session, workspace_id: str, sid: str) -> tuple[str | None, 
     return media_id, g
 
 
+@router.get("/images/tools")
+async def image_tools_list(cur: CurrentUser = Depends(get_current_user)):
+    """Edit Image tools (contract v30) with live availability; switched-off ones are left out."""
+    from app.config import get_settings
+    from app.upscale import fetch_object_info
+
+    driver = get_settings().gen_driver
+    info, error = (None, None) if driver == "mock" else await fetch_object_info()
+    return {"tools": it.options(info, driver=driver, error=error)}
+
+
+def _pick_tool(db: Session, body: ImageEditIn, template: dict | None,
+               sources: list[tuple[str | None, Generation]]) -> tuple[it.ImageTool | None, str | None]:
+    """(tool to run, None) or (None, why the edit model runs instead). 422 when nothing can run."""
+    tool = None if body.engine == "edit" else it.tool_for(template, body.tool)
+    if tool is None:
+        if body.engine == "tool":
+            raise HTTPException(422, "engine=tool needs a template with a tool, or tool")
+        return None, None
+    reason = it.unavailable(tool)
+    if reason is None and tool.needs_mask and not body.mask and not it.has_selection(db, sources[0][1]):
+        reason = "no mask: paint over what should go, or pick a Photo Studio selection"
+    if reason is None:
+        return tool, None
+    if body.engine == "tool" or not tool.fallback:
+        raise HTTPException(422, f"{tool.label} can't run: {reason}")
+    return None, reason
+
+
+def _tool_images(db: Session, cur: CurrentUser, body: ImageEditIn, tool: it.ImageTool, template: dict | None,
+                 sources: list[tuple[str | None, Generation]], into: str | None) -> ImageBatchOut:
+    try:
+        rec = it.build_params(db, cur.workspace_id, tool, template, body.instruction, [g for _, g in sources],
+                              body.tool_options, body.mask)
+    except it.ToolError as e:
+        raise HTTPException(422, str(e)) from None
+    ran = it.TOOLS[rec["tool"]]
+    w, h = rec["inputs"]["width"], rec["inputs"]["height"]
+    text = mn.plain(body.instruction).strip()
+    title = (body.title or "").strip() or (f"{ran.label} · {lib.short_title(text, 5)}" if text else ran.label)
+    edit_of = [{"media_id": m, "generation_id": g.id} for m, g in sources]
+    # line art, depth, edges and LaMa give the same picture every time: one is enough
+    count = body.count if ran.generative else 1
+    items, jobs = [], []
+    for i in range(count):
+        params = {"width": w, "height": h, "aspect": body.aspect, "image_tool": rec, "edit_of": edit_of,
+                  "instruction": text or None, "created_by": {"user_id": cur.id, "flow": "image_tool"}}
+        if body.template_id:
+            params["template_id"] = body.template_id
+        seed = (body.seed + i) % 2**31 if body.seed is not None else None
+        item, job = _new_image_item(db, cur, title, text or ran.label, params, seed, into)
+        items.append(item)
+        jobs.append(job)
+    db.commit()
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs], tool_resolved=ran.id)
+
+
 @router.post("/images/edit", response_model=ImageBatchOut, status_code=202)
 def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    template = templates().get(body.template_id) if body.template_id else None
+    if body.template_id and (template is None or template.get("target") != "image-edit"):
+        raise HTTPException(422, f"'{body.template_id}' isn't an Edit Image template")
+    if template is not None and not it.template_visible(template):
+        raise HTTPException(422, f"“{template['title']}” is switched off on this server (IMAGE_ALLOW_NONCOMMERCIAL)")
+    into = generate_into(db, cur.workspace_id, body.folder_id, "image")
+    sources = [_edit_source(db, cur.workspace_id, sid) for sid in body.source_ids[:3]]
+    tool, fallback = _pick_tool(db, body, template, sources)
+    if tool is not None:
+        return _tool_images(db, cur, body, tool, template, sources, into)
     if not body.instruction.strip():
         raise HTTPException(422, "Say what to change")
-    into = generate_into(db, cur.workspace_id, body.folder_id, "image")
     model, chosen = mc.choose(body.model, "edit", mn.plain(body.instruction), refs=len(body.source_ids))
     mc.check_refs(model, len(body.source_ids))
-    sources = [_edit_source(db, cur.workspace_id, sid) for sid in body.source_ids]
     mentioned = mn.resolve(db, cur.workspace_id, body.instruction.strip(), budget=model.max_refs or 3,
                            used=len(sources), model_label=model.label)
     if body.aspect:
@@ -309,6 +375,10 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
                   "created_by": {"user_id": cur.id, "flow": "image_edit"}, **chosen}
         if mentioned.mentions:
             params["mentions"] = mentioned.mentions
+        if body.template_id:
+            params["template_id"] = body.template_id
+        if fallback:
+            params["tool_fallback"] = fallback
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
             db, cur.workspace_id, body.brand_kit_id, instruction, params, edit=True, max_refs=model.max_refs or 3), seed,
@@ -316,7 +386,8 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
         items.append(item)
         jobs.append(job)
     db.commit()
-    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs], model_resolved=model.id)
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs], model_resolved=model.id,
+                         tool_fallback=fallback)
 
 
 @router.post("/images/img2img", response_model=ImageBatchOut, status_code=202)
@@ -405,13 +476,14 @@ def _template_out(t: dict) -> TemplateOut:
                                                 "target")},
                        tags=t.get("tags") or [], examples=t.get("examples") or {}, preview_url=url,
                        requires_brand=bool(t.get("requires_brand")), refs_required=t.get("refs_required") or 0,
-                       ref_labels=t.get("ref_labels") or [], options=t.get("options") or [])
+                       ref_labels=t.get("ref_labels") or [], options=t.get("options") or [],
+                       tool=it.template_tool(t))
 
 
 @router.get("/templates", response_model=list[TemplateOut])
 @router.get("/prompt-templates", response_model=list[TemplateOut])
 def list_templates(type: Literal["video", "image", "audio"] | None = None, cur: CurrentUser = Depends(get_current_user)):
-    rows = [t for t in templates().values() if type in (None, t["type"])]
+    rows = [t for t in templates().values() if type in (None, t["type"]) and it.template_visible(t)]
     order = categories()
 
     def rank(t: dict) -> int:
@@ -439,7 +511,7 @@ def placeholders(text: str) -> list[str]:
 @router.post("/prompt-templates/{template_id}/start", response_model=TemplateStartOut)
 def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user)):
     t = templates().get(template_id)
-    if t is None:
+    if t is None or not it.template_visible(t):
         raise HTTPException(404, "Prompt template not found")
     d = dict(t["defaults"])
     scaffold = d.pop("prompt_scaffold", "")
@@ -449,6 +521,8 @@ def start_template(template_id: str, cur: CurrentUser = Depends(get_current_user
         prefill = {"instruction": scaffold, "model": d.get("model"), "count": d.get("count", 1),
                    "aspect": d.get("aspect"), "refs_required": t.get("refs_required", 1),
                    "ref_labels": t.get("ref_labels") or [], "options": t.get("options") or [], "template_id": t["id"]}
+        if t.get("tool"):
+            prefill["tool"] = it.template_tool(t)
         target = "image-edit"
     elif t["type"] == "image":
         prefill = {"prompt": scaffold, "aspect": d.get("aspect", "1:1"), "count": d.get("count", 1),

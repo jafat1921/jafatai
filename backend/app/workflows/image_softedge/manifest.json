@@ -1,0 +1,81 @@
+{
+  "name": "image_softedge",
+  "family": "controlnet_aux",
+  "description": "Soft edge map (comfyui_controlnet_aux HEDPreprocessor, ControlNetHED.pth), white on black. Weights from lllyasviel/Annotators, licence 'other': gated by IMAGE_ALLOW_NONCOMMERCIAL until confirmed.",
+  "inputs": {
+    "image": {
+      "type": "image",
+      "required": true,
+      "targets": [
+        [
+          "Source",
+          "image"
+        ]
+      ]
+    },
+    "width": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "width"
+        ]
+      ]
+    },
+    "height": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "height"
+        ]
+      ]
+    },
+    "resolution": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 64,
+      "targets": [
+        [
+          "Detect",
+          "resolution"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/tool",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "image": {
+      "node": "Save",
+      "kind": "image"
+    }
+  },
+  "requires": {
+    "pack": "comfyui_controlnet_aux (Fannovel16) @ a587a4c1594524c1d2de5cd1a86cd868ff448e1c",
+    "nodes": [
+      "HEDPreprocessor"
+    ],
+    "assumed": "HEDPreprocessor inputs image / safe, resolution (read from the pinned commit)"
+  },
+  "progress_weights": {
+    "Detect": 4
+  },
+  "models": {
+    "custom_nodes/comfyui_controlnet_aux": [
+      "ckpts/lllyasviel/Annotators/ControlNetHED.pth"
+    ]
+  }
+}

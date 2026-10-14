@@ -931,7 +931,33 @@ export interface ImageEditRequest extends MagicFields {
   seed?: number
   model?: string
   brand_kit_id?: string
+  // contract v30: a template's image tool (LaMa, IC-Light, CatVTON, line art...)
+  template_id?: string
+  tool?: string
+  engine?: 'auto' | 'tool' | 'edit'
+  tool_options?: { light?: LightFrom; garment_type?: 'upper' | 'lower' | 'overall'; edge?: 'crisp' | 'soft' }
+  // LaMa: PNG data URL, opaque = remove
+  mask?: string
 }
+
+export type LightFrom = 'none' | 'left' | 'right' | 'top' | 'bottom'
+
+/** GET /images/tools (contract v30). Tools switched off on the server aren't listed. */
+export interface ImageToolInfo {
+  id: string
+  label: string
+  engine: string
+  licence: string
+  noncommercial: boolean
+  fallback: boolean
+  needs_mask: boolean
+  available: boolean
+  reason: string | null
+  est_seconds?: number
+}
+
+/** What a template card says about the tool behind it. */
+export type TemplateTool = Pick<ImageToolInfo, 'id' | 'label' | 'engine' | 'licence' | 'noncommercial' | 'fallback' | 'needs_mask'>
 
 export type Img2ImgAspect = 'source' | ImageAspect
 
@@ -954,6 +980,9 @@ export interface MediaBatch {
   jobs: Job[]
   // contract v14: what "auto" turned into
   model_resolved?: string | null
+  // contract v30: the image tool that ran, or why the edit model ran instead
+  tool_resolved?: string | null
+  tool_fallback?: string | null
 }
 
 export type TemplateType = 'video' | 'image' | 'audio'
@@ -976,6 +1005,8 @@ export interface Template {
   refs_required?: number
   ref_labels?: string[]
   options?: TemplateOption[]
+  // v30: the image tool behind an edit card
+  tool?: TemplateTool | null
 }
 
 /** A picker that fills one [slot] of a template's prompt or instruction. */

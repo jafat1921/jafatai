@@ -1,0 +1,24 @@
+{
+  "name": "image_catvton",
+  "family": "catvton",
+  "description": "CatVTON virtual try-on (official ComfyUI-CatVTON release node). AutoMasker finds the garment area on the person (DensePose + SCHP) for upper, lower or overall; CatVTON paints the garment from the second picture into it. The pipeline loads its weights by Hugging Face repo id: runwayml's inpainting repo is gone, so the booksforcharlie mirror is used. CatVTON weights are CC BY-NC-SA 4.0: only offered when IMAGE_ALLOW_NONCOMMERCIAL is on.",
+  "inputs": {
+    "image":   {"type": "image", "required": true, "targets": [["Person", "image"]]},
+    "garment": {"type": "image", "required": true, "targets": [["Garment", "image"]]},
+    "width":   {"type": "int", "default": 768, "multiple_of": 16, "targets": [["PersonFit", "width"]]},
+    "height":  {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["PersonFit", "height"]]},
+    "cloth_type": {"type": "str", "default": "upper", "targets": [["AutoMask", "cloth_type"]]},
+    "steps":   {"type": "int", "default": 50, "targets": [["TryOn", "steps"]]},
+    "cfg":     {"type": "float", "default": 2.5, "targets": [["TryOn", "cfg"]]},
+    "seed":    {"type": "int", "default": 0, "targets": [["TryOn", "seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/tool", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"huggingface": ["zhengchong/CatVTON", "booksforcharlie/stable-diffusion-inpainting", "stabilityai/sd-vae-ft-mse"]},
+  "requires": {
+    "pack": "ComfyUI-CatVTON.zip from the Zheng-Chong/CatVTON 'ComfyUI' release (2024-07-27)",
+    "nodes": ["LoadCatVTONPipeline", "LoadAutoMasker", "AutoMasker", "CatVTON"],
+    "assumed": "class names from the release's catvton_workflow.json; input names (sd15_inpaint_path, catvton_path, mixed_precision, cloth_type, target_image, refer_image, mask_image, seed, steps, cfg) not yet checked against /object_info"
+  },
+  "progress_weights": {"TryOn": 8, "Pipeline": 3, "AutoMask": 1}
+}

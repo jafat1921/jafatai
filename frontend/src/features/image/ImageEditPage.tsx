@@ -14,18 +14,20 @@ import { useDockModels } from '@/components/generate/useDockModels'
 import { useRecordRun } from '@/components/generate/useRecordRun'
 import { useBrandChoice } from '@/hooks/useBrandKits'
 import { useGenEstimate } from '@/hooks/useGenEstimate'
-import { flatItems, useImageEdit, useMediaList } from '@/hooks/useMedia'
+import { flatItems, useImageEdit, useImageTools, useMediaList } from '@/hooks/useMedia'
 import { withBrand } from '@/lib/brand'
 import { localEstimate } from '@/lib/estimate'
 import { addSources, editPayload, MAX_EDIT_SOURCES, placeholdersIn, placeSources } from '@/lib/images'
 import { normalizeModelId } from '@/lib/models'
 import { editFormFrom, fillSlot, type TemplatePrefill } from '@/lib/templates'
-import type { ImageAspect, ImageEditRequest, MediaItem, TemplateOption } from '@/lib/types'
+import type { ImageAspect, ImageEditRequest, LightFrom, MediaItem, TemplateOption } from '@/lib/types'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { CountPicker, ImageAspectTiles } from './controls'
 import { EditSources } from './EditSources'
+import { MaskBrush } from './MaskBrush'
 import { TemplateChoices } from './TemplateChoices'
+import { ToolChoice } from './ToolChoice'
 
 const PAGE = 'image-edit'
 const idsFrom = (raw: string | null) => (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -50,7 +52,9 @@ export function ImageEditPage() {
   const state = location.state as { sources?: string[]; template?: TemplatePrefill } | null
   const fromState = state?.sources ?? []
   // an edit template: its instruction, model, and the labelled pictures it needs (fixed for this visit)
-  const [tpl] = useState(() => (state?.template ? { title: state.template.templateTitle, ...editFormFrom(state.template.prefill) } : null))
+  const [tpl] = useState(() =>
+    state?.template ? { id: state.template.templateId, title: state.template.templateTitle, ...editFormFrom(state.template.prefill) } : null,
+  )
   const labels = tpl?.labels ?? []
   // ?sources=a,b from a tile's Edit button or the References page; never more than three.
   // With a template, '' holds an empty labelled slot open.
@@ -74,6 +78,19 @@ export function ImageEditPage() {
   const over = Math.max(0, sources.length - max)
   const estimate = useGenEstimate(effective ? { kind: 'image', model: effective.id, count } : null, localEstimate(effective, { count }))
   const name = model?.label ?? 'This model'
+  // v30: a template with its own tool (LaMa, IC-Light, CatVTON, line art...) runs on it when the server can
+  const tools = useImageTools()
+  const tool = tpl?.tool
+  const toolInfo = !tool || !tools.isSuccess ? undefined : (tools.data.find((t) => t.id === tool.id) ?? null)
+  const [useTool, setUseTool] = useState(true)
+  // the mask belongs to the photo it was painted on
+  const [painted, setPainted] = useState<{ on: string; png: string | null } | null>(null)
+  const mask = painted && painted.on === ids[0] ? painted.png : null
+  const [light, setLight] = useState<LightFrom>('none')
+  const toolOn = !!tool && !!toolInfo?.available && useTool
+  // LaMa needs a mask; without one the edit model reads the instruction
+  const toolRuns = toolOn && (!tool.needs_mask || !!mask)
+  const wordsNeeded = !toolRuns || tool.id === 'relight'
 
   const add = (items: MediaItem[], at?: number) => {
     const next = placeSources(ids, items.map((m) => m.id), max, at)
@@ -103,23 +120,26 @@ export function ImageEditPage() {
 
   const missing = labels.slice(0, tpl?.required ?? 0).filter((_, i) => !ids[i])
   const slots = placeholdersIn(instruction)
+  const toolDown = tool && !tool.fallback && toolInfo !== undefined && !toolInfo?.available
   const blocked = over
     ? `Too many source images for ${name}.`
     : missing.length
       ? `Add the ${listOf(missing.map((l) => l.toLowerCase()))} ${missing.length > 1 ? 'pictures' : 'picture'} first.`
       : !sources.length
         ? 'Add at least one source image.'
-        : slots.length
-          ? `Replace ${slots.join(', ')} first.`
-          : instruction.trim().length < 3
-            ? 'Say what should change.'
-            : null
+        : toolDown
+          ? `${tool.engine} isn't available on this server.`
+          : wordsNeeded && slots.length
+            ? `Replace ${slots.join(', ')} first.`
+            : wordsNeeded && instruction.trim().length < 3
+              ? 'Say what should change.'
+              : null
 
   const run = (r: EditRun) =>
     edit.mutate(r.body, {
-      onSuccess: ({ items, jobs }) => {
+      onSuccess: ({ items, jobs, tool_fallback }) => {
         record({ prompt: r.body.instruction, summary: r.summary, settings: r, items: items ?? [], jobs, label: plural(items?.length ?? r.count, 'edit') })
-        announce(`Editing. ${plural(items?.length ?? r.count, 'result')} on the way.`)
+        announce(`Editing. ${plural(items?.length ?? r.count, 'result')} on the way.${tool_fallback ? ` Ran on the edit model: ${tool_fallback}.` : ''}`)
       },
     })
 
@@ -129,6 +149,12 @@ export function ImageEditPage() {
     const base = editPayload(sources, instruction, count, aspect, send && { id: send.id, max_refs: max })
     const n = Number.parseInt(seed, 10)
     const body = withBrand({ ...base, ...(Number.isFinite(n) && n >= 0 ? { seed: n } : {}) }, brand.sendId)
+    if (tpl?.id) body.template_id = tpl.id
+    if (tool) {
+      body.engine = useTool ? 'auto' : 'edit'
+      if (toolRuns && mask) body.mask = mask
+      if (toolOn && tool.id === 'relight') body.tool_options = { light }
+    }
     const summary = [model?.label, plural(sources.length, 'source'), aspect ?? 'source shape', plural(count, 'result')].filter(Boolean).join(' · ')
     run({ ids: sources, instruction, count, aspect, model: model?.id, seed, body, summary })
   }
@@ -174,6 +200,8 @@ export function ImageEditPage() {
         belowPrompt={
           tpl && (
             <div className="flex flex-col gap-2">
+              {tool && <ToolChoice tool={tool} info={toolInfo} useTool={useTool} onUseTool={setUseTool} light={light} onLight={setLight} />}
+              {tool?.needs_mask && toolOn && ids[0] && <MaskBrush key={ids[0]} sourceId={ids[0]} onChange={(png) => setPainted({ on: ids[0], png })} />}
               <TemplateChoices options={tpl.options} picked={picked} onPick={pick} />
               <PlaceholderHint text={instruction} field={field} examples={tpl.examples} />
             </div>

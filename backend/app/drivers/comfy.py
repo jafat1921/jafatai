@@ -39,7 +39,9 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
             "ltx23_two_stage": 3600.0, "ltx23_ia2v": 3600.0, "ltx23_ia2v_extend": 3600.0, "wan22_t2v": 2400.0,
             "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0,
-            "ace15_song": 900.0, "sa3_music": 600.0, "sa3_sfx": 600.0, "sa3_medium": 1200.0, "minimax_music3": 1800.0}
+            "ace15_song": 900.0, "sa3_music": 600.0, "sa3_sfx": 600.0, "sa3_medium": 1200.0, "minimax_music3": 1800.0,
+            "image_lineart": 300.0, "image_lineart_anime": 300.0, "image_depth": 300.0, "image_canny": 120.0,
+            "image_softedge": 300.0, "image_lama_inpaint": 600.0, "image_iclight": 900.0, "image_catvton": 1200.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
 LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend", "ltx23_ia2v",
                  "ltx23_ia2v_extend"}
@@ -161,6 +163,9 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
 
     if params.get("restore"):
         return restore_plan(params["restore"], seed, lookup)
+
+    if params.get("image_tool"):
+        return image_tool_plan(params["image_tool"], seed, lookup)
 
     if params.get("upscale") and kind in ("portrait", "sheet_view", "establishing", "keyframe_start", "keyframe_end",
                                           "keyframe_mid", "image"):
@@ -511,6 +516,27 @@ def restore_plan(r: dict, seed: int, lookup) -> Plan:
     if template not in RESTORE_TEMPLATES:
         raise ComfyError(f"unknown restore template {template!r}")
     return Plan(template, inputs, {"image": src}, [], "image", sources)
+
+
+def image_tool_plan(t: dict, seed: int, lookup) -> Plan:
+    """Edit Image tools (app.image_tools): line art / depth / edges, LaMa, IC-Light, CatVTON."""
+    from app.image_tools import TEMPLATES
+
+    template = t.get("template")
+    if template not in TEMPLATES:
+        raise ComfyError(f"unknown image tool template {template!r}")
+    images: dict[str, Path | list[Path]] = {"image": lookup.generation_file(t["source_id"])}
+    if t.get("mask_file"):
+        mask = get_settings().data_dir / t["mask_file"]
+        if not mask.is_file():
+            raise ComfyError("the mask for this edit is missing on disk")
+        images["mask"] = mask
+    for key in ("garment", "background"):
+        if t.get(f"{key}_id"):
+            images[key] = lookup.generation_file(t[f"{key}_id"])
+    inputs = {**(t.get("inputs") or {}), "seed": seed}
+    sources = {k: t[k] for k in ("source_id", "garment_id", "background_id") if t.get(k)}
+    return Plan(template, inputs, images, [], "image", {**sources, "tool": t.get("tool")})
 
 
 def style_tags(prompt: str, params: dict) -> str:

@@ -1,0 +1,16 @@
+{
+  "1": {"class_type": "LoadCatVTONPipeline", "_meta": {"title": "Pipeline"},
+        "inputs": {"sd15_inpaint_path": "booksforcharlie/stable-diffusion-inpainting", "catvton_path": "zhengchong/CatVTON",
+                   "mixed_precision": "bf16"}},
+  "2": {"class_type": "LoadAutoMasker", "_meta": {"title": "Masker"}, "inputs": {"catvton_path": "zhengchong/CatVTON"}},
+  "3": {"class_type": "LoadImage", "_meta": {"title": "Person"}, "inputs": {"image": "person.png"}},
+  "4": {"class_type": "ImageScale", "_meta": {"title": "PersonFit"},
+        "inputs": {"image": ["3", 0], "upscale_method": "lanczos", "width": 768, "height": 1024, "crop": "disabled"}},
+  "5": {"class_type": "LoadImage", "_meta": {"title": "Garment"}, "inputs": {"image": "garment.png"}},
+  "6": {"class_type": "AutoMasker", "_meta": {"title": "AutoMask"},
+        "inputs": {"pipe": ["2", 0], "target_image": ["4", 0], "cloth_type": "upper"}},
+  "7": {"class_type": "CatVTON", "_meta": {"title": "TryOn"},
+        "inputs": {"pipe": ["1", 0], "target_image": ["4", 0], "refer_image": ["5", 0], "mask_image": ["6", 0],
+                   "seed": 0, "steps": 50, "cfg": 2.5}},
+  "8": {"class_type": "SaveImage", "_meta": {"title": "Save"}, "inputs": {"images": ["7", 0], "filename_prefix": "mixai/tool"}}
+}

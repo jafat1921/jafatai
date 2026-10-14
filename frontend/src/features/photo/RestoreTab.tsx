@@ -302,6 +302,7 @@ function ToolRow({ tool, open, onToggle, busy, onApply }: RowProps) {
       {open && (
         <div id={panelId} className="flex flex-col gap-2 px-2 pb-2.5 pt-1">
           {!tool.available && <p className="text-[12px] text-studio-danger" role="note">Not available: {tool.reason}</p>}
+          {tool.licence && <p className="text-[12px] text-studio-muted">Licence: {tool.licence}</p>}
           {tool.variants.length > 1 && (
             <div role="radiogroup" aria-label={`${tool.label} option`} className="flex flex-wrap gap-1.5">
               {tool.variants.map((v) => (

@@ -1,0 +1,81 @@
+{
+  "name": "image_depth",
+  "family": "controlnet_aux",
+  "description": "Relative depth map, near is bright (comfyui_controlnet_aux DepthAnythingV2Preprocessor). Pinned to the Small model, the only Depth Anything V2 size under Apache-2.0 (Base/Large/Giant are CC BY-NC 4.0).",
+  "inputs": {
+    "image": {
+      "type": "image",
+      "required": true,
+      "targets": [
+        [
+          "Source",
+          "image"
+        ]
+      ]
+    },
+    "width": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "width"
+        ]
+      ]
+    },
+    "height": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 8,
+      "targets": [
+        [
+          "Fit",
+          "height"
+        ]
+      ]
+    },
+    "resolution": {
+      "type": "int",
+      "default": 1024,
+      "multiple_of": 64,
+      "targets": [
+        [
+          "Detect",
+          "resolution"
+        ]
+      ]
+    },
+    "filename_prefix": {
+      "type": "str",
+      "default": "mixai/tool",
+      "targets": [
+        [
+          "Save",
+          "filename_prefix"
+        ]
+      ]
+    }
+  },
+  "outputs": {
+    "image": {
+      "node": "Save",
+      "kind": "image"
+    }
+  },
+  "requires": {
+    "pack": "comfyui_controlnet_aux (Fannovel16) @ a587a4c1594524c1d2de5cd1a86cd868ff448e1c",
+    "nodes": [
+      "DepthAnythingV2Preprocessor"
+    ],
+    "assumed": "DepthAnythingV2Preprocessor inputs image / ckpt_name, resolution (read from the pinned commit)"
+  },
+  "progress_weights": {
+    "Detect": 4
+  },
+  "models": {
+    "custom_nodes/comfyui_controlnet_aux": [
+      "ckpts/depth-anything/Depth-Anything-V2-Small/depth_anything_v2_vits.pth"
+    ]
+  }
+}

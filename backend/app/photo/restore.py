@@ -49,6 +49,7 @@ class Tool:
     strength: bool = True  # offer the blend-with-original slider
     prompt: str | None = None  # "required" | "optional" | None
     noncommercial: bool = False
+    licence: str | None = None  # shown beside tools whose weights carry terms worth knowing
     load_s: float = 5.0
     rate_mp: float = 1.0
 
@@ -61,7 +62,8 @@ TOOLS: dict[str, Tool] = {t.id: t for t in (
     Tool("scratches", "Remove scratches & creases", "Paints out scratches, creases, tears, dust and spots.",
          "repair", edit=True, strength=False, prompt="optional", load_s=15, rate_mp=20),
     Tool("heavy", "Heavy restore (SUPIR)", "For badly damaged photos. Slow; re-draws detail.", "repair",
-         "photo_supir", cap_mp=SUPIR_MP, multiple=64, prompt="optional", noncommercial=True, load_s=40, rate_mp=40),
+         "photo_supir", cap_mp=SUPIR_MP, multiple=64, prompt="optional", noncommercial=True, load_s=40, rate_mp=40,
+         licence="Non-commercial only (SUPIR weights); SDXL base: CreativeML Open RAIL++-M"),
     Tool("jpeg", "Remove JPEG artefacts", "Blocky edges and colour smears from heavy compression.", "clean",
          "photo_model_1x", variants={"fbcnn": ("FBCNN", "1x_fbcnn_color.pth")}, default_variant="fbcnn",
          load_s=3, rate_mp=1.5),
@@ -143,7 +145,7 @@ def tool_options(object_info: dict | None, *, driver: str, error: str | None = N
     out = []
     for t in TOOLS.values():
         item = {"id": t.id, "label": t.label, "hint": t.hint, "group": t.group, "gpu": t.effect is None,
-                "strength": t.strength, "prompt": t.prompt, "noncommercial": t.noncommercial,
+                "strength": t.strength, "prompt": t.prompt, "noncommercial": t.noncommercial, "licence": t.licence,
                 "variants": [{"id": k, "label": v[0]} for k, v in t.variants.items()],
                 "default_variant": t.default_variant, "available": True, "reason": None}
         problems = []

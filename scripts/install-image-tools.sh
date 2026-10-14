@@ -366,6 +366,15 @@ fetch() {  # $1 url, $2 dest, $3 bytes, $4 sha256 (may be empty)
 
 install_catvton_node() {
   local dir="$NODES/$CATVTON_DIR"
+  if [[ -d "$dir" && ! -f "$dir/__init__.py" && -f "$dir/$CATVTON_DIR/__init__.py" ]]; then
+    # an earlier install kept the zip's __MACOSX folder, so the node sat one level too deep and never loaded
+    if (( DRY )); then STATUS[$CATVTON_DIR]="would flatten"; return 0; fi
+    local old="$dir.nested"
+    mv "$dir" "$old" && mv "$old/$CATVTON_DIR" "$dir" && rm -rf "$old"
+    STATUS[$CATVTON_DIR]="flattened"; CHANGED=1
+    pip_safe_install "$dir" "$dir/requirements.txt"
+    return
+  fi
   if [[ -d "$dir" ]]; then STATUS[$CATVTON_DIR]="present"; return 0; fi
   if (( DRY )); then STATUS[$CATVTON_DIR]="would unzip"; return 0; fi
   local tmp; tmp="$(mktemp -d)"
@@ -375,6 +384,7 @@ install_catvton_node() {
     rm -rf "$tmp"; return 1
   fi
   "$PY" -m zipfile -e "$tmp/node.zip" "$tmp/x" || { rm -rf "$tmp"; return 1; }
+  rm -rf "$tmp/x/__MACOSX"  # Finder metadata the release zip carries
   # the zip may hold one top folder or the files themselves
   local top; mapfile -t top < <(find "$tmp/x" -mindepth 1 -maxdepth 1)
   if (( ${#top[@]} == 1 )) && [[ -d "${top[0]}" ]]; then mv "${top[0]}" "$dir"; else mv "$tmp/x" "$dir"; fi

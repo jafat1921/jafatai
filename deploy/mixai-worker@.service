@@ -17,6 +17,8 @@ ExecStart=/data/apps/mixaicinemastudio/backend/.venv/bin/python -m app.worker --
 SyslogIdentifier=mixai-worker-%i
 # long renders: give an in-flight job time to checkpoint before systemd kills it
 KillSignal=SIGINT
+# only the worker gets the signal; it re-queues its job and stops the model runner itself
+KillMode=mixed
 TimeoutStopSec=60
 Restart=on-failure
 RestartSec=5

@@ -512,6 +512,30 @@ def test_runner_errors_and_exit_codes(runners):
     assert "omnivoice" in str(e.value)
 
 
+def test_runner_killed_during_shutdown_requeues_the_job(runners, monkeypatch):
+    # a restart (systemd stop) used to fail a half-spoken book; now the job goes back to the queue
+    from app import worker
+
+    killed = runners("killed", """
+        import sys
+        sys.stderr.write("KeyboardInterrupt\\n")
+        sys.exit(130)
+    """)
+    monkeypatch.setattr(worker, "_stop", __import__("threading").Event())
+    worker._stop.set()
+    with pytest.raises(worker.WorkerStopping):
+        venv_runner.run(killed, "any", {}, python=sys.executable)
+    ok = runners("ok", """
+        import json
+        print(json.dumps({"done": {"fine": True}}))
+    """)
+    # one that finished anyway keeps its result
+    assert venv_runner.run(ok, "any", {}, python=sys.executable) == {"fine": True}
+    worker._stop.clear()
+    with pytest.raises(venv_runner.RunnerError, match="code 130"):
+        venv_runner.run(killed, "any", {}, python=sys.executable)
+
+
 def test_runner_timeout_and_cancel(runners):
     slow = runners("slow", """
         import json, sys, time

@@ -86,8 +86,12 @@ def run(runner: str, venv: str, job: dict, *, lane: str | None = None,
     if hf_home:
         env["HF_HOME"] = hf_home
 
+    # its own session, so a Ctrl+C reaches the worker, which decides what happens to the job, instead of
+    # killing the runner mid-book behind its back
+    detach = {"start_new_session": True} if os.name == "posix" else {}
     proc = subprocess.Popen([exe, str(script)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8", errors="replace")
+                            stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8", errors="replace",
+                            **detach)
     tail: deque[str] = deque(maxlen=STDERR_TAIL)
     timed_out = threading.Event()
 
@@ -135,6 +139,7 @@ def run(runner: str, venv: str, job: dict, *, lane: str | None = None,
         reader.join(timeout=5)
 
     stderr = "\n".join(tail)
+    _requeue_if_stopping(proc.returncode, done is not None)
     if timed_out.is_set():
         raise RunnerError(f"{runner} took longer than {timeout:g} s and was stopped")
     if error is not None:
@@ -143,3 +148,12 @@ def run(runner: str, venv: str, job: dict, *, lane: str | None = None,
         raise RunnerError(f"{runner} exited with code {proc.returncode} without a result"
                           + (f":\n{stderr[-1500:]}" if stderr else ""))
     return done
+
+
+def _requeue_if_stopping(returncode: int | None, finished: bool) -> None:
+    # a runner that died while the worker is shutting down hands its job back to the queue instead of
+    # failing it: a restart shouldn't throw away half a book's narration
+    from app import worker
+
+    if worker._stop.is_set() and (returncode != 0 or not finished):
+        raise worker.WorkerStopping()

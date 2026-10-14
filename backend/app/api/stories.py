@@ -87,7 +87,8 @@ class StoryAudioIn(BaseModel):
 
 class StoryPicture(BaseModel):
     key: str = Key
-    media_id: str = Field(min_length=1, max_length=64)
+    media_id: str = Field(min_length=1, max_length=64,
+                          description="A finished Library picture or video (its item id); a clip is fitted to the page")
 
 
 class TitleCard(BaseModel):
@@ -127,8 +128,9 @@ def story_audio(body: StoryAudioIn, db: Session = Depends(get_db), cur: CurrentU
 
 
 @router.post("/video", response_model=StoryJobOut, status_code=202, summary="Make a read-along video",
-             description="One ffmpeg job: each page's picture for as long as its audio, captions per line, "
-                         "chapters per page. 16:9 or a 9:16 Short (max_seconds keeps whole pages from the start).")
+             description="One ffmpeg job: each page's picture or video clip for as long as its audio, captions per "
+                         "line, chapters per page. 16:9 or a 9:16 Short (max_seconds keeps whole pages from the "
+                         "start).")
 def story_video(body: StoryVideoIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     job = stories.queue_video(db, cur, body.model_dump(mode="json"))
     db.commit()

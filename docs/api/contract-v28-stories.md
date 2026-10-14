@@ -200,7 +200,43 @@ readable error.
    OmniVoice and its default is `true`. A server whose `.env` says `AUDIO_ALLOW_NONCOMMERCIAL=false` now
    also loses OmniVoice (Urdu, Punjabi, Sindhi and Pashto speech then have no engine).
 
+## Addendum (v28a): video pages
+
+Asked for by BCP, owner-approved. Request and result shapes, captions, chapters, title and end pages are
+unchanged.
+
+- `pages[].media_id` may be a **video** Library item (the item id from `POST /api/videos/generate` →
+  `items[0].id`, or an uploaded clip) as well as a picture. It must be in the workspace and finished
+  (`ready` / `approved`); anything else (audio, missing, still rendering) is a **422** naming the page.
+  Stills and clips can be mixed freely in one story.
+- A video page lasts exactly its span, as a still does:
+  - longer clip: trimmed, keeping the start;
+  - shorter clip: slowed down when ≤ 15% covers the gap (no freeze at all), otherwise played at normal
+    speed and held on its last frame (`tpad stop_mode=clone`) for the rest.
+  - The clip's own sound is dropped; no zoom; the 0.4 s cross-fades between parts are unchanged.
+  - Any size is scaled and centre-cropped to cover the frame (e.g. LTX 1344×768 into 1920×1080), no blurred
+    background; 30 fps, yuv420p.
+- Stills whose shape is within 3% of the frame (16:9 into 16:9, 9:16 into 9:16) now fill it (cover crop)
+  instead of sitting on their blurred copy; on 9:16 that also drops the top-60% layout, and the captions sit
+  over the picture as on 16:9. Other stills keep the old layouts.
+- With no `title_card.media_id` and a video first page, the title card uses the clip's first frame. A
+  `title_card.media_id` itself must still be a picture.
+
+### Changes from the draft
+
+1. Short clips: one treatment per clip, not both. Slowing by up to 15% is used only when it covers the whole
+   gap; when it can't, the clip plays at normal speed and then holds (a slowed clip that still freezes looked
+   worse than a plain hold).
+2. On a full-frame 9:16 title card the title sits on the rounded dark band (there's no caption area under
+   the picture to put it in).
+
 ## Tests
+
+`backend/tests/test_stories.py` (v28a): `video_clip` held / slowed / trimmed to the exact length, 1920×1080,
+30 fps, no audio; matching-aspect stills fill the frame and others keep the old layouts; a 16:9 story with a
+still and a held clip and a 9:16 one with a trimmed 768×1344 clip first (title card from its frame) and a
+full-frame 9:16 still (duration, size, chapters); an audio item or unknown id as a page → 422. Clips are made
+with ffmpeg `lavfi`; these tests skip when ffmpeg isn't available.
 
 `backend/tests/test_stories.py`: generate token posts / read-only token gets 403; OmniVoice 422; validation
 limits; a faked `venv_runner.run` producing page files, line times, `full` page offsets, one runner call

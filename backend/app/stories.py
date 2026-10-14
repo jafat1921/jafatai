@@ -3,7 +3,8 @@
 story_audio speaks every line of the book in one runner call (one model load; each line carries its
 speaker's seed / voice), lays the lines out per page, levels the whole book to -16 LUFS and, when asked,
 checks each page with Whisper and puts a ducked music bed under it. story_video is plain ffmpeg on the
-general lane: one still per page with a slow zoom, cross-faded, captions burned in, chapters muxed.
+general lane: one still per page with a slow zoom (or a Library video clip fitted to the page's length),
+cross-faded, captions burned in, chapters muxed.
 
 The files live in workspaces/<ws>/stories/<job id>/ and only the names a job's result lists can be
 downloaded. They are swept after KEEP_DAYS; BlogCreatorPro keeps its own copies.
@@ -64,6 +65,10 @@ ZOOM = 0.06
 # stills are drawn at twice the frame so zoompan's whole-pixel steps don't shimmer
 OVERSAMPLE = 2
 PICTURE_SHARE = 0.6  # 9:16: the picture's share of the height; captions go below
+# a still this close to the frame's shape fills it instead of sitting on its blurred copy
+FILL_TOLERANCE = 0.03
+# a clip a little short of its page is slowed down to fit rather than frozen on its last frame
+MAX_SLOW = 0.15
 # (size against the usual subtitle size, characters per line)
 CAPTIONS = {"16:9": (1.2, 42), "9:16": (1.15, 22)}
 VENC = ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", str(FPS)]
@@ -459,16 +464,20 @@ def plan_video(res: dict, title_s: float, end_s: float, max_seconds: float | Non
             "total": round(title_s + audio_len + end_s, 3)}
 
 
-def _picture(db: Session, workspace_id: str, media_id: str, what: str) -> str:
+def _picture(db: Session, workspace_id: str, media_id: str, what: str, video_ok: bool = False) -> tuple[str, bool]:
+    """The file behind a Library item (or generation) and whether it's a video; pages may be either,
+    the title card's cover only a picture."""
+    noun = "picture or video" if video_ok else "picture"
     try:
         g = owned_source(db, workspace_id, media_id, what)
     except HTTPException:
-        raise HTTPException(422, f"{what}: no picture '{media_id}' in the Library") from None
+        raise HTTPException(422, f"{what}: no {noun} '{media_id}' in the Library") from None
     path = generation_file(g)
-    if not (g.media_type or "").startswith("image/") or g.status not in lib.FINISHED or path is None \
-            or not path.is_file():
-        raise HTTPException(422, f"{what}: '{media_id}' isn't a finished picture")
-    return g.file_path
+    mt = g.media_type or ""
+    video = video_ok and mt.startswith("video/")
+    if not (mt.startswith("image/") or video) or g.status not in lib.FINISHED or path is None or not path.is_file():
+        raise HTTPException(422, f"{what}: '{media_id}' isn't a finished {noun}")
+    return g.file_path, video
 
 
 def queue_video(db: Session, cur, req: dict) -> Job:
@@ -478,12 +487,15 @@ def queue_video(db: Session, cur, req: dict) -> Job:
         raise HTTPException(422, "That narration has no music bed; set use_music to false")
     known = {p["key"] for p in res["pages"]}
     pics: dict[str, str] = {}
+    videos: list[str] = []
     for pg in req["pages"]:
         if pg["key"] not in known:
             raise HTTPException(422, f"Page '{pg['key']}' isn't in the story audio job")
         if pg["key"] in pics:
             raise HTTPException(422, f"Page '{pg['key']}' is listed twice")
-        pics[pg["key"]] = _picture(db, cur.workspace_id, pg["media_id"], f"Page {pg['key']}")
+        pics[pg["key"]], video = _picture(db, cur.workspace_id, pg["media_id"], f"Page {pg['key']}", video_ok=True)
+        if video:
+            videos.append(pg["key"])
     title, end = req.get("title_card"), req.get("end_card")
     plan = plan_video(res, float(title["seconds"]) if title else 0.0, float(end["seconds"]) if end else 0.0,
                       req.get("max_seconds"))
@@ -493,11 +505,15 @@ def queue_video(db: Session, cur, req: dict) -> Job:
     if title:
         cover = title.get("media_id")
         first = next(s["key"] for s in plan["segments"] if s["kind"] == "page")
-        title = {**title, "file": _picture(db, cur.workspace_id, cover, "Title card") if cover else pics[first]}
+        if cover:
+            title = {**title, "file": _picture(db, cur.workspace_id, cover, "Title card")[0]}
+        else:
+            # a video first page lends the title card its first frame
+            title = {**title, "file": pics[first], "video": first in videos}
     aspect = req["aspect"]
     job = Job(workspace_id=cur.workspace_id, type=VIDEO_JOB, message="Waiting for a worker · Story video",
               payload={"audio_job": a.id, "audio_file": "full_music.mp3" if req["use_music"] else "full.mp3",
-                       "aspect": aspect, "pictures": pics, "title_card": title, "end_card": end,
+                       "aspect": aspect, "pictures": pics, "videos": videos, "title_card": title, "end_card": end,
                        "captions": req["captions"], "language": (a.payload or {}).get("language"), "plan": plan,
                        "name": f"story_{aspect.replace(':', 'x')}",
                        "created_by": {"user_id": cur.id, "flow": "story_video"}})
@@ -519,8 +535,16 @@ def _backdrop(img: Image.Image, w: int, h: int) -> Image.Image:
     return ImageEnhance.Brightness(small.resize((w, h), Image.BILINEAR)).enhance(0.45)
 
 
+def fills(img: Image.Image, aspect: str) -> bool:
+    w, h = SIZES[aspect]
+    return abs(img.width / img.height / (w / h) - 1) <= FILL_TOLERANCE
+
+
 def picture_frame(img: Image.Image, aspect: str, scale: int = OVERSAMPLE) -> Image.Image:
     w, h = (v * scale for v in SIZES[aspect])
+    if fills(img, aspect):
+        # already the frame's shape: cover-crop, and the captions sit over it as on 16:9
+        return ImageOps.fit(img, (w, h), Image.LANCZOS)
     canvas = Image.new("RGB", (w, h), GROUND)
     bh = h if aspect == "16:9" else round(h * PICTURE_SHARE)
     canvas.paste(_backdrop(img, w, bh), (0, 0))
@@ -546,6 +570,9 @@ def title_frame(img: Image.Image, aspect: str, title: str, language: str | None)
     h = canvas.height
     if aspect == "16:9":
         _text(canvas, title, language, h * 0.66, round(h * 0.08), band=True)
+    elif fills(img, aspect):
+        # no caption area under a full-frame picture, so the title gets the band
+        _text(canvas, title, language, h * (PICTURE_SHARE + 0.1), round(h * 0.045), band=True)
     else:
         _text(canvas, title, language, h * (PICTURE_SHARE + 0.1), round(h * 0.045), band=False)
     return canvas
@@ -572,6 +599,23 @@ def clip(still: Path, dst: Path, frames: int, aspect: str, zoom: bool = True, ti
           "format=yuv420p")
     _ff(["-loop", "1", "-framerate", str(FPS), "-i", str(still), "-vf", vf, "-frames:v", str(frames),
          *VENC, "-crf", "14", "-an", str(dst)], tick)
+
+
+def video_clip(src: Path, dst: Path, frames: int, aspect: str, tick=None) -> str:
+    """A Library clip made exactly `frames` long: trimmed from the start when longer; when shorter, slowed
+    if up to MAX_SLOW covers it, else held on its last frame. Cover-cropped to the frame, its own sound
+    dropped, 30 fps. No zoom: the clip already moves."""
+    w, h = SIZES[aspect]
+    want = frames / FPS
+    have = aa.stream_info(src).duration or 0.0
+    speed, how = 1.0, "trimmed" if have >= want else "held"
+    if 0 < have < want <= have * (1 + MAX_SLOW):
+        speed, how = want / have, "slowed"
+    # tpad also covers the odd frame lost to rounding after a slow-down; -frames:v cuts the rest
+    vf = (f"setpts={speed:.6f}*(PTS-STARTPTS),fps={FPS},scale={w}:{h}:force_original_aspect_ratio=increase,"
+          f"crop={w}:{h},setsar=1,tpad=stop_mode=clone:stop_duration={want + 1:.3f},format=yuv420p")
+    _ff(["-i", str(src), "-vf", vf, "-frames:v", str(frames), *VENC, "-crf", "16", "-an", str(dst)], tick)
+    return how
 
 
 def xfade_graph(durs: list[float], audio: int, plan: dict) -> str:
@@ -620,28 +664,36 @@ def handle_video(ctx) -> dict:
     name = p.get("name") or "story"
     dst, srt = out / f"{name}.mp4", out / f"{name}.srt"
     segs = plan["segments"]
+    videos = set(p.get("videos") or [])
     t0 = time.monotonic()
     try:
         clips, durs = [], []
         for i, s in enumerate(segs):
-            ctx.progress(0.03 + 0.62 * i / len(segs), f"Drawing part {i + 1} of {len(segs)}")
+            msg = f"Drawing part {i + 1} of {len(segs)}"
+            ctx.progress(0.03 + 0.62 * i / len(segs), msg)
+            length = s["seconds"] + (XFADE if i < len(segs) - 1 else 0.0)
+            frames = max(2, round(length * FPS))
+            c = work / f"c{i:04d}.mp4"
+            tick = lambda i=i, msg=msg: ctx.progress(0.03 + 0.62 * i / len(segs), msg)  # noqa: E731
+            clips.append(c)
+            durs.append(frames / FPS)
+            if s["kind"] == "page" and s["key"] in videos:
+                video_clip(get_settings().data_dir / p["pictures"][s["key"]], c, frames, aspect, tick=tick)
+                continue
             if s["kind"] == "page":
                 img = picture_frame(_open(p["pictures"][s["key"]]), aspect)
             elif s["kind"] == "title":
                 tc = p["title_card"]
-                img = title_frame(_open(tc["file"]), aspect, tc.get("title") or "", language)
+                cover = (br.grab_frame(get_settings().data_dir / tc["file"], 0.0, work / "cover.png")
+                         if tc.get("video") else _open(tc["file"]))
+                img = title_frame(cover or Image.new("RGB", SIZES[aspect], GROUND), aspect, tc.get("title") or "",
+                                  language)
             else:
                 img = end_frame(aspect, (p.get("end_card") or {}).get("text") or "The End", language)
             still = work / f"s{i:04d}.png"
             img.save(still)
-            length = s["seconds"] + (XFADE if i < len(segs) - 1 else 0.0)
-            frames = max(2, round(length * FPS))
-            c = work / f"c{i:04d}.mp4"
-            clip(still, c, frames, aspect, zoom=s["kind"] != "end",
-                 tick=lambda: ctx.progress(0.03 + 0.62 * i / len(segs), f"Drawing part {i + 1} of {len(segs)}"))
+            clip(still, c, frames, aspect, zoom=s["kind"] != "end", tick=tick)
             still.unlink(missing_ok=True)
-            clips.append(c)
-            durs.append(frames / FPS)
         ctx.progress(0.7, "Joining the pages")
         inputs = []
         for c in clips:

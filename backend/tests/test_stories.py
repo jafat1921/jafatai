@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from app import audio_analysis as aa
 from app import audio_edit as ae
@@ -16,6 +17,7 @@ from app.db import SessionLocal
 from app.drivers.mock import MockDriver
 from app.main import app
 from app.models import Job, Workspace
+from app.podcast.publish import GROUND
 from app.worker import process_one
 from tests.test_library import png_bytes, upload
 
@@ -304,6 +306,117 @@ def test_video_validation(client, monkeypatch):
     assert post(audio_job="missing").status_code == 404
     # a 4 s title card plus the first page (about 2.7 s) don't fit in 5 s
     assert post(max_seconds=5, title_card={"title": "Snow", "seconds": 4}).status_code == 422
+
+
+# ---------------------------------------------------------------- video pages (v28a)
+
+def _ffmpeg_ok() -> bool:
+    try:
+        return subprocess.run([get_settings().ffmpeg_path(), "-version"], capture_output=True).returncode == 0
+    except Exception:
+        return False
+
+
+needs_ffmpeg = pytest.mark.skipif(not _ffmpeg_ok(), reason="ffmpeg isn't available")
+
+
+def lavfi_clip(path: Path, seconds: float, size: str = "1344x768", rate: int = 24) -> Path:
+    # with a tone, so the test can see the clip's own sound is dropped
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([get_settings().ffmpeg_path(), "-y", "-loglevel", "error",
+                    "-f", "lavfi", "-i", f"testsrc2=size={size}:rate={rate}:duration={seconds}",
+                    "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}", "-shortest",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)],
+                   check=True, capture_output=True)
+    return path
+
+
+def upload_clip(client, tmp_path, seconds, size="1344x768") -> str:
+    clip = lavfi_clip(tmp_path / f"clip_{seconds}_{size}.mp4", seconds, size)
+    r = upload(client, clip.name, clip.read_bytes(), "video/mp4")
+    assert r.status_code == 201, r.text
+    assert r.json()["kind"] == "video"
+    return r.json()["id"]
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("have, how", [(1.0, "held"), (1.8, "slowed"), (3.0, "trimmed")])
+def test_video_clip_fits_the_page(tmp_path, have, how):
+    src = lavfi_clip(tmp_path / "src.mp4", have)
+    dst = tmp_path / "out.mp4"
+    assert stories.video_clip(src, dst, 60, "16:9") == how
+    info = br.video_info(dst)
+    assert (info.width, info.height) == (1920, 1080) and info.fps == 30 and not info.has_audio
+    assert info.duration == pytest.approx(2.0, abs=0.05)
+
+
+def test_matching_stills_fill_the_frame():
+    red = (200, 30, 30)
+    wide = stories.picture_frame(Image.new("RGB", (1344, 768), red), "16:9", scale=1)  # 1.75 against 1.78
+    assert wide.size == (1920, 1080) and wide.getpixel((2, 2)) == red and wide.getpixel((1917, 1077)) == red
+    tall = stories.picture_frame(Image.new("RGB", (1100, 1920), red), "9:16", scale=1)
+    assert tall.size == (1080, 1920) and tall.getpixel((540, 1900)) == red
+    # off by more than 3%: the old layouts (blurred copy behind; 9:16 caption area below the picture)
+    boxed = stories.picture_frame(Image.new("RGB", (640, 480), red), "16:9", scale=1)
+    assert boxed.getpixel((2, 540)) != red
+    square = stories.picture_frame(Image.new("RGB", (1080, 1080), red), "9:16", scale=1)
+    assert square.getpixel((540, 1900)) == GROUND
+
+
+@needs_ffmpeg
+def test_video_mixes_stills_and_clips_16x9(client, monkeypatch, tmp_path):
+    out = narrate(client, monkeypatch)
+    still = pictures(client, 1)[0]
+    clip = upload_clip(client, tmp_path, 1.0)  # p2 runs about 1.9 s: held on its last frame
+    r = client.post("/api/stories/video", json={
+        "audio_job": out["id"], "aspect": "16:9", "use_music": False, "captions": True,
+        "pages": [{"key": "p1", "media_id": still}, {"key": "p2", "media_id": clip}]})
+    assert r.status_code == 202, r.text
+    run_all()
+    j = done_job(r.json()["job"]["id"])
+    assert j.status == "done", j.error
+    assert j.payload["videos"] == ["p2"]
+    res = j.result
+    assert res["duration"] == pytest.approx(out["result"]["full"]["duration"], abs=0.15)
+    assert [c["key"] for c in res["chapters"]] == ["p1", "p2"]
+    path = stories.story_dir(j.workspace_id, j.id) / res["file"]
+    info = br.video_info(path)
+    assert (info.width, info.height) == (1920, 1080) and info.has_audio and _chapters(path) == 2
+
+
+@needs_ffmpeg
+def test_video_9x16_clip_first_with_title_card(client, monkeypatch, tmp_path):
+    out = narrate(client, monkeypatch)
+    clip = upload_clip(client, tmp_path, 4.0, "768x1344")  # longer than p1: trimmed
+    r = upload(client, "tall.jpg", png_bytes((1080, 1920), (90, 120, 60), "JPEG"), "image/jpeg")
+    tall = r.json()["id"]
+    r = client.post("/api/stories/video", json={
+        "audio_job": out["id"], "aspect": "9:16", "use_music": False,
+        "pages": [{"key": "p1", "media_id": clip}, {"key": "p2", "media_id": tall}],
+        "title_card": {"title": "Pip and the First Snow", "seconds": 1.5}})
+    assert r.status_code == 202, r.text
+    run_all()
+    j = done_job(r.json()["job"]["id"])
+    assert j.status == "done", j.error
+    assert j.payload["title_card"]["video"] is True
+    res = j.result
+    assert res["duration"] == pytest.approx(1.5 + out["result"]["full"]["duration"], abs=0.15)
+    assert res["chapters"][0] == {"key": "p1", "start": 1.5}
+    path = stories.story_dir(j.workspace_id, j.id) / res["file"]
+    assert (br.video_info(path).width, br.video_info(path).height) == (1080, 1920) and _chapters(path) == 2
+
+
+def test_video_page_must_be_a_picture_or_video(client, monkeypatch, tmp_path):
+    out = narrate(client, monkeypatch)
+    wav = tone(tmp_path / "beep.wav", 0.5)
+    r = upload(client, "beep.wav", wav.read_bytes(), "audio/wav")
+    assert r.status_code == 201, r.text
+    body = {"audio_job": out["id"], "use_music": False,
+            "pages": [{"key": "p1", "media_id": r.json()["id"]}, {"key": "p2", "media_id": pictures(client, 1)[0]}]}
+    r = client.post("/api/stories/video", json=body)
+    assert r.status_code == 422 and "picture or video" in r.json()["detail"]
+    body["pages"][0]["media_id"] = "nope"
+    assert client.post("/api/stories/video", json=body).status_code == 422
 
 
 # ---------------------------------------------------------------- downloads

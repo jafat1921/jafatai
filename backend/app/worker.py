@@ -448,6 +448,12 @@ from app.podcast import video as video_podcast, video_stages as video_podcast_st
 HANDLERS[video_podcast.JOB] = video_podcast_stages.handle
 HANDLERS[video_podcast.ASSEMBLE_JOB] = video_podcast_stages.handle_assemble
 CPU_JOB_LEDGER.update({video_podcast.JOB: "autopilot", video_podcast.ASSEMBLE_JOB: "assembly"})
+from app import character_sheet  # noqa: E402
+
+# panels are ordinary image generations; the board is Pillow on the general lane
+HANDLERS[character_sheet.BOARD_JOB] = character_sheet.handle_board
+FINISHED_HOOKS.append(character_sheet.on_job_finished)
+CPU_JOB_LEDGER[character_sheet.BOARD_JOB] = "export"
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

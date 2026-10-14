@@ -152,12 +152,103 @@ export interface Generation {
 
 export interface Character {
   id: string
-  project_id: string
+  // null for a Character Studio character (contract-v25); films cast it through project_cast
+  project_id: string | null
   name: string
   description: string
   source: Source
   locked: boolean
+  profile?: CharacterProfile
+  voice_id?: string | null
+  studio?: boolean
   approved_portrait?: Generation | null
+  // approved, else the newest finished portrait
+  portrait?: Generation | null
+  panels_ready?: number
+  board_thumb_url?: string | null
+  films?: { id: string; title: string }[]
+  updated_at?: string
+}
+
+// contract-v25-character-sheets.md
+export const PROFILE_FIELDS = [
+  'role', 'affiliation', 'nationality', 'height', 'age', 'gender', 'languages', 'personality', 'accent', 'wardrobe',
+] as const
+export type ProfileField = (typeof PROFILE_FIELDS)[number]
+export type CharacterProfile = Partial<Record<ProfileField, string>>
+
+export type SheetPreset = 'essential' | 'full' | 'custom'
+export type SheetBackdrop = 'grey' | 'dark'
+export type BoardLayout = 'dossier' | 'studio'
+export type SheetListName = 'outfits' | 'details' | 'props' | 'accessories'
+export type SheetPanelStatus = 'none' | 'waiting' | 'queued' | 'generating' | 'ready' | 'approved' | 'failed' | 'rejected'
+
+export interface SheetPanel {
+  key: string
+  section: string
+  section_title: string
+  label: string
+  default_label: string
+  source: 'portrait' | 'hero' | 'none'
+  status: SheetPanelStatus
+  current: Generation | null
+  live_job_id: string | null
+  versions: number
+  stale: boolean
+}
+
+export interface CharacterSheet {
+  character_id: string
+  preset: SheetPreset | null
+  counts: Record<string, number>
+  lists: Partial<Record<SheetListName, string[]>>
+  backdrop: SheetBackdrop
+  titles: Record<string, string>
+  footer: { team?: string; number?: string }
+  ruler: boolean
+  panels: SheetPanel[]
+  palette: string[]
+  estimate: { panels: number; seconds_low: number; seconds_high: number }
+  has_portrait: boolean
+  board: { media_id: string | null; layout: BoardLayout; generation: Generation | null; status: 'none' | 'queued' | 'running' | 'ready' }
+  queued?: number
+}
+
+export interface SheetCatalogue {
+  sections: { key: string; label: string }[]
+  counts: Record<string, number[]>
+  lists: Record<SheetListName, number>
+  presets: Record<'essential' | 'full', { counts: Record<string, number>; panels: number }>
+  backdrops: SheetBackdrop[]
+  seconds_per_panel: [number, number]
+}
+
+export interface SheetRequest {
+  preset: SheetPreset
+  counts?: Record<string, number>
+  lists?: Partial<Record<SheetListName, string[]>>
+  backdrop?: SheetBackdrop
+}
+
+export interface SheetTextPatch {
+  titles?: Record<string, string>
+  labels?: Record<string, string>
+  footer?: { team?: string; number?: string }
+  ruler?: boolean
+  backdrop?: SheetBackdrop
+  lists?: Partial<Record<SheetListName, string[]>>
+}
+
+export interface ShotRef {
+  kind: 'character' | 'location'
+  id: string
+  name: string
+  panel: string | null
+  panel_label: string | null
+  auto: boolean
+  generation: Generation | null
+  options: { key: string; label: string; section_title: string }[]
+  used: boolean
 }
 
 // contract-v1-storyboard.md
@@ -226,6 +317,8 @@ export interface Shot {
   activity?: ShotActivity[]
   // P2 camera rack on a shot (migration 0007); `camera` holds the same in plain words
   camera_rack?: CameraSetting
+  // contract-v25: {character_id: sheet panel} picked by hand over the automatic reference
+  ref_panels?: Record<string, string>
 
   created_at: string
   updated_at: string
@@ -258,6 +351,7 @@ export type ShotPatch = Partial<
     | 'beats'
     | 'brand_placements'
     | 'camera_rack'
+    | 'ref_panels'
   >
 >
 

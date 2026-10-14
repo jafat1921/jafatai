@@ -32,6 +32,7 @@ META_FIELDS = ("time_of_day", "mood")
 PRIORITY = {
     "ai_assist": 5,
     "ai_portrait_prompt": 5,
+    "ai_character_profile": 5,
     "ai_extract_characters": 3,
     "ai_write_missing": 2,
     "ai_continue": 2,
@@ -194,8 +195,7 @@ def upsert_character(db: Session, project: Project, name: str, description: str,
         return None, "skipped"
     description = description.strip()
     existing = next(
-        (c for c in db.scalars(select(Character).where(Character.project_id == project.id)).all()
-         if c.name.casefold() == name.casefold()),
+        (c for c in _characters(db, project.id) if c.name.casefold() == name.casefold()),
         None,
     )
     if existing is None:
@@ -297,7 +297,9 @@ def _owned(db: Session, model, obj_id: str | None, job: Job, label: str):
 
 
 def _characters(db: Session, project_id: str) -> list[Character]:
-    return list(db.scalars(select(Character).where(Character.project_id == project_id).order_by(Character.created_at)).all())
+    from app.cast import project_cast
+
+    return project_cast(db, project_id)
 
 
 def _tokens_for(words: int) -> int:
@@ -561,11 +563,43 @@ def handle_extract_characters(ctx) -> dict:
 def handle_portrait_prompt(ctx) -> dict:
     db, job = ctx.db, ctx.job
     character = _owned(db, Character, job.payload.get("character_id"), job, "Character")
-    project = db.get(Project, character.project_id)
+    project = db.get(Project, character.project_id) if character.project_id else None
     run = AiRun(ctx)
     res = run.call(f"Writing a portrait prompt for {character.name}", 0.1, "creative",
                    P.portrait_messages(project, character), temperature=0.6, max_tokens=400)
     return run.result(character_id=character.id, prompt=P.clean_line(res.content))
+
+
+def handle_character_profile(ctx) -> dict:
+    """Fills only the empty profile fields, so the user's own words stay; Urdu / Arabic values get aerab.
+    The suggested props, accessories and details go into the sheet's lists where those are still empty."""
+    from app import character_sheet as cs
+
+    db, job = ctx.db, ctx.job
+    character = _owned(db, Character, job.payload.get("character_id"), job, "Character")
+    project = db.get(Project, character.project_id) if character.project_id else None
+    run = AiRun(ctx)
+    film = f"{project.title}. {project.logline}".strip(" .") if project is not None else ""
+    data = run.call(f"Writing {character.name}'s profile", 0.1, "creative", P.profile_messages(character, film),
+                    schema=P.CharacterProfile, temperature=0.5, max_tokens=900).data
+    have = dict(character.profile or {})
+    filled = {k: " ".join(str(getattr(data, k) or "").split())[:300] for k in cs.PROFILE_FIELDS if not have.get(k)}
+    filled = {k: v for k, v in filled.items() if v}
+    if filled and aerab.applies(None, "\n".join(filled.values())):
+        keys = list(filled)
+        marked = aerab.finish_lines_sync([filled[k] for k in keys], None,
+                                         tick=lambda: ctx.progress(0.8, "Adding aerab to the profile"),
+                                         what="character profile")
+        filled = dict(zip(keys, marked))
+    character.profile = {**have, **filled}
+    lists = dict((character.sheet or {}).get("lists") or {})
+    for name in ("props", "accessories", "details"):
+        if not lists.get(name):
+            lists[name] = [" ".join(str(x).split())[:120] for x in getattr(data, name) if str(x).strip()]
+    cs.put(character, lists=cs.clean_lists(lists))
+    character.updated_at = utcnow()
+    return run.result(character_id=character.id, filled=sorted(filled), profile=character.profile,
+                      lists=(character.sheet or {}).get("lists"))
 
 
 def handle_summarize(ctx) -> dict:
@@ -963,6 +997,7 @@ AI_HANDLERS = {
     "ai_assist": handle_assist,
     "ai_extract_characters": handle_extract_characters,
     "ai_portrait_prompt": handle_portrait_prompt,
+    "ai_character_profile": handle_character_profile,
     "ai_summarize": handle_summarize,
 }
 

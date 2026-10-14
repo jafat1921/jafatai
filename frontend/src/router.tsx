@@ -181,6 +181,16 @@ export const shellRoutes: RouteObject[] = [
     ],
   },
 
+  // contract-v25: Character Studio
+  page('characters', async () => {
+    const { CharacterStudioPage } = await import('@/features/characters/CharacterStudioPage')
+    return <CharacterStudioPage />
+  }),
+  page('characters/:characterId', async () => {
+    const { CharacterPage } = await import('@/features/characters/CharacterPage')
+    return <CharacterPage />
+  }),
+
   { path: 'image', element: <Navigate to="/image/generate" replace /> },
   { path: 'video', element: <Navigate to="/video/quick" replace /> },
 

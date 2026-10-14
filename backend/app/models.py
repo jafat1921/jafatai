@@ -139,13 +139,33 @@ class Character(Base):
     __tablename__ = "character"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
-    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True)
+    # NULL = a Character Studio character, shared into films through project_cast (migration 0018)
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True, nullable=True
+    )
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(20), default="user")
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # role, age, height, origin, languages, personality, accent, wardrobe, details[] (app.character_sheet)
+    profile: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    # a library voice id or "gallery:<id>" (M12b)
+    voice_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # sheet state: preset, panel extras, hero-sourced panels waiting, palette, board (app.character_sheet)
+    sheet: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class ProjectCast(Base):
+    """A studio character cast in a film. The film's own characters don't need a row."""
+
+    __tablename__ = "project_cast"
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id", ondelete="CASCADE"), primary_key=True)
+    character_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("character.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Location(Base):
@@ -188,6 +208,10 @@ class Shot(Base):
     brand_placements: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     # {size, angle, motion, speed} from the camera rack (migration 0007); `camera` keeps the readable text
     camera_rack: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    # {character_id: sheet panel key} the user picked over the automatic choice (migration 0018)
+    ref_panels: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    # [{character_id, text, pause_after_s?}] spoken lines (M12b, migration 0018)
+    dialogue: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     stale:Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[str] = mapped_column(String(20), default="user")
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -234,13 +258,14 @@ class Generation(Base):
     __tablename__ = "generation"
     __table_args__ = (
         Index("ix_generation_target", "target_type", "target_id", "kind"),
-        # backstop for the "one approved per target+kind" rule enforced in the API
+        # backstop for the "one approved per target+kind" rule enforced in the API. Sheet views are
+        # one approved per panel (params.panel), which an index can't see, so they're left out (0018).
         Index(
             "uq_generation_one_approved",
             "target_type", "target_id", "kind",
             unique=True,
-            sqlite_where=text("status = 'approved'"),
-            postgresql_where=text("status = 'approved'"),
+            sqlite_where=text("status = 'approved' AND kind != 'sheet_view'"),
+            postgresql_where=text("status = 'approved' AND kind != 'sheet_view'"),
         ),
     )
     id: Mapped[str] = _id()

@@ -25,8 +25,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import ai_jobs, brand, longtake, models_catalog, storyboard as sb, vision
+from app import ai_jobs, brand, character_sheet, longtake, models_catalog, storyboard as sb, vision
 from app import brand_moments as bm
+from app import cast as film_cast
 from app import estimate as est
 from app import reel as rl
 from app.config import get_settings
@@ -412,8 +413,7 @@ class Autopilot:
         return ai_jobs.ordered_scenes(self.db, self.project.id)
 
     def characters(self) -> list[Character]:
-        return list(self.db.scalars(select(Character).where(Character.project_id == self.project.id)
-                                    .order_by(Character.created_at)).all())
+        return film_cast.project_cast(self.db, self.project.id)
 
     def locations(self) -> list[Location]:
         return list(self.db.scalars(select(Location).where(Location.project_id == self.project.id)
@@ -756,6 +756,14 @@ class Autopilot:
         if waits:
             done = n - len({*waits})
             return Wait(waits, f"{max(0, done)} of {n} portraits and locations approved")
+        if self.p.get("character_sheets") and not c.get("sheets"):
+            # off by default (10 panels a character is GPU time); queued, never waited on
+            for ch in chars:
+                try:
+                    character_sheet.start(db, ch, "essential")
+                except HTTPException as e:
+                    log.warning("no sheet for %s: %s", ch.name, e.detail)
+            c["sheets"] = True
         return None
 
     def stage_storyboard(self):

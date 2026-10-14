@@ -219,25 +219,92 @@ class RejectIn(BaseModel):
 
 
 # characters
+class FilmRef(BaseModel):
+    id: str
+    title: str
+
+
 class CharacterOut(Out):
     id: str
-    project_id: str
+    # None for a Character Studio character (contract v25); it is cast into films through project_cast
+    project_id: str | None = None
     name: str
     description: str
     source: str
     locked: bool
+    profile: dict[str, Any] = {}
+    voice_id: str | None = None
+    studio: bool = False
     approved_portrait: GenerationOut | None = None
+    # approved, else the newest finished one: what the studio grid shows while nothing is approved yet
+    portrait: GenerationOut | None = None
+    panels_ready: int = 0
+    board_thumb_url: str | None = None
+    # the films using it; filled on the studio routes
+    films: list[FilmRef] = []
+    created_at: Utc | None = None
+    updated_at: Utc | None = None
+
+
+ProfileText = Annotated[str, Field(max_length=300)]
 
 
 class CharacterCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
+    profile: dict[str, ProfileText] | None = None
 
 
 class CharacterPatch(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = None
     locked: bool | None = None
+    # contract v25: the identity block; a key sent blank is cleared
+    profile: dict[str, ProfileText] | None = None
+    # M12b: a library voice id or "gallery:<id>"; "" clears it
+    voice_id: str | None = Field(None, max_length=80)
+
+
+class PhotoConsent(BaseModel):
+    name: str = Field(max_length=120)
+    statement: str = Field(max_length=300)
+
+
+class CharacterFromPhoto(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    media_id: str
+    consent: PhotoConsent
+    description: str = ""
+
+
+class CastLinkIn(BaseModel):
+    character_id: str
+
+
+class SheetIn(BaseModel):
+    preset: Literal["essential", "full", "custom"] = "essential"
+    # custom only: section -> panel count (snapped down to what the section allows)
+    counts: dict[str, int] | None = None
+    # named items: outfits (3), details (4), props (3), accessories (6); not used by essential
+    lists: dict[str, list[Annotated[str, Field(max_length=120)]]] | None = None
+    backdrop: Literal["grey", "dark"] | None = None
+
+
+class SheetPatch(BaseModel):
+    titles: dict[str, Annotated[str, Field(max_length=200)]] | None = None
+    labels: dict[str, Annotated[str, Field(max_length=200)]] | None = None
+    footer: dict[str, Annotated[str, Field(max_length=200)]] | None = None
+    ruler: bool | None = None
+    backdrop: Literal["grey", "dark"] | None = None
+    lists: dict[str, list[Annotated[str, Field(max_length=120)]]] | None = None
+
+
+class PanelRegenerateIn(BaseModel):
+    note: str = Field("", max_length=500)
+
+
+class BoardIn(BaseModel):
+    layout: Literal["dossier", "studio"] = "dossier"
 
 
 # jobs
@@ -360,6 +427,8 @@ class ShotOut(Out):
     closing: str | None = None
     brand_placements_locked: bool = False
     camera_rack: dict[str, Any] = {}
+    # M12a: {character_id: sheet panel key} picked by hand over the automatic reference choice
+    ref_panels: dict[str, str] = {}
     # P3 shot cards: generations in flight and kinds whose newest try failed ({id, kind, status, job_id, version})
     activity: list[dict[str, Any]] = []
     created_at: Utc
@@ -406,6 +475,8 @@ class ShotPatch(BaseModel):
     stale: bool | None = None
     # contract v7: where the brand kit's logo/products appear in this shot
     brand_placements: list["BrandPlacement"] | None = Field(None, max_length=12)
+    # contract v25: {character_id: panel key}; "auto" or "" goes back to the automatic pick
+    ref_panels: dict[str, str] | None = None
 
 
 class BrandPlacement(BaseModel):

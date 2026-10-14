@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -1005,14 +1005,17 @@ def vp_out(db: Session, vp: VideoPodcast) -> dict:
 
 
 def other_characters(db: Session, vp: VideoPodcast) -> list[dict]:
-    rows = db.execute(select(Character, Project).join(Project, Project.id == Character.project_id).where(
-        Character.workspace_id == vp.workspace_id, Character.project_id != vp.project_id,
-    ).order_by(Character.updated_at.desc()).limit(200)).all()
+    # Character Studio characters (no project) come along too; they're who people cast across shows
+    rows = db.execute(select(Character, Project).outerjoin(Project, Project.id == Character.project_id).where(
+        Character.workspace_id == vp.workspace_id,
+        or_(Character.project_id.is_(None), Character.project_id != vp.project_id),
+    ).order_by(Character.project_id.is_not(None), Character.updated_at.desc()).limit(200)).all()
     out = []
     for c, p in rows:
         g = sb.approved(db, "character", c.id, "portrait") or next(
             (x for x in portraits(db, c.id) if x.status == "ready" and x.file_path), None)
-        out.append({"id": c.id, "name": c.name, "description": c.description, "project_id": p.id,
-                    "project_title": p.title, "portrait_url": media_url(g.file_path) if g is not None else None,
+        out.append({"id": c.id, "name": c.name, "description": c.description, "project_id": p.id if p else None,
+                    "project_title": p.title if p else "Character Studio", "studio": p is None,
+                    "portrait_url": media_url(g.file_path) if g is not None else None,
                     "thumb_url": gen_out(g).thumb_url if g is not None else None})
     return out

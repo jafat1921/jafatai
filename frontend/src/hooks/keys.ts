@@ -7,6 +7,12 @@ export const qk = {
   project: (id: string) => ['projects', id] as const,
   scenes: (projectId: string) => ['scenes', projectId] as const,
   characters: (projectId: string) => ['characters', projectId] as const,
+  // contract-v25; every list of characters stays under 'characters' (useGenerations patches them as arrays)
+  studioCharacters: (q: string) => ['characters', 'studio', q] as const,
+  character: (id: string) => ['character', id] as const,
+  characterSheet: (id: string) => ['character-sheet', id] as const,
+  sheetCatalogue: ['character-sheet-catalogue'] as const,
+  shotRefs: (shotId: string) => ['shot-refs', shotId] as const,
   locations: (projectId: string) => ['locations', projectId] as const,
   // one project-wide list; scenes filter it client-side so SSE patches land in one place
   shots: (projectId: string) => ['shots', projectId] as const,

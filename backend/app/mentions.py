@@ -8,12 +8,12 @@ import re
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app import brand
 from app.library import FINISHED
-from app.models import BrandKit, Character, Generation, Location, Project
+from app.models import BrandKit, Character, Generation, Location, Project, ProjectCast
 from app.services import media_url
 
 TYPES = ("character", "location", "product", "logo")
@@ -111,12 +111,19 @@ def search(db: Session, workspace_id: str, q: str = "", *, project_id: str | Non
     found: list[Entity] = []
     if "character" in types or "location" in types:
         projects = {p.id: p for p in _projects(db, workspace_id, project_id)}
-        hint = (lambda row: "") if project_id else (lambda row: projects[row.project_id].title)
+        hint = (lambda row: "") if project_id else (
+            lambda row: projects[row.project_id].title if row.project_id in projects else "Character Studio")
         # filter on the name first; the picture lookup is a query per row
         for model, make, type_ in ((Character, _character, "character"), (Location, _location, "location")):
             if type_ not in types or not projects:
                 continue
-            rows = db.scalars(select(model).where(model.project_id.in_(list(projects))).order_by(model.name))
+            where = model.project_id.in_(list(projects))
+            if model is Character:
+                # a film's cast includes the studio characters linked into it; with no film, the whole studio
+                linked = select(ProjectCast.character_id).where(ProjectCast.project_id.in_(list(projects)))
+                where = or_(where, Character.id.in_(linked)) if project_id else or_(
+                    where, Character.project_id.is_(None) & (Character.workspace_id == workspace_id))
+            rows = db.scalars(select(model).where(where).order_by(model.name))
             found += [make(db, r, hint(r)) for r in [r for r in rows if _matches(r.name, needle)][:LIMIT]]
     if "logo" in types or "product" in types:
         kit = brand.get_kit(db, workspace_id, kit_id, project_id) if (kit_id or project_id) else None

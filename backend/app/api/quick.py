@@ -34,6 +34,8 @@ class QuickIn(BaseModel):
     aspect_ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
     style: Literal["cinematic", "documentary", "animated", "commercial"] = "cinematic"
     dialogue: bool = True
+    # contract v25: an Essential character sheet for each cast member, after the portraits (GPU heavy, off)
+    character_sheets: bool = False
     upscale: UpscaleIn | None = None
     # contract v6 advanced options; stored on the project so every stage of the autopilot uses them
     image_model: str | None = None
@@ -94,6 +96,7 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
     job = Job(workspace_id=cur.workspace_id, type=autopilot.JOB_TYPE, project_id=p.id, message="Waiting for a worker",
               payload={"project_id": p.id, "prompt": prompt, "duration_s": body.duration_s,
                        "aspect_ratio": body.aspect_ratio, "style": body.style, "dialogue": body.dialogue,
+                       "character_sheets": body.character_sheets,
                        "upscale": body.upscale.model_dump() if body.upscale else None, "title_auto": True,
                        "models": settings, "template_id": body.template_id,
                        "planner": (tpl or {}).get("planner") or "", "mentions": mentioned.mentions,

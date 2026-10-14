@@ -252,15 +252,42 @@ def with_style(project: Project, text: str) -> str:
     return text
 
 
+def shot_text(shot: Shot) -> str:
+    return " ".join(x for x in (shot.description, shot.prompt, shot.start_prompt, shot.camera) if x)
+
+
+def character_ref(db: Session, shot: Shot, c: Character) -> dict:
+    """The picture a shot uses for one character: the user's panel pick, else the sheet panel that fits the
+    framing (app.character_panels.pick_for_shot), else the approved portrait."""
+    from app import character_panels as cp
+    from app.character_sheet import panel_generation
+
+    picked = (shot.ref_panels or {}).get(c.id)
+    wanted = [picked] if picked else cp.pick_for_shot(shot_text(shot), shot.shot_type, shot.camera_rack)
+    for key in wanted:
+        if key == "portrait":
+            break
+        g = panel_generation(db, c.id, key)
+        if g is not None:
+            return {"generation": g, "panel": key, "auto": not picked}
+    g = approved(db, "character", c.id, "portrait")
+    if g is None:
+        # a film made before sheets: an approved podcast-style sheet view still beats nothing
+        g = approved(db, "character", c.id, "sheet_view")
+    return {"generation": g if g is not None and g.file_path else None, "panel": "portrait" if g else None,
+            "auto": not picked}
+
+
 def references_for(db: Session, shot: Shot) -> tuple[list[str], list[str]]:
-    """Approved character portraits (or sheet view), then the location's establishing frame."""
+    """Per character the sheet panel that fits the shot (or the approved portrait), then the location's
+    establishing frame. At most MAX_REFS."""
     ids, labels = [], []
     for cid in shot.character_ids or []:
         c = db.get(Character, cid)
         if c is None:
             continue
-        g = approved(db, "character", cid, "portrait") or approved(db, "character", cid, "sheet_view")
-        if g and g.file_path:
+        g = character_ref(db, shot, c)["generation"]
+        if g is not None:
             ids.append(g.id)
             labels.append(c.name)
     loc_id = shot.location_id or (db.get(Scene, shot.scene_id).location_id if shot.scene_id else None)

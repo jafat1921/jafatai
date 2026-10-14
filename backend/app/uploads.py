@@ -32,14 +32,14 @@ EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
        "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
        "font/ttf": ".ttf", "font/otf": ".otf", "image/svg+xml": ".svg",
        "audio/wav": ".wav", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac", "audio/ogg": ".ogg",
-       "audio/flac": ".flac", "audio/webm": ".weba"}
+       "audio/flac": ".flac", "audio/webm": ".weba", "application/zip": ".zip"}
 # what a file name may say for each sniffed type; mp4 and mov are the same container family
 NAME_OK = {"image/png": {".png"}, "image/jpeg": {".jpg", ".jpeg", ".jfif"}, "image/webp": {".webp"},
            "video/mp4": {".mp4", ".m4v", ".mov"}, "video/quicktime": {".mov", ".mp4", ".m4v"},
            "video/webm": {".webm"}, "font/ttf": {".ttf"}, "font/otf": {".otf"}, "image/svg+xml": {".svg"},
            "audio/wav": {".wav", ".wave"}, "audio/mpeg": {".mp3"}, "audio/mp4": {".m4a", ".m4b", ".mp4", ".aac"},
            "audio/aac": {".aac"}, "audio/ogg": {".ogg", ".oga", ".opus"}, "audio/flac": {".flac"},
-           "audio/webm": {".weba", ".webm"}}
+           "audio/webm": {".weba", ".webm"}, "application/zip": {".zip"}}
 # ISO-BMFF brands that are stills, not video
 NOT_VIDEO_BRANDS = (b"avif", b"avis", b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1")
 AUDIO_BRANDS = (b"M4A ", b"M4B ", b"M4P ")

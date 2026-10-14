@@ -75,7 +75,7 @@ export interface MenuSection {
   modelsNote?: string
 }
 
-export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'audio' | 'upscale' | 'queue' | 'settings'
+export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | 'audio' | 'upscale' | 'queue' | 'settings'
 
 export interface RailItem {
   id: RailId
@@ -163,13 +163,13 @@ const UPSCALE_MENU: MenuSection = {
 const ASSETS_MENU: MenuSection = {
   title: 'Assets',
   features: [
-    { id: 'characters', title: 'Characters', description: 'Cast from your projects', to: '/assets#characters', icon: Users },
+    { id: 'characters', title: 'Characters', description: 'Character Studio: shared cast and sheets', to: '/characters', icon: Users },
     { id: 'locations', title: 'Locations', description: 'Places from your projects', to: '/assets#locations', icon: MapPin },
     { id: 'uploads', title: 'Uploads', description: 'Images and videos you brought in', to: '/assets#uploads', icon: FolderUp },
     { id: 'loras', title: 'LoRAs', description: 'Custom styles and faces · later', to: '/assets#loras', icon: Boxes, disabled: true },
   ],
   models: [],
-  modelsNote: 'Reusable characters and LoRAs across projects arrive in a later milestone.',
+  modelsNote: 'Character LoRAs arrive in a later milestone.',
 }
 
 export const RAIL_ITEMS: RailItem[] = [
@@ -180,6 +180,8 @@ export const RAIL_ITEMS: RailItem[] = [
   { id: 'image', label: 'Image', icon: ImageIcon, to: '/image/generate', menu: IMAGE_MENU },
   { id: 'video', label: 'Video', icon: Clapperboard, to: '/video/quick', menu: VIDEO_MENU },
   { id: 'audio', label: 'Audio', icon: Music, to: '/audio/song', menu: AUDIO_MENU },
+  // contract-v25: a studio of its own, not a menu under Video
+  { id: 'characters', label: 'Characters', icon: UsersRound, to: '/characters' },
   { id: 'upscale', label: 'Upscale', icon: ImageUpscale, to: '/image/upscale', menu: UPSCALE_MENU },
   { id: 'queue', label: 'Queue', icon: ListOrdered, to: '/queue' },
 ]
@@ -235,6 +237,7 @@ export function activeRail(pathname: string): RailId | null {
   if (p.startsWith('/image')) return 'image'
   if (p.startsWith('/video') || p.startsWith('/projects') || p === '/create' || p.startsWith('/quick')) return 'video'
   if (p.startsWith('/audio')) return 'audio'
+  if (p.startsWith('/characters')) return 'characters'
   if (p.startsWith('/assets')) return 'assets'
   if (p.startsWith('/photos')) return 'photos'
   if (p.startsWith('/brand-kits')) return 'brand'
@@ -260,6 +263,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/image\/library/, 'Image library'],
   [/^\/image\/studio/, 'Photo Studio'],
   [/^\/assets/, 'Assets'],
+  [/^\/characters/, 'Character Studio'],
   [/^\/photos/, 'Photos'],
   [/^\/brand-kits/, 'Brand kits'],
   [/^\/image\/img2img/, 'Image to image'],

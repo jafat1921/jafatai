@@ -42,10 +42,12 @@ def get_owned(db: Session, model, obj_id: str, workspace_id: str, label: str):
 
 
 def project_out(db: Session, p: Project) -> ProjectOut:
+    from app.cast import in_project
+
     out = ProjectOut.model_validate(p)
     out.counts = Counts(
         scenes=db.scalar(select(func.count()).select_from(Scene).where(Scene.project_id == p.id)) or 0,
-        characters=db.scalar(select(func.count()).select_from(Character).where(Character.project_id == p.id)) or 0,
+        characters=db.scalar(select(func.count()).select_from(Character).where(in_project(p.id))) or 0,
         shots=db.scalar(select(func.count()).select_from(Shot).where(Shot.project_id == p.id)) or 0,
     )
     thumb = db.scalars(
@@ -62,8 +64,14 @@ def project_out(db: Session, p: Project) -> ProjectOut:
     return out
 
 
-def character_out(db: Session, c: Character) -> CharacterOut:
+def character_out(db: Session, c: Character, *, films: bool = False) -> CharacterOut:
+    from app import cast, character_sheet as cs
+    from app.models import MediaItem
+    from app.schemas import FilmRef
+    from app.thumbs import url_for
+
     out = CharacterOut.model_validate(c)
+    out.studio = c.project_id is None
     g = db.scalars(
         select(Generation).where(
             Generation.target_type == "character",
@@ -73,6 +81,14 @@ def character_out(db: Session, c: Character) -> CharacterOut:
         )
     ).first()
     out.approved_portrait = gen_out(g) if g else None
+    cur = g or cs.portrait(db, c.id)
+    out.portrait = gen_out(cur) if cur else None
+    out.panels_ready = sum(1 for gens in cs.panel_gens(db, c.id).values() if cs.current(gens) is not None)
+    item = db.get(MediaItem, ((c.sheet or {}).get("board") or {}).get("media_id") or "")
+    board = db.get(Generation, item.generation_id) if item is not None and item.generation_id else None
+    out.board_thumb_url = url_for(board) if board is not None else None
+    if films:
+        out.films = [FilmRef(id=p.id, title=p.title) for p in cast.films(db, c)]
     return out
 
 
@@ -148,6 +164,12 @@ def enqueue_generation(
     return g
 
 
+def panel_key(g: Generation) -> str:
+    """Which sheet panel a sheet_view is. The podcast's older views only name their camera view."""
+    p = g.params or {}
+    return str(p.get("panel") or f"view:{p.get('view') or 'front'}")
+
+
 def approve(db: Session, g: Generation) -> Generation:
     if g.status == "approved":
         return g
@@ -155,23 +177,29 @@ def approve(db: Session, g: Generation) -> Generation:
         raise HTTPException(409, f"Only a ready generation can be approved (this one is {g.status})")
     now = utcnow()
     # demote first: the partial unique index would reject two approved rows
-    db.execute(
-        update(Generation)
-        .where(
-            Generation.target_type == g.target_type,
-            Generation.target_id == g.target_id,
-            Generation.kind == g.kind,
-            Generation.status == "approved",
-            Generation.id != g.id,
-        )
-        .values(status="ready", approved_at=None, updated_at=now)
-    )
+    same = [
+        Generation.target_type == g.target_type,
+        Generation.target_id == g.target_id,
+        Generation.kind == g.kind,
+        Generation.status == "approved",
+        Generation.id != g.id,
+    ]
+    if g.kind == "sheet_view":
+        # one approved per sheet panel, not per character (the index leaves sheet views out)
+        mine = panel_key(g)
+        ids = [o.id for o in db.scalars(select(Generation).where(*same)) if panel_key(o) == mine]
+        same.append(Generation.id.in_(ids))
+    db.execute(update(Generation).where(*same).values(status="ready", approved_at=None, updated_at=now))
     g.status = "approved"
     g.approved_at = now
     db.flush()
     from app.storyboard import after_approve  # storyboard imports this module
 
     after_approve(db, g)
+    if g.kind == "sheet_view":
+        from app.character_sheet import panel_changed
+
+        panel_changed(db, g)
     return g
 
 

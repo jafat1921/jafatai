@@ -1,6 +1,6 @@
 import { API_BASE, ApiError } from './api'
 import type { BrandPurpose } from './brand'
-import type { MediaItem, MediaKind } from './types'
+import type { Character, MediaItem, MediaKind } from './types'
 
 const MB = 1024 * 1024
 
@@ -94,6 +94,11 @@ function xhrUpload<T>(path: string, file: File, onProgress: (fraction: number) =
   })
   return { promise, abort: () => xhr.abort() }
 }
+
+// contract-v25: a character pack exported from Character Studio
+export const uploadCharacterPack = (file: File, onProgress: (fraction: number) => void) =>
+  xhrUpload<Character>('/characters/import', file, onProgress, (status, detail, name) =>
+    status === 413 ? `“${name}” is bigger than the 300 MB pack limit.` : detail || uploadErrorText(status, detail, name))
 
 export const uploadMedia = (file: File, onProgress: (fraction: number) => void, title?: string) =>
   xhrUpload<MediaItem>('/media/upload', file, onProgress, uploadErrorText, { title })

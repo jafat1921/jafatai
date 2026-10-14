@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import brand_moments as bm
+from app import cast, character_panels as cp
 from app import camera as cam
 from app import longtake
 from app import storyboard as sb
@@ -14,7 +15,7 @@ from app.schemas import (ChunkRegenerateIn, JobOut, SceneOut, ShotCreate, ShotEx
                          ShotOut, ShotPatch, ShotReorderIn, ShotRerenderIn, ShotRerenderOut, ShotsApproveIn,
                          ShotsApproveOut, ShotsReviewIn, ShotSplitIn, TakeEstimate, TakesIn)
 from app.security import CurrentUser, get_current_user, require_editor
-from app.services import enqueue_generation, get_owned, job_out, new_seed
+from app.services import enqueue_generation, gen_out, get_owned, job_out, new_seed
 
 router = APIRouter(tags=["shots"])
 
@@ -25,7 +26,7 @@ PROMPT_FIELDS = ("start_prompt", "end_prompt", "motion_prompt")
 def _check_refs(db: Session, project_id: str, character_ids: list[str] | None, location_id: str | None) -> None:
     if character_ids:
         found = set(db.scalars(
-            select(Character.id).where(Character.project_id == project_id, Character.id.in_(character_ids))
+            select(Character.id).where(cast.in_project(project_id), Character.id.in_(character_ids))
         ).all())
         if found != set(character_ids):
             raise HTTPException(422, "character_ids must be characters of this project")
@@ -50,6 +51,42 @@ def list_project_shots(project_id: str, db: Session = Depends(get_db), cur: Curr
 @router.get("/shots/{shot_id}", response_model=ShotOut)
 def get_shot(shot_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     return sb.shot_out(db, get_owned(db, Shot, shot_id, cur.workspace_id, "Shot"))
+
+
+@router.get("/shots/{shot_id}/refs")
+def shot_refs(shot_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    """The pictures a keyframe of this shot is drawn with (contract v25): per character the sheet panel the
+    framing picked (or the user's pick), then the location. The first MAX_REFS usable ones are used."""
+    from app import character_sheet as cs
+
+    shot = get_owned(db, Shot, shot_id, cur.workspace_id, "Shot")
+    out = []
+    for cid in shot.character_ids or []:
+        c = db.get(Character, cid)
+        if c is None:
+            continue
+        r = sb.character_ref(db, shot, c)
+        options = [{"key": "portrait", "label": "Portrait", "section_title": "Portrait"}]
+        for key, gens in cs.panel_gens(db, c.id).items():
+            p = cp.panel(key, cs.extras(c))
+            if p is not None and p.source != "none" and cs.current(gens) is not None:
+                options.append({"key": key, "label": cs.panel_label(c, p), "section_title": cs.section_title(c, p.section)})
+        p = cp.panel(r["panel"] or "", cs.extras(c))
+        out.append({"kind": "character", "id": c.id, "name": c.name, "panel": r["panel"],
+                    "panel_label": cs.panel_label(c, p) if p else ("Portrait" if r["panel"] else None),
+                    "auto": r["auto"], "generation": gen_out(r["generation"]) if r["generation"] else None,
+                    "options": options})
+    loc_id = shot.location_id or (db.get(Scene, shot.scene_id).location_id if shot.scene_id else None)
+    loc = db.get(Location, loc_id) if loc_id else None
+    if loc is not None:
+        g = sb.approved(db, "location", loc.id, "establishing")
+        out.append({"kind": "location", "id": loc.id, "name": loc.name, "panel": None, "panel_label": None,
+                    "auto": True, "generation": gen_out(g) if g is not None and g.file_path else None, "options": []})
+    n = 0
+    for r in out:
+        r["used"] = r["generation"] is not None and n < sb.MAX_REFS
+        n += r["used"]
+    return {"max_refs": sb.MAX_REFS, "refs": out}
 
 
 @router.post("/scenes/{scene_id}/shots", response_model=ShotOut, status_code=201)
@@ -103,6 +140,11 @@ def patch_shot(shot_id: str, body: ShotPatch, db: Session = Depends(get_db), cur
         changes["camera_rack"] = rack
         if "camera" not in changes:
             changes["camera"] = cam.to_prompt(rack).rstrip(".")[:300]
+    if "ref_panels" in changes:
+        picks = changes.pop("ref_panels") or {}
+        merged = {**(shot.ref_panels or {}), **picks}
+        # a blank or "auto" pick goes back to the automatic choice
+        shot.ref_panels = {k: v for k, v in merged.items() if v and v != "auto" and cp.panel(v) is not None}
     if "beats" in changes:
         beats = changes.pop("beats")
         if beats is not None:

@@ -13,6 +13,7 @@ from app.config import Settings, get_settings
 from app.drivers.base import DriverResult, ProgressCallback
 from app.drivers.comfy_client import ComfyClient, ComfyError, ComfyOutput, parse_outputs, pick_client
 from app import models_catalog as mc
+from app.character_panels import VIEW_ALIASES, VIEW_PROMPTS
 from app.lanes import AUDIO_KINDS
 from app.workflows import build, frames_for, load, snap_multiple
 
@@ -28,13 +29,6 @@ WAN_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (624, 624), "4:3": (
 PORTRAIT_SIZE = (768, 1024)
 MAX_FRAMES = 257  # ~10.7 s at 24 fps; longer shots belong to the long-take templates
 
-VIEW_PROMPTS = {
-    "front": "front view, facing the camera directly, full body, arms relaxed",
-    "three_quarter": "three-quarter view, body turned 45 degrees from the camera, full body",
-    "side": "side profile view, body turned 90 degrees, full body",
-    "back": "back view, seen from directly behind, full body",
-}
-VIEW_ALIASES = {"3/4": "three_quarter", "3-4": "three_quarter", "34": "three_quarter", "profile": "side"}
 ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
 
 TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23_extend": 3600.0,
@@ -234,6 +228,10 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
     if kind == "portrait":
         return edit_plan(ref_ids, prompt, PORTRAIT_SIZE) if ref_ids else t2i_plan(PORTRAIT_SIZE)
 
+    if kind == "sheet_view" and params.get("object"):
+        # a sheet's prop or accessory: an object on its own, so a product shot from text, not an edit
+        return t2i_plan((1024, 1024))
+
     if kind == "sheet_view":
         ids = ref_ids
         if not ids:
@@ -243,14 +241,18 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
             ids = [portrait]
         view = str(params.get("view") or "front").lower().replace(" ", "_")
         view = VIEW_ALIASES.get(view, view)
-        angle = VIEW_PROMPTS.get(view, view.replace("_", " "))
-        text = (
-            f"Show the same character from a new camera angle: {angle}. "
-            "Keep the face, hairstyle, body shape, clothing and colours exactly the same. "
-            "Plain light grey studio background, soft even lighting, character sheet style."
-        )
-        if prompt.strip():
-            text += f" {prompt.strip()}"
+        if params.get("panel"):
+            # a character sheet panel (app.character_sheet): its prompt is already the whole edit instruction
+            text = prompt.strip()
+        else:
+            angle = VIEW_PROMPTS.get(view, view.replace("_", " "))
+            text = (
+                f"Show the same character from a new camera angle: {angle}. "
+                "Keep the face, hairstyle, body shape, clothing and colours exactly the same. "
+                "Plain light grey studio background, soft even lighting, character sheet style."
+            )
+            if prompt.strip():
+                text += f" {prompt.strip()}"
         plan = edit_plan(ids, text, PORTRAIT_SIZE, model="qwen_image_edit_2511")  # the angles LoRA is Qwen-only
         if params.get("angles_lora"):
             strength = params["angles_lora"] if isinstance(params["angles_lora"], (int, float)) else 1.0

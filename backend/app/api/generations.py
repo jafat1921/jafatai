@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.ai_jobs import rewrite_prompt_from_note
-from app import models_catalog, reel, storyboard, upscale, upscale_image
+from app import character_sheet, models_catalog, reel, storyboard, upscale, upscale_image
 from app.api.media import resolve_media_path
 from app.config import get_settings
 from app.models import Generation, Job, Location, Project, Shot, utcnow
@@ -165,6 +165,7 @@ def unapprove_generation(gen_id: str, db: Session = Depends(get_db), cur: Curren
         raise HTTPException(409, "This generation isn't approved")
     g.status = "ready"
     g.approved_at = None
+    character_sheet.panel_changed(db, g)
     db.commit()
     return gen_out(g)
 
@@ -180,6 +181,7 @@ def reject_generation(
     g.approved_at = None
     if body and body.reason:
         g.reject_reason = body.reason
+    character_sheet.panel_changed(db, g)
     db.commit()
     return gen_out(g)
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, User, Users } from 'lucide-react'
+import { LibraryBig, Plus, User, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +9,7 @@ import { useProjectId, useSelectedCharacter } from '@/features/workspace/selecti
 import type { Character } from '@/lib/types'
 import { cn, plural } from '@/lib/utils'
 import { announce, useUi } from '@/stores/ui'
+import { CastFromStudioDialog } from '@/features/characters/CastFromStudioDialog'
 import { AddCharacterDialog } from './AddCharacterDialog'
 import { CharacterSuggestions } from './CharacterSuggestions'
 import { ExtractCharactersButton } from './ExtractCharactersButton'
@@ -36,7 +37,9 @@ function CharacterCard({ c, selected, onSelect }: { c: Character; selected: bool
         )}
       </div>
       <div className="flex flex-col gap-1.5 p-2.5">
-        <span className="truncate font-display text-panel font-semibold">{c.name}</span>
+        <span dir="auto" className="truncate font-display text-panel font-semibold">
+          {c.name}
+        </span>
         {c.description && <span className="line-clamp-2 text-small text-studio-muted">{c.description}</span>}
         <StatusPill
           className="self-start"
@@ -55,6 +58,7 @@ export function CastCanvas() {
   const projectId = useProjectId()
   const { characters, character, select } = useSelectedCharacter()
   const [adding, setAdding] = useState(false)
+  const [casting, setCasting] = useState(false)
   const [aiError, setAiError] = useState<unknown>(null)
   const list = characters.data ?? []
 
@@ -69,6 +73,10 @@ export function CastCanvas() {
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ExtractCharactersButton projectId={projectId} onError={setAiError} />
+          <Button variant="secondary" onClick={() => setCasting(true)}>
+            <LibraryBig aria-hidden />
+            From Character Studio
+          </Button>
           <Button variant="primary" onClick={() => setAdding(true)}>
             <Plus aria-hidden />
             Add character
@@ -132,6 +140,16 @@ export function CastCanvas() {
           setAdding(false)
           select(c.id)
           announce(`${c.name} added. Generate a portrait in the Inspector.`)
+        }}
+      />
+      <CastFromStudioDialog
+        projectId={projectId}
+        open={casting}
+        onOpenChange={setCasting}
+        onLinked={(c) => {
+          setCasting(false)
+          select(c.id)
+          announce(`${c.name} is cast in this film.`)
         }}
       />
     </div>

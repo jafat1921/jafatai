@@ -9,16 +9,24 @@ export interface GenerationTarget {
   targetType: TargetType
   targetId: string
   kind: GenerationKind
+  // contract-v25: one character sheet panel out of the character's sheet_view list
+  panel?: string
 }
 
-export function useGenerations({ targetType, targetId, kind }: GenerationTarget, includeRejected: boolean) {
+export const panelOf = (g: Pick<Generation, 'params'>) => (g.params?.panel as string | undefined) ?? null
+
+export function useGenerations({ targetType, targetId, kind, panel }: GenerationTarget, includeRejected: boolean) {
   return useQuery({
     queryKey: qk.generations(targetType, targetId, kind, includeRejected),
     queryFn: () =>
       api.generations.list({ target_type: targetType, target_id: targetId, kind, include_rejected: includeRejected }),
     enabled: !!targetId,
+    select: panel ? (list: Generation[]) => list.filter((g) => panelOf(g) === panel) : undefined,
   })
 }
+
+// sheet panels are approved one per panel, everything else one per target+kind
+const sameSlot = (a: Generation, b: Generation) => a.kind !== 'sheet_view' || panelOf(a) === panelOf(b)
 
 const newestFirst = (a: Generation, b: Generation) => b.version - a.version
 
@@ -34,7 +42,9 @@ export function upsertGeneration(qc: QueryClient, gen: Generation) {
     qc.setQueryData<Generation[]>(q.queryKey, (old) => {
       let list = (old ?? []).filter((g) => g.id !== gen.id)
       if (gen.status === 'approved') {
-        list = list.map((g) => (g.status === 'approved' ? { ...g, status: 'ready' as const, approved_at: null } : g))
+        list = list.map((g) =>
+          g.status === 'approved' && sameSlot(g, gen) ? { ...g, status: 'ready' as const, approved_at: null } : g,
+        )
       }
       if (gen.status !== 'rejected' || includeRejected) list.push(gen)
       return list.sort(newestFirst)
@@ -51,6 +61,12 @@ export function upsertGeneration(qc: QueryClient, gen: Generation) {
         return c
       }),
     )
+  }
+
+  // the sheet and the studio card are worked out on the server; refetch rather than patch
+  if (gen.target_type === 'character') {
+    qc.invalidateQueries({ queryKey: qk.characterSheet(gen.target_id) })
+    if (gen.kind === 'portrait') qc.invalidateQueries({ queryKey: qk.character(gen.target_id) })
   }
 
   if (gen.target_type === 'location' && gen.kind === 'establishing') {

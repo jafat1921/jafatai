@@ -302,9 +302,12 @@ def extract_messages(project, scripts: str, known: list[str]) -> list[dict]:
 
 
 def portrait_messages(project, character) -> list[dict]:
+    # a Character Studio character has no film around it
+    film = (f"Film: {project.title}. {project.logline}\nAspect ratio of the film: {project.aspect_ratio}\n\n"
+            if project is not None else "")
+    infer = "(none — infer a fitting look from the film)" if project is not None else "(none — infer one from the name)"
     user = (
-        f"Film: {project.title}. {project.logline}\nAspect ratio of the film: {project.aspect_ratio}\n\n"
-        f"Character: {character.name}\nDescription: {character.description or '(none — infer a fitting look from the film)'}\n\n"
+        f"{film}Character: {character.name}\nDescription: {character.description or infer}\n\n"
         "Write a text-to-image prompt for this character's reference portrait. It will anchor their look in every "
         "later shot, so: head-and-shoulders, facing the camera with a slight three-quarter turn, neutral expression, "
         "plain neutral grey studio background, soft even key light with gentle fill, photorealistic, sharp focus on "
@@ -313,6 +316,45 @@ def portrait_messages(project, character) -> list[dict]:
         "people, no quotes. Reply with the prompt only."
     )
     return [{"role": "system", "content": "You write precise prompts for photorealistic image models."},
+            {"role": "user", "content": user}]
+
+
+class CharacterProfile(BaseModel):
+    role: str = ""
+    affiliation: str = ""
+    nationality: str = ""
+    height: str = ""
+    age: str = ""
+    gender: str = ""
+    languages: str = ""
+    personality: str = ""
+    accent: str = ""
+    wardrobe: str = ""
+    # things the sheet can show on their own or close up
+    props: list[str] = []
+    accessories: list[str] = []
+    details: list[str] = []
+
+
+def profile_messages(character, film: str = "") -> list[dict]:
+    """Character Studio's "Fill from description": the identity block plus items the sheet can show."""
+    known = {k: v for k, v in (character.profile or {}).items() if v}
+    rule = aerab.writing_rule(None, f"{character.name}. {character.description}")
+    user = (
+        (f"Film: {film}\n" if film else "")
+        + f"Character: {character.name}\nDescription: {character.description or '(none)'}\n"
+        + (f"Already decided (keep these, don't contradict them): {known}\n" if known else "")
+        + "\nFill in a character profile for a reference sheet. role: what they do in the story, a few words. "
+        "affiliation: team, family, company or side, if any. nationality, height (with units, e.g. 172 cm), "
+        "age (a number or a range), gender, languages they speak, personality (three or four adjectives), accent "
+        "(how they sound when they speak), wardrobe (their signature outfit in one line). Then list items for "
+        "the sheet: props (up to 3 objects they carry or use, weapons too if the story has them), accessories "
+        "(up to 6 worn items such as a watch, glasses, jewellery or a bag) and details (4 parts of their outfit "
+        "worth a close-up). Infer sensibly from the description; leave a field empty rather than invent something "
+        "that clashes with it. Short values, no full sentences."
+        + (f" Write the values in the language of the description. {rule}" if rule else "")
+    )
+    return [{"role": "system", "content": "You are a costume designer and casting director. Answer only with JSON."},
             {"role": "user", "content": user}]
 
 

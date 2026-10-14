@@ -14,7 +14,14 @@ import type {
   LyricsRequest,
   LyricsResponse,
   TemplateType,
+  BoardLayout,
   Character,
+  CharacterProfile,
+  CharacterSheet,
+  SheetCatalogue,
+  SheetRequest,
+  SheetTextPatch,
+  ShotRef,
   Generation,
   GenerationKind,
   Job,
@@ -345,9 +352,31 @@ export const api = {
     list: (projectId: string) => get<Character[]>(`/projects/${projectId}/characters`),
     create: (projectId: string, body: { name: string; description?: string }) =>
       post<Character>(`/projects/${projectId}/characters`, body),
-    update: (id: string, body: Partial<Pick<Character, 'name' | 'description' | 'locked'>>) =>
+    update: (id: string, body: Partial<Pick<Character, 'name' | 'description' | 'locked' | 'profile' | 'voice_id'>>) =>
       patch<Character>(`/characters/${id}`, body),
-    remove: (id: string) => del(`/characters/${id}`),
+    // from a film (projectId) a studio character is only unlinked; without it, it goes everywhere
+    remove: (id: string, projectId?: string) =>
+      del(`/characters/${id}${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`),
+    // contract-v25: Character Studio
+    studio: (q?: string) => get<Character[]>(`/characters${q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`),
+    get: (id: string) => get<Character>(`/characters/${id}`),
+    createStudio: (body: { name: string; description?: string; profile?: CharacterProfile }) =>
+      post<Character>('/characters', body),
+    fromPhoto: (body: { name: string; media_id: string; description?: string; consent: { name: string; statement: string } }) =>
+      post<Character>('/characters/from-photo', body),
+    saveToStudio: (id: string) => post<Character>(`/characters/${id}/save-to-studio`),
+    link: (projectId: string, characterId: string) =>
+      post<Character>(`/projects/${projectId}/cast`, { character_id: characterId }),
+    aiProfile: (id: string) => post<Job>(`/characters/${id}/ai/profile`),
+    sheet: (id: string) => get<CharacterSheet>(`/characters/${id}/sheet`),
+    makeSheet: (id: string, body: SheetRequest) => post<CharacterSheet>(`/characters/${id}/sheet`, body),
+    patchSheet: (id: string, body: SheetTextPatch) => patch<CharacterSheet>(`/characters/${id}/sheet`, body),
+    regeneratePanel: (id: string, key: string, note?: string) =>
+      post<Generation>(`/characters/${id}/sheet/panels/${encodeURIComponent(key)}/regenerate`, { note: note ?? '' }),
+    makeBoard: (id: string, layout: BoardLayout) => post<Job>(`/characters/${id}/sheet/board`, { layout }),
+    catalogue: () => get<SheetCatalogue>('/character-sheet/catalogue'),
+    boardUrl: (id: string, format: 'png' | 'pdf') => `${API_BASE}/characters/${id}/sheet/board/download?format=${format}`,
+    packUrl: (id: string) => `${API_BASE}/characters/${id}/pack`,
   },
   locations: {
     list: (projectId: string) => get<Location[]>(`/projects/${projectId}/locations`),
@@ -359,6 +388,8 @@ export const api = {
   },
   shots: {
     list: (projectId: string) => get<Shot[]>(`/projects/${projectId}/shots`),
+    // contract-v25: the pictures its keyframes are drawn with, and the panels each character could use
+    refs: (id: string) => get<{ max_refs: number; refs: ShotRef[] }>(`/shots/${id}/refs`),
     listForScene: (sceneId: string) => get<Shot[]>(`/scenes/${sceneId}/shots`),
     create: (
       sceneId: string,

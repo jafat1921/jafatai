@@ -523,6 +523,8 @@ for port in "${PORTS[@]}"; do
       model:*)
         rest="${check#model:}"; folder="${rest%%:*}"; name="${rest#*:}"
         out=$(curl -sf "$base/models/$folder" || true)
+        # newer ComfyUI lists models/unet under its new name
+        [[ "$folder" == unet ]] && out+=$(curl -sf "$base/models/diffusion_models" || true)
         if grep -qF "\"$name\"" <<<"$out"; then r=OK; else r=MISSING; FAILED=1; fi
         printf '    %-8s model %s/%s\n' "$r" "$folder" "$name" ;;
     esac

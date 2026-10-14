@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Generation
 from app.photo import develop as dv
 from app.photo import effects as fx
@@ -236,6 +236,7 @@ def mask(gen_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(
     path = get_settings().data_dir / rel if rel else None
     if not path or not path.is_file():
         raise HTTPException(404, "This picture has no cut-out mask")
+    release(db)
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 

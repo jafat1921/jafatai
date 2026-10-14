@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app import stories
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Job
 from app.schemas import JobOut
 from app.security import CurrentUser, get_current_user, require_editor
@@ -150,5 +150,6 @@ def story_file(job_id: str, name: str, db: Session = Depends(get_db), cur: Curre
     path = (folder / name).resolve()
     if not path.is_relative_to(folder) or not path.is_file():
         raise HTTPException(404, "This file is gone (story files are kept for 7 days)")
+    release(db)
     return FileResponse(path, media_type=MEDIA_TYPES.get(path.suffix.lower()), filename=name,
                         headers={"Cache-Control": "private, no-store"})

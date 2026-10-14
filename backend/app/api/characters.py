@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app import cast, character_pack, character_panels as cp, character_sheet as cs, models_catalog, voices
 from app import library as lib, shot_speech, voice_instruct
 from app.ai_jobs import enqueue_ai
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Character, Generation, Job, MediaItem, Project, VoiceProfile, utcnow
 from app.schemas import (BoardIn, CastLinkIn, CharacterCreate, CharacterFromPhoto, CharacterOut, CharacterPatch,
                          CharacterVoiceDesignIn, CharacterVoiceDesignOut, GenerationOut, JobOut, OwnImageIn,
@@ -351,6 +351,7 @@ def download_board(character_id: str, format: str = Query("png", pattern="^(png|
         headers["Content-Disposition"] = f'attachment; filename="{stem} sheet.pdf"'
         return Response(cs.board_pdf(path), media_type="application/pdf", headers=headers)
     # an uploaded sheet goes back as the file it came in as
+    release(db)
     return FileResponse(path, media_type=g.media_type or "image/png", filename=f"{stem} sheet{path.suffix.lower()}",
                         headers=headers)
 

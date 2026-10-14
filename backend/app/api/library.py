@@ -25,7 +25,7 @@ from app import organise as org
 from app import prompt_enhance, uploads
 from app import styles as st
 from app.ai_jobs import rewrite_prompt_from_note
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Generation, Job, MediaItem, Project, UserTemplate, new_id, utcnow
 from app.schemas import (
     DashboardOut, ImageBatchOut, ImageControlIn, ImageEditIn, ImageGenerateIn, Img2ImgIn, JobOut, MediaDetailOut,
@@ -208,11 +208,12 @@ def image_options():
 
 
 @router.get("/images/styles/{style_id}/preview")
-def style_preview(style_id: str, cur: CurrentUser = Depends(get_current_user)):
+def style_preview(style_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     s = st.catalogue().get(style_id)
     f = st.preview_file(s) if s is not None else None
     if f is None:
         raise HTTPException(404, "No preview for this style")
+    release(db)
     return FileResponse(f, media_type="image/webp", headers={"Cache-Control": "private, max-age=86400"})
 
 
@@ -733,10 +734,11 @@ def list_templates(type: Literal["video", "image", "audio"] | None = None, db: S
 
 @router.get("/templates/{template_id}/preview")
 @router.get("/prompt-templates/{template_id}/preview")
-def template_preview(template_id: str, cur: CurrentUser = Depends(get_current_user)):
+def template_preview(template_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     f = preview_file(template_id)
     if f is None:
         raise HTTPException(404, "No preview for this prompt template")
+    release(db)
     return FileResponse(f, media_type="image/webp", headers={"Cache-Control": "private, max-age=86400"})
 
 

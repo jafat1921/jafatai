@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app import voice_gallery as vg
 from app import voices as vc
-from app.db import get_db
+from app.db import get_db, release
 from app.schemas import VoiceOut
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import job_out
@@ -43,6 +43,7 @@ def sample(gallery_id: str, db: Session = Depends(get_db), cur: CurrentUser = De
     _entry(gallery_id)
     path = vg.sample_path(gallery_id)
     if path.is_file():
+        release(db)
         return FileResponse(path, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=86400"})
     # rendered once for everyone; a viewer may trigger it too, it's the studio's own catalogue
     job = vg.queue_sample(db, cur.workspace_id, gallery_id)

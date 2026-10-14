@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app import file_links, reel
 from app.api.media import resolve_media_path
 from app.config import get_settings
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Generation, Project
 from app.services import READY_STATES
 
@@ -24,5 +24,6 @@ def signed_download(signed: str, db: Session = Depends(get_db)):
     if path is None:
         raise HTTPException(404, "This link has expired or the file is gone")
     name = reel.download_name(db.get(Project, g.project_id) if g.project_id else None, g)
+    release(db)
     return FileResponse(path, media_type=g.media_type or None, filename=name,
                         headers={"Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer"})

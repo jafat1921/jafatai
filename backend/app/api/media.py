@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import thumbs
 from app.config import get_settings
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Generation
 from app.security import CurrentUser, get_current_user
 
@@ -47,14 +47,16 @@ def get_thumb(gen_id: str, w: int = Query(thumbs.DEFAULT), db: Session = Depends
         raise HTTPException(404, "No preview for this file")
     # a generation's file never changes, so neither does its thumb
     kind = "image/png" if dest.suffix == ".png" else "image/webp"  # audio: the waveform
+    release(db)
     return FileResponse(dest, media_type=kind, headers={"Cache-Control": "private, max-age=604800"})
 
 
 @router.get("/media/{path:path}")
-def get_media(path: str, cur: CurrentUser = Depends(get_current_user)):
+def get_media(path: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     target = resolve_media_path(path, cur.workspace_id, get_settings().data_dir)
     if target is None:
         raise HTTPException(404, "Not found")
+    release(db)
     # mimetypes doesn't know .flac / .m4a everywhere; <audio> wants the real type to start playing
     return FileResponse(target, media_type=AUDIO_TYPES.get(target.suffix.lower()),
                         headers={"Cache-Control": "private, max-age=3600"})

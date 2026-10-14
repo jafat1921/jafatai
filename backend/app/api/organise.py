@@ -11,7 +11,7 @@ from app import organise as org
 from app import upscale, upscale_image
 from app.api.media import resolve_media_path
 from app.config import get_settings
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Folder, Job, SavedFilter, utcnow
 from app.schemas import (
     BatchIn, BatchOut, FavouriteIn, FavouriteOut, FavouritesImportIn, FavouritesOut, FolderIn, FolderOut, FolderPatch,
@@ -283,5 +283,6 @@ def download_export(job_id: str, db: Session = Depends(get_db), cur: CurrentUser
         raise HTTPException(410, "This zip has been cleared; make it again from the Library")
     name = f"mixai-library-{job.created_at:%Y%m%d-%H%M}.zip"
     # FileResponse streams in chunks, so a multi-GB archive never sits in memory
+    release(db)
     return FileResponse(path, media_type="application/zip", filename=name,
                         headers={"Cache-Control": "private, no-store"})

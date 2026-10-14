@@ -13,7 +13,7 @@ from app import organise as org
 from app.catalogue import albums as al
 from app.catalogue import query as cq
 from app.config import get_settings
-from app.db import get_db
+from app.db import get_db, release
 from app.models import Album, Client, MediaItem
 from app.schemas import MediaItemOut
 from app.security import CurrentUser, get_current_user, require_editor
@@ -246,6 +246,7 @@ def photo_source(media_id: str, db: Session = Depends(get_db), cur: CurrentUser 
     if not path or not path.is_file():
         raise HTTPException(404, "This photo has no separate original file")
     name = m.original_name or path.name
+    release(db)
     return FileResponse(path, filename=name, media_type="application/octet-stream")
 
 

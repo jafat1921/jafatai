@@ -35,3 +35,10 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def release(db) -> None:
+    # FastAPI closes a yield dependency only after the whole response has been sent, so a file streaming
+    # to a slow client would pin a pooled connection for minutes; a few of those starve every other
+    # request (QueuePool timeout, 500 after 30 s). File routes call this once they've done their checks.
+    db.close()

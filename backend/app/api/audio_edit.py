@@ -19,7 +19,7 @@ from app import audio_edit as ae
 from app import audio_jobs as aj
 from app import library as lib
 from app import mixdown as md
-from app.db import get_db
+from app.db import get_db, release
 from app.reel import safe_name
 from app.schemas import AudioPreviewIn, AudioRenderIn, LoudnessTarget, MixIn, MixRenderIn
 from app.security import CurrentUser, get_current_user, require_editor
@@ -160,5 +160,6 @@ async def export(item_id: str, format: ExportFormat = "wav16", loudness: Loudnes
         shutil.rmtree(tmp, ignore_errors=True)
         raise _fail(e) from None
     name = safe_name(item.title or "", "audio") + ext
+    release(db)
     return FileResponse(dst, media_type=media_type, filename=name, headers={"Cache-Control": "no-store"},
                         background=BackgroundTask(shutil.rmtree, tmp, ignore_errors=True))

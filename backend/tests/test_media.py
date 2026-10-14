@@ -35,3 +35,31 @@ def test_resolver_rejects_outside_and_other_workspaces(tmp_path):
 
 def test_media_requires_session(anon):
     assert anon.get("/api/media/workspaces/x/y.png").status_code == 401
+
+
+def test_file_responses_give_their_db_connection_back_before_streaming(client):
+    # FastAPI closes the request's session only after the last byte is sent; a video going out at
+    # 100 KB/s used to pin a pooled connection for minutes and starve every other route
+    import asyncio
+
+    from app.db import engine
+    from app.main import app
+
+    cookie = "; ".join(f"{k}={v}" for k, v in client.cookies.items())
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET", "scheme": "http",
+             "path": "/api/templates/image-aerial/preview", "raw_path": b"/api/templates/image-aerial/preview",
+             "query_string": b"", "root_path": "", "server": ("test", 80), "client": ("test", 1),
+             "headers": [(b"host", b"test"), (b"cookie", cookie.encode())]}
+    seen = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(msg):
+        if msg["type"] == "http.response.start":
+            seen.append(msg["status"])
+        elif msg["type"] == "http.response.body" and len(seen) == 1:
+            seen.append(engine.pool.checkedout())
+
+    asyncio.run(app(scope, receive, send))
+    assert seen == [200, 0]

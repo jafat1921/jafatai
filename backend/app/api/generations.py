@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import get_db, release
 from app.ai_jobs import rewrite_prompt_from_note
 from app import character_sheet, models_catalog, reel, storyboard, upscale, upscale_image
 from app.api.media import resolve_media_path
@@ -217,6 +217,7 @@ def download_generation(gen_id: str, db: Session = Depends(get_db), cur: Current
     if path is None or g.status not in READY_STATES:
         raise HTTPException(404, "This file isn't available")
     name = reel.download_name(db.get(Project, g.project_id) if g.project_id else None, g)
+    release(db)
     return FileResponse(path, media_type=g.media_type or None, filename=name,
                         headers={"Cache-Control": "private, no-store"})
 

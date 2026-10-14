@@ -244,3 +244,9 @@ with per-line seeds, the ducking graph and `match`; real ffmpeg (imageio-ffmpeg 
 16:9 and a 9:16 Short with `max_seconds` (duration, size, chapters); the download whitelist, traversal,
 workspace and 7-day sweep; `AUDIO_ALLOW_NONCOMMERCIAL=false` hiding/refusing OmniVoice and switching the
 default.
+
+## Addendum (v28b): preview copy
+- The story video result has `preview`: the same video at 640×360 (16:9) or 360×640 (9:16), H.264 + AAC at about 0.5 Mbit/s with `+faststart`, e.g. `story_16x9_preview.mp4`. It downloads through the same files route.
+- `GET /api/stories/{job_id}/files/{name}` honours `Range` (206 Partial Content), so players can seek and interrupted downloads can resume.
+- The Caddy example (`deploy/Caddyfile.mixai`) compresses text types only, so media is passed through as-is.
+

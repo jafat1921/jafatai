@@ -99,7 +99,7 @@ def file_names(result: dict | None) -> set[str]:
     """Every file a finished story job lists; the download route serves these and nothing else."""
     r = result or {}
     names = {p.get("file") for p in r.get("pages") or []}
-    names |= {(r.get("full") or {}).get("file"), (r.get("full_music") or {}).get("file"), r.get("file"), r.get("srt")}
+    names |= {(r.get("full") or {}).get("file"), (r.get("full_music") or {}).get("file"), r.get("file"), r.get("srt"), r.get("preview")}
     return {n for n in names if isinstance(n, str) and n}
 
 
@@ -663,6 +663,7 @@ def handle_video(ctx) -> dict:
     prune_old(job.workspace_id)
     name = p.get("name") or "story"
     dst, srt = out / f"{name}.mp4", out / f"{name}.srt"
+    preview = out / f"{name}_preview.mp4"
     segs = plan["segments"]
     videos = set(p.get("videos") or [])
     t0 = time.monotonic()
@@ -719,10 +720,16 @@ def handle_video(ctx) -> dict:
              "-movflags", "+faststart", str(part)])
         part.replace(dst)
         st.write_srt(srt, plan["cues"], language)
+        # a small copy to watch over a slow link before downloading the full one (~0.5 Mbit/s)
+        ctx.progress(0.98, "Making the preview")
+        pw, ph = (640, 360) if w >= h else (360, 640)
+        _ff(["-i", str(dst), "-vf", f"scale={pw}:{ph}:flags=lanczos,format=yuv420p", "-c:v", "libx264",
+             "-preset", "veryfast", "-b:v", "430k", "-maxrate", "500k", "-bufsize", "1000k", "-c:a", "aac",
+             "-b:a", "64k", "-movflags", "+faststart", str(preview)])
     finally:
         shutil.rmtree(work, ignore_errors=True)
     out_ = {"file": dst.name, "duration": round(aa.stream_info(dst).duration, 3), "width": w, "height": h,
-            "chapters": plan["chapters"], "srt": srt.name, "seconds": round(time.monotonic() - t0, 3)}
+            "chapters": plan["chapters"], "srt": srt.name, "preview": preview.name, "seconds": round(time.monotonic() - t0, 3)}
     if burned and burned.get("fonts_missing"):
         out_["fonts_missing"] = burned["fonts_missing"]
     return out_

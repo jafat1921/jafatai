@@ -266,6 +266,11 @@ def test_video_16x9_with_captions_and_end_card(client, monkeypatch):
     assert (info.width, info.height) == (1920, 1080) and info.has_audio and _chapters(path) == 2
     srt = (path.parent / res["srt"]).read_text(encoding="utf-8")
     assert "Pip ran to the window." in srt and "snowed all night" in srt
+    # the small copy to watch before downloading; served by the same files route, with ranges for seeking
+    small = br.video_info(path.parent / res["preview"])
+    assert res["preview"] == "story_16x9_preview.mp4" and (small.width, small.height) == (640, 360) and small.has_audio
+    got = client.get(f"/api/stories/{j.id}/files/{res['preview']}", headers={"Range": "bytes=0-99"})
+    assert got.status_code == 206 and len(got.content) == 100
 
 
 def test_video_9x16_short_with_max_seconds(client, monkeypatch):
@@ -284,6 +289,8 @@ def test_video_9x16_short_with_max_seconds(client, monkeypatch):
     assert j.status == "done", j.error
     res = j.result
     assert res["file"] == "story_9x16.mp4" and (res["width"], res["height"]) == (1080, 1920)
+    small = br.video_info(stories.story_dir(j.workspace_id, j.id) / res["preview"])
+    assert (small.width, small.height) == (360, 640)
     assert res["chapters"] == [{"key": "p1", "start": 1.5}]
     assert res["duration"] == pytest.approx(1.5 + p1_end + 1, abs=0.15) and res["duration"] <= body["max_seconds"]
     path = stories.story_dir(j.workspace_id, j.id) / res["file"]

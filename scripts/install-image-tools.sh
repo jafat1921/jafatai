@@ -364,6 +364,18 @@ fetch() {  # $1 url, $2 dest, $3 bytes, $4 sha256 (may be empty)
   if [[ -n "$sha" ]]; then echo "downloaded (sha256 ok)"; else echo "downloaded (size ok, no published hash)"; fi
 }
 
+patch_catvton_abn() {
+  # SCHP's in-place batch norm JIT-compiles a CUDA extension on import, which needs the CUDA toolkit; swap in
+  # a pure-PyTorch version so the node loads with just the driver and PyTorch
+  local f="$NODES/$CATVTON_DIR/model/SCHP/modules/functions.py"
+  local ours; ours="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/catvton_inplace_abn_functions.py"
+  [[ -f "$f" ]] && grep -q "cpp_extension import load" "$f" || return 0
+  if (( DRY )); then info "would patch  $CATVTON_DIR inplace_abn (no CUDA toolkit needed)"; return 0; fi
+  cp "$f" "$f.orig" && cp "$ours" "$f" || { warn "couldn't patch $f"; FAILED=1; return 1; }
+  info "patched $CATVTON_DIR inplace_abn (original kept as functions.py.orig)"
+  STATUS[$CATVTON_DIR]="${STATUS[$CATVTON_DIR]:-present} +patched"; CHANGED=1
+}
+
 install_catvton_node() {
   local dir="$NODES/$CATVTON_DIR"
   if [[ -d "$dir" && ! -f "$dir/__init__.py" && -f "$dir/$CATVTON_DIR/__init__.py" ]]; then
@@ -422,6 +434,7 @@ for row in "${REPOS[@]}"; do
 done
 if (( WANT_TRYON )); then
   if ! install_catvton_node; then STATUS[$CATVTON_DIR]="FAILED"; FAILED=1; warn "$CATVTON_DIR failed"; fi
+  patch_catvton_abn
 fi
 
 # ---------------------------------------------------------------- models

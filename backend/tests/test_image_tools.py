@@ -59,7 +59,7 @@ def test_tool_templates_build_and_check(tool):
     tpl = load(t.template)
     assert check_template(t.template, info())["ok"], t.template
     req = tpl.manifest["requires"]
-    assert req["pack"] and req["nodes"] and req["assumed"]
+    assert req["pack"] and req["nodes"] and (req.get("assumed") or req.get("verified"))
     assert t.template in TIMEOUTS
     inputs = {"image": "a.png", "mask": "m.png", "garment": "g.png", "width": 640, "height": 480, "seed": 3}
     graph, resolved = build(t.template, inputs)

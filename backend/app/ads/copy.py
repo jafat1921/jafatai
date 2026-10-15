@@ -158,6 +158,31 @@ def strip_channels(text: str, ch: Channels) -> tuple[str, list[str]]:
     return "\n".join(ln for ln in out.split("\n") if ln.strip(" .,-–·")), removed
 
 
+# ---------------------------------------------------------------- punctuation
+
+_QUESTION = "?؟"
+
+
+def tidy(field: str, text: str) -> str:
+    """Punctuation the way a designer sets it: a kicker carries no full stop (it's set in capitals as a label),
+    a question ends on its question mark, and doubled or stray marks go ("Flyttar du?." -> "Flyttar du?")."""
+    lines = []
+    for ln in (text or "").split("\n"):
+        ln = " ".join(ln.split())
+        ln = re.sub(r"\s+([.,!?;:؟،])", r"\1", ln)
+        ln = re.sub(r"([?؟!])[.。]+", r"\1", ln)
+        ln = re.sub(r"(?<!\.)\.\.(?!\.)", ".", ln)  # ".." is a typo; "..." is meant
+        ln = re.sub(r"([!?؟])\1+", r"\1", ln)
+        ln = re.sub(r",\s*([.!?؟])", r"\1", ln)
+        lines.append(ln)
+    out = "\n".join(lines).strip()
+    if field == "kicker":
+        out = re.sub(r"(?<!\.)\.$", "", out).rstrip()
+    elif field == "headline" and out.rstrip(".").endswith(tuple(_QUESTION)):
+        out = out.rstrip(".")
+    return out
+
+
 def guard(concept: dict, approved: list[str], extra_text: str = "",
           channels: Channels | None = None) -> tuple[dict, dict]:
     """(the concept with only approved offers, numbers and channels, what was taken out)."""
@@ -178,7 +203,7 @@ def guard(concept: dict, approved: list[str], extra_text: str = "",
         text, gone = strip_channels(c.get(k) or "", ch)
         report["channels_removed"] += gone
         text, gone = strip_numbers(text, allowed)
-        c[k] = text
+        c[k] = tidy(k, text)
         report["numbers_removed"] += gone
     if not c.get("headline", "").strip():
         # nothing left of the headline: the kicker moves up rather than leaving an empty ad

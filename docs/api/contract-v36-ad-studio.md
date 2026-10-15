@@ -214,3 +214,79 @@ web addresses whose host isn't the kit's website, booking link or a social profi
 mentions of a platform the kit has no account on (with the little word before it: "via WhatsApp",
 "på TikTok"), and phone numbers other than the kit's (local `0…` forms of the kit's numbers count).
 `guard.channels_removed` lists what went.
+
+## 8. Addendum: art direction after the first live campaign
+
+The first real campaign (Swedish, autumn, a cleaning brand) worked end to end but read badly: stiff,
+translated-sounding copy, palette hex codes painted into a photo as text, a white plate behind the logo on dark
+photos, posed stock-like photo prompts, a story footer floating mid-screen and a CTA indistinguishable from
+the offer. No migration; the API shape only grows.
+
+### Copywriter model
+
+`ADS_LLM_MODEL` (empty by default) names the model for the concept call and the self-check. Empty: the
+largest installed model from `ADS_LLM_MODELS` (default `gemma4:26b,qwen2.5:14b-instruct,gemma4:e4b`) plus
+`LLM_MODEL_CREATIVE`, sized from the Ollama tag (`26b`, `14b-instruct`, `e4b` = 4); list order breaks ties.
+When the model list can't be read the creative role's model is used. `deepseek-r1` is left out by default (a
+thinking model). The job result records it as `copywriter`. `llm.chat(..., model=)` is the per-call override.
+
+### Concept prompt and self-check
+
+The creative-director prompt now asks for native spoken idiom (no literal translations or borrowed English
+phrasing), one clear insight per concept, no empty abstractions, a headline of at most 5 words, and carries a
+short GOOD / BAD example set for `sv` and `en` (generic, not client lines; other languages see the English set
+as a register guide). The brand context gives the palette as colour names, never hex.
+
+A second call (schema `AdCopyCheck`: `{lines: [{concept, field, score 1-5, issue, rewrite}]}`) has a native
+editor score every kicker/headline/body/cta and rewrite lines scoring 3 or lower. Rewrites go through the
+offer/number/channel guard like the first draft. A failed check keeps the draft. Concepts gain
+`copy_check: [{field, score, issue, before?, after?}]` and `photo_model`.
+
+Punctuation (`copy.tidy`, applied by the guard): no trailing full stop on a kicker, a question ends on its
+question mark ("?." and " ?" are fixed), doubled marks and ".." collapse ("..." is kept).
+
+### Photos
+
+- Prompts never carry hex values, handles, links, emails, phone numbers or the brand's name/tagline:
+  `app/ads/colours.py` names colours (`#26243F` -> "deep navy", `#FF8484` -> "soft coral") and `scrub()`
+  cleans the LLM's prompt, the kit's style text, the placement and the logo-edit instruction.
+- t2i prompts start with an editorial lifestyle / natural light line and end with "No text, no letters, no
+  numbers, no logos, no signs, no name badges anywhere in the picture." The product edit path allows only the
+  product's own label. The negative adds numbers, name badges, colour swatches and hex codes.
+- Photo-prompt rules: real moments (people working naturally, or the lived-in result), local cues of the
+  market, no random props or badges, and an explicit copy-space region per layout (frosted/badge upper start
+  side, side_wash start half, bottom_bar bottom third, minimal upper half, split none).
+- `brief.image_model` defaults to `"auto"`: each concept picks `zimage_turbo` (people, homes) or
+  `qwen_image_2512` (detailed interiors, products) via `photo_model`; any explicit model is kept for every
+  concept. `/api/ads/options` lists Auto first.
+
+### Layout
+
+- **Logo**: on auto the primary logo stays when it reads (3:1 against where it lands). Otherwise, on a
+  background where white reads better, the kit's light logo; with no light logo the primary's dark ink
+  (luminance < 0.35, not saturated) is recoloured to white, keeping saturated accents and the transparency
+  (white backgrounds are still keyed out first). A plate is the last resort. `report.logo` = `{variant:
+  primary|light|dark|recoloured, plate, contrast, box}`.
+- **CTA vs offer**: palette roles gain `primary` (the first palette colour deep enough for white type, else
+  the ink). The CTA is a solid button in `primary` with white text, a modest radius and an arrow (pointing
+  left in RTL); on a surface of the same colour (a bottom bar, a story fade) it turns white with the primary
+  label. The offer stays a pill in a tint of the accent. `report.buttons` = `{cta: {shape: "button", bg, fg,
+  arrow: true, inverted}, offer: {shape: "pill", bg, fg, arrow: false}}`.
+- **Story footer**: in 9:16 the footer is a rounded card inset from the sides, inside the safe zones (top
+  13 %, bottom 18 %), lifted a shade off the footer colour. Below and around it the photo fades into the footer
+  colour (`treatment: "story_fade"`); a split block and a bottom bar run on to the bottom edge instead.
+  `report.footer` adds `box` and `card`.
+
+### Quality report
+
+Every ad's `report.quality`:
+
+```json
+{"contrast": {"headline": {"ratio": 7.1, "need": 3.0, "pass": true}, "logo": {...}, ...},
+ "all_pass": true,
+ "dropped": {"offers": [], "numbers": [], "channels": [], "copy_trimmed": [], "footer": []},
+ "copy_check": [{"field": "kicker", "score": 2, "issue": "literal translation", "before": "...", "after": "..."}],
+ "treatment": ["panel", "story_fade"]}
+```
+
+Empty `dropped` lists are left out.

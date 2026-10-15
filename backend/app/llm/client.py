@@ -262,10 +262,12 @@ async def chat(
     timeout: float | None = None,
     think: bool | None = None,
     retry_empty: bool = True,
+    model: str | None = None,
 ) -> ChatResult:
-    """One chat call for a role. With `schema`, `result.data` is a validated instance or LLMError is raised."""
+    """One chat call for a role. With `schema`, `result.data` is a validated instance or LLMError is raised.
+    `model` overrides the role's model for this one call (Ad Studio picks its own copywriter)."""
     s = get_settings()
-    model = model_for(role)
+    model = model or model_for(role)
     if think is None:
         # only the reasoning role is allowed to think; creative/vision answers must land in content
         think = role == "reasoning" and s.llm_reasoning_format.lower() != "none"
@@ -301,7 +303,7 @@ async def chat(
             first_error = str(e).splitlines()[0][:300]
             log.warning("invalid JSON from %s (%s); running one repair pass", model, first_error)
 
-        repair_model = model_for("creative")
+        repair_model = model if role == "creative" else model_for("creative")
         fixed = await _raw_chat(
             client, repair_model, _repair_messages(res.content, json_schema, first_error),
             schema=json_schema, temperature=0.0, max_tokens=max(max_tokens, 1024), think=False, timeout=timeout,

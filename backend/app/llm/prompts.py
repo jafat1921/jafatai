@@ -715,6 +715,8 @@ def poetry_scene_messages(title: str, language: str, groups: list[list[str]], ch
 # ---------------------------------------------------------------- Ad Studio (contract v36)
 
 AD_LAYOUTS = ("frosted", "side_wash", "bottom_bar", "split", "badge", "minimal")
+# the photoreal engines a concept may ask for when the brief leaves the model on auto
+AD_PHOTO_MODELS = ("zimage_turbo", "qwen_image_2512")
 
 
 class AdConcept(BaseModel):
@@ -726,6 +728,7 @@ class AdConcept(BaseModel):
     cta: str = ""
     layout: str = "frosted"
     photo_prompt: str = Field(min_length=1)
+    photo_model: str = ""
     placement: str = ""
     logo_surface: str = ""
 
@@ -735,16 +738,44 @@ class AdConcept(BaseModel):
         v = (v or "").strip().lower().replace(" ", "_").replace("-", "_")
         return v if v in AD_LAYOUTS else "frosted"
 
+    @field_validator("photo_model")
+    @classmethod
+    def _photo_model(cls, v):
+        v = (v or "").strip().lower().replace("-", "_")
+        return v if v in AD_PHOTO_MODELS else ""
+
 
 class AdConcepts(BaseModel):
     concepts: list[AdConcept] = Field(min_length=1)
 
 
-AD_RULES = """Rules:
-- Write every word of copy (kicker, headline, body, offers, cta) in {language}, as a native copywriter in {market}
-  would write it for this audience: idiomatic, warm, specific. Never translated English, never word-for-word.
-- headline: at most 6 words. Put a line break (\n) where a designer would break it, at most one or two.
-- kicker: 2 to 5 words above the headline (an occasion, a question, a hook). body: one or two short lines.
+# a few lines in the voice we want and the voice we don't. Kept generic on purpose: they teach the register,
+# not a client's campaign
+AD_EXAMPLES = {
+    "sv": (["Tänd ljusen. Vi tar dammet.", "Släpp in höstljuset.", "Höstrusket stannar ute.",
+            "Flytta med gott samvete.", "Kaffet är klart. Golven också."],
+           ["Upplev skillnaden med renhet (översatt engelska)", "Din lösning för ett rent hem (tom abstraktion)",
+            "Ta ditt hem till nästa nivå (lån från engelskan)", "Kvalitet möter omtanke (säger ingenting)"]),
+    "en": (["Light the candles. We'll do the dusting.", "Leave the mud at the door.", "Coffee's on. Floors are done.",
+            "Move out. Leave it spotless."],
+           ["Experience the ultimate cleanliness solution (brochure-speak)",
+            "Elevate your autumn living (empty abstraction)", "Where quality meets comfort (says nothing)",
+            "Unlock a cleaner tomorrow (cliché)"]),
+}
+
+AD_RULES = """Copy rules:
+- Write every word of copy (kicker, headline, body, offers, cta) in {language}, the way a native copywriter in
+  {market} talks to neighbours: everyday spoken idiom, concrete and warm. Think in {language} from the start.
+  Never translate an English idea word for word, never borrow English phrasing ("next level", "experience the
+  difference", "your solution for"). If a line would sound odd said out loud at a kitchen table, rewrite it.
+- One clear insight per concept: a real, recognisable moment or tension of the audience (wet boots in the
+  hall, guests coming on Saturday, the first dark evenings), and the copy says that one thing.
+- No empty abstractions: no "safety", "comfort", "quality", "threshold", "harmony" or other nouns that could
+  sell anything. Name the thing itself: the dust, the window light, the moving boxes.
+- headline: at most 5 words, a short spoken sentence or two. Put a line break (\\n) where a designer would
+  break it, at most one. A question ends with a question mark and nothing after it.
+- kicker: 2 to 4 words above the headline (the occasion, the moment, the place), no full stop at the end.
+  body: one short line, two at most.
 - cta: 1 to 3 words on a button (book, order, call...), in the imperative. It may name one of the brand's
   channels listed above the way people say it in {language} ("book via WhatsApp", "follow us on Instagram"),
   never a channel that isn't listed.
@@ -757,22 +788,54 @@ AD_RULES = """Rules:
   (a solid brand bar under the photo), split (photo and a colour block side by side), badge (a round price or
   discount badge; only when an approved offer has a number), minimal (a short headline centred on calm space).
   Vary the layouts across concepts.
-- photo_prompt: in English, 50 to 90 words, a photograph for this advert: subject, setting, light, lens, mood,
-  the brand's colours where natural. It must leave calm, uncluttered space for the copy ({space}). No text,
-  letters, signs, logos or watermarks anywhere in the picture.
+- Each concept is a different idea (insight): a different moment, angle or feeling, not a rewording."""
+
+AD_PHOTO_RULES = """Photo rules (photo_prompt, in English, 50 to 90 words):
+- A real moment, shot like an editorial lifestyle feature: people doing the work naturally and mid-action
+  (hands on the task, not posing, not looking at the camera), or the lived-in result just after (a made bed,
+  sunlight on a clean floor, a coat on the hook). Never a stiff person standing to attention, never an empty
+  room with things hanging in it.
+- Natural light from a window or the time of day, real textures, a believable home or workplace with local
+  cues of {market} (architecture, interiors, weather, season, the light at that latitude).
+- Name the subject, the setting, the action, the light, the lens (e.g. 35mm, shallow depth of field) and the
+  mood. The brand's colours ({colours}) may appear in one or two natural things (a cushion, a towel, a mug),
+  written as colour names, never as codes.
+- Nothing random: no name badges, lanyards, stickers, odd emblems, floating objects or props the moment
+  doesn't need, and no text, letters, numbers, signs, logos or watermarks anywhere in the picture.
+- Copy space: describe the calm, uncluttered area the layout needs, in the words "copy space": {space}.
+- photo_model: "zimage_turbo" for people, hands and homes (natural skin, quick), or "qwen_image_2512" for
+  detailed interiors, products, materials and crowded scenes.
 - placement: where the subject sits in the frame, e.g. "right third, lower half".
 - logo_surface: a surface in the photo that could carry the logo (a van door, an apron, a mug, a shop window), or
-  "" when the logo should only be laid over the advert. Use it for at most one concept, and only when natural.
-- Each concept is a different idea (insight): a different moment, angle or feeling, not a rewording."""
+  "" when the logo should only be laid over the advert. Use it for at most one concept, and only when natural."""
+
+
+def ad_copy_space(layout: str, rtl: bool) -> str:
+    side, other = ("right", "left") if rtl else ("left", "right")
+    return {
+        "frosted": f"the upper {side} area, subject in the {other} part of the frame",
+        "badge": f"the upper {side} area (a round badge goes in the top {other} corner)",
+        "side_wash": f"the whole {side} half, subject on the {other}",
+        "bottom_bar": "the bottom third, subject in the upper two thirds",
+        "split": "none needed, the photo sits beside a colour block; the subject can fill the frame",
+        "minimal": "the upper half, subject low in the frame",
+    }.get(layout, f"the upper {side} area")
+
+
+def _examples(language: str) -> str:
+    lang = (language or "").lower().split("-")[0]
+    good, bad = AD_EXAMPLES.get(lang, AD_EXAMPLES["en"])
+    head = "" if lang in AD_EXAMPLES else " (in English; aim for the same register in the ad's language)"
+    return (f"The voice we want{head}:\n" + "\n".join(f"  GOOD: {g}" for g in good) + "\n"
+            + "\n".join(f"  BAD: {b}" for b in bad))
 
 
 def ad_concept_messages(*, brand: str, subject: str, description: str, brief: str, occasion: str, market: str,
                         language: str, tone: str, must_say: str, offers: list[str], count: int,
                         products: list[str], rtl: bool, avoid: list[str] | None = None,
-                        channels: list[str] | None = None) -> list[dict]:
+                        channels: list[str] | None = None, colours: list[str] | None = None) -> list[dict]:
     lang_name = aerab.NAMES.get(language, language)
-    space = ("the left side or the top, as copy reads right to left" if rtl else
-             "the left side or the top of the frame")
+    spaces = "; ".join(f"{k} -> {ad_copy_space(k, rtl)}" for k in AD_LAYOUTS)
     parts = [f"Write {count} advert concept{'s' if count > 1 else ''} for social media.",
              f"The brand:\n{brand}" if brand else "",
              f"What we advertise: {subject}" + (f" ({description})" if description else ""),
@@ -789,13 +852,77 @@ def ad_concept_messages(*, brand: str, subject: str, description: str, brief: st
               + "; ".join(products) + ". Describe the scene around it; the product itself stays as it is.")
              if products else "",
              ("Already written, do something different from: " + " | ".join(avoid)) if avoid else "",
-             AD_RULES.format(language=lang_name, market=market or "the target market", space=space)]
+             AD_RULES.format(language=lang_name, market=market or "the target market"),
+             _examples(language),
+             AD_PHOTO_RULES.format(market=market or "the target market",
+                                   colours=", ".join(colours or []) or "the brand's colours",
+                                   space=f"match it to the layout you chose ({spaces})")]
     rule = aerab.writing_rule(language)
     if rule:
         parts.append(rule)
     parts.append(f'Answer as JSON {{"concepts": [{{"insight": "...", "kicker": "...", "headline": "...", '
                  f'"body": "...", "offers": ["..."], "cta": "...", "layout": "frosted", "photo_prompt": "...", '
-                 f'"placement": "...", "logo_surface": ""}}]}} with exactly {count} concepts.')
+                 f'"photo_model": "zimage_turbo", "placement": "...", "logo_surface": ""}}]}} with exactly '
+                 f'{count} concepts.')
     return [{"role": "system", "content": "You are the creative director and senior copywriter of an advertising "
-                                          "agency. Answer only with JSON."},
+                                          f"agency in {market or 'the target market'}, writing in your mother "
+                                          f"tongue, {lang_name}. Answer only with JSON."},
             {"role": "user", "content": "\n\n".join(p for p in parts if p)}]
+
+
+AD_CHECK_FIELDS = ("kicker", "headline", "body", "cta")
+
+
+class AdLineCheck(BaseModel):
+    concept: int = 0
+    field: str = ""
+    score: int = 5
+    issue: str = ""
+    rewrite: str = ""
+
+    @field_validator("field")
+    @classmethod
+    def _field(cls, v):
+        return (v or "").strip().lower()
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def _score(cls, v):
+        try:
+            return max(1, min(5, int(float(v))))
+        except (TypeError, ValueError):
+            return 5
+
+
+class AdCopyCheck(BaseModel):
+    lines: list[AdLineCheck] = []
+
+
+def ad_copy_check_messages(*, language: str, market: str, concepts: list[dict]) -> list[dict]:
+    """The self-check: a native editor scores every line and rewrites the ones that sound translated."""
+    lang_name = aerab.NAMES.get(language, language)
+    rows = []
+    for i, c in enumerate(concepts, 1):
+        for f in AD_CHECK_FIELDS:
+            text = (c.get(f) or "").strip()
+            if text:
+                rows.append(f"{i}. {f}: {text!r}")
+    parts = [f"You are a native {lang_name} copy editor in {market or 'the target market'}. Read these advert "
+             "lines out loud in your head and score each one from 1 to 5: 5 is what a good local copywriter "
+             "would write, 3 is understandable but stiff, 1 is translated English or nonsense.",
+             "\n".join(rows),
+             "For every line scoring 3 or lower, write a better one that says the same thing the way people "
+             f"really talk in {lang_name}: concrete, idiomatic, no empty abstractions. Keep each rewrite within "
+             "the same limits: headline at most 5 words (keep a \\n line break if there was one), kicker 2 to 4 "
+             "words with no full stop, cta 1 to 3 words in the imperative. Add no numbers, prices, promises, "
+             "handles or links the line didn't have. Lines scoring 4 or 5 get an empty rewrite.",
+             "issue: a few words in English on what's wrong (\"literal translation\", \"abstract\", "
+             "\"awkward word order\"), empty when nothing is.",
+             _examples(language)]
+    rule = aerab.writing_rule(language)
+    if rule:
+        parts.append(rule)
+    parts.append('Answer as JSON {"lines": [{"concept": 1, "field": "headline", "score": 4, "issue": "", '
+                 '"rewrite": ""}]} with one entry per line above.')
+    return [{"role": "system", "content": "You edit advertising copy for native fluency. Answer only with JSON."},
+            {"role": "user", "content": "\n\n".join(parts)}]

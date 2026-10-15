@@ -63,6 +63,8 @@ export interface AdConcept {
   photo_prompt: string
   placement: string
   logo_surface: string
+  photo_model?: string
+  copy_check?: AdQuality['copy_check']
   error: string | null
   guard: { offers_dropped?: string[]; numbers_removed?: string[]; channels_removed?: string[] }
   photos: Partial<Record<'portrait' | 'square' | 'wide', { base: AdGen | null; logo: AdGen | null; final: string | null; note: string | null }>>
@@ -102,9 +104,19 @@ export interface AdReport {
   treatment?: string[]
   fonts?: Record<string, number>
   fit?: { scale: number; headline_scale: number; trimmed: string[] }
-  logo?: { variant: string; plate: boolean }
+  logo?: { variant: string; plate: boolean; contrast?: number }
   footer_dropped?: number
-  footer?: { rows: number; items: string[]; dropped: string[]; folded: boolean; size: number }
+  footer?: { rows: number; items: string[]; dropped: string[]; folded: boolean; size: number; box?: number[]; card?: boolean }
+  buttons?: Record<'cta' | 'offer', { shape: string; bg: string; fg: string; arrow: boolean; inverted?: boolean }>
+  quality?: AdQuality
+}
+
+export interface AdQuality {
+  contrast: Record<string, { ratio: number; need: number; pass: boolean }>
+  all_pass: boolean
+  dropped: Partial<Record<'offers' | 'numbers' | 'channels' | 'copy_trimmed' | 'footer', string[]>>
+  copy_check: { field: string; score: number | null; issue: string; before?: string; after?: string }[]
+  treatment: string[]
 }
 
 export interface Ad {
@@ -306,6 +318,7 @@ export const AD_LANGUAGES = [
 ]
 
 export const IMAGE_MODELS = [
+  { value: 'auto', label: 'Auto (photoreal, per concept)' },
   { value: 'zimage_turbo', label: 'Z-Image Turbo' },
   { value: 'qwen_image_2512', label: 'Qwen-Image 2512' },
   { value: 'hidream_o1', label: 'HiDream-O1' },

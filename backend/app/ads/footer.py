@@ -37,6 +37,12 @@ RANK = {"website": 0, "booking_url": 1, "social": 2, "follow": 3, "phone": 4, "w
         "opening_hours": 7, "location": 8}
 MAX_ROWS = {"9:16": 3, "4:5": 2, "2:3": 2, "1:1": 1, "16:9": 1, "1.91:1": 1, "yt": 1}
 SIZE = {"1:1": 0.95, "9:16": 1.0}
+# formats whose footer is a rounded floating card rather than an edge-to-edge bar
+CARD = ("9:16",)
+
+
+def card_inset(fmt: str, s: int) -> int:
+    return round(0.045 * s) if fmt in CARD else 0
 
 
 @dataclass
@@ -209,7 +215,7 @@ def plan(spec: dict, fmt: str, w: int, s: int, faces: dict) -> Plan:
     max_rows = MAX_ROWS.get(fmt, 1)
     floor = max(16, round(0.0204 * s))
     top = max(floor, round(0.025 * s * 1.08 * SIZE.get(fmt, 1.0)))
-    avail = w - 2 * round(0.065 * s * 0.7)
+    avail = w - 2 * (round(0.065 * s * 0.7) + card_inset(fmt, s))
     p = Plan()
     scale = {"social": 1.25, "follow": 1.1} if story else {}
 
@@ -252,7 +258,15 @@ def draw(img: Image.Image, box: tuple[int, int, int, int], p: Plan, faces: dict,
 
     d = ImageDraw.Draw(img)
     bg = colours["footer"]
-    d.rectangle(box, fill=lay.rgb(bg))
+    card = box[0] > 0
+    if card:
+        # lifted a shade off the footer colour the photo fades into, so the card reads as its own object
+        lifted = lay.hexs(lay.mix(bg, (255, 255, 255), 0.09 if lay.lum(bg) < 0.2 else 0.0))
+        if lay.ratio(lay.lum(colours["footer_text"]), lay.lum(lifted)) >= lay.AA_TEXT:
+            bg = lifted
+        d.rounded_rectangle(box, radius=round((box[3] - box[1]) * 0.18), fill=lay.rgb(bg))
+    else:
+        d.rectangle(box, fill=lay.rgb(bg))
     if not p.rows:
         return
     fg = lay.ensure_contrast(colours["footer_text"], lay.lum(bg), lay.AA_TEXT)
@@ -284,6 +298,6 @@ def draw(img: Image.Image, box: tuple[int, int, int, int], p: Plan, faces: dict,
         y += rh
     report["contrast"]["footer"] = round(lay.ratio(lay.lum(fg), lay.lum(bg)), 2)
     report["footer"] = {"rows": len(p.rows), "items": [i.key for r in p.rows for i in r], "dropped": p.dropped,
-                        "folded": p.folded, "size": p.size}
+                        "folded": p.folded, "size": p.size, "box": [round(v) for v in box], "card": card}
     if p.dropped:
         report["footer_dropped"] = len(p.dropped)

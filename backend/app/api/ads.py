@@ -63,7 +63,8 @@ class CreateIn(BaseModel):
     formats: list[Format] = Field(["4:5"], min_length=1, max_length=7)
     variants: int = Field(3, ge=2, le=8, description="How many concepts")
     product_media_ids: list[str] = Field([], max_length=3, description="Photos of the real product")
-    image_model: str = Field(svc.DEFAULT_MODEL, max_length=60)
+    # "auto": each concept picks a photoreal engine (Z-Image Turbo or Qwen-Image 2512); any other id is kept
+    image_model: str = Field(svc.AUTO_MODEL, max_length=60)
     font_preset: str | None = Field(None, max_length=20)
     review: bool = Field(True, description="Stop after the concepts for an OK")
     logo_on_surface: bool = True
@@ -167,8 +168,9 @@ def _products(db: Session, ws: str, ids: list[str]) -> None:
 @router.get("/options", summary="What the brief form and the ad editor offer")
 def options(kit_id: str | None = None, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     kit = br.get_kit(db, cur.workspace_id, kit_id) if kit_id else None
-    models = [{"id": m, "label": mc.MODELS[m].label, "default": m == svc.DEFAULT_MODEL}
-              for m in svc.IMAGE_MODELS if m in mc.MODELS and not mc.hidden(mc.MODELS[m])]
+    models = [{"id": svc.AUTO_MODEL, "label": "Auto (photoreal, per concept)", "default": True}]
+    models += [{"id": m, "label": mc.MODELS[m].label, "default": False}
+               for m in svc.IMAGE_MODELS if m in mc.MODELS and not mc.hidden(mc.MODELS[m])]
     return {"formats": [{"id": f, "label": lay.FORMAT_LABELS[f], "width": w, "height": h}
                         for f, (w, h) in lay.FORMATS.items()],
             "styles": [{"id": s, "label": lay.STYLE_LABELS[s]} for s in lay.STYLES],

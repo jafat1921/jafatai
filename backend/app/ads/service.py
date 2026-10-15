@@ -6,7 +6,10 @@ concept's id), one per orientation the campaign needs: portrait (4:5 and 9:16 sh
 finished advert is a Library image; every re-render is a new version of it. The campaign's layer specs are
 also written to workspaces/<ws>/ads/<campaign id>/ad.json.
 """
+import asyncio
 import json
+import logging
+import re
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -23,8 +26,12 @@ from app.ads import footer as ft
 from app.ads import layout as lay
 from app.brand_schemas import social_key
 from app.config import get_settings
+from app.llm import LLMError
+from app.llm.client import list_models
 from app.models import AdCampaign, BrandKit, Generation, Job, MediaItem, new_id, utcnow
 from app.services import gen_out, generation_file, job_out, media_url, next_version
+
+log = logging.getLogger("mixai.ads")
 
 JOB = "ad_campaign"
 STAGES = (("concepts", "Concepts"), ("photos", "Photos"), ("layout", "Layout"))
@@ -34,14 +41,17 @@ FINISHED = ("ready", "approved")
 ATTEMPTS = 2
 IMAGE_MODELS = ("zimage_turbo", "qwen_image_2512", "hidream_o1")
 DEFAULT_MODEL = "zimage_turbo"
+# the brief's default: each concept picks one of the photoreal engines (prompts.AD_PHOTO_MODELS) itself
+AUTO_MODEL = "auto"
 RTL_LANGS = ("he", "yi")  # plus every Arabic-script language aerab knows
 
 GROUPS = {"4:5": "portrait", "9:16": "portrait", "2:3": "portrait", "1:1": "square", "16:9": "wide",
           "1.91:1": "wide", "yt": "wide"}
-PHOTO_NEGATIVE = "text, letters, words, captions, watermark, logo, signage, label text, blurry, distorted"
+PHOTO_NEGATIVE = ("text, letters, words, numbers, captions, watermark, logo, signage, label text, name badge, "
+                  "colour swatches, hex codes, blurry, distorted")
 
 DEFAULTS = {"subject": "", "description": "", "brief": "", "occasion": "", "market": "", "tone": "",
-            "must_say": "", "offers": [], "formats": ["4:5"], "variants": 3, "image_model": DEFAULT_MODEL,
+            "must_say": "", "offers": [], "formats": ["4:5"], "variants": 3, "image_model": AUTO_MODEL,
             "product_media_ids": [], "review": True, "logo_on_surface": True, "font_preset": None,
             "footer_items": None}
 
@@ -51,6 +61,42 @@ SPEC_TEXTS = ("kicker", "headline", "body", "offers", "cta", "badge_big", "badge
 
 class AdError(RuntimeError):
     pass
+
+
+def _size_b(name: str) -> float:
+    """Parameters in billions from an Ollama tag: gemma4:26b -> 26, qwen2.5:14b-instruct -> 14, gemma4:e4b -> 4
+    (the "e" is gemma's effective size). 0 when the tag doesn't say."""
+    tag = name.split(":", 1)[1] if ":" in name else name
+    m = re.search(r"(?<![\d.])e?(\d+(?:\.\d+)?)b(?![a-z])", tag.lower())
+    return float(m.group(1)) if m else 0.0
+
+
+def _bare_tag(name: str) -> str:
+    return name.strip().lower().removesuffix(":latest")
+
+
+def pick_writer(candidates: list[str], installed: list[str]) -> str | None:
+    """The largest candidate that is installed; the list order breaks a tie."""
+    have = {_bare_tag(n) for n in installed}
+    ok = [(i, c) for i, c in enumerate(candidates) if c and _bare_tag(c) in have]
+    if not ok:
+        return None
+    return min(ok, key=lambda t: (-_size_b(t[1]), t[0]))[1]
+
+
+def writer_model() -> str | None:
+    """The copywriter's model: ADS_LLM_MODEL when set, else the largest installed of ADS_LLM_MODELS (plus the
+    creative model). None leaves it to the creative role, e.g. when the server can't be asked."""
+    s = get_settings()
+    if s.ads_llm_model.strip():
+        return s.ads_llm_model.strip()
+    candidates = list(dict.fromkeys([*s.ads_llm_models, s.llm_model_creative]))
+    try:
+        installed = asyncio.run(list_models())
+    except LLMError as e:
+        log.info("couldn't list the LLM models (%s); the creative model writes the ads", e)
+        return None
+    return pick_writer(candidates, installed)
 
 
 def brief_of(c: AdCampaign) -> dict:
@@ -156,8 +202,9 @@ def mark_dirty(c: AdCampaign, concept_id: str) -> None:
 def new_concept(n: int, data: dict, guard: dict) -> dict:
     return {"id": new_id(), "n": n, "approved": True, "edited": False, "copy_dirty": False,
             **{k: data.get(k) or "" for k in ("insight", "kicker", "headline", "body", "cta", "layout",
-                                               "photo_prompt", "placement", "logo_surface")},
-            "offers": list(data.get("offers") or []), "guard": guard, "photos": {}, "error": None}
+                                               "photo_prompt", "photo_model", "placement", "logo_surface")},
+            "offers": list(data.get("offers") or []), "guard": guard, "copy_check": list(data.get("copy_check") or []),
+            "photos": {}, "error": None}
 
 
 def groups(formats: list[str]) -> list[str]:
@@ -293,11 +340,36 @@ def write_ad(db: Session, c: AdCampaign, con: dict, rec: dict, kit: BrandKit | N
         thumbs.for_generation(g)
     except Exception:  # a missing thumb is made on first view anyway
         pass
-    slim = {k: report.get(k) for k in ("contrast", "treatment", "fonts", "fit", "logo", "footer", "footer_dropped")}
+    slim = {k: report.get(k) for k in ("contrast", "treatment", "fonts", "fit", "logo", "footer", "footer_dropped",
+                                       "buttons")}
+    slim["quality"] = quality_of(report, con)
     rec.update(media_id=item.id, generation_id=g.id, status="ready", error=None, dirty=False,
                photo_id=spec.get("photo_id"), report=slim)
     put_ad(c, rec)
     return rec
+
+
+def quality_of(report: dict, con: dict) -> dict:
+    """The art director's checklist for one ad: every contrast check against its WCAG target, everything the
+    guard, the fitter or the footer had to leave out, and what the copy self-check said."""
+    def check(r: float, need: float) -> dict:
+        # the ratios are rounded to two places, so 4.499 shows as 4.5 and passes
+        return {"ratio": r, "need": need, "pass": r >= need - 0.005}
+
+    contrast = {role: check(r, lay.NEED.get(role, lay.AA_TEXT))
+                for role, r in (report.get("contrast") or {}).items() if isinstance(r, (int, float))}
+    logo = report.get("logo") or {}
+    if logo.get("contrast") is not None:
+        contrast["logo"] = check(logo["contrast"], lay.AA_LARGE)
+    g = con.get("guard") or {}
+    dropped = {"offers": list(g.get("offers_dropped") or []), "numbers": list(g.get("numbers_removed") or []),
+               "channels": list(g.get("channels_removed") or []),
+               "copy_trimmed": list((report.get("fit") or {}).get("trimmed") or []),
+               "footer": list((report.get("footer") or {}).get("dropped") or [])}
+    notes = [n for n in con.get("copy_check") or [] if isinstance(n, dict)]
+    return {"contrast": contrast, "all_pass": all(v["pass"] for v in contrast.values()),
+            "dropped": {k: v for k, v in dropped.items() if v}, "copy_check": notes,
+            "treatment": list(report.get("treatment") or [])}
 
 
 def new_ad(con: dict, fmt: str) -> dict:
@@ -393,8 +465,9 @@ def concept_out(db: Session, con: dict) -> dict:
         photos[grp] = {"base": _gen(db, rec.get("base")), "logo": _gen(db, rec.get("logo")),
                        "final": rec.get("final"), "note": rec.get("note")}
     return {**{k: con.get(k) for k in ("id", "n", "approved", "edited", "insight", "kicker", "headline", "body", "cta",
-                                       "layout", "photo_prompt", "placement", "logo_surface", "error")},
-            "offers": list(con.get("offers") or []), "guard": con.get("guard") or {}, "photos": photos}
+                                       "layout", "photo_prompt", "photo_model", "placement", "logo_surface", "error")},
+            "offers": list(con.get("offers") or []), "guard": con.get("guard") or {},
+            "copy_check": list(con.get("copy_check") or []), "photos": photos}
 
 
 def ad_out(db: Session, c: AdCampaign, rec: dict, con: dict | None, kit: BrandKit | None) -> dict:

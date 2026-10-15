@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     llm_model_creative: str = ""
     llm_model_vision: str = ""
     llm_reasoning_format: str = "deepseek"
+    # Ad Studio's copywriter: this model when set, else the largest of ads_llm_models that is installed
+    ads_llm_model: str = ""
+    ads_llm_models: Annotated[list[str], NoDecode] = ["gemma4:26b", "qwen2.5:14b-instruct", "gemma4:e4b"]
     # auto: use Ollama's native /api/chat when the server answers /api/version
     # (it honours num_ctx and think=false), else plain OpenAI-compatible calls
     llm_api: str = "auto"
@@ -118,7 +121,8 @@ class Settings(BaseSettings):
     subtitle_fonts_dir: str = "/usr/share/fonts/truetype/noto"
     subtitle_renderer: str = "auto"
 
-    @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", mode="before")
+    @field_validator("cors_origins", "comfy_urls", "comfy_image_urls", "comfy_video_urls", "ads_llm_models",
+                     mode="before")
     @classmethod
     def _split_csv(cls, v):
         if isinstance(v, str):

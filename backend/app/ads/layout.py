@@ -119,14 +119,23 @@ def _sat(c: str) -> float:
 
 
 def roles(palette: list[dict] | None) -> dict[str, str]:
-    """Colour roles from a kit palette: the darkest colour is the ink and the footer, the liveliest one the
-    accent (kicker, CTA, badge). Falls back to the prototype's navy and coral."""
+    """Colour roles from a kit palette, used the same way in every layout:
+
+    text / footer   the darkest colour (the ink)
+    primary         the brand's main colour: the first palette colour deep enough to carry white type, else the
+                    ink. The CTA is a solid button in it with white text and an arrow
+    accent          the liveliest colour: the kicker, the badge and the offer pill (a tint of it)
+
+    Falls back to the prototype's navy and coral."""
     cols = [p["hex"] for p in palette or [] if p.get("hex")]
     dark = min(cols, key=lum) if cols and lum(min(cols, key=lum)) < 0.2 else DEFAULT_TEXT
     rest = [c for c in cols if c != dark and 0.03 < lum(c) < 0.8]
     accent = max(rest, key=_sat) if rest and _sat(max(rest, key=_sat)) > 0.15 else DEFAULT_ACCENT
-    return {"text": dark, "accent": accent, "button": accent, "button_text": "#FFFFFF", "footer": dark,
-            "footer_text": "#FFFFFF", "pill": hexs(mix(accent, WHITE, 0.18)), "light": "#FFFFFF",
+    primary = next((c for c in cols if c != accent and lum(c) < 0.3), dark)
+    # white type on the button has to read; a mid-tone primary is deepened just enough
+    primary = ensure_contrast(primary, 1.0, AA_TEXT)
+    return {"text": dark, "accent": accent, "primary": primary, "button": primary, "button_text": "#FFFFFF",
+            "footer": dark, "footer_text": "#FFFFFF", "pill": hexs(mix(accent, WHITE, 0.18)), "light": "#FFFFFF",
             # the split layout's block: a pale wash of the accent, so the logo's own accent never vanishes on it
             "block": hexs(mix(accent, WHITE, 0.84))}
 
@@ -232,6 +241,21 @@ def _ink_lum(logo: Image.Image) -> float:
     return lum(tuple(int(v) for v in rgbm))
 
 
+def light_ink(logo: Image.Image, threshold: float = 0.35) -> Image.Image:
+    """The logo for a dark background when the kit has no light version: the dark ink (luminance under
+    `threshold`, not saturated) turns white, saturated accents such as a coral X stay as they are, the
+    transparency is kept."""
+    a = np.array(logo.convert("RGBA"))
+    f = a[..., :3].astype(np.float64) / 255.0
+    lin = np.where(f <= 0.04045, f / 12.92, ((f + 0.055) / 1.055) ** 2.4)
+    lu = 0.2126 * lin[..., 0] + 0.7152 * lin[..., 1] + 0.0722 * lin[..., 2]
+    sat = f.max(axis=2) - f.min(axis=2)
+    accent = (sat >= 0.3) & (lu >= 0.1)
+    ink = (lu < threshold) & ~accent
+    a[ink, :3] = 255
+    return Image.fromarray(a, "RGBA")
+
+
 # ---------------------------------------------------------------- text
 
 def _shape(text: str, lang: str | None) -> tuple[str, dict]:
@@ -303,7 +327,8 @@ class Block:
     size: int
     advance: int
     gap: int  # space above this block
-    pill: tuple[int, int] | None = None  # (pad_x, pad_y) for the offer and CTA pills
+    pill: tuple[int, int] | None = None  # (pad_x, pad_y) for the offer pill and the CTA button
+    arrow: int = 0  # the CTA's arrow, px wide (its gap to the label comes on top)
     width: float = 0
     height: int = 0
 
@@ -355,7 +380,9 @@ def geometry(style: str, fmt: str, *, footer_h: int, logo_pos: str, rtl: bool) -
     fh = footer_h
     footer = fh > 0
     top, bottom = st + m, h - sb - fh - m
-    foot = (0, h - sb - fh, w, h - sb) if footer else None
+    # a story's footer is a floating card inside the safe zones, not a bar cut across the middle of the screen
+    inset = ft.card_inset(fmt, s)
+    foot = (inset, h - sb - fh, w - inset, h - sb) if footer else None
     band = (h - sb - fh, h - sb) if footer else None
     fmt = LAYOUT_OF.get(fmt, fmt)
     wide, tall = fmt == "16:9", fmt == "9:16"
@@ -408,7 +435,8 @@ def geometry(style: str, fmt: str, *, footer_h: int, logo_pos: str, rtl: bool) -
         g.tone = "dark"
         if fmt in ("4:5", "9:16"):
             bt = round(h * (0.5 if fmt == "4:5" else 0.45))
-            g.block = (0, bt, w, foot[1] if foot else h)
+            # under a story's card the block runs on to the bottom edge
+            g.block = (0, bt, w, foot[1] if foot and not inset else h)
             g.photo = (0, 0, w, bt)
             g.copy = [m, bt + m, w - m, (foot[1] if foot else h - sb) - m]
         else:
@@ -452,13 +480,15 @@ def _stack(d, spec: dict, faces: dict, caps: bool, box_w: float, k: float, hk: f
         face = faces[face_role or role]
         font = fz.load(str(face.path), size, face.weight)
         pad = (round(size * 0.95), round(size * 0.48)) if pill else None
-        inner = box_w - (2 * pad[0] if pad else 0)
+        arrow = _arrow_room(size) if role == "cta" else 0
+        inner = box_w - (2 * pad[0] if pad else 0) - arrow
         lines, fitted = wrap(d, text, font, inner, lang, hard=hard)
         ok = ok and fitted
         adv = _advance(font, size, role, script)
         widest = max((_width(d, ln, font, lang) for ln in lines), default=0)
-        b = Block(role, lines, font, size, adv, round(gap * s * k) if blocks else 0, pad)
-        b.width = widest + (2 * pad[0] if pad else 0)
+        b = Block(role, lines, font, size, adv, round(gap * s * k) if blocks else 0, pad,
+                  arrow=round(size * 0.85) if arrow else 0)
+        b.width = widest + (2 * pad[0] if pad else 0) + arrow
         b.height = adv * len(lines) + (2 * pad[1] if pad else 0)
         blocks.append(b)
 
@@ -556,6 +586,61 @@ def _pill(d, b: Block, rect, bg: str, fg: str, rtl: bool, lang) -> None:
         _draw(d, (x, y0 + py + i * b.advance + _nudge(b)), ln, b.font, rgb(fg), lang)
 
 
+def _arrow_room(size: int) -> int:
+    return round(size * 0.85) + round(size * 0.5)
+
+
+def _arrow(img: Image.Image, x: float, cy: float, w: int, colour, left: bool) -> None:
+    """A clean arrow, drawn 4x and scaled down like the footer icons."""
+    ss = 4
+    n = w * ss
+    m = Image.new("L", (n, n), 0)
+    dm = ImageDraw.Draw(m)
+    t = max(ss * 2, round(n * 0.13))
+    head = n * 0.42
+    y = n / 2
+    tip, tail = (n * 0.06, n * 0.94) if left else (n * 0.94, n * 0.06)
+    back = tip + head if left else tip - head
+    dm.line((tail, y, tip, y), fill=255, width=t)
+    dm.line((back, y - head, tip, y, back, y + head), fill=255, width=t, joint="curve")
+    m = m.resize((w, w), Image.LANCZOS)
+    solid = Image.new("RGB", (w, w), tuple(colour))
+    img.paste(solid, (round(x), round(cy - w / 2)), m)
+
+
+def _button(img: Image.Image, b: Block, rect, bg: str, fg: str, rtl: bool, lang) -> None:
+    """The CTA: a solid button with a modest radius and an arrow after the label (before it, pointing left,
+    in a right-to-left ad). Different in shape and colour from the offer pill on purpose."""
+    d = ImageDraw.Draw(img)
+    x0, y0, x1, y1 = rect
+    d.rounded_rectangle((x0, y0, x1, y1), radius=max(4, round(b.size * 0.32)), fill=rgb(bg))
+    px, py = b.pill
+    gap = round(b.size * 0.5)
+    widest = max((_width(d, ln, b.font, lang) for ln in b.lines), default=0)
+    start = x0 + (x1 - x0 - (widest + gap + b.arrow)) / 2
+    text_x = start + (b.arrow + gap if rtl else 0)
+    for i, ln in enumerate(b.lines):
+        lw = _width(d, ln, b.font, lang)
+        x = text_x + (widest - lw if rtl else 0)
+        _draw(d, (x, y0 + py + i * b.advance + _nudge(b)), ln, b.font, rgb(fg), lang)
+    ax = start if rtl else start + widest + gap
+    _arrow(img, ax, (y0 + y1) / 2, b.arrow, rgb(fg), left=rtl)
+
+
+def _cta_colours(img: Image.Image, rect, colours: dict) -> tuple[str, str, bool]:
+    """(background, label, inverted). The primary button, unless it would vanish into what it sits on (a
+    bottom bar in the same colour): then it turns white with the primary label."""
+    bg, fg = colours["button"], colours["button_text"]
+    inverted = False
+    if ratio(lum(bg), mean_lum(img, rect)) < 1.6:
+        bg, fg, inverted = colours["light"], colours["primary"], True
+    if ratio(lum(fg), lum(bg)) < AA_LARGE:
+        alt = colours["light"] if lum(fg) < 0.4 else colours["text"]
+        fg = alt if ratio(lum(alt), lum(bg)) > ratio(lum(fg), lum(bg)) else fg
+        bg = ensure_contrast(bg, lum(fg), AA_LARGE)
+    return bg, fg, inverted
+
+
 def _nudge(b: Block) -> int:
     # Latin capitals sit high in their line box; push them down a touch so the pill looks centred
     asc, desc = b.font.getmetrics()
@@ -607,22 +692,52 @@ def _badge(img, g: Geo, spec, faces, colours, lang, report) -> None:
     report["contrast"]["badge"] = round(ratio(lum(fg), lum(bg)), 2)
 
 
+def _logo_pick(assets: AdAssets, variant: str, under: float) -> tuple[Image.Image | None, str | None]:
+    """(logo, which) for the background luminance under it. An asked-for variant wins; on auto the primary
+    logo stays unless it can't be read, then the kit's light (or dark) version, and with no light version
+    the primary's dark ink recoloured to white."""
+    def load(key):
+        return prepare_logo(getattr(assets, key))
+
+    if variant in ("light", "dark", "primary"):
+        order = {"light": ("logo_light", "logo", "logo_dark"), "dark": ("logo_dark", "logo", "logo_light"),
+                 "primary": ("logo", "logo_dark", "logo_light")}[variant]
+        for key in order:
+            logo = load(key)
+            if logo is not None:
+                if variant == "light" and key != "logo_light" and _ink_lum(logo) < 0.35:
+                    return light_ink(logo), "recoloured"
+                return logo, key
+        return None, None
+    logo, used = None, None
+    for key in ("logo", "logo_dark", "logo_light"):
+        logo = load(key)
+        if logo is not None:
+            used = key
+            break
+    if logo is None:
+        return None, None
+    ink = _ink_lum(logo)
+    if ratio(ink, under) >= AA_LARGE:
+        return logo, used
+    # which way to go: a mid-tone photo can be lighter than navy ink and still want a white logo
+    if ratio(1.0, under) > ratio(0.0, under):
+        light = load("logo_light") if used != "logo_light" else None
+        if light is not None:
+            return light, "logo_light"
+        return light_ink(logo), "recoloured"
+    dark = load("logo_dark") if used != "logo_dark" else None
+    if dark is not None and ratio(_ink_lum(dark), under) > ratio(ink, under):
+        return dark, "logo_dark"
+    return logo, used
+
+
 def _logo(img, g: Geo, spec, assets: AdAssets, colours, report) -> None:
     if g.logo is None or (spec.get("logo") or {}).get("position") == "none":
         return
     x0, y0, x1, y1 = g.logo
     under = mean_lum(img, g.logo)
-    dark_bg = under < 0.3
-    variant = (spec.get("logo") or {}).get("variant") or "auto"
-    order = {"light": ("logo_light", "logo", "logo_dark"), "dark": ("logo_dark", "logo", "logo_light"),
-             "primary": ("logo", "logo_dark", "logo_light")}.get(variant) or \
-        (("logo_light", "logo", "logo_dark") if dark_bg else ("logo", "logo_dark", "logo_light"))
-    logo, used = None, None
-    for key in order:
-        logo = prepare_logo(getattr(assets, key))
-        if logo is not None:
-            used = key
-            break
+    logo, used = _logo_pick(assets, (spec.get("logo") or {}).get("variant") or "auto", under)
     if logo is None:
         return
     lw, lh = x1 - x0, y1 - y0
@@ -637,17 +752,23 @@ def _logo(img, g: Geo, spec, assets: AdAssets, colours, report) -> None:
     else:
         lx = x0
     ly = y0 + (lh - logo.height) // 2 if pos[0:1] == "b" else y0
+    # measured where the logo really lands, not over its whole box
+    under = mean_lum(img, (lx, ly, lx + logo.width, ly + logo.height))
     ink = _ink_lum(logo)
     plate = None
-    if ratio(ink, under) < AA_LARGE:
-        # no variant for this background: a soft plate behind the logo instead
+    got = ratio(ink, under)
+    if got < AA_LARGE:
+        # still unreadable (a busy mid-tone photo): a soft plate behind the logo, the last resort
         plate = colours["light"] if ink < 0.35 else colours["footer"]
         p = round(g.s * 0.018)
         frosted(img, (lx - p * 2, ly - p, lx + logo.width + p * 2, ly + logo.height + p), radius=p * 2,
                 alpha=225, colour=rgb(plate))
+        got = ratio(ink, lum(plate))
     img.paste(logo, (lx, ly), logo)
-    report["logo"] = {"variant": {"logo": "primary", "logo_light": "light", "logo_dark": "dark"}[used],
-                      "plate": plate is not None, "box": [lx, ly, lx + logo.width, ly + logo.height]}
+    report["logo"] = {"variant": {"logo": "primary", "logo_light": "light", "logo_dark": "dark",
+                                  "recoloured": "recoloured"}[used],
+                      "plate": plate is not None, "contrast": round(got, 2),
+                      "box": [lx, ly, lx + logo.width, ly + logo.height]}
 
 
 # ---------------------------------------------------------------- render
@@ -695,6 +816,12 @@ def render(spec: dict, assets: AdAssets) -> tuple[Image.Image, dict]:
     if g.veil:
         kind, frac, strength = g.veil
         base = veil(base, kind, frac, strength, rtl=rtl)
+    card = g.footer is not None and g.footer[0] > 0
+    if card and g.block is None:
+        # the photo fades into the footer colour behind the card, so the card sits on something designed
+        reach = (g.h - g.footer[1] + round(0.12 * g.h)) / g.h
+        base = veil(base, "bottom", reach, 0.88, colour=rgb(colours["footer"]))
+        report["treatment"].append("story_fade")
 
     d = ImageDraw.Draw(base)
     copy_box = list(g.copy)
@@ -733,7 +860,7 @@ def render(spec: dict, assets: AdAssets) -> tuple[Image.Image, dict]:
         if g.panel == "fixed":
             return (copy_box[0] - p, cy0 - p, copy_box[2] + p, cy1 + p)
         if g.panel == "bar":
-            return (0, cy0 - p, g.w, (g.footer[1] if g.footer else g.h))
+            return (0, cy0 - p, g.w, (g.footer[1] if g.footer and not card else g.h))
         return (cx0 - p, cy0 - p, cx1 + p, cy1 + p)
 
     # what the copy sits on decides the ink, then every element is checked and the panel firmed up
@@ -778,16 +905,26 @@ def render(spec: dict, assets: AdAssets) -> tuple[Image.Image, dict]:
     # the logo goes on before the copy so its own check sees the final background
     _logo(img, g, spec, assets, colours, report)
     d = ImageDraw.Draw(img)
+    buttons: dict = {}
+
+    def draw_cta(b: Block, rect) -> None:
+        bg, fg, inverted = _cta_colours(img, rect, colours)
+        _button(img, b, rect, bg, fg, rtl, lang)
+        report["contrast"]["cta"] = round(ratio(lum(fg), lum(bg)), 2)
+        buttons["cta"] = {"shape": "button", "bg": bg, "fg": fg, "arrow": True, "inverted": inverted}
     for b, r in placed:
-        if b.role in ("offer", "cta"):
-            bg = colours["pill"] if b.role == "offer" else colours["button"]
-            fg = colours["text"] if b.role == "offer" else colours["button_text"]
-            if ratio(lum(fg), lum(bg)) < NEED.get(b.role, AA_TEXT):
+        if b.role == "cta":
+            draw_cta(b, r)
+            continue
+        if b.role == "offer":
+            bg, fg = colours["pill"], colours["text"]
+            if ratio(lum(fg), lum(bg)) < AA_TEXT:
                 alt = colours["light"] if lum(fg) < 0.4 else colours["text"]
                 fg = alt if ratio(lum(alt), lum(bg)) > ratio(lum(fg), lum(bg)) else fg
-                bg = ensure_contrast(bg, lum(fg), NEED.get(b.role, AA_TEXT))
+                bg = ensure_contrast(bg, lum(fg), AA_TEXT)
             _pill(d, b, r, bg, fg, rtl, lang)
-            report["contrast"][b.role] = round(ratio(lum(fg), lum(bg)), 2)
+            report["contrast"]["offer"] = round(ratio(lum(fg), lum(bg)), 2)
+            buttons["offer"] = {"shape": "pill", "bg": bg, "fg": fg, "arrow": False}
             continue
         fill = ink
         if b.role == "kicker":
@@ -804,18 +941,13 @@ def render(spec: dict, assets: AdAssets) -> tuple[Image.Image, dict]:
     if cta_block is not None:
         cx = g.m if not rtl else g.w - g.m - cta_block.width
         cy = g.bottom - cta_block.height
-        bg, fg = colours["button"], colours["button_text"]
-        if ratio(lum(fg), lum(bg)) < AA_LARGE:
-            alt = colours["light"] if lum(fg) < 0.4 else colours["text"]
-            fg = alt if ratio(lum(alt), lum(bg)) > ratio(lum(fg), lum(bg)) else fg
-            bg = ensure_contrast(bg, lum(fg), AA_LARGE)
-        _pill(d, cta_block, (cx, cy, cx + cta_block.width, cy + cta_block.height), bg, fg, rtl, lang)
-        report["contrast"]["cta"] = round(ratio(lum(fg), lum(bg)), 2)
+        draw_cta(cta_block, (cx, cy, cx + cta_block.width, cy + cta_block.height))
         placed.append((cta_block, (cx, cy, cx + cta_block.width, cy + cta_block.height)))
 
     _badge(img, g, spec, faces, colours, lang, report)
     if g.footer is not None:
         ft.draw(img, g.footer, foot, faces, colours, lang, rtl, report)
+    report["buttons"] = buttons
     report["boxes"] = {b.role: [round(v) for v in r] for b, r in placed}
     report["copy_box"] = [round(v) for v in inner]
     report["ink"] = ink

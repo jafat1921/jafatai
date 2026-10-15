@@ -4,14 +4,18 @@ import io
 import json
 import re
 import zipfile
+from types import SimpleNamespace
 
 import httpx
 import numpy as np
 import pytest
 from PIL import Image
 
+from app.ads import colours as col
 from app.ads import copy as cp
 from app.ads import layout as lay
+from app.ads import service as svc
+from app.ads import stages
 from app.db import SessionLocal
 from app.drivers.mock import MockDriver
 from app.llm import set_transport
@@ -39,7 +43,10 @@ def _concepts(n: int, urdu: bool = False) -> dict:
                      "body": "Veckostädning från 215 kr/timme. Nu bara 199 kr!", "cta": "Boka nu",
                      "offers": ["Från 215 kr/timme", "Gratis första städningen", "ingen bindningstid."],
                      "layout": ["frosted", "badge", "side_wash", "split"][i % 4],
-                     "photo_prompt": "A warm Swedish living room in autumn, candles, a soft blanket on the sofa",
+                     # the first campaign's leak: palette codes, the brand and its handle in the photo prompt
+                     "photo_prompt": "A warm Swedish living room in autumn, candles, a soft blanket on the sofa, "
+                                     "accents of #22223B and #E8857B, an iXperts cleaner, @ixperts.se",
+                     "photo_model": "qwen_image_2512" if i == 1 else "",
                      "placement": "right third", "logo_surface": "the cleaner's apron" if i == 1 else ""})
     return {"concepts": rows}
 
@@ -54,9 +61,15 @@ def llm():
         title = schema.get("title")
         user = body["messages"][-1]["content"]
         calls.append({"schema": title, "user": user})
+        calls[-1]["model"] = body.get("model")
         if title == "AdConcepts":
             n = int(re.search(r"with exactly (\d+) concepts", user)[1])
             content = _concepts(n, urdu="Urdu" in user)
+        elif title == "AdCopyCheck":
+            # the editor flags concept 1's kicker as translated and is happy with its headline
+            content = {"lines": [{"concept": 1, "field": "kicker", "score": 2, "issue": "literal translation",
+                                  "rewrite": "Höstrusket stannar ute."},
+                                 {"concept": 1, "field": "headline", "score": 5, "issue": "", "rewrite": ""}]}
         elif title == "Marked":
             rows = [re.sub(r"^\d+\.\s*", "", ln) for ln in user.split("\n")]
             content = {"lines": [r[:1] + ZABAR + r[1:] if r else r for r in rows]}
@@ -122,6 +135,35 @@ def test_guard_keeps_only_approved_offers_and_numbers():
     assert c["offers"] == [] and c["headline"] == "Höst" and not re.search(r"\d", json.dumps(c, ensure_ascii=False))
     # Arabic-Indic digits count as the same number
     assert "215" in cp.numbers("۲۱۵ روپے") and "15%" in cp.numbers("15 % rabatt")
+
+
+def test_punctuation_is_normalised():
+    assert cp.tidy("kicker", "Höstmys börjar hemma.") == "Höstmys börjar hemma"
+    assert cp.tidy("headline", "Flyttar du i höst?.") == "Flyttar du i höst?"
+    assert cp.tidy("headline", "Flyttar du ?") == "Flyttar du?"
+    assert cp.tidy("headline", "Tänd ljusen.\nVi tar dammet.") == "Tänd ljusen.\nVi tar dammet."
+    assert cp.tidy("body", "Vänta... Nu!!") == "Vänta... Nu!" and cp.tidy("body", "Hej ,  du..") == "Hej, du."
+    c, _ = cp.guard({"kicker": "Hösten är här.", "headline": "Redo för hösten?.", "cta": "Boka"}, [])
+    assert c["kicker"] == "Hösten är här" and c["headline"] == "Redo för hösten?"
+
+
+def test_colour_names_and_no_codes_or_brand_text_in_photo_prompts():
+    assert col.colour_name("#26243F") == "deep navy" and col.colour_name("#FF8484") == "soft coral"
+    assert col.colour_name("#FFFFFF") == "white" and col.colour_name("nope") == ""
+    dirty = ("Cleaner at work, palette #26243F #FF8484, 26243F walls, iXperts' van, @ixperts.se, "
+             "www.ixperts.se, hej@ixperts.se, ring +46 72 846 73 94, 35mm lens, a decade-old facade")
+    clean = col.scrub(dirty, ["iXperts"])
+    assert not col.leaks(clean, ["iXperts"]) and not re.search(r"#|@|\.se\b|\d{3}", clean)
+    assert "deep navy" in clean and "soft coral" in clean and "35mm lens" in clean and "decade-old facade" in clean
+    # the photo stage's own pieces carry names, never codes or the brand
+    k = SimpleNamespace(palette=[{"hex": "#26243F", "name": "Navy"}, {"hex": "#FF8484"}], name="iXperts",
+                        tagline="", style_text="Calm #F2E9E4 backgrounds", contact={}, socials=[])
+    look = stages.brand_look(k)
+    assert "deep navy" in look and "#" not in look and "cream white" in look
+    assert stages.NO_TEXT.startswith("No text, no letters, no numbers")
+    assert "copy space in the upper left" in stages.copy_space("frosted", "portrait", False)
+    assert "copy space in the bottom third" in stages.copy_space("bottom_bar", "portrait", False)
+    assert "copy space in the right half" in stages.copy_space("side_wash", "portrait", True)
 
 
 def test_badge_comes_from_an_offer():
@@ -216,7 +258,72 @@ def test_logo_white_background_is_keyed_and_light_variant_used_on_dark(tmp_path)
     assert rep["logo"]["variant"] == "light"
     _, rep = lay.render({"format": "1:1", "style": "bottom_bar", "texts": {"headline": "Hej"}},
                         lay.AdAssets(photo=photo((20, 20, 30)), logo=tmp_path / "logo.png"))
-    assert rep["logo"]["variant"] == "primary" and rep["logo"]["plate"]
+    # no light version: the dark ink turns white on the transparent logo instead of a plate going behind it
+    assert rep["logo"]["variant"] == "recoloured" and not rep["logo"]["plate"]
+    assert rep["logo"]["contrast"] >= lay.AA_LARGE
+
+
+def test_logo_recolour_on_dark_keeps_the_accent(tmp_path):
+    # navy letters and a coral X on white, the way the iXperts logo is saved
+    logo = Image.new("RGB", (400, 160), "white")
+    logo.paste((38, 36, 63), (40, 40, 260, 120))
+    logo.paste((255, 132, 132), (280, 40, 360, 120))
+    logo.save(tmp_path / "logo.png")
+    keyed = lay.prepare_logo(tmp_path / "logo.png")
+    assert keyed.size == (320, 80)
+    out = lay.light_ink(keyed)
+    a = np.array(out)
+    assert tuple(a[40, 100][:3]) == (255, 255, 255)  # the navy ink is white now
+    assert tuple(a[40, 280][:3]) == (255, 132, 132)  # the coral accent kept
+    assert a[40, 230][3] == 0  # the keyed gap between them stays transparent
+    for shade in ((18, 18, 26), (70, 66, 60)):  # dark, and a mid-tone photo
+        img, rep = lay.render({"format": "4:5", "style": "bottom_bar", "texts": {"headline": "Hej"}},
+                              lay.AdAssets(photo=photo(shade), logo=tmp_path / "logo.png"))
+        assert rep["logo"]["variant"] == "recoloured" and not rep["logo"]["plate"], shade
+        x0, y0, x1, y1 = rep["logo"]["box"]
+        px = np.array(img.crop((x0, y0, x1, y1))).astype(int)
+        coral = np.all(np.abs(px - (255, 132, 132)) < 30, axis=2)
+        assert coral.sum() > 50 and np.all(px > 240, axis=2).sum() > 500
+    # a light photo keeps the primary logo as it is
+    _, rep = lay.render({"format": "4:5", "style": "frosted", "texts": {"headline": "Hej"}},
+                        lay.AdAssets(photo=photo((240, 238, 232)), logo=tmp_path / "logo.png"))
+    assert rep["logo"]["variant"] == "primary"
+
+
+def test_cta_is_a_primary_button_and_the_offer_an_accent_pill():
+    palette = [{"hex": "#26243F"}, {"hex": "#FF8484"}]
+    texts = {"headline": "Släpp in höstljuset", "offers": ["Ingen bindningstid"], "cta": "Boka nu"}
+    for style in ("frosted", "side_wash", "bottom_bar", "split"):
+        _, rep = lay.render({"format": "4:5", "style": style, "texts": texts, "palette": palette, "footer": False},
+                            lay.AdAssets(photo=photo()))
+        cta, offer = rep["buttons"]["cta"], rep["buttons"]["offer"]
+        assert cta["shape"] == "button" and cta["arrow"] and offer["shape"] == "pill" and not offer["arrow"]
+        assert cta["bg"] != offer["bg"], style
+        if not cta["inverted"]:
+            assert cta["bg"] == "#26243F" and cta["fg"] == "#FFFFFF", style
+        assert rep["contrast"]["cta"] >= lay.AA_LARGE and rep["contrast"]["offer"] >= lay.AA_TEXT
+    r = lay.roles(palette)
+    assert r["primary"] == "#26243F" and r["button"] == r["primary"] and r["pill"] != r["button"]
+
+
+def test_story_footer_is_a_card_inside_the_safe_zone():
+    for style in lay.STYLES:
+        img, rep = lay.render({"format": "9:16", "style": style, "contact": CONTACT, "language": "sv",
+                               "texts": {"headline": "Tänd ljusen", "body": "Varje vecka", "cta": "Boka"}},
+                              lay.AdAssets(photo=photo()))
+        x0, y0, x1, y1 = rep["footer"]["box"]
+        assert rep["footer"]["card"] and x0 > 0 and x1 < img.width, style
+        assert y0 >= 1920 * 0.13 and y1 <= 1920 * (1 - 0.18) + 1, style
+        # nothing of the copy runs into the card
+        assert all(b[3] <= y0 for b in rep["boxes"].values()), style
+    # below the card the photo fades into the footer colour, so there's no stray strip of photo
+    assert "story_fade" in rep["treatment"]
+    below = np.array(img.crop((0, y1 + 20, img.width, img.height))).reshape(-1, 3).mean(axis=0)
+    assert lay.lum(tuple(int(v) for v in below)) < 0.1
+    # a feed footer is still the edge-to-edge bar
+    _, rep = lay.render({"format": "4:5", "style": "frosted", "contact": CONTACT, "texts": {"headline": "Hej"}},
+                        lay.AdAssets(photo=photo()))
+    assert rep["footer"]["box"][0] == 0 and not rep["footer"]["card"]
 
 
 def test_palette_roles():
@@ -255,7 +362,12 @@ def test_pipeline_makes_library_ads_and_ad_json(client, llm):
         # one portrait photo per concept serves 4:5 and 9:16; concept 2's logo goes on the apron
         base = [g for g in photos if not g.params.get("logo_on_surface")]
         assert len(base) == 2 and {g.params["aspect"] for g in base} == {"9:16"}
-        assert all(g.params["model"] == "zimage_turbo" and "text" in (g.params.get("negative") or "text") for g in base)
+        # on auto each concept gets the photoreal engine it asked for
+        assert sorted(g.params["model"] for g in base) == ["qwen_image_2512", "zimage_turbo"]
+        assert all("text" in (g.params.get("negative") or "text") for g in base)
+        for g in base:
+            assert not col.leaks(g.prompt, ["iXperts", "ixperts.se"]), g.prompt
+            assert "deep navy" in g.prompt and "No text, no letters, no numbers" in g.prompt
         logo = [g for g in photos if g.params.get("logo_on_surface")]
         assert len(logo) == 1 and logo[0].params["reference_ids"][0] in {g.id for g in base}
     got = client.get(c["ad_json_url"])
@@ -335,6 +447,51 @@ def test_product_photos_go_through_the_edit_model(client, llm):
         assert "picture 1" in g.params["instruction"] and "label" in g.params["instruction"]
     bad = client.post("/api/ads", json={"subject": "x", "product_media_ids": ["nope"]})
     assert bad.status_code == 422
+
+
+def test_copy_self_check_rewrites_translated_lines(client, llm):
+    c = make(client, brand_kit_id=kit(client)["id"])
+    first = c["concepts"][0]
+    # the rewrite went in, with the kicker's full stop dropped
+    assert first["kicker"] == "Höstrusket stannar ute"
+    note = next(n for n in first["copy_check"] if n["field"] == "kicker")
+    assert note["score"] == 2 and note["before"] == "Höstmys börjar hemma" and note["issue"] == "literal translation"
+    # a line the editor liked is noted but left alone
+    assert "after" not in next(n for n in first["copy_check"] if n["field"] == "headline")
+    asked = next(x for x in llm if x["schema"] == "AdCopyCheck")["user"]
+    assert "Höstmys börjar hemma" in asked and "GOOD: Tänd ljusen. Vi tar dammet." in asked
+    brief = next(x for x in llm if x["schema"] == "AdConcepts")["user"]
+    assert "at most 5 words" in brief and "BAD:" in brief and "#22223B" not in brief and "deep navy" in brief
+    c = go_on(client, c)
+    ad = next(a for a in c["ads"] if a["concept_id"] == first["id"])
+    q = ad["report"]["quality"]
+    assert q["copy_check"] and q["contrast"]["headline"]["pass"] and q["contrast"]["cta"]["need"] == lay.AA_LARGE
+    assert "Gratis första städningen" in q["dropped"]["offers"] and "25%" in " ".join(q["dropped"]["numbers"])
+    assert ad["report"]["buttons"]["cta"]["shape"] == "button"
+
+
+async def _installed(names):
+    return names
+
+
+def test_writer_model_honours_ads_llm_model(client, llm, monkeypatch):
+    s = svc.get_settings()
+    picks = ["gemma4:26b", "qwen2.5:14b-instruct", "gemma4:e4b"]
+    server = ["gemma4:e4b", "qwen2.5:14b-instruct", "deepseek-r1:14b", "gemma4:26b"]
+    assert svc.pick_writer(picks, server) == "gemma4:26b"
+    assert svc.pick_writer(picks, ["gemma4:e4b:latest", "qwen2.5:14b-instruct"]) == "qwen2.5:14b-instruct"
+    assert svc.pick_writer(picks, []) is None
+    monkeypatch.setattr(s, "ads_llm_model", "my-copywriter:32b")
+    assert svc.writer_model() == "my-copywriter:32b"
+    c = make(client)
+    wrote = [x["model"] for x in llm if x["schema"] in ("AdConcepts", "AdCopyCheck")]
+    assert wrote and set(wrote) == {"my-copywriter:32b"}
+    with SessionLocal() as db:
+        assert db.get(Job, db.get(AdCampaign, c["id"]).job_id).result["copywriter"] == "my-copywriter:32b"
+    # not set: the largest installed candidate
+    monkeypatch.setattr(s, "ads_llm_model", "")
+    monkeypatch.setattr(svc, "list_models", lambda: _installed(server))
+    assert svc.writer_model() == "gemma4:26b"
 
 
 def test_urdu_campaign_gets_aerab_and_rtl(client, llm):

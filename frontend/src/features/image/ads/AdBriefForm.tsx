@@ -41,7 +41,7 @@ export function AdBriefForm() {
     tone: '',
     must_say: '',
     variants: 3,
-    image_model: 'zimage_turbo',
+    image_model: 'auto',
     review: true,
   })
   const [formats, setFormats] = useState<AdFormat[]>(['4:5'])

@@ -7,6 +7,7 @@ where it stopped. With brief.review on it stops after the concepts for an OK.
 """
 import copy
 import logging
+import re
 import time
 from dataclasses import dataclass
 
@@ -20,11 +21,13 @@ from app import brand_templates as bt
 from app import library as lib
 from app import models_catalog as mc
 from app import styles as st
+from app.ads import colours as col
 from app.ads import copy as cp
 from app.ads import service as svc
 from app.autopilot import POLL_S, WAIT_PRIORITY, StageFailed, Wait
 from app.llm import LLMError, chat_sync
-from app.llm.prompts import AdConcepts, ad_concept_messages
+from app.llm.prompts import (AD_CHECK_FIELDS, AD_PHOTO_MODELS, AdConcepts, AdCopyCheck, ad_concept_messages,
+                              ad_copy_check_messages, ad_copy_space)
 from app.models import AdCampaign, Generation, Job, MediaItem
 from app.services import enqueue_generation
 
@@ -42,19 +45,62 @@ class Review:
     message: str
 
 
+NO_TEXT = "No text, no letters, no numbers, no logos, no signs, no name badges anywhere in the picture."
+LOOK = "Editorial lifestyle photograph, natural light, real textures, candid and unposed."
+
+
 def copy_space(style: str, group: str, rtl: bool) -> str:
+    """The composition clause: where the layout will set the copy, so the photo leaves that region calm."""
     side, other = ("right", "left") if rtl else ("left", "right")
     if style in ("frosted", "badge", "side_wash"):
-        if group == "wide":
-            return (f"Composition: the subject in the {other} half of the frame; the {side} half calm, softly lit "
-                    "and uncluttered, with room for text.")
-        return (f"Composition: the subject in the {other} part and lower half of the frame; the upper {side} "
-                "area calm, softly lit and uncluttered, with room for text.")
+        if group == "wide" or style == "side_wash":
+            return (f"Composition: the subject in the {other} half of the frame; copy space in the {side} half, "
+                    "calm, softly lit and uncluttered.")
+        return (f"Composition: the subject in the {other} part and lower half of the frame; copy space in the "
+                f"upper {side} area, calm, softly lit and uncluttered.")
     if style == "bottom_bar":
-        return "Composition: the subject in the upper two thirds, nothing important in the bottom third."
+        return ("Composition: the subject in the upper two thirds; copy space in the bottom third, nothing "
+                "important there.")
     if style == "split":
         return "Composition: the subject centred and close, filling the frame."
-    return "Composition: the subject low in the frame, a large calm empty area in the upper half for text."
+    return "Composition: the subject low in the frame; copy space in the upper half, large, calm and empty."
+
+
+def brand_tokens(kit) -> list[str]:
+    """Words an image model must never be handed: the brand's name, handles, site and email."""
+    if kit is None:
+        return []
+    contact, socials = br.contact_of(kit), br.socials_of(kit)
+    out = [kit.name or "", kit.tagline or ""]
+    out += [s.get("handle") or "" for s in socials]
+    out += [(s.get("handle") or "").lstrip("@") for s in socials]
+    out += [contact.get(k) or "" for k in ("website", "booking_url", "email", "phone", "whatsapp")]
+    return [t for t in dict.fromkeys(x.strip() for x in out) if len(t) > 1]
+
+
+def brand_look(kit) -> str:
+    """The kit's look for a photo prompt: colours by name, the style text with any codes named too."""
+    if kit is None:
+        return ""
+    parts = []
+    words = col.palette_words(kit.palette)
+    if words:
+        parts.append("subtle colour accents of " + " and ".join(words[:3]) + " in natural things in the scene")
+    if kit.style_text:
+        parts.append(col.scrub(kit.style_text, brand_tokens(kit)).rstrip("."))
+    return ", ".join(p for p in parts if p)
+
+
+def brand_context(kit) -> str:
+    """The kit for the copywriter, with the palette as colour names: hex codes it sees end up in its photo
+    prompts, and from there painted into the photos."""
+    if kit is None:
+        return ""
+    text = br.prompt_context(kit)
+    if kit.palette:
+        text = re.sub(r"^Colour palette: .*$", lambda _: "Colour palette: " + col.palette_phrase(kit.palette), text,
+                      count=1, flags=re.M)
+    return col.HEX.sub(lambda m: col.colour_name(m.group(0)), text)
 
 
 class Run:
@@ -69,6 +115,7 @@ class Run:
         self.current: str | None = None
         self.message = ""
         self.spins = 0
+        self._writer: str | None | bool = False  # False: not looked up yet
 
     @property
     def b(self) -> dict:
@@ -171,21 +218,23 @@ class Run:
         for mid in b["product_media_ids"]:
             item = self.db.get(MediaItem, mid)
             products.append(item.title if item is not None and item.title else "the client's product")
-        msgs = ad_concept_messages(brand=br.prompt_context(self.kit) if self.kit else "", subject=b["subject"],
+        msgs = ad_concept_messages(brand=brand_context(self.kit), subject=b["subject"],
                                    description=b["description"], brief=b["brief"], occasion=b["occasion"],
                                    market=b["market"], language=c.language, tone=b["tone"], must_say=b["must_say"],
                                    offers=b["offers"], count=count, products=products, rtl=svc.is_rtl(c.language),
-                                   avoid=avoid, channels=self.channel_names())
+                                   avoid=avoid, channels=self.channel_names(),
+                                   colours=col.palette_words(self.kit.palette) if self.kit else [])
         try:
             res = chat_sync("creative", msgs, schema=AdConcepts, think=False, temperature=0.85,
-                            max_tokens=900 + 450 * count, tick=lambda: self.tick(0.1))
+                            max_tokens=900 + 450 * count, tick=lambda: self.tick(0.1), model=self.writer())
         except LLMError as e:
             raise StageFailed(f"The copywriter is offline: {e}") from e
         extra = " ".join([b["must_say"], b["subject"], b["description"], self.kit.name if self.kit else ""])
         channels = cp.channels_of(br.contact_of(self.kit), br.socials_of(self.kit))
+        rows = self.self_check([d.model_dump() for d in res.data.concepts[:count]])
         out = []
-        for data in res.data.concepts[:count]:
-            clean, report = cp.guard(data.model_dump(), b["offers"], extra, channels)
+        for data in rows:
+            clean, report = cp.guard(data, b["offers"], extra, channels)
             if any(report.values()):
                 log.info("ad campaign %s: guard took out %s", c.id, report)
             out.append((clean, report))
@@ -193,6 +242,45 @@ class Run:
             raise StageFailed("The copywriter came back with no concepts")
         self.mark(out)
         return [{**d, "_guard": g} for d, g in out]
+
+    def writer(self) -> str | None:
+        if self._writer is False:
+            self._writer = svc.writer_model()
+            if self._writer:
+                self.r["copywriter"] = self._writer
+        return self._writer or None
+
+    def self_check(self, rows: list[dict]) -> list[dict]:
+        """A native editor's pass over the fresh copy: every line scored, the ones that read as translated or
+        stiff rewritten. The notes stay on the concept for the quality report. A failed check keeps the copy."""
+        if not rows:
+            return rows
+        self.tick(0.4, "Checking the copy reads naturally")
+        msgs = ad_copy_check_messages(language=self.c.language, market=self.b["market"], concepts=rows)
+        try:
+            res = chat_sync("creative", msgs, schema=AdCopyCheck, think=False, temperature=0.4,
+                            max_tokens=400 + 260 * len(rows), tick=lambda: self.tick(0.4), model=self.writer())
+        except LLMError as e:
+            log.warning("ad campaign %s: the copy self-check failed (%s); keeping the first draft", self.c.id, e)
+            for r in rows:
+                r["copy_check"] = [{"field": "*", "score": None, "issue": "self-check unavailable"}]
+            return rows
+        out = [dict(r, copy_check=[]) for r in rows]
+        for ln in res.data.lines:
+            if not (1 <= ln.concept <= len(out)) or ln.field not in AD_CHECK_FIELDS:
+                continue
+            row = out[ln.concept - 1]
+            before = (row.get(ln.field) or "").strip()
+            if not before:
+                continue
+            # a model that writes the break as the two characters \n still means a break
+            new = (ln.rewrite or "").replace("\\n", "\n").strip()
+            note = {"field": ln.field, "score": ln.score, "issue": ln.issue.strip()[:160]}
+            if ln.score <= 3 and new and new != before:
+                note.update(before=before, after=new)
+                row[ln.field] = new
+            row["copy_check"].append(note)
+        return out
 
     def channel_names(self) -> list[str]:
         """The kit's channels as the copywriter hears of them: names only, the footer has the details."""
@@ -234,10 +322,10 @@ class Run:
             d = self.write(1, avoid=[" ".join((con.get("headline") or "").split())])[0]
             g = d.pop("_guard")
             keep_photo = bool(con.get("photos"))
-            for k in ("insight", "kicker", "headline", "body", "cta", "offers"):
-                con[k] = d.get(k) or ([] if k == "offers" else "")
+            for k in ("insight", "kicker", "headline", "body", "cta", "offers", "copy_check"):
+                con[k] = d.get(k) or ([] if k in ("offers", "copy_check") else "")
             if not keep_photo:
-                for k in ("layout", "photo_prompt", "placement", "logo_surface"):
+                for k in ("layout", "photo_prompt", "photo_model", "placement", "logo_surface"):
                     con[k] = d.get(k) or ""
             con.update(guard=g, copy_dirty=False, edited=False)
             svc.put_concept(c, con)
@@ -273,9 +361,11 @@ class Run:
         aspect = svc.group_aspect(group, b["formats"])
         w, h = lib.size_for_ratio(*(int(x) for x in aspect.split(":")))
         space = copy_space(con.get("layout") or "frosted", group, svc.is_rtl(c.language))
-        scene = " ".join(f"{con.get('photo_prompt') or b['subject']} {space}".split())
-        if self.kit is not None:
-            scene = f"{scene} {br.image_prompt_suffix(self.kit)}".strip()
+        tokens = brand_tokens(self.kit)
+        # nothing the image model could paint as text: no hex codes, handles, links or the brand's name
+        idea = col.scrub(con.get("photo_prompt") or b["subject"], tokens)
+        look = brand_look(self.kit)
+        scene = " ".join(f"{LOOK} {idea.rstrip('.')}. {space} {look + '.' if look else ''}".split())
         base = {"aspect": aspect, "width": w, "height": h, "ad_campaign": c.id, "concept_id": con["id"],
                 "photo_group": group, "created_by": {"user_id": c.created_by, "flow": "ad_studio"}}
         refs = self.products()
@@ -283,13 +373,15 @@ class Run:
             # the real product goes into the scene: the edit model with the client's pictures as references
             m, chosen = mc.choose(mc.AUTO, "edit", scene, refs=len(refs))
             names = " and ".join(f"picture {i}" for i in range(1, len(refs) + 1))
+            where = col.scrub(con.get("placement") or "", tokens) or "as the hero of the frame"
             instruction = (f"A professional advertising photograph. {scene} The product from {names} is placed "
-                           f"naturally in this scene ({con.get('placement') or 'as the hero of the frame'}): keep "
-                           "its exact shape, colours, proportions and label exactly as in the reference, "
-                           "photographed in the scene's light. No added text.")
+                           f"naturally in this scene ({where}): keep its exact shape, colours, proportions and label "
+                           "exactly as in the reference, photographed in the scene's light. No other text, letters "
+                           "or numbers anywhere: only the product's own label.")
             return instruction, {**base, "instruction": instruction, "reference_ids": refs, "model": m.id,
                                  "product_media_ids": b["product_media_ids"], **chosen}
-        m, chosen = mc.choose(b["image_model"] or svc.DEFAULT_MODEL, "image", scene)
+        scene = f"{scene} {NO_TEXT}"
+        m, chosen = self.photo_model(con, scene)
         speed = mc.speed_of(m, None) if m.speeds else None
         params = {**base, "model": m.id, "style": None, "user_prompt": scene, **chosen}
         if speed:
@@ -299,11 +391,24 @@ class Run:
             params["negative"] = neg
         return scene, params
 
+    def photo_model(self, con: dict, scene: str):
+        """The user's model when they picked one; on auto, the photoreal engine the concept asked for."""
+        want = self.b["image_model"] or svc.AUTO_MODEL
+        if want != svc.AUTO_MODEL:
+            return mc.choose(want, "image", scene)
+        pick = con.get("photo_model") if con.get("photo_model") in AD_PHOTO_MODELS else svc.DEFAULT_MODEL
+        m = mc.MODELS.get(pick)
+        if m is None or mc.hidden(m) or mc.known_unavailable(m):
+            pick = svc.DEFAULT_MODEL
+        m, chosen = mc.choose(pick, "image", scene)
+        return m, {**chosen, "model_requested": svc.AUTO_MODEL,
+                   "model_auto_reason": "Ad Studio: the photoreal engine this concept asked for"}
+
     def logo_request(self, con: dict, base: Generation, logo: bt.LogoPick) -> tuple[str, dict]:
-        surface = con.get("logo_surface")
-        rule = bt.logo_rule(self.kit, logo, "white")
-        text = (f"Put the {self.kit.name} logo from picture 2 on {surface} in picture 1, printed or applied the way "
-                f"it would be in real life, following the surface's shape, light and texture. {rule} Change "
+        surface = col.scrub(con.get("logo_surface") or "", brand_tokens(self.kit))
+        rule = col.scrub(bt.logo_rule(self.kit, logo, "white"), brand_tokens(self.kit))
+        text = (f"Put the logo from picture 2 on {surface} in picture 1, printed or applied the way it would be in "
+                f"real life, following the surface's shape, light and texture. {rule} Add no other text. Change "
                 "nothing else in picture 1.")
         m, chosen = mc.choose(mc.AUTO, "edit", text, refs=2)
         p = base.params or {}

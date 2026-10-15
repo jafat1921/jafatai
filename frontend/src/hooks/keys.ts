@@ -22,6 +22,8 @@ export const qk = {
   generations: (t: TargetType, id: string, kind: GenerationKind, includeRejected: boolean) =>
     ['generations', t, id, kind, includeRejected] as const,
   jobs: ['jobs'] as const,
+  // under qk.jobs, so anything that invalidates the queue refreshes this view too
+  jobsVia: (via: 'api') => ['jobs', 'via', via] as const,
   shotEstimate: (shotId: string, durationS: number) => ['shot-estimate', shotId, durationS] as const,
   reel: (projectId: string) => ['reel', projectId] as const,
   reelEstimate: (projectId: string) => ['reel-estimate', projectId] as const,

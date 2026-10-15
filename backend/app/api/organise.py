@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import library as lib
 from app import organise as org
 from app import upscale, upscale_image
@@ -45,10 +46,11 @@ def _owned(db: Session, cur: CurrentUser, folder_id: str) -> Folder:
 @router.get("/folders", response_model=list[FolderOut])
 def list_folders(kind: Literal["image", "video"] | None = None, db: Session = Depends(get_db),
                  cur: CurrentUser = Depends(get_current_user)):
-    q = select(Folder).where(Folder.workspace_id == cur.workspace_id)
+    want = vis.wanted(cur)
+    q = select(Folder).where(Folder.workspace_id == cur.workspace_id, *vis.where(Folder, want))
     if kind:
         q = q.where(Folder.kind.in_(("any", kind)))
-    counts = org.item_counts(db, cur.workspace_id)
+    counts = org.item_counts(db, cur.workspace_id, want)
     return [_folder_out(f, counts) for f in db.scalars(q.order_by(Folder.sort, Folder.name))]
 
 

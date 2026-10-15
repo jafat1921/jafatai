@@ -14,6 +14,7 @@ from app.security import (
     can_read_docs,
     can_use_api,
     get_current_user,
+    is_admin,
     load_current,
     make_session_token,
     session_only,
@@ -29,7 +30,7 @@ LOGIN_FAILURES = SlidingWindow(limit=5, window_s=60)
 def _user_out(cur: CurrentUser) -> UserOut:
     u = cur.user
     return UserOut(id=u.id, email=u.email, display_name=u.display_name, workspace_id=cur.workspace_id, role=cur.role,
-                   api_access=can_use_api(cur), api_docs=can_read_docs(cur))
+                   api_access=can_use_api(cur), api_docs=can_read_docs(cur), admin=is_admin(cur))
 
 
 @router.post("/login", response_model=UserOut)

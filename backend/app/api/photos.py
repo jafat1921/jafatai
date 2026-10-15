@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import library as lib
 from app import organise as org
 from app.catalogue import albums as al
@@ -136,7 +137,7 @@ def photo_filter(
                      date_from=_day(date_from, "date_from"), date_to=to + timedelta(days=1) if to else None,
                      added_from=_day(added_from, "added_from"),
                      edited=edited, album_id=album_id, folder_id=folder_id, client_id=client_id,
-                     favourite_of=cur.id if favourite else None)
+                     favourite_of=cur.id if favourite else None, via_api=vis.wanted(cur))
 
 
 def _owned_photo(db: Session, workspace_id: str, media_id: str) -> MediaItem:
@@ -254,7 +255,7 @@ def photo_source(media_id: str, db: Session = Depends(get_db), cur: CurrentUser 
 
 @router.get("/albums")
 def list_albums(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    return al.tree(db, cur.workspace_id)
+    return al.tree(db, cur.workspace_id, vis.wanted(cur))
 
 
 @router.post("/albums", status_code=201)

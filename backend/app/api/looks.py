@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from app import visibility as vis
 from app.api.photo import _file_name
 from app.db import get_db
 from app.models import utcnow
@@ -20,7 +21,8 @@ router = APIRouter(prefix="/looks", tags=["looks"])
 
 @router.get("", response_model=list[LookOut])
 def list_looks(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    return [lk.look_out(x) for x in lk.list_looks(db, cur.workspace_id)]
+    want = vis.wanted(cur)
+    return [lk.look_out(x) for x in lk.list_looks(db, cur.workspace_id) if vis.keep(x, want) or x.workspace_id is None]
 
 
 @router.post("", response_model=LookOut, status_code=201)

@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react'
 import { Inbox, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ApiMadeChip } from '@/components/studio/api-made-chip'
 import { Chip } from '@/components/studio/chip'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { JobRow } from '@/components/shell/JobRow'
 import { TopBarActions } from '@/components/shell/TopBarActions'
-import { useJobs } from '@/hooks/useJobs'
+import { useApiJobs, useJobs } from '@/hooks/useJobs'
 import { isActiveJob } from '@/lib/status'
 import type { Job } from '@/lib/types'
 
@@ -30,7 +31,10 @@ function lanes(list: Job[]) {
 }
 
 export function QueuePage() {
-  const jobs = useJobs()
+  const [apiOnly, setApiOnly] = useState(false)
+  const studioJobs = useJobs()
+  const apiJobs = useApiJobs(apiOnly)
+  const jobs = apiOnly ? apiJobs : studioJobs
   const [filter, setFilter] = useState<Filter>('active')
   const list = useMemo(() => jobs.data ?? [], [jobs.data])
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.value, list.filter(f.test).length])) as Record<Filter, number>, [list])
@@ -51,15 +55,18 @@ export function QueuePage() {
             Queue
           </h1>
           <p className="text-body text-studio-muted" aria-live="polite">
-            {running} running · {counts.active - running} waiting · updates live
+            {running} running · {counts.active - running} waiting · {apiOnly ? 'made through the API, refreshes every 10 s' : 'updates live'}
           </p>
         </div>
-        <div role="group" aria-label="Show" className="flex flex-wrap gap-1">
-          {FILTERS.map((f) => (
-            <Chip key={f.value} selected={filter === f.value} onClick={() => setFilter(f.value)}>
-              {f.label} ({counts[f.value]})
-            </Chip>
-          ))}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div role="group" aria-label="Show" className="flex flex-wrap gap-1">
+            {FILTERS.map((f) => (
+              <Chip key={f.value} selected={filter === f.value} onClick={() => setFilter(f.value)}>
+                {f.label} ({counts[f.value]})
+              </Chip>
+            ))}
+          </div>
+          <ApiMadeChip on={apiOnly} onChange={setApiOnly} />
         </div>
 
         {jobs.isPending && [0, 1, 2].map((i) => <Skeleton key={i} className="h-20" />)}

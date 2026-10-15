@@ -12,6 +12,16 @@ export function useJobs() {
   })
 }
 
+/** The admin's view of jobs made through the API. The event stream leaves those out, so this one polls. */
+export function useApiJobs(enabled: boolean) {
+  return useQuery({
+    queryKey: qk.jobsVia('api'),
+    queryFn: () => api.jobs.list({ via: 'api' }),
+    refetchInterval: 10_000,
+    enabled,
+  })
+}
+
 export function useJob(id: string | null | undefined) {
   const { data } = useJobs()
   return id ? data?.find((j) => j.id === id) : undefined

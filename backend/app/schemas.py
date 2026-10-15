@@ -64,6 +64,8 @@ class UserOut(Out):
     # contract v27: whether Settings shows API tokens, and whether /api/docs opens for this user
     api_access: bool = False
     api_docs: bool = False
+    # contract v34: the admin may list what was made through the API (?via=api) in the Library and Queue
+    admin: bool = False
 
 
 # API tokens (contract v27)

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from app import visibility as vis
 from app import models_catalog as mc
 from app.db import get_db
 from app.models import Character, Generation, PoetryShort
@@ -108,7 +109,8 @@ def create_short(body: CreateIn, db: Session = Depends(get_db), cur: CurrentUser
 
 @router.get("", summary="List Poetry Shorts")
 def list_shorts(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    rows = db.scalars(select(PoetryShort).where(PoetryShort.workspace_id == cur.workspace_id)
+    rows = db.scalars(select(PoetryShort).where(PoetryShort.workspace_id == cur.workspace_id,
+                                                *vis.where(PoetryShort, vis.wanted(cur)))
                       .order_by(PoetryShort.updated_at.desc()).limit(200)).all()
     return [svc.summary_out(db, ps) for ps in rows]
 

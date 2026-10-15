@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app.db import get_db
 from app.models import Generation, Job, utcnow
 from app.schemas import JobOut
@@ -18,7 +19,7 @@ def list_jobs(
     db: Session = Depends(get_db),
     cur: CurrentUser = Depends(get_current_user),
 ):
-    q = select(Job).where(Job.workspace_id == cur.workspace_id)
+    q = select(Job).where(Job.workspace_id == cur.workspace_id, *vis.where(Job, vis.wanted(cur)))
     if status:
         q = q.where(Job.status.in_([s.strip() for s in status.split(",") if s.strip()]))
     if project_id:

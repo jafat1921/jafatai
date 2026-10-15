@@ -11,6 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app import visibility as vis
 from app import brand as br
 from app import brand_render as rnd
 from app import library as lib
@@ -115,7 +116,8 @@ def _make_default(db: Session, kit: BrandKit) -> None:
 
 @router.get("/brand-kits", response_model=list[BrandKitOut])
 def list_kits(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    kits = db.scalars(select(BrandKit).where(BrandKit.workspace_id == cur.workspace_id)
+    kits = db.scalars(select(BrandKit).where(BrandKit.workspace_id == cur.workspace_id,
+                                             *vis.where(BrandKit, vis.wanted(cur)))
                       .order_by(BrandKit.is_default.desc(), BrandKit.updated_at.desc())).all()
     return [kit_out(db, k) for k in kits]
 

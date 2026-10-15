@@ -3,6 +3,7 @@
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import thumbs
 from app.catalogue import query as cq
 from app.models import Album, AlbumItem, Client, Generation, MediaItem, utcnow
@@ -79,8 +80,8 @@ def album_out(a: Album, count: int, cover: str | None, client: str | None = None
             "created_at": a.created_at, "updated_at": a.updated_at}
 
 
-def tree(db: Session, workspace_id: str) -> list[dict]:
-    albums = list(db.scalars(select(Album).where(Album.workspace_id == workspace_id)
+def tree(db: Session, workspace_id: str, want: bool | None = None) -> list[dict]:
+    albums = list(db.scalars(select(Album).where(Album.workspace_id == workspace_id, *vis.where(Album, want))
                              .order_by(Album.sort, func.lower(Album.name))))
     counts = dict(db.execute(select(AlbumItem.album_id, func.count()).where(AlbumItem.workspace_id == workspace_id)
                              .group_by(AlbumItem.album_id)).all())

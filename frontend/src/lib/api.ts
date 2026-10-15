@@ -836,7 +836,7 @@ export const api = {
   },
   estimate: (q: EstimateQuery) => get<EstimateResult>('/estimate', { ...q }),
   jobs: {
-    list: (q?: { status?: JobStatus; project_id?: string }) => get<Job[]>('/jobs', q),
+    list: (q?: { status?: JobStatus; project_id?: string; via?: 'api' }) => get<Job[]>('/jobs', q),
     cancel: (id: string) => post<Job>(`/jobs/${id}/cancel`),
     retry: (id: string) => post<Job>(`/jobs/${id}/retry`),
   },

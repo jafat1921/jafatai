@@ -23,7 +23,7 @@ export function libraryFilter(
   origin: OriginFilter,
   q: string,
   tag: string | null,
-  scope: { folderId?: string | null; favourite?: boolean } = {},
+  scope: { folderId?: string | null; favourite?: boolean; apiOnly?: boolean } = {},
 ): MediaFilter {
   const f: MediaFilter = { kind }
   if (origin === 'all') f.include = 'project'
@@ -32,6 +32,7 @@ export function libraryFilter(
   if (tag) f.tag = tag
   if (scope.folderId) f.folder_id = scope.folderId
   if (scope.favourite) f.favourite = 1
+  if (scope.apiOnly) f.via = 'api'
   return f
 }
 

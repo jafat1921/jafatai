@@ -39,6 +39,11 @@ def _ws():
     return mapped_column(String(36), ForeignKey("workspace.id", ondelete="CASCADE"), index=True)
 
 
+def _via():
+    # made through the token REST API (contract v34): kept out of the studio app's own lists
+    return mapped_column(Boolean, default=False, server_default=text("0"), index=True)
+
+
 class Workspace(Base):
     __tablename__ = "workspace"
     id: Mapped[str] = _id()
@@ -70,6 +75,7 @@ class Project(Base):
     __tablename__ = "project"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     title: Mapped[str] = mapped_column(String(300))
     logline: Mapped[str] = mapped_column(Text, default="")
     brief: Mapped[str] = mapped_column(Text, default="")
@@ -139,6 +145,7 @@ class Character(Base):
     __tablename__ = "character"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     # NULL = a Character Studio character, shared into films through project_cast (migration 0018)
     project_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True, nullable=True
@@ -270,6 +277,7 @@ class Generation(Base):
     )
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     project_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True, nullable=True
     )
@@ -301,6 +309,7 @@ class Job(Base):
     __table_args__ = (Index("ix_job_status_created", "status", "created_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     type: Mapped[str] = mapped_column(String(40))
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(20), default="queued")
@@ -374,6 +383,7 @@ class MediaItem(Base):
     __table_args__ = (Index("ix_media_item_ws_created", "workspace_id", "created_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     kind: Mapped[str] = mapped_column(String(10))  # image | video | audio (and brand fonts)
     origin: Mapped[str] = mapped_column(String(20))  # generated | upload
     title: Mapped[str] = mapped_column(String(300), default="", server_default="")
@@ -435,6 +445,7 @@ class Album(Base):
     __tablename__ = "album"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(10), default="album", server_default="album")
     name: Mapped[str] = mapped_column(String(160))
@@ -483,6 +494,7 @@ class Folder(Base):
     __tablename__ = "folder"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     name: Mapped[str] = mapped_column(String(120))
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(10), default="any", server_default="any")  # any | image | video | audio
@@ -530,6 +542,7 @@ class BrandKit(Base):
     __tablename__ = "brand_kit"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     name: Mapped[str] = mapped_column(String(200))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     palette: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
@@ -556,6 +569,7 @@ class Look(Base):
     workspace_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("workspace.id", ondelete="CASCADE"), index=True, nullable=True
     )
+    via_api: Mapped[bool] = _via()
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     category: Mapped[str] = mapped_column(String(80), default="", server_default="")
@@ -576,6 +590,7 @@ class VoiceProfile(Base):
     __table_args__ = (Index("ix_voice_profile_ws_created", "workspace_id", "created_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     name: Mapped[str] = mapped_column(String(120))
     kind: Mapped[str] = mapped_column(String(10), index=True)  # clone | design | preset
     language: Mapped[str] = mapped_column(String(12), default="en", server_default="en", index=True)
@@ -606,6 +621,7 @@ class VoiceScript(Base):
     __table_args__ = (Index("ix_voice_script_ws_updated", "workspace_id", "updated_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     title: Mapped[str] = mapped_column(String(200))
     language: Mapped[str] = mapped_column(String(12), default="en", server_default="en")
     engine: Mapped[str] = mapped_column(String(20), default="auto", server_default="auto")
@@ -628,6 +644,7 @@ class DubProject(Base):
     __table_args__ = (Index("ix_dub_project_ws_updated", "workspace_id", "updated_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     video_id: Mapped[str] = mapped_column(String(36), index=True)
     # the version being dubbed, pinned so a later edit of the video doesn't shift every timing
     video_generation_id: Mapped[str] = mapped_column(String(36))
@@ -654,6 +671,7 @@ class Transcript(Base):
     __table_args__ = (Index("ix_transcript_ws_created", "workspace_id", "created_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     media_id: Mapped[str] = mapped_column(String(36), index=True)
     generation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     title: Mapped[str] = mapped_column(String(300), default="", server_default="")
@@ -677,6 +695,7 @@ class PodcastShow(Base):
     __table_args__ = (Index("ix_podcast_show_ws_updated", "workspace_id", "updated_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     author: Mapped[str] = mapped_column(String(200), default="", server_default="")
@@ -697,6 +716,7 @@ class PodcastEpisode(Base):
     __table_args__ = (Index("ix_podcast_episode_ws_updated", "workspace_id", "updated_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     show_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("podcast_show.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -726,6 +746,7 @@ class VideoPodcast(Base):
     __tablename__ = "video_podcast"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     episode_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("podcast_episode.id", ondelete="CASCADE"), unique=True, index=True)
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id", ondelete="CASCADE"), index=True)
@@ -764,6 +785,7 @@ class UserTemplate(Base):
     __table_args__ = (Index("ix_user_template_ws_updated", "workspace_id", "updated_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)  # kept when the user goes
     title: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(String(500), default="", server_default="")
@@ -789,6 +811,7 @@ class PoetryShort(Base):
     __table_args__ = (Index("ix_poetry_short_ws_updated", "workspace_id", "updated_at"),)
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
     title: Mapped[str] = mapped_column(String(200), default="", server_default="")
     language: Mapped[str] = mapped_column(String(12), default="ur", server_default="ur")
     stage: Mapped[str] = mapped_column(String(20), default="poem", server_default="poem")
@@ -804,6 +827,22 @@ class PoetryShort(Base):
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+VIA_API_MODELS = (Project, Character, Generation, Job, MediaItem, Folder, Album, BrandKit, Look, VoiceProfile,
+                  VoiceScript, DubProject, Transcript, PodcastShow, PodcastEpisode, VideoPodcast, UserTemplate,
+                  PoetryShort)
+# Session.info key: set for a token REST API request, and by the worker while it runs one of its jobs
+VIA_API = "via_api"
+
+
+@event.listens_for(Session, "before_flush")
+def _stamp_via_api(session, _ctx, _instances):
+    if not session.info.get(VIA_API):
+        return
+    for obj in session.new:
+        if isinstance(obj, VIA_API_MODELS):
+            obj.via_api = True
 
 
 @event.listens_for(Session, "before_flush")

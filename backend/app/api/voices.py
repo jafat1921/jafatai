@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import literal_column, or_, select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import voice_instruct
 from app import voices as vc
 from app.db import get_db
@@ -43,7 +44,8 @@ def engines(cur: CurrentUser = Depends(get_current_user)):
 def list_voices(q: str | None = Query(None, max_length=120), language: str | None = Query(None, max_length=12),
                 kind: str | None = Query(None, max_length=10), starred: bool | None = None,
                 db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    stmt = select(VoiceProfile).where(VoiceProfile.workspace_id == cur.workspace_id)
+    stmt = select(VoiceProfile).where(VoiceProfile.workspace_id == cur.workspace_id,
+                                      *vis.where(VoiceProfile, vis.wanted(cur)))
     if q and q.strip():
         like = f"%{q.strip()}%"
         stmt = stmt.where(or_(VoiceProfile.name.ilike(like), VoiceProfile.notes.ilike(like)))

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import models_catalog
 from app.config import get_settings
 from app.db import get_db
@@ -19,7 +20,8 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 def list_projects(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     rows = db.scalars(
         # an AI video podcast's project is an implementation detail of the episode
-        select(Project).where(Project.workspace_id == cur.workspace_id, Project.authoring_mode != "podcast")
+        select(Project).where(Project.workspace_id == cur.workspace_id, Project.authoring_mode != "podcast",
+                              *vis.where(Project, vis.wanted(cur)))
         .order_by(Project.updated_at.desc())
     ).all()
     return [project_out(db, p) for p in rows]

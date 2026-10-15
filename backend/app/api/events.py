@@ -11,8 +11,9 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app import storyboard as sb
+from app import visibility as vis
 from app.library import items_out
-from app.models import Generation, Job, MediaItem, Shot, utcnow
+from app.models import Generation, Job, MediaItem, Project, Shot, utcnow
 from app.reel import reel_events
 from app.security import authenticate
 from app.services import gen_out, job_out
@@ -33,22 +34,29 @@ def _frame(event: str, data: dict, event_id: str | None = None) -> str:
     return out + f"data: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
-def collect_changes(workspace_id: str, since: datetime) -> list[tuple[str, str, datetime, dict]]:
+def collect_changes(workspace_id: str, since: datetime, want: bool | None = None) -> list[tuple[str, str, datetime, dict]]:
+    """`want` is app.visibility.wanted() for the listener: the app's own stream leaves API rows out."""
     db = SessionLocal()
     try:
         jobs = db.scalars(
-            select(Job).where(Job.workspace_id == workspace_id, Job.updated_at > since).order_by(Job.updated_at)
+            select(Job).where(Job.workspace_id == workspace_id, Job.updated_at > since, *vis.where(Job, want))
+            .order_by(Job.updated_at)
         ).all()
         gens = db.scalars(
             select(Generation)
-            .where(Generation.workspace_id == workspace_id, Generation.updated_at > since)
+            .where(Generation.workspace_id == workspace_id, Generation.updated_at > since,
+                   *vis.where(Generation, want))
             .order_by(Generation.updated_at)
         ).all()
         out = [("job", j.id, j.updated_at, job_out(j).model_dump(mode="json")) for j in jobs]
         out += [("generation", g.id, g.updated_at, gen_out(g).model_dump(mode="json")) for g in gens]
-        out += _shot_changes(db, workspace_id, since, gens)
-        out += reel_events(db, workspace_id, since, jobs)
-        out += _media_changes(db, workspace_id, since)
+        film = _shot_changes(db, workspace_id, since, gens) + reel_events(db, workspace_id, since, jobs)
+        if want is not None:
+            # shots and reels have no flag of their own; their film's decides
+            api = set(db.scalars(select(Project.id).where(Project.workspace_id == workspace_id, Project.via_api)))
+            film = [r for r in film if (r[3].get("project_id") in api) == want]
+        out += film
+        out += _media_changes(db, workspace_id, since, want)
     finally:
         db.close()
     out.sort(key=lambda r: r[2])
@@ -80,9 +88,10 @@ def _shot_changes(db, workspace_id: str, since: datetime, gens) -> list[tuple[st
     return [("shot", o.id, stamps[o.id], o.model_dump(mode="json")) for o in sb.shots_out(db, list(shots.values()))]
 
 
-def _media_changes(db, workspace_id: str, since: datetime) -> list[tuple[str, str, datetime, dict]]:
+def _media_changes(db, workspace_id: str, since: datetime, want: bool | None = None) -> list[tuple[str, str, datetime, dict]]:
     # create, rename/tag, new version queued and finish all bump updated_at (app.library.touch)
-    items = db.scalars(select(MediaItem).where(MediaItem.workspace_id == workspace_id, MediaItem.updated_at > since)
+    items = db.scalars(select(MediaItem).where(MediaItem.workspace_id == workspace_id, MediaItem.updated_at > since,
+                                               *vis.where(MediaItem, want))
                        .order_by(MediaItem.updated_at)).all()
     return [("media", o.id, i.updated_at, o.model_dump(mode="json")) for i, o in zip(items, items_out(db, items))]
 
@@ -96,19 +105,24 @@ def _parse_last_id(value: str | None) -> datetime | None:
         return None
 
 
-def _auth_workspace(request: Request) -> str:
+def _listener(request: Request) -> tuple[str, bool | None]:
     # not using the get_db dependency: its session would stay open (and pin a
     # WAL snapshot) for as long as the stream lives. Cookie or Bearer token (read scope), like any GET
     db = SessionLocal()
     try:
-        return authenticate(db, request).workspace_id
+        cur = authenticate(db, request)
+        return cur.workspace_id, vis.wanted(cur)
     finally:
         db.close()
 
 
+def _auth_workspace(request: Request) -> str:
+    return _listener(request)[0]
+
+
 @router.get("/events")
 async def events(request: Request):
-    workspace_id = await run_in_threadpool(_auth_workspace, request)
+    workspace_id, want = await run_in_threadpool(_listener, request)
     start = _parse_last_id(request.headers.get("last-event-id")) or utcnow()
 
     async def stream():
@@ -120,7 +134,7 @@ async def events(request: Request):
             while True:
                 if await request.is_disconnected():
                     break
-                rows = await run_in_threadpool(collect_changes, workspace_id, cursor - OVERLAP)
+                rows = await run_in_threadpool(collect_changes, workspace_id, cursor - OVERLAP, want)
                 for kind, obj_id, stamp, data in rows:
                     key = f"{kind}:{obj_id}"
                     if seen.get(key) == stamp:

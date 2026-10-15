@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import voice_gallery as vg
+from app import visibility as vis
 from app import voices as vc
 from app.db import get_db, release
 from app.schemas import VoiceOut
@@ -34,7 +35,8 @@ def gallery(q: str | None = Query(None, max_length=120), language: str | None = 
             style: str | None = Query(None, max_length=20), engine: str | None = Query(None, max_length=20),
             db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     res = vg.search((q or "").strip() or None, language=language, gender=gender, age=age, style=style, engine=engine)
-    added = vg.added_voices(db, cur.workspace_id)
+    want = vis.wanted(cur)
+    added = {k: p for k, p in vg.added_voices(db, cur.workspace_id).items() if vis.keep(p, want)}
     return {**res, "items": [vg.item_out(v, added) for v in res["items"]]}
 
 
@@ -55,5 +57,8 @@ def sample(gallery_id: str, db: Session = Depends(get_db), cur: CurrentUser = De
 def add(gallery_id: str, body: GalleryAddIn | None = Body(None), db: Session = Depends(get_db),
         cur: CurrentUser = Depends(require_editor)):
     v, created = vg.add(db, cur.workspace_id, _entry(gallery_id), (body.starred if body else None))
+    if v.via_api and cur.channel == "app":
+        # an API client added it first; adding it in the studio brings it into the studio's library
+        v.via_api = False
     db.commit()
     return JSONResponse(VoiceOut(**vc.voice_out(db, v)).model_dump(mode="json"), status_code=201 if created else 200)

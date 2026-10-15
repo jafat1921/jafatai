@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import library as lib
 from app import transcripts as tr
 from app.db import get_db
@@ -40,7 +41,7 @@ def transcribe(body: TranscribeIn, db: Session = Depends(get_db), cur: CurrentUs
 @router.get("/transcripts")
 def list_transcripts(media_id: str | None = Query(None, max_length=36), db: Session = Depends(get_db),
                      cur: CurrentUser = Depends(get_current_user)):
-    q = select(Transcript).where(Transcript.workspace_id == cur.workspace_id)
+    q = select(Transcript).where(Transcript.workspace_id == cur.workspace_id, *vis.where(Transcript, vis.wanted(cur)))
     if media_id:
         q = q.where(Transcript.media_id == media_id)
     rows = db.scalars(q.order_by(Transcript.created_at.desc(), Transcript.id).limit(100)).all()

@@ -41,6 +41,7 @@ class Filter:
     folder_id: str | None = None
     client_id: str | None = None
     favourite_of: str | None = None  # user id
+    via_api: bool | None = None  # app.visibility.wanted(); None lists API-made photos too
 
 
 def edited_clause():
@@ -62,6 +63,8 @@ def _in_album(album_id: str):
 def scope_clauses(db: Session, workspace_id: str, f: Filter, *, skip: tuple[str, ...] = ()) -> list:
     """WHERE parts for a filter. `skip` leaves facets out so each facet counts the others' result."""
     c = [MediaItem.workspace_id == workspace_id, MediaItem.kind == "image"]
+    if f.via_api is not None:
+        c.append(MediaItem.via_api == f.via_api)
     if f.origin:
         c.append(MediaItem.origin == f.origin)
     if f.q.strip():

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.models import ApiToken, Membership, User, utcnow
+from app.models import VIA_API, ApiToken, Membership, User, utcnow
 
 COOKIE_NAME = "mixai_session"
 SESSION_MAX_AGE = 14 * 24 * 3600
@@ -63,6 +63,10 @@ class CurrentUser:
     # set when the request came in with an API token; a browser session has no scope limits
     token_id: str | None = None
     scopes: frozenset[str] | None = None
+    # app (cookie session), api (token on the REST routes) or mcp (/api/mcp); see app.visibility
+    channel: str = "app"
+    # ?via= on an app request; only an admin's counts (app.visibility.wanted)
+    via: str | None = None
 
     @property
     def id(self) -> str:
@@ -126,7 +130,7 @@ def resolve_token(db: Session, raw: str) -> CurrentUser | None:
         # once a minute is plenty for "last used", and keeps a busy script from writing on every call
         db.execute(update(ApiToken).where(ApiToken.id == row.id).values(last_used_at=now))
         db.commit()
-    return replace(cur, token_id=row.id, scopes=frozenset(row.scopes or ()))
+    return replace(cur, token_id=row.id, scopes=frozenset(row.scopes or ()), channel="api")
 
 
 def bearer_token(request: Request) -> str | None:
@@ -169,12 +173,15 @@ def authenticate(db: Session, request: Request) -> CurrentUser:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid, expired or revoked API token",
                                 headers={"WWW-Authenticate": "Bearer"})
         check_scope(cur, required_scope(request))
+        # whatever this request creates is stamped via_api (models._stamp_via_api)
+        db.info[VIA_API] = True
         return cur
     token = request.cookies.get(COOKIE_NAME)
     uid = read_session_token(token) if token else None
     cur = load_current(db, uid) if uid else None
     if not cur:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not signed in")
+    cur.via = request.query_params.get("via")
     return cur
 
 

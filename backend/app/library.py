@@ -16,6 +16,7 @@ from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import styles, thumbs
+from app import visibility as vis
 from app.config import get_settings
 from app.models import Character, Generation, Job, Location, MediaItem, Project, utcnow
 from app.schemas import MediaDetailOut, MediaItemOut
@@ -215,11 +216,11 @@ def _image_dims(g: Generation) -> tuple[int | None, int | None]:
 
 
 def _project_rows(db: Session, workspace_id: str, *, kind: str | None, project_id: str | None,
-                  only_ids: list[str] | None = None) -> list[tuple[Generation, MediaItemOut]]:
+                  only_ids: list[str] | None = None, want: bool | None = None) -> list[tuple[Generation, MediaItemOut]]:
     """Read-through rows for project results. Newest render per (project, title); approved stills."""
     rows: list[tuple[Generation, MediaItemOut]] = []
     base = [Generation.workspace_id == workspace_id, Generation.target_type != "media",
-            Generation.project_id.is_not(None)]
+            Generation.project_id.is_not(None), *vis.where(Generation, want)]
     if project_id:
         base.append(Generation.project_id == project_id)
     if only_ids is not None:
@@ -300,14 +301,15 @@ def _project_rows(db: Session, workspace_id: str, *, kind: str | None, project_i
 def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origin: str | None = None,
                q: str | None = None, tag: str | None = None, project_id: str | None = None,
                include_project: bool = False, limit: int = 40, cursor: str | None = None,
-               scope: Scope | None = None) -> tuple[list[MediaItemOut], str | None]:
+               scope: Scope | None = None, want: bool | None = None) -> tuple[list[MediaItemOut], str | None]:
+    """`want` is app.visibility.wanted(): False keeps API-made rows out of the studio's own Library."""
     limit = max(1, min(MAX_LIMIT, limit))
     after = parse_cursor(cursor)
     needle = (q or "").strip().lower()
     merged: list[tuple[datetime, str, MediaItemOut | MediaItem]] = []
 
     if origin in (None, "generated", "upload"):
-        stmt = select(MediaItem).where(MediaItem.workspace_id == workspace_id)
+        stmt = select(MediaItem).where(MediaItem.workspace_id == workspace_id, *vis.where(MediaItem, want))
         if kind:
             stmt = stmt.where(MediaItem.kind == kind)
         else:
@@ -342,7 +344,7 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
 
     only = sorted(scope.gen_ids) if scope is not None and scope.gen_ids is not None else None
     if (origin == "project" or (origin is None and include_project)) and not tag and only != []:
-        for g, row in _project_rows(db, workspace_id, kind=kind, project_id=project_id, only_ids=only):
+        for g, row in _project_rows(db, workspace_id, kind=kind, project_id=project_id, only_ids=only, want=want):
             if needle and needle not in f"{row.title} {row.project_title or ''}".lower():
                 continue
             if after and (row.created_at, row.id) >= after:
@@ -476,7 +478,7 @@ def _upscale_title(g: Generation, items: dict[str, MediaItem], names: dict[str, 
 
 
 def list_upscales(db: Session, workspace_id: str, *, kind: str | None = None, limit: int = 20,
-                  cursor: str | None = None) -> tuple[list[dict], str | None]:
+                  cursor: str | None = None, want: bool | None = None) -> tuple[list[dict], str | None]:
     """Every upscale result in the workspace, newest first, running and failed ones included.
 
     Upscale results are the generations whose params carry "upscale"; they always have a parent, so the
@@ -488,7 +490,8 @@ def list_upscales(db: Session, workspace_id: str, *, kind: str | None = None, li
     found: list[Generation] = []
     while len(found) <= limit:
         q = select(Generation).where(Generation.workspace_id == workspace_id, Generation.parent_id.is_not(None),
-                                     Generation.kind.in_(kinds), Generation.status != "rejected")
+                                     Generation.kind.in_(kinds), Generation.status != "rejected",
+                                     *vis.where(Generation, want))
         if after:
             q = q.where(or_(Generation.created_at < after[0],
                             (Generation.created_at == after[0]) & (Generation.id < after[1])))

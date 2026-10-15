@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app import camera
 from app import mentions as mn
+from app import visibility as vis
 from app.db import get_db
 from app.security import CurrentUser, get_current_user
 
@@ -17,7 +18,8 @@ def list_mentions(q: str = "", project_id: str | None = None, types: str | None 
     bad = [t for t in wanted if t not in mn.TYPES]
     if bad:
         raise HTTPException(422, f"Unknown mention type '{bad[0]}' (expected {', '.join(mn.TYPES)})")
-    return mn.search(db, cur.workspace_id, q[:80], project_id=project_id or None, types=wanted, kit_id=kit_id or None)
+    return mn.search(db, cur.workspace_id, q[:80], project_id=project_id or None, types=wanted, kit_id=kit_id or None,
+                     want=vis.wanted(cur))
 
 
 @router.get("/camera/presets")

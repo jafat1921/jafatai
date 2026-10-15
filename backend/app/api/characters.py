@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import cast, character_pack, character_panels as cp, character_sheet as cs, models_catalog, voices
 from app import library as lib, shot_speech, voice_instruct
 from app.ai_jobs import enqueue_ai
@@ -98,7 +99,7 @@ def unlink_character(project_id: str, character_id: str, db: Session = Depends(g
 def list_studio(q: str | None = Query(None, max_length=120), scope: str = Query("studio", pattern="^(studio|all)$"),
                 db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     """The studio library; scope=all adds every film's own characters (for pickers)."""
-    stmt = select(Character).where(Character.workspace_id == cur.workspace_id)
+    stmt = select(Character).where(Character.workspace_id == cur.workspace_id, *vis.where(Character, vis.wanted(cur)))
     if scope == "studio":
         stmt = stmt.where(Character.project_id.is_(None))
     if q and q.strip():

@@ -12,6 +12,7 @@ from pathlib import Path
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import library as lib
 from app.config import get_settings
 from app.models import Favourite, Folder, FolderLink, Generation, Job, MediaItem, utcnow
@@ -118,10 +119,10 @@ def check_parent(db: Session, workspace_id: str, folder: Folder | None, parent_i
     return parent
 
 
-def item_counts(db: Session, workspace_id: str) -> dict[str, int]:
+def item_counts(db: Session, workspace_id: str, want: bool | None = None) -> dict[str, int]:
     counts: dict[str, int] = dict(db.execute(
         select(MediaItem.folder_id, func.count()).where(
-            MediaItem.workspace_id == workspace_id, MediaItem.folder_id.is_not(None),
+            MediaItem.workspace_id == workspace_id, MediaItem.folder_id.is_not(None), *vis.where(MediaItem, want),
             MediaItem.kind.in_(("image", "video", "audio"))).group_by(MediaItem.folder_id)).all())
     for fid, n in db.execute(select(FolderLink.folder_id, func.count()).where(
             FolderLink.workspace_id == workspace_id).group_by(FolderLink.folder_id)):

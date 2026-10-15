@@ -9,6 +9,7 @@ import asyncio
 import json
 from collections.abc import Iterator
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import replace
 from typing import Annotated, Any, Literal
 
 import anyio
@@ -98,6 +99,8 @@ def acting(ctx: Context, scope: str, err: type[Exception] = ToolError) -> Iterat
         if not allowed(cur.scopes, cur.role, scope):
             raise err(f"This token can't do that: it needs the '{scope}' scope"
                             + (" and an editor role" if cur.role == "viewer" and scope != "read" else ""))
+        # what an MCP client makes shows in the studio like the user's own work (contract v34)
+        cur = replace(cur, channel="mcp")
         try:
             yield db, cur
         except HTTPException as e:

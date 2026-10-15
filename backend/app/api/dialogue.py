@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import cast as film_cast
 from app import dialogue as dl
 from app import voices as vc
@@ -41,7 +42,8 @@ def _out(db: Session, s: VoiceScript) -> ScriptOut:
 
 @router.get("", response_model=list[ScriptSummary])
 def list_scripts(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    rows = db.scalars(select(VoiceScript).where(VoiceScript.workspace_id == cur.workspace_id)
+    rows = db.scalars(select(VoiceScript).where(VoiceScript.workspace_id == cur.workspace_id,
+                                                *vis.where(VoiceScript, vis.wanted(cur)))
                       .order_by(VoiceScript.updated_at.desc(), VoiceScript.id)).all()
     return [ScriptSummary(**dl.summary_out(db, s)) for s in rows]
 

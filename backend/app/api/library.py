@@ -23,6 +23,7 @@ from app import mentions as mn
 from app import models_catalog as mc
 from app import organise as org
 from app import prompt_enhance, uploads
+from app import visibility as vis
 from app import styles as st
 from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db, release
@@ -73,7 +74,7 @@ def list_media(
     sc = org.scope(db, cur.workspace_id, cur.id, folder_id, favourite)
     items, nxt = lib.list_media(db, cur.workspace_id, kind=kind, origin=origin, q=q, tag=tag, project_id=project_id,
                                 include_project="project" in (include or "").split(","), limit=limit, cursor=cursor,
-                                scope=sc)
+                                scope=sc, want=vis.wanted(cur))
     return MediaPage(items=org.annotate(db, cur.workspace_id, cur.id, items), next_cursor=nxt)
 
 
@@ -630,8 +631,9 @@ def _mine_out(db: Session, rows: list[UserTemplate]) -> list[TemplateOut]:
     return out
 
 
-def _my_rows(db: Session, workspace_id: str) -> list[UserTemplate]:
-    return list(db.scalars(select(UserTemplate).where(UserTemplate.workspace_id == workspace_id)
+def _my_rows(db: Session, workspace_id: str, want: bool | None = None) -> list[UserTemplate]:
+    return list(db.scalars(select(UserTemplate).where(UserTemplate.workspace_id == workspace_id,
+                                                      *vis.where(UserTemplate, want))
                            .order_by(UserTemplate.updated_at.desc(), UserTemplate.id)))
 
 
@@ -661,7 +663,7 @@ def _check_mine(body: UserTemplateIn) -> None:
 
 @router.get("/my-templates", response_model=list[TemplateOut])
 def list_my_templates(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    return _mine_out(db, _my_rows(db, cur.workspace_id))
+    return _mine_out(db, _my_rows(db, cur.workspace_id, vis.wanted(cur)))
 
 
 @router.post("/my-templates", response_model=TemplateOut, status_code=201)
@@ -727,7 +729,7 @@ def list_templates(type: Literal["video", "image", "audio"] | None = None, db: S
     if type not in (None, "image"):
         return shipped
     # the workspace's own lead the image cards (mine=true, category "My templates")
-    mine = _mine_out(db, _my_rows(db, cur.workspace_id))
+    mine = _mine_out(db, _my_rows(db, cur.workspace_id, vis.wanted(cur)))
     at = next((i for i, t in enumerate(shipped) if t.type == "image"), len(shipped))
     return shipped[:at] + mine + shipped[at:]
 
@@ -809,13 +811,15 @@ def start_template(template_id: str, db: Session = Depends(get_db), cur: Current
 def dashboard(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     from app.api.quick import recent
 
-    ws = cur.workspace_id
-    projects = db.scalars(select(Project).where(Project.workspace_id == ws, Project.authoring_mode != "podcast")
+    ws, want = cur.workspace_id, vis.wanted(cur)
+    projects = db.scalars(select(Project).where(Project.workspace_id == ws, Project.authoring_mode != "podcast",
+                                                *vis.where(Project, want))
                           .order_by(Project.updated_at.desc()).limit(6)).all()
-    videos, _ = lib.list_media(db, ws, kind="video", include_project=True, limit=6)
-    images, _ = lib.list_media(db, ws, kind="image", limit=8)
+    videos, _ = lib.list_media(db, ws, kind="video", include_project=True, limit=6, want=want)
+    images, _ = lib.list_media(db, ws, kind="image", limit=8, want=want)
     org.annotate(db, ws, cur.id, videos + images)
-    running = db.scalars(select(Job).where(Job.workspace_id == ws, Job.status.in_(("queued", "running")))
+    running = db.scalars(select(Job).where(Job.workspace_id == ws, Job.status.in_(("queued", "running")),
+                                           *vis.where(Job, want))
                          .order_by(Job.created_at.desc()).limit(20)).all()
     quick = [r.model_dump(mode="json") for r in recent(db, cur)[:4]]
     return DashboardOut(recent_projects=[project_out(db, p) for p in projects], recent_videos=videos,
@@ -828,7 +832,7 @@ def dashboard(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_curr
 def list_upscales(kind: Literal["image", "video"] | None = None, limit: int = Query(20, ge=1, le=lib.MAX_LIMIT),
                   cursor: str | None = None, db: Session = Depends(get_db),
                   cur: CurrentUser = Depends(get_current_user)):
-    rows, nxt = lib.list_upscales(db, cur.workspace_id, kind=kind, limit=limit, cursor=cursor)
+    rows, nxt = lib.list_upscales(db, cur.workspace_id, kind=kind, limit=limit, cursor=cursor, want=vis.wanted(cur))
     return UpscalePage(items=rows, next_cursor=nxt)
 
 

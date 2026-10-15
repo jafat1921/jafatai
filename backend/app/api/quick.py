@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import autopilot, brand, models_catalog, prompt_enhance
 from app import mentions as mn
 from app.config import get_settings
@@ -111,7 +112,7 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
 @router.get("/recent", response_model=list[QuickRecentOut])
 def recent(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     projects = db.scalars(select(Project).where(Project.workspace_id == cur.workspace_id,
-                                                Project.authoring_mode == "quick")
+                                                Project.authoring_mode == "quick", *vis.where(Project, vis.wanted(cur)))
                           .order_by(Project.created_at.desc()).limit(RECENT)).all()
     out = []
     for p in projects:

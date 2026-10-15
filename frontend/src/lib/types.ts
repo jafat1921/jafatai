@@ -13,6 +13,8 @@ export interface User {
   // contract v27: Settings shows API tokens / the docs open for this user (admin only while PUBLIC_API is off)
   api_access?: boolean
   api_docs?: boolean
+  // contract v34: the admin can list what was made through the API (Library and Queue)
+  admin?: boolean
 }
 
 // contract v27
@@ -825,6 +827,8 @@ export interface MediaQuery {
   include?: 'project'
   folder_id?: string
   favourite?: 1
+  // contract v34, admin only: just the items made through the API
+  via?: 'api'
   limit?: number
   cursor?: string
 }

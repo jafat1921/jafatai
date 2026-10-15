@@ -8,10 +8,11 @@ import re
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, true
 from sqlalchemy.orm import Session
 
 from app import brand
+from app import visibility as vis
 from app.library import FINISHED
 from app.models import BrandKit, Character, Generation, Location, Project, ProjectCast
 from app.services import media_url
@@ -87,14 +88,14 @@ def _kit_assets(db: Session, kit: BrandKit) -> list[Entity]:
     return out
 
 
-def _projects(db: Session, workspace_id: str, project_id: str | None) -> list[Project]:
+def _projects(db: Session, workspace_id: str, project_id: str | None, want: bool | None = None) -> list[Project]:
     if project_id:
         p = db.get(Project, project_id)
         if p is None or p.workspace_id != workspace_id:
             raise HTTPException(404, "Project not found")
         return [p]
     return list(db.scalars(select(Project).where(Project.workspace_id == workspace_id,
-                                                 Project.authoring_mode != "podcast")
+                                                 Project.authoring_mode != "podcast", *vis.where(Project, want))
                            .order_by(Project.updated_at.desc()).limit(20)))
 
 
@@ -105,12 +106,13 @@ def _matches(label: str, needle: str) -> bool:
 
 
 def search(db: Session, workspace_id: str, q: str = "", *, project_id: str | None = None,
-           types: tuple[str, ...] = TYPES, kit_id: str | None = None) -> list[dict]:
-    """Cast and locations (one project, or the recent ones), then the brand kit's logos and products."""
+           types: tuple[str, ...] = TYPES, kit_id: str | None = None, want: bool | None = None) -> list[dict]:
+    """Cast and locations (one project, or the recent ones), then the brand kit's logos and products.
+    `want` (app.visibility) keeps API-made films and studio characters out of the app's picker."""
     needle = (q or "").strip().lower()
     found: list[Entity] = []
     if "character" in types or "location" in types:
-        projects = {p.id: p for p in _projects(db, workspace_id, project_id)}
+        projects = {p.id: p for p in _projects(db, workspace_id, project_id, want)}
         hint = (lambda row: "") if project_id else (
             lambda row: projects[row.project_id].title if row.project_id in projects else "Character Studio")
         # filter on the name first; the picture lookup is a query per row
@@ -122,7 +124,8 @@ def search(db: Session, workspace_id: str, q: str = "", *, project_id: str | Non
                 # a film's cast includes the studio characters linked into it; with no film, the whole studio
                 linked = select(ProjectCast.character_id).where(ProjectCast.project_id.in_(list(projects)))
                 where = or_(where, Character.id.in_(linked)) if project_id else or_(
-                    where, Character.project_id.is_(None) & (Character.workspace_id == workspace_id))
+                    where, Character.project_id.is_(None) & (Character.workspace_id == workspace_id)
+                    & (Character.via_api == want if want is not None else true()))
             rows = db.scalars(select(model).where(where).order_by(model.name))
             found += [make(db, r, hint(r)) for r in [r for r in rows if _matches(r.name, needle)][:LIMIT]]
     if "logo" in types or "product" in types:

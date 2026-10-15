@@ -12,6 +12,11 @@ app: make pictures, videos, songs and speech, build characters, then download th
 
 While `PUBLIC_API` is off (the default) only the admin account can make tokens and open the docs.
 
+**What you make through the API stays out of the studio app.** Items, projects, voices, jobs and the rest
+created with a token don't appear in the app's Library, Queue or other lists; your script still lists and
+downloads them through the API as usual. (The MCP server is different: what Claude makes there shows in the
+app like your own work.) See [contract v34](contract-v34-api-visibility.md).
+
 ## 1. Make a token
 
 1. Open **Settings → API → API tokens**.

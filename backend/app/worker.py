@@ -29,7 +29,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.drivers import GenerationDriver, get_driver
 from app.lanes import AUDIO_KINDS, IMAGE_KINDS, LANES, VIDEO_KINDS, gpu_lane, parse_lanes
-from app.models import Generation, Job, UsageLedger, WorkerHeartbeat, utcnow
+from app.models import VIA_API, Generation, Job, UsageLedger, WorkerHeartbeat, utcnow
 
 log = logging.getLogger("mixai.worker")
 
@@ -490,6 +490,15 @@ def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver
     lane = gpu_lane(lanes or LANES) if job.lane == "audio" else job.lane
     factory = driver_factory or (lambda: get_driver(get_settings().gen_driver, lane=lane))
     ctx = JobContext(db, job, factory, lanes)
+    # an API job's results, child jobs and Library items are API rows too (contract v34)
+    db.info[VIA_API] = bool(job.via_api)
+    try:
+        _run(db, job, ctx)
+    finally:
+        db.info.pop(VIA_API, None)
+
+
+def _run(db: Session, job: Job, ctx: JobContext) -> None:
     t0 = time.monotonic()
     handler = HANDLERS.get(job.type)
     try:

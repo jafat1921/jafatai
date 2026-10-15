@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import visibility as vis
 from app import dialogue as dl
 from app import library as lib
 from app.db import get_db
@@ -65,7 +66,8 @@ def _ads(db: Session, cur: CurrentUser, ads: list[dict]) -> list[dict]:
 
 @router.get("/shows", response_model=list[ShowOut])
 def list_shows(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    rows = db.scalars(select(PodcastShow).where(PodcastShow.workspace_id == cur.workspace_id)
+    rows = db.scalars(select(PodcastShow).where(PodcastShow.workspace_id == cur.workspace_id,
+                                                *vis.where(PodcastShow, vis.wanted(cur)))
                       .order_by(PodcastShow.updated_at.desc(), PodcastShow.id)).all()
     return [ShowOut(**sv.show_out(db, s)) for s in rows]
 
@@ -144,7 +146,8 @@ def delete_ad(show_id: str, ad_id: str, db: Session = Depends(get_db), cur: Curr
 @router.get("/episodes", response_model=list[EpisodeSummary])
 def list_episodes(show_id: str | None = Query(None), db: Session = Depends(get_db),
                   cur: CurrentUser = Depends(get_current_user)):
-    stmt = select(PodcastEpisode).where(PodcastEpisode.workspace_id == cur.workspace_id)
+    stmt = select(PodcastEpisode).where(PodcastEpisode.workspace_id == cur.workspace_id,
+                                        *vis.where(PodcastEpisode, vis.wanted(cur)))
     if show_id:
         stmt = stmt.where(PodcastEpisode.show_id == show_id)
     rows = db.scalars(stmt.order_by(PodcastEpisode.updated_at.desc(), PodcastEpisode.id)).all()

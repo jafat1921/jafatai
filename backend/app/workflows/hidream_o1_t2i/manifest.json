@@ -1,0 +1,23 @@
+{
+  "name": "hidream_o1_t2i",
+  "family": "hidream-o1",
+  "description": "HiDream-O1-Image Full text-to-image (Comfy-Org template image_hidream_o1, edit switch and prompt refine off): ModelNoiseScale 8, HiDreamO1PatchSeamSmoothing (0.8-1.0, single_shift, ramp_2_4, median), BasicScheduler normal 40 steps, dpmpp_2m_sde_gpu, SamplerCustom cfg 5. The template loads the bf16 file; this uses the fp8_scaled one from the same repo. MIT.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 32, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 32, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "noise_seed"]]},
+    "steps":    {"type": "int", "default": 40, "targets": [["Scheduler", "steps"]]},
+    "cfg":      {"type": "float", "default": 5.0, "targets": [["Sampler", "cfg"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/hidream_o1_full", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["hidream_o1_image_fp8_scaled.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core 0.38 (comfy_extras/nodes_hidream_o1.py)",
+    "nodes": ["CheckpointLoaderSimple", "ModelNoiseScale", "HiDreamO1PatchSeamSmoothing", "EmptyHiDreamO1LatentImage", "BasicScheduler", "KSamplerSelect", "SamplerCustom"],
+    "assumed": "input names read from the v0.38.0 sources; HiDreamO1PatchSeamSmoothing is marked experimental upstream"
+  },
+  "progress_weights": {"Sampler": 14, "Checkpoint": 3, "Positive": 1}
+}

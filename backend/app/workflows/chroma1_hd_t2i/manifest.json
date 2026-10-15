@@ -1,0 +1,29 @@
+{
+  "name": "chroma1_hd_t2i",
+  "family": "chroma1-hd",
+  "description": "Chroma1-HD text-to-image (Comfy-Org template image_chroma_text_to_image): all core nodes, no hybrid loader. fp8mixed weights through UNETLoader, T5-XXL fp8 scaled (CLIPLoader type chroma) with T5TokenizerOptions 0/0, AuraFlow shift 1, BasicScheduler beta 26 steps, euler, CFGGuider 3.5. Shares the ae VAE with Z-Image. Apache-2.0.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "low quality, blurry, unfinished sketch, oversaturated, heavy bloom, chromatic aberration, artifacts, watermark",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "steps":    {"type": "int", "default": 26, "targets": [["Scheduler", "steps"]]},
+    "cfg":      {"type": "float", "default": 3.5, "targets": [["Guider", "cfg"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/chroma", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["Chroma1-HD-fp8mixed.safetensors"],
+    "text_encoders": ["t5xxl_fp8_e4m3fn_scaled.safetensors"],
+    "vae": ["ae.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core 0.38 (CLIPLoader type chroma, comfy_extras/nodes_cond.py T5TokenizerOptions)",
+    "nodes": ["UNETLoader", "CLIPLoader", "T5TokenizerOptions", "BasicScheduler", "CFGGuider", "SamplerCustomAdvanced"],
+    "assumed": "graph copied from the official template; its long negative is shortened to our own wording"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 10, "UNet": 3, "TextEncoder": 2}
+}

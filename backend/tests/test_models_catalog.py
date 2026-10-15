@@ -79,7 +79,8 @@ def test_catalog_shape_and_defaults(client):
         assert m["available"] is True  # mock driver
 
     images = client.get("/api/models?type=image").json()
-    assert [m["id"] for m in images] == ["auto", "zimage_turbo", "qwen_image_2512", "flux2_klein"]
+    # the contract v6 models first; contract v32's follow (tests/test_image_models.py)
+    assert [m["id"] for m in images][:4] == ["auto", "zimage_turbo", "qwen_image_2512", "flux2_klein"]
     assert images[0]["auto"] and images[0]["description"] == "Picks the best model for your prompt"
     qwen = images[2]
     assert [s["id"] for s in qwen["speeds"]] == ["full", "lightning", "turbo"] and qwen["default_speed"] == "lightning"

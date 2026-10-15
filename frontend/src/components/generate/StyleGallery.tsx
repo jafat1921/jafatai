@@ -8,7 +8,7 @@ import { useImageOptions } from '@/hooks/useMedia'
 import { filterStyles, findStyle, initials } from '@/lib/styles'
 import type { ImageStyle } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { useModelLabels } from './useModelLabel'
+import { useImageModelUsable, useModelLabels } from './useModelLabel'
 
 const NONE = '__none__'
 
@@ -45,6 +45,7 @@ export function StyleGallery({ value, onChange, modelId, onUseModel, noneHint = 
   const uid = useId()
   const options = useImageOptions()
   const labelOf = useModelLabels()
+  const usable = useImageModelUsable()
   const [group, setGroup] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const grid = useRef<HTMLDivElement>(null)
@@ -99,7 +100,8 @@ export function StyleGallery({ value, onChange, modelId, onUseModel, noneHint = 
     )
   }
 
-  const best = selected && selected.best_model !== modelId ? selected.best_model : null
+  // only a click switches the model, and only to one this server can run (contract v32)
+  const best = selected && selected.best_model !== modelId && usable(selected.best_model) !== false ? selected.best_model : null
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">

@@ -22,6 +22,10 @@ class Speed:
     cfg: float = 1.0
     shift: float | None = None
     lora: str | None = None
+    # a speed that runs other weights on its own graph (Krea 2 Raw, HiDream-O1 Full, Qwen-Image 2.1 base)
+    template: str | None = None
+    sampler: str | None = None
+    scheduler: str | None = None
 
 
 @dataclass(frozen=True)
@@ -42,9 +46,18 @@ class Model:
     est_seconds: float | None = None
     default: bool = False
     smooth_motion: bool = False  # the template carries the optional temporal x2 nodes
-    licence: str | None = None  # shown beside the model in the picker (audio models)
-    # hidden and refused unless AUDIO_ALLOW_NONCOMMERCIAL: its licence limits commercial use
+    licence: str | None = None  # the weights licence, shown beside the model in the picker
+    # hidden and refused unless AUDIO_ALLOW_NONCOMMERCIAL (audio) / IMAGE_ALLOW_NONCOMMERCIAL (image, edit):
+    # its licence limits commercial use
     noncommercial: bool = False
+    # "conditional" when commercial use is allowed only under terms (Krea 2's revenue cap); else derived
+    terms: str | None = None
+    group: str | None = None  # picker section for image models, see IMAGE_GROUPS
+    best_for: tuple[str, ...] = ()
+
+    @property
+    def licence_kind(self) -> str:
+        return self.terms or ("noncommercial" if self.noncommercial else "commercial")
 
 
 QWEN_LIGHTNING = "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors"
@@ -53,11 +66,24 @@ SINGLE_PASS_S = 256 / 24  # 257 frames, one LTX pass
 WAN_FPS = 16.0
 WAN_FRAMES = 81
 SA3_LICENCE = "Stability AI Community Licence: free for commercial use under US$1M annual revenue"
+APACHE = "Apache-2.0: free for commercial use"
+# contract v32: weights licences, read from each model card / licence file on 2026-10-14
+KREA_LICENCE = ("Krea 2 Community Licence: commercial use only under US$1M annual revenue, "
+                "with content filtering in place")
+FLUX_NC = "FLUX Non-Commercial Licence: non-commercial use only"
+QWEN_RESEARCH = "Qwen Research Licence: research and evaluation only, no commercial use"
+ANIMA_LICENCE = "CircleStone Labs Non-Commercial Licence (weights); the images it makes may be used commercially"
+OPENRAIL_M = "CreativeML OpenRAIL-M: commercial use allowed, with use restrictions"
+OPENRAIL_PP = "CreativeML OpenRAIL++-M: commercial use allowed, with use restrictions"
+SDXL_LIGHTNING = "sdxl_lightning_8step_lora.safetensors"
+ANIMA_TURBO = "anima-turbo-lora-v0.2.safetensors"
+# picker sections for image models, in order
+IMAGE_GROUPS = ("fast", "photo", "text", "anime", "experimental")
 
 MODELS: dict[str, Model] = {m.id: m for m in (
     Model("zimage_turbo", "image", "Z-Image Turbo", "FAST",
           "Photoreal pictures in a few seconds.", ("t2i", "i2i"), "zimage_t2i", extra={"i2i": "zimage_i2i"},
-          est_seconds=7, default=True),
+          est_seconds=7, default=True, licence=APACHE, group="fast", best_for=("photos", "everyday pictures")),
     Model("qwen_image_2512", "image", "Qwen-Image 2512", "TEXT",
           "Best for writing inside the picture: signs, posters, titles, including Urdu.",
           ("t2i", "i2i", "text_render"), "qwen_image_t2i", extra={"i2i": "qwen_image_i2i"},
@@ -67,17 +93,92 @@ MODELS: dict[str, Model] = {m.id: m for m in (
               Speed("lightning", "Lightning (4 steps)", 4, "Fast, nearly full quality", shift=3.1, lora=QWEN_LIGHTNING),
               Speed("turbo", "Turbo (2 steps)", 2, "Fastest draft", shift=3.0, lora=QWEN_TURBO),
           ),
-          default_speed="lightning", est_seconds=25),
+          default_speed="lightning", est_seconds=25, licence=APACHE, group="text",
+          best_for=("posters", "signs", "Urdu and other scripts")),
     Model("flux2_klein", "image", "FLUX.2 klein 4B", "FAST",
           "Very fast general-purpose images.", ("t2i", "i2i"), "flux2_klein_t2i", extra={"i2i": "flux2_klein_i2i"},
-          est_seconds=5),
+          est_seconds=5, licence=APACHE, group="fast", best_for=("batches", "quick drafts")),
+
+    # contract v32 (est_seconds are guesses for the RTX 4000 Ada until the server has run some)
+    Model("realvis_xl5", "image", "RealVisXL V5.0", "PHOTO",
+          "SDXL photoreal: people, skin and natural light.", ("t2i", "i2i"), "realvis_xl_t2i",
+          extra={"i2i": "realvis_xl_i2i"},
+          speeds=(
+              Speed("full", "Full quality", 30, "DPM++ SDE Karras, 30 steps", cfg=5.0, sampler="dpmpp_sde",
+                    scheduler="karras"),
+              Speed("lightning", "Lightning (8 steps)", 8, "SDXL-Lightning LoRA, faster", lora=SDXL_LIGHTNING,
+                    sampler="euler", scheduler="sgm_uniform"),
+          ),
+          default_speed="full", est_seconds=15, licence=OPENRAIL_PP, group="photo",
+          best_for=("portraits", "realistic people")),
+    Model("zimage_base", "image", "Z-Image (base)", "PHOTO",
+          "Undistilled Z-Image: real CFG and negative prompts, slower and more controllable.", ("t2i", "i2i"),
+          "zimage_base_t2i", extra={"i2i": "zimage_base_i2i"}, est_seconds=40, licence=APACHE, group="photo",
+          best_for=("negative prompts", "fine control")),
+    Model("hidream_o1", "image", "HiDream-O1-Image", "2K",
+          "Detailed, well-composed pictures that follow long prompts.", ("t2i",), "hidream_o1_dev_t2i",
+          speeds=(
+              Speed("dev", "Dev (28 steps)", 28, "Distilled, cfg 1"),
+              Speed("full", "Full (40 steps)", 40, "Base model with CFG, slowest", cfg=5.0, template="hidream_o1_t2i"),
+          ),
+          default_speed="dev", est_seconds=60, licence="MIT: free for commercial use", group="photo",
+          best_for=("long prompts", "composition")),
+    Model("ernie_image_turbo", "image", "ERNIE-Image Turbo", "TEXT",
+          "8-step pictures with accurate text, infographics and layouts.", ("t2i", "text_render"),
+          "ernie_turbo_t2i", est_seconds=20, licence=APACHE, group="text",
+          best_for=("infographics", "comics", "layouts")),
+    Model("illustrious_xl2", "image", "Illustrious XL v2.0", "ANIME",
+          "SDXL anime and illustration: characters, key visuals, manga looks.", ("t2i", "i2i"),
+          "illustrious_xl_t2i", extra={"i2i": "illustrious_xl_i2i"}, est_seconds=12, licence=OPENRAIL_M,
+          group="anime", best_for=("anime", "manga", "characters")),
+    Model("anima", "image", "Anima", "ANIME",
+          "2B anime model: clean line art and many styles. Weights non-commercial; images are yours to use.",
+          ("t2i", "i2i"), "anima_t2i", extra={"i2i": "anima_i2i"},
+          speeds=(
+              Speed("turbo", "Turbo (8 steps)", 8, "Official turbo LoRA, cfg 1", lora=ANIMA_TURBO),
+              Speed("full", "Full quality", 30, "30 steps, cfg 4", cfg=4.0),
+          ),
+          default_speed="turbo", est_seconds=5, licence=ANIMA_LICENCE, noncommercial=True, group="anime",
+          best_for=("anime", "illustration")),
+    Model("krea2_turbo", "image", "Krea 2", "2K",
+          "Aesthetic, stylised pictures from 1K to 2K.", ("t2i",), "krea2_t2i",
+          speeds=(
+              Speed("turbo", "Turbo (8 steps)", 8, "Distilled, cfg 1"),
+              Speed("raw", "Raw (52 steps)", 52, "Undistilled base with CFG, much slower", cfg=3.5,
+                    template="krea2_raw_t2i"),
+          ),
+          default_speed="turbo", est_seconds=25, licence=KREA_LICENCE, noncommercial=True, terms="conditional",
+          group="experimental", best_for=("art direction", "stylised looks")),
+    Model("flux2_klein_9b", "image", "FLUX.2 klein 9B", "FAST",
+          "Bigger klein: more detail than 4B at the same 4 steps.", ("t2i", "i2i"), "flux2_klein9b_t2i",
+          extra={"i2i": "flux2_klein9b_i2i"}, est_seconds=10, licence=FLUX_NC, noncommercial=True,
+          group="experimental", best_for=("quick drafts", "detail")),
+    Model("qwen_image_21", "image", "Qwen-Image 2.1", "TEXT",
+          "Newer Qwen-Image: sharper text and 2K detail. Research licence; 2512 stays the default.",
+          ("t2i", "text_render"), "qwen_image21_t2i",
+          speeds=(
+              Speed("turbo", "Turbo (8 steps)", 8, "Turbo weights, cfg 1"),
+              Speed("full", "Full (25 steps)", 25, "Base weights, slowest", template="qwen_image21_full_t2i"),
+          ),
+          default_speed="turbo", est_seconds=35, licence=QWEN_RESEARCH, noncommercial=True, group="experimental",
+          best_for=("posters", "small text")),
+    Model("chroma1_hd", "image", "Chroma1-HD", "NEW",
+          "Open FLUX-based model with real CFG and negatives; wide range of styles.", ("t2i",), "chroma1_hd_t2i",
+          est_seconds=60, licence=APACHE, group="experimental", best_for=("styles", "negative prompts")),
+    Model("wan22_still", "image", "Wan 2.2 Cinematic still", "NEW",
+          "A single film frame from the Wan 2.2 video model: cinematic light and framing.", ("t2i",),
+          "wan22_still_t2i", est_seconds=60, licence=APACHE, group="experimental",
+          best_for=("film stills", "keyframes")),
 
     Model("qwen_image_edit_2511", "edit", "Qwen-Image-Edit 2511", "BEST",
           "Change a picture or combine up to 3 references; keeps faces and clothes.",
-          ("edit", "refs", "multi_angle"), "qwen_edit", max_refs=3, est_seconds=20, default=True),
+          ("edit", "refs", "multi_angle"), "qwen_edit", max_refs=3, est_seconds=20, default=True, licence=APACHE),
     Model("flux2_klein_edit", "edit", "FLUX.2 klein 4B (base)", None,
           "Reference-guided edits, quick and loose.", ("edit", "refs"), "flux2_klein_edit",
-          max_refs=3, est_seconds=25),
+          max_refs=3, est_seconds=25, licence=APACHE),
+    Model("flux2_klein_9b_edit", "edit", "FLUX.2 klein 9B", None,
+          "Reference-guided edits in 4 steps with the 9B model.", ("edit", "refs"), "flux2_klein9b_edit",
+          max_refs=3, est_seconds=15, licence=FLUX_NC, noncommercial=True),
 
     Model("ltx23_distilled", "video", "LTX-2.3", None,
           "Video with sound from text, a start image, or start and end frames; long takes.",
@@ -141,10 +242,22 @@ def audio_default(kind: str) -> Model:
     return next(m for m in MODELS.values() if m.type == "audio" and m.default and kind in m.capabilities)
 
 
+def nc_switch(m: Model) -> str | None:
+    """The .env switch that allows this model's non-commercial weights, None for other types."""
+    if m.type == "audio":
+        return "AUDIO_ALLOW_NONCOMMERCIAL"
+    if m.type in ("image", "edit"):
+        return "IMAGE_ALLOW_NONCOMMERCIAL"
+    return None
+
+
 def hidden(m: Model) -> bool:
     from app.config import get_settings
 
-    return m.noncommercial and m.type == "audio" and not get_settings().audio_allow_noncommercial
+    switch = nc_switch(m)
+    if not m.noncommercial or switch is None:
+        return False
+    return not getattr(get_settings(), switch.lower())
 
 
 def check_audio(m: Model, kind: str, duration_s: float) -> None:
@@ -163,7 +276,7 @@ def get(model_id: str | None, type_: str) -> Model:
     m = MODELS.get(model_id)
     if m is not None and hidden(m):
         raise HTTPException(422, f"{m.label} is turned off on this server: its licence limits commercial use "
-                                 "(the owner can allow it with AUDIO_ALLOW_NONCOMMERCIAL)")
+                                 f"(the owner can allow it with {nc_switch(m)})")
     if m is None or m.type != type_:
         names = ", ".join(x.id for x in MODELS.values() if x.type == type_ and not hidden(x))
         what = "an image" if type_ == "image" else ("an edit" if type_ == "edit" else f"a {type_}")
@@ -185,30 +298,61 @@ _TEXT_WORDS = re.compile(r"\b(posters?|signs?|signage|signboard|logos?|text|capt
                          r"banner|billboard)\b", re.I)
 
 
+_ANIME_WORDS = re.compile(r"\b(anime|manga|chibi|waifu|kawaii|cel[- ]shad(?:ed|ing)|visual novel|shoujo|shojo|"
+                          r"shonen|shounen|isekai|vtuber)\b", re.I)
+# contract v32: Auto may send anime prompts here, in this order, once /object_info shows them installed
+AUTO_ANIME = ("illustrious_xl2", "anima")
+
+
 def wants_text(prompt: str) -> bool:
     from app.prompt_enhance import quoted
 
     return bool(quoted(prompt) or _NON_LATIN.search(prompt or "") or _TEXT_WORDS.search(prompt or ""))
 
 
+def wants_anime(prompt: str) -> bool:
+    return bool(_ANIME_WORDS.search(prompt or ""))
+
+
 def _usable(model_id: str) -> bool:
-    return known_unavailable(MODELS[model_id]) is None
+    m = MODELS[model_id]
+    return not hidden(m) and known_unavailable(m) is None
+
+
+def _confirmed(model_id: str) -> bool:
+    """Stricter than _usable for the newer routes: the model must be allowed here and the last /object_info
+    must show it installed. Not knowing keeps Auto on the old default, so nobody's outputs change by surprise."""
+    from app.config import get_settings
+
+    m = MODELS[model_id]
+    if hidden(m):
+        return False
+    if get_settings().gen_driver == "mock":
+        return True
+    info = _cached_info()
+    return info is not None and availability(m, info)["available"]
 
 
 def resolve_auto(type_: str, prompt: str = "", *, count: int = 1, refs: int = 0,
-                 quality: str | None = None, kind: str | None = None) -> tuple[Model, str]:
-    """(model, why) for the catalog's "auto" entry. Skips a pick the last /object_info says is broken."""
+                 quality: str | None = None, kind: str | None = None, cap: str | None = None) -> tuple[Model, str]:
+    """(model, why) for the catalog's "auto" entry. Skips a pick the last /object_info says is broken, and
+    with `cap` (img2img asks for "i2i") a pick that can't do it."""
     if type_ == "image":
         if wants_text(prompt):
             picks = [("qwen_image_2512", "text in the prompt")]
-        elif count >= 4:
-            picks = [("flux2_klein", f"{count} images, fastest model")]
+        elif wants_anime(prompt):
+            picks = [(mid, "anime or manga prompt") for mid in AUTO_ANIME if _confirmed(mid)]
         else:
             picks = []
+        if count >= 4 and not picks:
+            picks = [("flux2_klein", f"{count} images, fastest model")]
         picks.append(("zimage_turbo", "general picture"))
+        if cap:
+            picks = [p for p in picks if capability_unavailable(MODELS[p[0]], cap) is None] or picks[-1:]
     elif type_ == "edit":
         picks = [(m.id, "keeps faces and clothes" if m.id == "qwen_image_edit_2511" else f"{refs} references")
-                 for m in MODELS.values() if m.type == "edit" and (m.max_refs is None or refs <= m.max_refs)]
+                 for m in MODELS.values() if m.type == "edit" and not hidden(m)
+                 and (m.max_refs is None or refs <= m.max_refs)]
         picks.sort(key=lambda p: p[0] != "qwen_image_edit_2511")
         picks.append(("qwen_image_edit_2511", "default"))
     elif type_ == "video":
@@ -256,6 +400,14 @@ def speed_of(m: Model, speed_id: str | None) -> Speed | None:
     return sp
 
 
+def template_for(m: Model, speed_id: str | None = None, *, i2i: bool = False) -> str:
+    """The graph the comfy driver runs for this model/speed (the mock driver records it too)."""
+    if i2i and "i2i" in m.extra:
+        return m.extra["i2i"]
+    sp = next((s for s in m.speeds if s.id == (speed_id or m.default_speed)), None)
+    return sp.template if sp is not None and sp.template else m.template
+
+
 def check_refs(m: Model, n: int) -> None:
     if m.max_refs is not None and n > m.max_refs:
         raise HTTPException(422, f"{m.label} takes at most {m.max_refs} reference images; you sent {n}")
@@ -291,17 +443,20 @@ def _lora_options(info: dict) -> set:
 
 
 def availability(m: Model, info: dict | None, *, driver: str = "comfy", error: str | None = None) -> dict:
-    """{available, reason, speeds: {id: reason|None}, smooth: reason|None, dropped: [capabilities]}"""
-    out = {"available": True, "reason": None, "speeds": {s.id: None for s in m.speeds}, "smooth": None, "dropped": []}
+    """{available, installed, reason, speeds: {id: reason|None}, smooth: reason|None, dropped: [capabilities]}
+    installed is None when ComfyUI couldn't be asked, False when nodes or weights are missing."""
+    out = {"available": True, "installed": True, "reason": None, "speeds": {s.id: None for s in m.speeds},
+           "smooth": None, "dropped": []}
     if driver == "mock":
         return out
     if info is None:
         reason = f"ComfyUI isn't reachable ({error or 'no answer'})"
-        out.update(available=False, reason=reason, smooth=reason)
+        out.update(available=False, installed=None, reason=reason, smooth=reason)
         return out
     res = check_template(m.template, info)
     if not res["ok"]:
-        out.update(available=False, reason="; ".join(_problems(res)))
+        out.update(available=False, reason="; ".join(_problems(res)),
+                   installed=not (res["missing_nodes"] or res["missing_models"]))
     for cap, tpl in m.extra.items():
         extra = check_template(tpl, info)
         if not extra["ok"]:
@@ -309,6 +464,11 @@ def availability(m: Model, info: dict | None, *, driver: str = "comfy", error: s
     if m.speeds:
         loras = _lora_options(info)
         for s in m.speeds:
+            if s.template and s.template != m.template:
+                own = check_template(s.template, info)
+                if not own["ok"]:
+                    out["speeds"][s.id] = "not installed: " + "; ".join(_problems(own))
+                    continue
             if s.lora and s.lora not in loras:
                 out["speeds"][s.id] = f"missing LoRA {s.lora}"
     if m.smooth_motion:
@@ -399,6 +559,15 @@ def model_out(m: Model, av: dict, measured: dict[str, float] | None = None) -> d
         out["default_speed"] = m.default_speed
     if m.max_refs is not None:
         out["max_refs"] = m.max_refs
+    if m.type in ("image", "edit"):
+        # contract v32: the weights licence on every card, the picker section, and whether it's installed
+        out["extra"] = {"licence": m.licence, "licence_kind": m.licence_kind,
+                        **({"noncommercial": True} if m.noncommercial else {})}
+        out["installed"] = av.get("installed", True)
+        if m.group:
+            out["group"] = m.group
+        if m.best_for:
+            out["best_for"] = list(m.best_for)
     if m.type == "audio":
         out["max_duration_s"] = m.max_duration_s
         out["extra"] = {"licence": m.licence, **({"noncommercial": True} if m.noncommercial else {})}

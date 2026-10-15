@@ -1,0 +1,29 @@
+{
+  "name": "zimage_base_t2i",
+  "family": "z-image",
+  "description": "Z-Image (undistilled base) text-to-image (Comfy-Org template image_z_image): the Turbo graph with z_image_bf16, real CFG 4 and a negative prompt, res_multistep/simple, AuraFlow shift 3. 28 steps (the Tongyi card says 28-50; the template ships 25). Shares Turbo's Qwen3 4B encoder and ae VAE. Apache-2.0.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "blurry, low quality, deformed hands, extra fingers, watermark, text artifacts",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 28, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 4.0, "targets": [["Sampler", "cfg"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/zimage_base", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["z_image_bf16.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["ae.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core",
+    "nodes": ["UNETLoader", "CLIPLoader", "ModelSamplingAuraFlow", "EmptySD3LatentImage", "KSampler"],
+    "assumed": "same nodes as the installed Z-Image Turbo graph; only the weights and sampling numbers change"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 10, "UNet": 2, "TextEncoder": 2}
+}

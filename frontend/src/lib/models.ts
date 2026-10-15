@@ -1,5 +1,5 @@
 import { formatEstimate } from './shots'
-import type { ModelCapability, ModelInfo, ModelSpeed, ModelType } from './types'
+import type { ModelCapability, ModelGroup, ModelInfo, ModelSpeed, ModelType } from './types'
 
 // What an older server (no /api/models) actually runs. Only what was wired before contract v6,
 // so nothing here can be picked that the server would reject.
@@ -98,6 +98,28 @@ export function capabilityLabels(m: ModelInfo): { icon: CapabilityIcon; text: st
   return out
 }
 
+// contract v32: the image picker's sections, in order
+export const MODEL_GROUPS: { id: ModelGroup; label: string }[] = [
+  { id: 'fast', label: 'Fast' },
+  { id: 'photo', label: 'Photoreal' },
+  { id: 'text', label: 'Text & design' },
+  { id: 'anime', label: 'Anime & illustration' },
+  { id: 'experimental', label: 'Experimental / NC' },
+]
+
+/** Ungrouped models (Auto) first without a heading, then one section per group that has models. */
+export function modelSections(models: ModelInfo[]): { id: string; label: string | null; models: ModelInfo[] }[] {
+  if (!models.some((m) => m.group)) return [{ id: 'all', label: null, models }]
+  const known = new Set<string>(MODEL_GROUPS.map((g) => g.id))
+  const top = models.filter((m) => !m.group || !known.has(m.group))
+  const out = top.length ? [{ id: 'top', label: null as string | null, models: top }] : []
+  for (const g of MODEL_GROUPS) {
+    const ms = models.filter((m) => m.group === g.id)
+    if (ms.length) out.push({ id: g.id, label: g.label, models: ms })
+  }
+  return out
+}
+
 export function defaultSpeed(m: ModelInfo | undefined): ModelSpeed | undefined {
   if (!m?.speeds?.length) return undefined
   const ok = m.speeds.filter((s) => s.available !== false)
@@ -123,7 +145,7 @@ export const secondsText = (s: number) => (s < 60 ? `${Math.max(1, Math.round(s)
 export const AUTO_ID = 'auto'
 
 const AUTO_HINT: Record<ModelType, string> = {
-  image: 'Picks for your prompt: text in quotes goes to Qwen-Image, everything else to the fastest good model',
+  image: 'Picks for your prompt: text in quotes goes to Qwen-Image, anime to an installed anime model, everything else to the fastest good model',
   edit: 'Picks the edit model that fits your references',
   video: 'Picks the video model that fits your length and pictures',
   upscale: 'Picks the upscaler for the source',
@@ -159,6 +181,9 @@ export function withAuto(models: ModelInfo[], type: ModelType): { models: ModelI
 // the server's auto rules (contract-v6 P1), mirrored so the estimate and an older server agree with it
 const TEXT_WORDS = /["“”«»「」]|\b(poster|sign|logo|text|banner|billboard)\b/i
 const NON_LATIN = /[^\p{Script=Latin}\p{N}\p{P}\p{S}\s]/u
+const ANIME_WORDS = /\b(anime|manga|chibi|waifu|kawaii|cel[- ]shad(?:ed|ing)|visual novel|shoujo|shojo|shonen|shounen|isekai|vtuber)\b/i
+// contract v32: in this order, and only when the catalog says they're installed here
+const AUTO_ANIME = ['illustrious_xl2', 'anima']
 
 /** What Auto will most likely pick for this prompt; only a guess, the result tile shows the real one. */
 export function guessAuto(type: ModelType, models: ModelInfo[], ctx: { prompt?: string; count?: number } = {}): ModelInfo | undefined {
@@ -167,6 +192,10 @@ export function guessAuto(type: ModelType, models: ModelInfo[], ctx: { prompt?: 
   if (type === 'image') {
     const p = ctx.prompt ?? ''
     if (TEXT_WORDS.test(p) || NON_LATIN.test(p)) return byId('qwen_image_2512') ?? pickModel(usable)
+    if (ANIME_WORDS.test(p)) {
+      const anime = AUTO_ANIME.map(byId).find(Boolean)
+      if (anime) return anime
+    }
     if ((ctx.count ?? 1) >= 4) return byId('flux2_klein') ?? pickModel(usable)
   }
   return pickModel(usable)

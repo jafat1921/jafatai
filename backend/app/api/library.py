@@ -419,7 +419,7 @@ def img2img(body: Img2ImgIn, db: Session = Depends(get_db), cur: CurrentUser = D
     if "strength" not in body.model_fields_set and style is not None:
         strength = st.restyle_strength(style) or strength
     into = generate_into(db, cur.workspace_id, body.folder_id, "image")
-    model, chosen = mc.choose(body.model, "image", body.prompt or style.positive, count=body.count)
+    model, chosen = mc.choose(body.model, "image", body.prompt or style.positive, count=body.count, cap="i2i")
     reason = mc.capability_unavailable(model, "i2i")
     if reason:
         raise HTTPException(422, f"Image to image with {model.label} isn't available: {reason}")

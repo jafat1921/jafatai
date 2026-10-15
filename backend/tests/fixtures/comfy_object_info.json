@@ -15,7 +15,11 @@
       "stable_audio_3_small_music.safetensors",
       "stable_audio_3_small_sfx.safetensors",
       "yue2_3b_int8_convrot.safetensors",
-      "Realistic_Vision_V5.1_fp16-no-ema.safetensors"
+      "Realistic_Vision_V5.1_fp16-no-ema.safetensors",
+      "hidream_o1_image_dev_fp8_scaled.safetensors",
+      "hidream_o1_image_fp8_scaled.safetensors",
+      "Illustrious-XL-v2.0.safetensors",
+      "RealVisXL_V5.0_fp16.safetensors"
      ],
      {
       "tooltip": "The name of the checkpoint (model) to load."
@@ -335,7 +339,51 @@
      "COMBO",
      {
       "options": [
-       "euler"
+       "euler",
+       "res_multistep",
+       "euler_cfg_pp",
+       "euler_ancestral",
+       "euler_ancestral_cfg_pp",
+       "heun",
+       "heunpp2",
+       "exp_heun_2_x0",
+       "exp_heun_2_x0_sde",
+       "dpm_2",
+       "dpm_2_ancestral",
+       "lms",
+       "dpm_fast",
+       "dpm_adaptive",
+       "dpmpp_2s_ancestral",
+       "dpmpp_2s_ancestral_cfg_pp",
+       "dpmpp_sde",
+       "dpmpp_sde_gpu",
+       "dpmpp_2m",
+       "dpmpp_2m_cfg_pp",
+       "dpmpp_2m_sde",
+       "dpmpp_2m_sde_gpu",
+       "dpmpp_2m_sde_heun",
+       "dpmpp_2m_sde_heun_gpu",
+       "dpmpp_3m_sde",
+       "dpmpp_3m_sde_gpu",
+       "ddpm",
+       "lcm",
+       "ipndm",
+       "ipndm_v",
+       "deis",
+       "cfgpp_ud10_ab",
+       "res_multistep_cfg_pp",
+       "res_multistep_ancestral",
+       "res_multistep_ancestral_cfg_pp",
+       "gradient_estimation",
+       "gradient_estimation_cfg_pp",
+       "er_sde",
+       "seeds_2",
+       "seeds_3",
+       "sa_solver",
+       "sa_solver_pece",
+       "ddim",
+       "uni_pc",
+       "uni_pc_bh2"
       ]
      }
     ]
@@ -939,7 +987,16 @@
       "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
       "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
       "acestep_v1.5_turbo.safetensors",
-      "minimax_music3_dit_fp16.safetensors"
+      "minimax_music3_dit_fp16.safetensors",
+      "krea2_turbo_fp8_scaled.safetensors",
+      "krea2_raw_fp8_scaled.safetensors",
+      "anima-base-v1.0.safetensors",
+      "flux-2-klein-9b-fp8.safetensors",
+      "qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "qwen_image_2.1_int8_convrot.safetensors",
+      "ernie-image-turbo.safetensors",
+      "z_image_bf16.safetensors",
+      "Chroma1-HD-fp8mixed.safetensors"
      ]
     ],
     "weight_dtype": [
@@ -980,7 +1037,9 @@
       "ltx23/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
       "ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
       "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
-      "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
+      "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+      "anima-turbo-lora-v0.2.safetensors",
+      "sdxl_lightning_8step_lora.safetensors"
      ]
     ],
     "strength_model": [
@@ -1054,7 +1113,13 @@
       "qwen_1.7b_ace15.safetensors",
       "qwen_4b_ace15.safetensors",
       "t5gemma_b_b_ul2.safetensors",
-      "minimax_music3_text_encoder_pruned_int8_convrot.safetensors"
+      "minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
+      "qwen3vl_4b_fp8_scaled.safetensors",
+      "qwen_3_06b_base.safetensors",
+      "qwen_3_8b_fp8mixed.safetensors",
+      "qwen3vl_8b_int8_convrot.safetensors",
+      "ministral-3-3b.safetensors",
+      "t5xxl_fp8_e4m3fn_scaled.safetensors"
      ]
     ],
     "type": [
@@ -1120,7 +1185,9 @@
       "wan_2.1_vae.safetensors",
       "pixel_space",
       "ace_1.5_vae.safetensors",
-      "minimax_music3_dav.safetensors"
+      "minimax_music3_dav.safetensors",
+      "qwen_image_2.1_vae_bf16.safetensors",
+      "flux2-vae-ernie.safetensors"
      ]
     ]
    }
@@ -4454,6 +4521,295 @@
   },
   "output": [
    "IMAGE"
+  ]
+ },
+ "EmptyLatentImage": {
+  "input": {
+   "required": {
+    "width": [
+     "INT"
+    ],
+    "height": [
+     "INT"
+    ],
+    "batch_size": [
+     "INT"
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ]
+ },
+ "SamplerCustom": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "add_noise": [
+     "BOOLEAN"
+    ],
+    "noise_seed": [
+     "INT"
+    ],
+    "cfg": [
+     "FLOAT"
+    ],
+    "positive": [
+     "CONDITIONING"
+    ],
+    "negative": [
+     "CONDITIONING"
+    ],
+    "sampler": [
+     "SAMPLER"
+    ],
+    "sigmas": [
+     "SIGMAS"
+    ],
+    "latent_image": [
+     "LATENT"
+    ]
+   }
+  },
+  "output": [
+   "LATENT",
+   "LATENT"
+  ]
+ },
+ "BasicScheduler": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "scheduler": [
+     [
+      "simple",
+      "sgm_uniform",
+      "karras",
+      "exponential",
+      "ddim_uniform",
+      "beta",
+      "normal",
+      "linear_quadratic",
+      "kl_optimal"
+     ]
+    ],
+    "steps": [
+     "INT"
+    ],
+    "denoise": [
+     "FLOAT"
+    ]
+   }
+  },
+  "output": [
+   "SIGMAS"
+  ]
+ },
+ "SamplerLCM": {
+  "input": {
+   "required": {
+    "s_noise": [
+     "FLOAT"
+    ],
+    "s_noise_end": [
+     "FLOAT"
+    ],
+    "noise_clip_std": [
+     "FLOAT"
+    ]
+   }
+  },
+  "output": [
+   "SAMPLER"
+  ]
+ },
+ "ModelNoiseScale": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "noise_scale": [
+     "FLOAT"
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ]
+ },
+ "EmptyHiDreamO1LatentImage": {
+  "input": {
+   "required": {
+    "width": [
+     "INT",
+     {
+      "step": 32
+     }
+    ],
+    "height": [
+     "INT",
+     {
+      "step": 32
+     }
+    ],
+    "batch_size": [
+     "INT"
+    ]
+   }
+  },
+  "output": [
+   "LATENT"
+  ]
+ },
+ "HiDreamO1PatchSeamSmoothing": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "start_percent": [
+     "FLOAT"
+    ],
+    "end_percent": [
+     "FLOAT"
+    ],
+    "pattern": [
+     "COMBO",
+     {
+      "options": [
+       "single_shift",
+       "symmetric"
+      ]
+     }
+    ],
+    "passes": [
+     "COMBO",
+     {
+      "options": [
+       "2",
+       "4",
+       "ramp_2_4",
+       "ramp_2_4_8"
+      ]
+     }
+    ],
+    "blend": [
+     "COMBO",
+     {
+      "options": [
+       "average",
+       "window",
+       "median"
+      ]
+     }
+    ],
+    "strength": [
+     "FLOAT"
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
+  ]
+ },
+ "HiDreamO1ReferenceImages": {
+  "input": {
+   "required": {
+    "positive": [
+     "CONDITIONING"
+    ],
+    "negative": [
+     "CONDITIONING"
+    ]
+   }
+  },
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING"
+  ]
+ },
+ "T5TokenizerOptions": {
+  "input": {
+   "required": {
+    "clip": [
+     "CLIP"
+    ],
+    "min_padding": [
+     "INT"
+    ],
+    "min_length": [
+     "INT"
+    ]
+   }
+  },
+  "output": [
+   "CLIP"
+  ]
+ },
+ "TextEncodeQwenImage21": {
+  "input": {
+   "required": {
+    "clip": [
+     "CLIP"
+    ],
+    "prompt": [
+     "STRING"
+    ],
+    "negative_prompt": [
+     "STRING"
+    ],
+    "resolution": [
+     "INT"
+    ]
+   },
+   "optional": {
+    "vae": [
+     "VAE"
+    ]
+   }
+  },
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ]
+ },
+ "QwenImage21Cache": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL"
+    ],
+    "device": [
+     "COMBO",
+     {
+      "options": [
+       "auto",
+       "gpu",
+       "cpu",
+       "off"
+      ]
+     }
+    ],
+    "dtype": [
+     "COMBO",
+     {
+      "options": [
+       "default",
+       "int8",
+       "int4"
+      ]
+     }
+    ]
+   }
+  },
+  "output": [
+   "MODEL"
   ]
  }
 }

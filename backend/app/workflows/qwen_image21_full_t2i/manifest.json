@@ -1,0 +1,27 @@
+{
+  "name": "qwen_image21_full_t2i",
+  "family": "qwen-image-2.1",
+  "description": "Qwen-Image 2.1 base text-to-image (Comfy-Org template image_qwen_image_2_1_t2i, prompt enhancer off): int8_convrot base weights, QwenImage21Cache, TextEncodeQwenImage21, KSampler 25 steps cfg 1 euler/simple. At cfg 1 the negative prompt has no effect (per the ComfyUI docs). Qwen Research Licence: non-commercial only.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Encode", "prompt"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Encode", "negative_prompt"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 25, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 1.0, "targets": [["Sampler", "cfg"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/qwenimage21_full", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["qwen_image_2.1_int8_convrot.safetensors"],
+    "text_encoders": ["qwen3vl_8b_int8_convrot.safetensors"],
+    "vae": ["qwen_image_2.1_vae_bf16.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core 0.38 (comfy_extras/nodes_qwen.py)",
+    "nodes": ["TextEncodeQwenImage21", "QwenImage21Cache", "KSampler"],
+    "assumed": "input names read from the v0.38.0 source"
+  },
+  "progress_weights": {"Sampler": 10, "UNet": 3, "TextEncoder": 3}
+}

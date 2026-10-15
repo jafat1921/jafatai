@@ -1140,7 +1140,10 @@ export interface LlmCheck {
 
 // contract-v6-models.md
 export type ModelType = 'image' | 'edit' | 'video' | 'upscale' | 'audio'
-export type ModelBadgeId = 'FAST' | 'BEST' | 'TEXT' | 'NEW' | 'HQ' | 'QUICK' | 'UPSCALE'
+export type ModelBadgeId = 'FAST' | 'BEST' | 'TEXT' | 'NEW' | 'HQ' | 'QUICK' | 'UPSCALE' | 'ANIME' | 'PHOTO' | '2K'
+// contract v32: picker sections for image models, in this order
+export type ModelGroup = 'fast' | 'photo' | 'text' | 'anime' | 'experimental'
+export type LicenceKind = 'commercial' | 'conditional' | 'noncommercial'
 export type ModelCapability =
   | 't2i' | 'edit' | 'refs' | 't2v' | 'i2v' | 'flf' | 'audio' | 'longtake' | 'text_render' | 'multi_angle' | 'i2i'
   // contract v14 (audio models)
@@ -1173,8 +1176,12 @@ export interface ModelInfo {
   default: boolean
   // LTX only: the temporal x2 upscaler, single-pass clips only
   smooth_motion?: { available: boolean; reason?: string | null }
-  // audio models: the licence line, and MiniMax's non-commercial flag
-  extra?: { licence?: string; noncommercial?: boolean } & Record<string, unknown>
+  // audio models: the licence line, and MiniMax's non-commercial flag; image/edit models too (contract v32)
+  extra?: { licence?: string; noncommercial?: boolean; licence_kind?: LicenceKind } & Record<string, unknown>
+  // contract v32 (image / edit): false when ComfyUI lacks the nodes or weights, null when it couldn't be asked
+  installed?: boolean | null
+  group?: ModelGroup
+  best_for?: string[]
 }
 
 export type VideoAspect = '16:9' | '9:16' | '1:1'

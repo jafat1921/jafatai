@@ -1,0 +1,18 @@
+{
+  "1": {"class_type": "CheckpointLoaderSimple", "_meta": {"title": "Checkpoint"},
+        "inputs": {"ckpt_name": "Illustrious-XL-v2.0.safetensors"}},
+  "2": {"class_type": "CLIPTextEncode", "_meta": {"title": "Positive"},
+        "inputs": {"clip": ["1", 1], "text": ""}},
+  "3": {"class_type": "CLIPTextEncode", "_meta": {"title": "Negative"},
+        "inputs": {"clip": ["1", 1], "text": ""}},
+  "4": {"class_type": "EmptyLatentImage", "_meta": {"title": "Latent"},
+        "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+  "5": {"class_type": "KSampler", "_meta": {"title": "Sampler"},
+        "inputs": {"model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0],
+                   "seed": 0, "steps": 28, "cfg": 5.5, "sampler_name": "euler_ancestral", "scheduler": "normal",
+                   "denoise": 1.0}},
+  "6": {"class_type": "VAEDecode", "_meta": {"title": "Decode"},
+        "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+  "7": {"class_type": "SaveImage", "_meta": {"title": "Save"},
+        "inputs": {"images": ["6", 0], "filename_prefix": "mixai/illustrious"}}
+}

@@ -21,7 +21,12 @@ ROUGH_LOW, ROUGH_HIGH = 0.75, 1.6
 # first-use load on the GPU box; provisional like the catalog's est_seconds
 # TODO: measure loads from cold-vs-warm pairs in the comfy history instead of guessing
 LOAD_S = {"zimage_turbo": 15, "flux2_klein": 12, "qwen_image_2512": 35, "qwen_image_edit_2511": 35,
-          "flux2_klein_edit": 15, "ltx23_distilled": 45, "ltx23_hq": 60, "wan22_t2v": 60,
+          "flux2_klein_edit": 15,
+          # contract v32 image models, guessed from their file sizes
+          "realvis_xl5": 10, "illustrious_xl2": 10, "anima": 8, "zimage_base": 20, "hidream_o1": 25,
+          "ernie_image_turbo": 35, "krea2_turbo": 30, "flux2_klein_9b": 20, "flux2_klein_9b_edit": 20,
+          "qwen_image_21": 40, "chroma1_hd": 30, "wan22_still": 60,
+          "ltx23_distilled": 45, "ltx23_hq": 60, "wan22_t2v": 60,
           # audio: guesses until the GPU box has run some (warm rates are the catalog's est_seconds / 30)
           "ace15_turbo": 8, "sa3_small_music": 5, "sa3_small_sfx": 5, "sa3_medium": 10, "minimax_music3": 20}
 AUDIO_DEFAULT_S = 30.0
@@ -42,6 +47,9 @@ def _template_models() -> dict[str, str]:
         out[m.template] = m.id
         for tpl in m.extra.values():
             out[tpl] = m.id
+        for s in m.speeds:
+            if s.template:
+                out[s.template] = m.id
     return out
 
 

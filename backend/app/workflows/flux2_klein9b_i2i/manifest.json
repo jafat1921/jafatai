@@ -1,0 +1,30 @@
+{
+  "name": "flux2_klein9b_i2i",
+  "family": "flux.2-klein-9b",
+  "description": "FLUX.2 [klein] 9B distilled image-to-image: the flux2_klein_i2i graph (SplitSigmasDenoise on Flux2Scheduler sigmas) with the 9B fp8 weights and Qwen3 8B encoder. The driver stretches steps so about 4 real steps run at any strength.",
+  "inputs": {
+    "image":   {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":  {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "width":   {"type": "int", "default": 1024, "multiple_of": 16,
+                "targets": [["Resize", "width"], ["Scheduler", "width"]]},
+    "height":  {"type": "int", "default": 1024, "multiple_of": 16,
+                "targets": [["Resize", "height"], ["Scheduler", "height"]]},
+    "denoise": {"type": "float", "default": 0.45, "targets": [["Strength", "denoise"]]},
+    "steps":   {"type": "int", "default": 9, "targets": [["Scheduler", "steps"]]},
+    "seed":    {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/flux2klein9b_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["flux-2-klein-9b-fp8.safetensors"],
+    "text_encoders": ["qwen_3_8b_fp8mixed.safetensors"],
+    "vae": ["flux2-vae.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core",
+    "nodes": ["UNETLoader", "CLIPLoader", "Flux2Scheduler", "SplitSigmasDenoise", "SamplerCustomAdvanced"],
+    "assumed": "same graph as the 4B image-to-image, with 9B files"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 4, "UNet": 3, "TextEncoder": 2, "Encode": 1}
+}

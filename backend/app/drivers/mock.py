@@ -90,6 +90,12 @@ class MockDriver:
         meta = {"width": _size(params)[0], "height": _size(params)[1]}
         if params.get("model"):
             meta["model"] = params["model"]  # whatever the catalog picked; the placeholder looks the same
+            from app import models_catalog as mc
+
+            m = mc.MODELS.get(params["model"])
+            if m is not None and m.type in ("image", "edit") and not params.get("reference_ids"):
+                # the graph the comfy driver would run, so the result tile and estimates see the same key
+                meta["template"] = mc.template_for(m, params.get("speed"), i2i=bool(params.get("img2img_of")))
         if params.get("image_tool"):
             # an image tool: the placeholder at the tool's working size, with the template the comfy driver would use
             meta["template"] = params["image_tool"]["template"]

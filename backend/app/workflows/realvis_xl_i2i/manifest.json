@@ -1,0 +1,32 @@
+{
+  "name": "realvis_xl_i2i",
+  "family": "sdxl-realvis",
+  "description": "RealVisXL V5.0 image-to-image: scaled/centre-cropped source, VAE-encoded, KSampler at denoise = strength. Same speed options as realvis_xl_t2i (optional Lightning LoRA plus steps/cfg/sampler/scheduler).",
+  "inputs": {
+    "image":     {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":    {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":  {"type": "str", "default": "bad hands, bad anatomy, ugly, deformed, face asymmetry, eyes asymmetry, deformed eyes, deformed mouth, open mouth",
+                  "targets": [["Negative", "text"]]},
+    "width":     {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "width"]]},
+    "height":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "height"]]},
+    "denoise":   {"type": "float", "default": 0.45, "targets": [["Sampler", "denoise"]]},
+    "seed":      {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":     {"type": "int", "default": 30, "targets": [["Sampler", "steps"]]},
+    "cfg":       {"type": "float", "default": 5.0, "targets": [["Sampler", "cfg"]]},
+    "sampler":   {"type": "str", "default": "dpmpp_sde", "targets": [["Sampler", "sampler_name"]]},
+    "scheduler": {"type": "str", "default": "karras", "targets": [["Sampler", "scheduler"]]},
+    "speed_lora": {"type": "str", "targets": [["SpeedLoRA", "lora_name"]],
+                   "if_missing": {"bypass": {"SpeedLoRA": {"0": "model"}}}},
+    "filename_prefix": {"type": "str", "default": "mixai/realvis_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["RealVisXL_V5.0_fp16.safetensors"]},
+  "optional_models": {"loras": ["sdxl_lightning_8step_lora.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core",
+    "nodes": ["CheckpointLoaderSimple", "LoraLoaderModelOnly", "VAEEncode", "KSampler"],
+    "assumed": "the app's usual VAEEncode + denoise pattern"
+  },
+  "lora": {"after": "Checkpoint"},
+  "progress_weights": {"Sampler": 8, "Checkpoint": 2, "Encode": 1}
+}

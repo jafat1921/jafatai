@@ -1,0 +1,30 @@
+{
+  "name": "realvis_xl_t2i",
+  "family": "sdxl-realvis",
+  "description": "RealVisXL V5.0 (SDXL photoreal checkpoint) text-to-image. Full: DPM++ SDE Karras, 30 steps (the model card's recommendation), cfg 5, the card's negative. Lightning: ByteDance SDXL-Lightning 8-step LoRA, euler / sgm_uniform, cfg 1 (the Lightning card's ComfyUI advice). OpenRAIL++ (both).",
+  "inputs": {
+    "prompt":    {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":  {"type": "str", "default": "bad hands, bad anatomy, ugly, deformed, face asymmetry, eyes asymmetry, deformed eyes, deformed mouth, open mouth",
+                  "targets": [["Negative", "text"]]},
+    "width":     {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":      {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":     {"type": "int", "default": 30, "targets": [["Sampler", "steps"]]},
+    "cfg":       {"type": "float", "default": 5.0, "targets": [["Sampler", "cfg"]]},
+    "sampler":   {"type": "str", "default": "dpmpp_sde", "targets": [["Sampler", "sampler_name"]]},
+    "scheduler": {"type": "str", "default": "karras", "targets": [["Sampler", "scheduler"]]},
+    "speed_lora": {"type": "str", "targets": [["SpeedLoRA", "lora_name"]],
+                   "if_missing": {"bypass": {"SpeedLoRA": {"0": "model"}}}},
+    "filename_prefix": {"type": "str", "default": "mixai/realvis", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["RealVisXL_V5.0_fp16.safetensors"]},
+  "optional_models": {"loras": ["sdxl_lightning_8step_lora.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core",
+    "nodes": ["CheckpointLoaderSimple", "LoraLoaderModelOnly", "EmptyLatentImage", "KSampler"],
+    "assumed": "cfg 5 for the full speed is a starting point (the card gives sampler and steps only); the Lightning LoRA is trained on SDXL base, check it holds up on RealVis"
+  },
+  "lora": {"after": "Checkpoint"},
+  "progress_weights": {"Sampler": 8, "Checkpoint": 2}
+}

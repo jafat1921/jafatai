@@ -1,0 +1,27 @@
+{
+  "name": "illustrious_xl_i2i",
+  "family": "sdxl-illustrious",
+  "description": "Illustrious XL v2.0 image-to-image: scaled/centre-cropped source, VAE-encoded with the checkpoint's VAE, KSampler at denoise = strength.",
+  "inputs": {
+    "image":    {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "worst quality, low quality, lowres, bad anatomy, bad hands, extra fingers, jpeg artifacts, watermark, signature, blurry",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "height"]]},
+    "denoise":  {"type": "float", "default": 0.45, "targets": [["Sampler", "denoise"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 28, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 5.5, "targets": [["Sampler", "cfg"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/illustrious_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["Illustrious-XL-v2.0.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core",
+    "nodes": ["CheckpointLoaderSimple", "VAEEncode", "KSampler"],
+    "assumed": "the app's usual VAEEncode + denoise pattern on the SDXL simple graph"
+  },
+  "lora": {"after": "Checkpoint"},
+  "progress_weights": {"Sampler": 8, "Checkpoint": 2, "Encode": 1}
+}

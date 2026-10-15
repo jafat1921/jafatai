@@ -1,0 +1,25 @@
+{
+  "name": "qwen_image21_t2i",
+  "family": "qwen-image-2.1",
+  "description": "Qwen-Image 2.1 Turbo text-to-image (Comfy-Org template image_qwen_image_2_1_turbo_t2i, prompt enhancer off): int8_convrot Turbo weights, QwenImage21Cache auto, TextEncodeQwenImage21 (Qwen3-VL 8B int8), the template's 8-step ManualSigmas schedule, euler, cfg 1. Qwen Research Licence: non-commercial only.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Encode", "prompt"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Encode", "negative_prompt"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/qwenimage21", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["qwen_image_2.1_turbo_int8_convrot.safetensors"],
+    "text_encoders": ["qwen3vl_8b_int8_convrot.safetensors"],
+    "vae": ["qwen_image_2.1_vae_bf16.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core 0.38 (comfy_extras/nodes_qwen.py)",
+    "nodes": ["TextEncodeQwenImage21", "QwenImage21Cache", "ManualSigmas", "CFGGuider", "SamplerCustomAdvanced"],
+    "assumed": "Comfy-Org publishes no fp8 build of 2.1: int8_convrot as the templates load. TextEncodeQwenImage21 and QwenImage21Cache input names read from the v0.38.0 source"
+  },
+  "progress_weights": {"Sampler": 6, "UNet": 3, "TextEncoder": 3}
+}

@@ -1,0 +1,26 @@
+{
+  "name": "krea2_t2i",
+  "family": "krea-2",
+  "description": "Krea 2 Turbo text-to-image (Comfy-Org template image_krea2_turbo_t2i, prompt enhancer and style LoRA switch left out): 8 steps, cfg 1, euler/simple, zeroed negative. Weights: Krea 2 Community Licence (commercial use only under US$1M revenue, content filtering required).",
+  "inputs": {
+    "prompt": {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "width":  {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height": {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":   {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":  {"type": "int", "default": 8, "targets": [["Sampler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/krea2", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["krea2_turbo_fp8_scaled.safetensors"],
+    "text_encoders": ["qwen3vl_4b_fp8_scaled.safetensors"],
+    "vae": ["qwen_image_vae.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core 0.38 (CLIPLoader type krea2)",
+    "nodes": ["UNETLoader", "CLIPLoader", "EmptyLatentImage", "KSampler", "ConditioningZeroOut"],
+    "assumed": "graph copied from the official template's subgraph; check CLIPLoader lists 'krea2' and the three files via /object_info on the GPU server"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 8, "UNet": 3, "TextEncoder": 2}
+}

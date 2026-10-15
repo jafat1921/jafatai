@@ -1,0 +1,26 @@
+{
+  "name": "ernie_turbo_t2i",
+  "family": "ernie-image",
+  "description": "ERNIE-Image Turbo text-to-image (Comfy-Org template image_ernie_image_turbo, prompt enhancer off): Ministral 3 3B encoder (CLIPLoader type flux2), EmptyFlux2LatentImage, KSampler 8 steps cfg 1 euler/simple, zeroed negative. Only a bf16 build (16 GB) is published; UNETLoader casts it to fp8_e4m3fn on load so it fits beside the encoder on a 20 GB card. ERNIE's own flux2-vae copy is installed as flux2-vae-ernie.safetensors. Apache-2.0.",
+  "inputs": {
+    "prompt": {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "width":  {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height": {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":   {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":  {"type": "int", "default": 8, "targets": [["Sampler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/ernie", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["ernie-image-turbo.safetensors"],
+    "text_encoders": ["ministral-3-3b.safetensors"],
+    "vae": ["flux2-vae-ernie.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core 0.38",
+    "nodes": ["UNETLoader", "CLIPLoader", "EmptyFlux2LatentImage", "KSampler", "ConditioningZeroOut"],
+    "assumed": "weight_dtype fp8_e4m3fn is our change (the template loads default); compare against 'default' once on the server. The VAE is renamed on disk because ERNIE's flux2-vae.safetensors is not byte-identical to the FLUX.2 klein one"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 8, "UNet": 4, "TextEncoder": 2}
+}

@@ -1,0 +1,32 @@
+{
+  "name": "anima_t2i",
+  "family": "anima",
+  "description": "Anima Base v1.0 anime text-to-image (Comfy-Org template image_anima_base_v1): Qwen3 0.6B encoder, Qwen-Image VAE, euler/simple. Full: 30 steps cfg 4 with the template's negative. Turbo: the official turbo LoRA, 8 steps cfg 1. Weights: CircleStone Labs Non-Commercial Licence (outputs may be used commercially).",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 30, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 4.0, "targets": [["Sampler", "cfg"]]},
+    "speed_lora": {"type": "str", "targets": [["SpeedLoRA", "lora_name"]],
+                   "if_missing": {"bypass": {"SpeedLoRA": {"0": "model"}}}},
+    "filename_prefix": {"type": "str", "default": "mixai/anima", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["anima-base-v1.0.safetensors"],
+    "text_encoders": ["qwen_3_06b_base.safetensors"],
+    "vae": ["qwen_image_vae.safetensors"]
+  },
+  "optional_models": {"loras": ["anima-turbo-lora-v0.2.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core 0.38",
+    "nodes": ["UNETLoader", "CLIPLoader", "EmptyLatentImage", "KSampler", "LoraLoaderModelOnly"],
+    "assumed": "graph copied from the official template's subgraph (its LoRA switch became the speed LoRA)"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 8, "UNet": 2, "TextEncoder": 1}
+}

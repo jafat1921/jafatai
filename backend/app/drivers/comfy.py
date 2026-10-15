@@ -43,7 +43,14 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "image_lineart": 300.0, "image_lineart_anime": 300.0, "image_depth": 300.0, "image_canny": 120.0,
             "image_softedge": 300.0, "image_lama_inpaint": 600.0, "image_iclight": 900.0, "image_catvton": 1200.0,
             "zimage_controlnet": 900.0, "zimage_controlnet_depth": 900.0, "zimage_controlnet_canny": 900.0,
-            "zimage_controlnet_pose": 900.0, "zimage_controlnet_hed": 900.0, "zimage_controlnet_scribble": 900.0}
+            "zimage_controlnet_pose": 900.0, "zimage_controlnet_hed": 900.0, "zimage_controlnet_scribble": 900.0,
+            # contract v32: first loads of 9-16 GB weights on the 20 GB card are slow
+            "krea2_t2i": 1200.0, "krea2_raw_t2i": 2400.0, "hidream_o1_dev_t2i": 1800.0, "hidream_o1_t2i": 2400.0,
+            "anima_t2i": 600.0, "anima_i2i": 600.0, "illustrious_xl_t2i": 600.0, "illustrious_xl_i2i": 600.0,
+            "realvis_xl_t2i": 600.0, "realvis_xl_i2i": 600.0, "flux2_klein9b_t2i": 900.0,
+            "flux2_klein9b_i2i": 900.0, "flux2_klein9b_edit": 900.0, "qwen_image21_t2i": 1800.0,
+            "qwen_image21_full_t2i": 2400.0, "ernie_turbo_t2i": 1200.0, "zimage_base_t2i": 1200.0,
+            "zimage_base_i2i": 1200.0, "chroma1_hd_t2i": 1800.0, "wan22_still_t2i": 1800.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
 LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend", "ltx23_ia2v",
                  "ltx23_ia2v_extend"}
@@ -200,10 +207,13 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
             inputs.update(steps=sp.steps, cfg=sp.cfg, speed_lora=sp.lora)
             if sp.shift is not None:
                 inputs["shift"] = sp.shift
+            if sp.sampler:
+                inputs.update(sampler=sp.sampler, scheduler=sp.scheduler)
             sources["speed"] = sp.id
         if params.get("steps"):
             inputs["steps"] = params["steps"]
-        return Plan(m.template, inputs, {}, _family(m.template, loras), "image", sources)
+        tpl = mc.template_for(m, sp.id if sp else None)
+        return Plan(tpl, inputs, {}, _family(tpl, loras), "image", sources)
 
     def i2i_plan(size: tuple[int, int]) -> Plan:
         # the t2i recipe (model, speed, size) on the model's image-to-image graph
@@ -216,7 +226,7 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
         strength = min(0.9, max(0.1, float(src.get("strength") or 0.45)))
         plan.template = tpl
         plan.inputs["denoise"] = strength
-        if tpl == "flux2_klein_i2i":
+        if tpl in ("flux2_klein_i2i", "flux2_klein9b_i2i"):
             # SplitSigmasDenoise keeps round(steps * strength) steps; stretch so ~4 real steps run
             plan.inputs["steps"] = max(4, math.ceil(int(plan.inputs.get("steps") or 4) / strength))
         plan.images = {"image": lookup.generation_file(src["generation_id"])}

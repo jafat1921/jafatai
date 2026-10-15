@@ -20,3 +20,18 @@ export function useModelLabels() {
   })
   return (id: string | null | undefined) => modelLabel(catalog, id)
 }
+
+/**
+ * Whether a model can be picked here, from the cached image catalog only: false when the catalog lists it as
+ * not installed or leaves it out (switched off), undefined when no catalog is cached yet.
+ */
+export function useImageModelUsable() {
+  const [q] = useQueries({
+    queries: [{ queryKey: qk.models('image'), queryFn: () => api.models.list('image'), enabled: false }],
+  })
+  const list = Array.isArray(q.data) ? (q.data as ModelInfo[]) : null
+  return (id: string | null | undefined): boolean | undefined => {
+    if (!id || !list) return undefined
+    return list.find((m) => m.id === id)?.available ?? false
+  }
+}

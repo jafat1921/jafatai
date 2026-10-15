@@ -1,0 +1,22 @@
+{
+  "name": "hidream_o1_dev_t2i",
+  "family": "hidream-o1",
+  "description": "HiDream-O1-Image Dev text-to-image (Comfy-Org template image_hidream_o1_dev with the edit switch off and prompt refine off): one all-in-one checkpoint, ModelNoiseScale 7.6, BasicScheduler normal 28 steps, SamplerLCM (s_noise 1, noise_clip_std 2.5), SamplerCustom cfg 1. Sizes snap to 32. MIT.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "", "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 32, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 32, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "noise_seed"]]},
+    "steps":    {"type": "int", "default": 28, "targets": [["Scheduler", "steps"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/hidream_o1", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["hidream_o1_image_dev_fp8_scaled.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core 0.38 (comfy_extras/nodes_hidream_o1.py, nodes_advanced_samplers.py, nodes_model_advanced.py)",
+    "nodes": ["CheckpointLoaderSimple", "ModelNoiseScale", "EmptyHiDreamO1LatentImage", "BasicScheduler", "SamplerLCM", "SamplerCustom"],
+    "assumed": "input names read from the v0.38.0 sources; the template samples at 2048x2048, we run the app's ~1 MP sizes (check quality, raise to 2K if it is soft)"
+  },
+  "progress_weights": {"Sampler": 10, "Checkpoint": 3, "Positive": 1}
+}

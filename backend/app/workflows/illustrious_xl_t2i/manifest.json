@@ -1,0 +1,25 @@
+{
+  "name": "illustrious_xl_t2i",
+  "family": "sdxl-illustrious",
+  "description": "Illustrious XL v2.0 (SDXL anime checkpoint) text-to-image on the Comfy-Org 'SDXL simple' graph: checkpoint, two CLIPTextEncode, EmptyLatentImage, KSampler, VAEDecode. Sampler settings are the usual SDXL anime ones (the model card gives none). CreativeML OpenRAIL-M.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "worst quality, low quality, lowres, bad anatomy, bad hands, extra fingers, jpeg artifacts, watermark, signature, blurry",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 28, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 5.5, "targets": [["Sampler", "cfg"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/illustrious", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {"checkpoints": ["Illustrious-XL-v2.0.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core",
+    "nodes": ["CheckpointLoaderSimple", "CLIPTextEncode", "EmptyLatentImage", "KSampler"],
+    "assumed": "euler_ancestral / normal / 28 steps / cfg 5.5 are a starting point, not from the model card; A/B on the server"
+  },
+  "lora": {"after": "Checkpoint"},
+  "progress_weights": {"Sampler": 8, "Checkpoint": 2}
+}

@@ -1,0 +1,34 @@
+{
+  "name": "anima_i2i",
+  "family": "anima",
+  "description": "Anima image-to-image: the anima_t2i recipe on a scaled/centre-cropped, VAE-encoded source; KSampler denoise = strength. Same speed options (optional turbo LoRA plus steps/cfg).",
+  "inputs": {
+    "image":    {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "height"]]},
+    "denoise":  {"type": "float", "default": 0.45, "targets": [["Sampler", "denoise"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 30, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 4.0, "targets": [["Sampler", "cfg"]]},
+    "speed_lora": {"type": "str", "targets": [["SpeedLoRA", "lora_name"]],
+                   "if_missing": {"bypass": {"SpeedLoRA": {"0": "model"}}}},
+    "filename_prefix": {"type": "str", "default": "mixai/anima_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["anima-base-v1.0.safetensors"],
+    "text_encoders": ["qwen_3_06b_base.safetensors"],
+    "vae": ["qwen_image_vae.safetensors"]
+  },
+  "optional_models": {"loras": ["anima-turbo-lora-v0.2.safetensors"]},
+  "requires": {
+    "pack": "ComfyUI core 0.38",
+    "nodes": ["UNETLoader", "CLIPLoader", "VAEEncode", "KSampler", "LoraLoaderModelOnly"],
+    "assumed": "no official Anima image-to-image template; this is the app's usual VAEEncode + denoise pattern"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 8, "UNet": 2, "TextEncoder": 1, "Encode": 1}
+}

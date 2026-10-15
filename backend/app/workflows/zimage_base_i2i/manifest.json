@@ -1,0 +1,31 @@
+{
+  "name": "zimage_base_i2i",
+  "family": "z-image",
+  "description": "Z-Image (base) image-to-image: the zimage_i2i graph with z_image_bf16, cfg 4 and a negative, 28 steps; KSampler denoise = strength.",
+  "inputs": {
+    "image":    {"type": "image", "required": true, "targets": [["Source", "image"]]},
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "blurry, low quality, deformed hands, extra fingers, watermark, text artifacts",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "width"]]},
+    "height":   {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Resize", "height"]]},
+    "denoise":  {"type": "float", "default": 0.45, "targets": [["Sampler", "denoise"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["Sampler", "seed"]]},
+    "steps":    {"type": "int", "default": 28, "targets": [["Sampler", "steps"]]},
+    "cfg":      {"type": "float", "default": 4.0, "targets": [["Sampler", "cfg"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/zimage_base_i2i", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["z_image_bf16.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["ae.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core",
+    "nodes": ["UNETLoader", "CLIPLoader", "VAEEncode", "KSampler"],
+    "assumed": "the app's usual VAEEncode + denoise pattern"
+  },
+  "lora": {"after": "UNet"},
+  "progress_weights": {"Sampler": 10, "UNet": 2, "TextEncoder": 2, "Encode": 1}
+}

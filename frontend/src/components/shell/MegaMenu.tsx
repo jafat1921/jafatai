@@ -11,6 +11,10 @@ const BADGE_TONE: Record<Badge, string> = {
   NEW: 'border-studio-gold bg-studio-gold/15 text-studio-accent-hover',
   TEXT: 'border-studio-border-strong bg-studio-raised text-studio-text',
   HQ: 'border-studio-accent/60 bg-studio-accent-soft text-studio-accent-hover',
+  // contract v32; same text colours as the badges above, so the contrast is already checked
+  ANIME: 'border-studio-accent/60 text-studio-accent-hover',
+  PHOTO: 'border-studio-border-strong bg-studio-raised text-studio-text',
+  '2K': 'border-studio-gold bg-studio-gold/15 text-studio-accent-hover',
 }
 
 export function ModelBadge({ badge }: { badge: Badge }) {

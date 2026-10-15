@@ -1,0 +1,20 @@
+{
+  "1": {"class_type": "CheckpointLoaderSimple", "_meta": {"title": "Checkpoint"},
+        "inputs": {"ckpt_name": "RealVisXL_V5.0_fp16.safetensors"}},
+  "2": {"class_type": "LoraLoaderModelOnly", "_meta": {"title": "SpeedLoRA"},
+        "inputs": {"model": ["1", 0], "lora_name": "sdxl_lightning_8step_lora.safetensors", "strength_model": 1.0}},
+  "3": {"class_type": "CLIPTextEncode", "_meta": {"title": "Positive"},
+        "inputs": {"clip": ["1", 1], "text": ""}},
+  "4": {"class_type": "CLIPTextEncode", "_meta": {"title": "Negative"},
+        "inputs": {"clip": ["1", 1], "text": ""}},
+  "5": {"class_type": "EmptyLatentImage", "_meta": {"title": "Latent"},
+        "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+  "6": {"class_type": "KSampler", "_meta": {"title": "Sampler"},
+        "inputs": {"model": ["2", 0], "positive": ["3", 0], "negative": ["4", 0], "latent_image": ["5", 0],
+                   "seed": 0, "steps": 30, "cfg": 5.0, "sampler_name": "dpmpp_sde", "scheduler": "karras",
+                   "denoise": 1.0}},
+  "7": {"class_type": "VAEDecode", "_meta": {"title": "Decode"},
+        "inputs": {"samples": ["6", 0], "vae": ["1", 2]}},
+  "8": {"class_type": "SaveImage", "_meta": {"title": "Save"},
+        "inputs": {"images": ["7", 0], "filename_prefix": "mixai/realvis"}}
+}

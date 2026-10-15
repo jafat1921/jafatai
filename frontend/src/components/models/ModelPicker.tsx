@@ -2,7 +2,7 @@ import { useId } from 'react'
 import { RadioGroup } from 'radix-ui'
 import { AudioLines, Clock, Film, Images, Layers, Lock, MicVocal, Rotate3d, Type, VolumeX, type LucideIcon } from 'lucide-react'
 import { ModelBadge } from '@/components/shell/MegaMenu'
-import { capabilityLabels, secondsText, type CapabilityIcon } from '@/lib/models'
+import { capabilityLabels, modelSections, secondsText, type CapabilityIcon } from '@/lib/models'
 import type { ModelInfo } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +37,21 @@ export function CapabilityChips({ model, id }: { model: ModelInfo; id?: string }
   )
 }
 
+// NC / revenue-capped weights get a pill beside the badge; the licence line under the card says the rest
+function licenceTag(m: ModelInfo): { short: string; spoken: string; tone: string } | null {
+  // image / edit rows only (contract v32): audio cards already spell their licence out in the name line
+  const kind = m.extra?.licence_kind
+  if (kind === 'noncommercial') return { short: 'NC', spoken: 'non-commercial', tone: 'border-studio-warning/60 text-studio-warning' }
+  if (kind === 'conditional') return { short: 'TERMS', spoken: 'licence terms apply', tone: 'border-studio-border-strong text-studio-muted' }
+  return null
+}
+
+function whyBlocked(m: ModelInfo, blockedBy?: (m: ModelInfo) => string | null): string | null {
+  if (m.available) return blockedBy?.(m) ?? null
+  if (m.installed === false) return m.reason ? `Not installed on the server (${m.reason})` : 'Not installed on the server yet.'
+  return m.reason || 'Not installed on the server yet.'
+}
+
 interface Props {
   label: string
   models: ModelInfo[]
@@ -48,9 +63,15 @@ interface Props {
   className?: string
 }
 
-/** Radio cards: arrow keys move between models and skip the ones that can't be used. */
+/**
+ * Radio cards: arrow keys move between models and skip the ones that can't be used. Image models come in
+ * sections (Fast, Photoreal, Text & design, Anime & illustration, Experimental / NC) inside one scroll area;
+ * the section name is part of each card's description, since a radiogroup can't own headings.
+ */
 export function ModelPicker({ label, models, value, onChange, blockedBy, highlighted, className }: Props) {
   const uid = useId()
+  const sections = modelSections(models)
+  const grouped = sections.some((s) => s.label)
   return (
     <div className={className}>
       <div id={`${uid}-label`} className="section-label mb-2">
@@ -60,59 +81,84 @@ export function ModelPicker({ label, models, value, onChange, blockedBy, highlig
         aria-labelledby={`${uid}-label`}
         value={value ?? ''}
         onValueChange={onChange}
-        className="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]"
+        className={cn(grouped && 'flex max-h-[min(62vh,34rem)] flex-col gap-3 overflow-y-auto overscroll-contain pr-1')}
       >
-        {models.map((m) => {
-          const reason = m.available ? (blockedBy?.(m) ?? null) : (m.reason || 'Not installed on the server yet.')
-          const est = m.est_seconds ? `about ${secondsText(m.est_seconds)} each` : null
-          const ids = `${uid}-${m.id}`
-          const licence = m.extra?.licence
-          return (
-            <RadioGroup.Item
-              key={m.id}
-              value={m.id}
-              disabled={!!reason}
-              aria-label={m.badge ? `${m.label}, ${m.badge}` : m.label}
-              aria-describedby={`${ids}-d ${ids}-c${licence ? ` ${ids}-l` : ''}${reason ? ` ${ids}-r` : ''}`}
-              className={cn(
-                'flex flex-col items-stretch gap-1.5 rounded-[6px] border p-2.5 text-left transition-colors duration-150',
-                'border-studio-border-strong bg-studio-raised hover:bg-studio-panel-hover',
-                'data-[state=checked]:border-studio-accent data-[state=checked]:bg-studio-accent-soft',
-                'disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-studio-raised',
-                highlighted && value === m.id && 'ring-2 ring-studio-gold/70',
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <span
-                  aria-hidden
-                  className="flex size-4 shrink-0 items-center justify-center rounded-full border border-studio-border-strong bg-studio-panel"
-                >
-                  <RadioGroup.Indicator className="size-2 rounded-full bg-studio-accent" />
-                </span>
-                {/* licensed names (MiniMax-Music3) must show in full, so they wrap instead of truncating */}
-                <span className={cn('min-w-0 flex-1 text-body font-medium text-studio-text', licence ? 'break-words' : 'truncate')}>{m.label}</span>
-                {m.badge && <ModelBadge badge={m.badge} />}
-              </span>
-              <span id={`${ids}-d`} className="text-small text-studio-muted">
-                {m.description}
-                {est && !reason ? ` · ${est}` : ''}
-              </span>
-              <CapabilityChips model={m} id={`${ids}-c`} />
-              {licence && (
-                <span id={`${ids}-l`} className="text-[12px] leading-4 text-studio-muted">
-                  {licence}
-                </span>
-              )}
-              {reason && (
-                <span id={`${ids}-r`} className="flex items-start gap-1 text-small text-studio-warning">
-                  <Lock aria-hidden className="mt-0.5 size-3 shrink-0" />
-                  {reason}
-                </span>
-              )}
-            </RadioGroup.Item>
-          )
-        })}
+        {sections.map((sec) => (
+          <div key={sec.id} className="flex flex-col gap-1.5">
+            {sec.label && (
+              <div id={`${uid}-g-${sec.id}`} aria-hidden className="sticky top-0 z-[1] bg-studio-panel py-0.5 text-[12px] font-medium uppercase tracking-wide text-studio-muted">
+                {sec.label}
+              </div>
+            )}
+            <div className="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+              {sec.models.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  m={m}
+                  ids={`${uid}-${m.id}`}
+                  groupId={sec.label ? `${uid}-g-${sec.id}` : null}
+                  reason={whyBlocked(m, blockedBy)}
+                  ring={!!highlighted && value === m.id}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </RadioGroup.Root>
     </div>
+  )
+}
+
+function ModelCard({ m, ids, groupId, reason, ring }: { m: ModelInfo; ids: string; groupId: string | null; reason: string | null; ring: boolean }) {
+  const est = m.est_seconds ? `about ${secondsText(m.est_seconds)} each${m.estimate_source === 'measured' ? '' : ' (est.)'}` : null
+  const licence = m.extra?.licence
+  const tag = licenceTag(m)
+  const name = [m.label, m.badge, tag?.spoken].filter(Boolean).join(', ')
+  const described = [`${ids}-d`, `${ids}-c`, licence && `${ids}-l`, reason && `${ids}-r`, groupId].filter(Boolean).join(' ')
+  return (
+    <RadioGroup.Item
+      value={m.id}
+      disabled={!!reason}
+      aria-label={name}
+      aria-describedby={described}
+      className={cn(
+        'flex flex-col items-stretch gap-1.5 rounded-[6px] border p-2.5 text-left transition-colors duration-150',
+        'border-studio-border-strong bg-studio-raised hover:bg-studio-panel-hover',
+        'data-[state=checked]:border-studio-accent data-[state=checked]:bg-studio-accent-soft',
+        'disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-studio-raised',
+        ring && 'ring-2 ring-studio-gold/70',
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span aria-hidden className="flex size-4 shrink-0 items-center justify-center rounded-full border border-studio-border-strong bg-studio-panel">
+          <RadioGroup.Indicator className="size-2 rounded-full bg-studio-accent" />
+        </span>
+        {/* licensed names (MiniMax-Music3) must show in full, so they wrap instead of truncating */}
+        <span className={cn('min-w-0 flex-1 text-body font-medium text-studio-text', licence ? 'break-words' : 'truncate')}>{m.label}</span>
+        {m.badge && <ModelBadge badge={m.badge} />}
+        {tag && (
+          <span aria-hidden title={licence} className={cn('rounded-[4px] border px-1.5 font-mono text-[11px] font-medium leading-[18px] tracking-wide', tag.tone)}>
+            {tag.short}
+          </span>
+        )}
+      </span>
+      <span id={`${ids}-d`} className="text-small text-studio-muted">
+        {m.description}
+        {est && !reason ? ` · ${est}` : ''}
+        {m.best_for?.length ? <span className="block">Best for {m.best_for.join(', ')}</span> : null}
+      </span>
+      <CapabilityChips model={m} id={`${ids}-c`} />
+      {licence && (
+        <span id={`${ids}-l`} className="text-[12px] leading-4 text-studio-muted">
+          {licence}
+        </span>
+      )}
+      {reason && (
+        <span id={`${ids}-r`} className="flex items-start gap-1 text-small text-studio-warning">
+          <Lock aria-hidden className="mt-0.5 size-3 shrink-0" />
+          {reason}
+        </span>
+      )}
+    </RadioGroup.Item>
   )
 }

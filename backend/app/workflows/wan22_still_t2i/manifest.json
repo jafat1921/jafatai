@@ -1,0 +1,27 @@
+{
+  "name": "wan22_still_t2i",
+  "family": "wan-2.2-14b",
+  "description": "Wan 2.2 14B 'Cinematic still': the installed wan22_t2v graph (two experts, lightx2v 4-step LoRAs, cfg 1, shift 5) rendering a single frame (latent length 1), decoded with VAEDecode and saved as a PNG. No new weights. Apache-2.0.",
+  "inputs": {
+    "prompt":   {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative": {"type": "str", "default": "oversaturated, overexposed, blurry details, subtitles, watermark, grey cast, worst quality, low quality, jpeg artifacts, ugly, deformed, extra fingers, bad hands, bad face, malformed limbs, cluttered background",
+                 "targets": [["Negative", "text"]]},
+    "width":    {"type": "int", "default": 1280, "multiple_of": 16, "targets": [["Latent", "width"]]},
+    "height":   {"type": "int", "default": 720, "multiple_of": 16, "targets": [["Latent", "height"]]},
+    "seed":     {"type": "int", "default": 0, "targets": [["HighSampler", "noise_seed"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/wanstill", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors", "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"],
+    "text_encoders": ["umt5_xxl_fp8_e4m3fn_scaled.safetensors"],
+    "vae": ["wan_2.1_vae.safetensors"],
+    "loras": ["wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors", "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core (already used by wan22_t2v)",
+    "nodes": ["EmptyHunyuanLatentVideo", "KSamplerAdvanced", "ModelSamplingSD3", "VAEDecode", "SaveImage"],
+    "assumed": "no official Wan 2.2 text-to-image template: one-frame sampling is our recipe; check the 4-step Lightning LoRAs hold up on a still, else try the experts without them at 20 steps cfg 3.5"
+  },
+  "progress_weights": {"HighSampler": 4, "LowSampler": 4, "HighUNet": 3, "LowUNet": 3, "TextEncoder": 2}
+}

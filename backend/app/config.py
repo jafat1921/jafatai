@@ -88,7 +88,8 @@ class Settings(BaseSettings):
     photo_allow_noncommercial: bool = True
     # image tools (contract v30) whose weights are non-commercial or unverified: CatVTON try-on and the
     # Annotators line art / soft edge models. On while testing; false hides them and the templates fall back
-    # to Qwen-Image-Edit
+    # to Qwen-Image-Edit. Contract v32: also hides and refuses the image / edit models with non-commercial or
+    # revenue-capped weights (Anima, Krea 2, FLUX.2 klein 9B, Qwen-Image 2.1)
     image_allow_noncommercial: bool = True
     # MiniMax-Music3 (revenue-capped community licence) and OmniVoice (CC-BY-NC weights). On while the owner
     # tests; false hides both, refuses them with a 422 and makes VoxCPM2 the default speech engine

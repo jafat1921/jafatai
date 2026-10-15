@@ -285,7 +285,7 @@ def check_template(name: str, object_info: dict) -> dict:
         req = info.get("input", {}).get("required", {}) or {}
         opt = info.get("input", {}).get("optional", {}) or {}
         for key in req:
-            if key not in node["inputs"]:
+            if key not in node["inputs"] and not _may_be_empty(req[key], key, node["inputs"]):
                 invalid.append(f"{title}.{key}: required input not set")
         for key, val in node["inputs"].items():
             if _is_link(val) or (title, key) in runtime:
@@ -321,12 +321,22 @@ def check_template(name: str, object_info: dict) -> dict:
     return out
 
 
+def _may_be_empty(spec, key: str, inputs: dict) -> bool:
+    # a V3 autogrow list (Qwen-Image 2.1's reference images) is listed as required, but with min 0 the
+    # prompt may leave it out and ComfyUI hands the node {}; filled slots arrive as "images.image_1"
+    if not (isinstance(spec, list) and spec and spec[0] == "COMFY_AUTOGROW_V3"):
+        return False
+    opts = spec[1] if len(spec) > 1 and isinstance(spec[1], dict) else {}
+    return (opts.get("template") or {}).get("min", 0) == 0 or any(k.startswith(f"{key}.") for k in inputs)
+
+
 def _node_problems(title: str, node: dict, info: dict | None, runtime: set) -> list[str]:
     if info is None:
         return [f"missing node {node['class_type']}"]
     req = info.get("input", {}).get("required", {}) or {}
     opt = info.get("input", {}).get("optional", {}) or {}
-    probs = [f"{title}.{k}: required input not set" for k in req if k not in node["inputs"]]
+    probs = [f"{title}.{k}: required input not set" for k in req
+             if k not in node["inputs"] and not _may_be_empty(req[k], k, node["inputs"])]
     for key, val in node["inputs"].items():
         if _is_link(val) or (title, key) in runtime:
             continue

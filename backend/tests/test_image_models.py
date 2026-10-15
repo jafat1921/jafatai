@@ -327,3 +327,12 @@ def test_anime_styles_hint_illustrious(client):
     styles = {s["id"]: s for s in client.get("/api/images/options").json()["styles"]}
     assert styles["anime"]["best_model"] == "illustrious_xl2" and styles["chibi"]["best_model"] == "illustrious_xl2"
     assert styles["photoreal"]["best_model"] == "zimage_turbo"
+
+
+def test_qwen21_leaves_its_empty_reference_list_out(info):
+    # the live server lists TextEncodeQwenImage21.images (a min-0 autogrow) as required; the pre-flight check
+    # used to call that "required input not set" and refuse every Qwen-Image 2.1 job
+    from app.workflows import check_template
+
+    for name in ("qwen_image21_t2i", "qwen_image21_full_t2i"):
+        assert check_template(name, info)["ok"], name

@@ -98,11 +98,51 @@ def speak_all(job: dict, synth, sample_rate) -> dict:
     synth is called as synth(text, seg) and reads instruct / seed / voice / language from seg."""
     segs = job.get("segments") or []
     per_segment = bool(job.get("per_segment"))
-    out = []
+    out, warnings = [], []
+
+    def say(text, seg):
+        return synth(text, seg) if per_segment else synth(text)
+
     for i, seg in enumerate(segs):
         progress(0.15 + 0.8 * i / max(1, len(segs)), f"Speaking line {i + 1}/{len(segs)}")
-        audio = synth(seg["text"], seg) if per_segment else synth(seg["text"])
+        text = seg["text"]
+        audio = None
+        # a line of only punctuation, a dash or an emoji gives the model nothing to say, and some engines
+        # crash on the empty result (OmniVoice: "zero-size array to reduction operation maximum")
+        if has_letters(text):
+            try:
+                audio = say(text, seg)
+            except Exception as e:  # noqa: BLE001
+                bare = strip_marks(text)
+                try:
+                    audio = say(bare, seg) if bare != text else None
+                except Exception:  # noqa: BLE001
+                    audio = None
+                if audio is None:
+                    warnings.append(f"line {i + 1} ({text[:120]!r}): {type(e).__name__}: {e}"[:400])
+                    print(f"speak_all: skipped {warnings[-1]}", file=sys.stderr, flush=True)
         rate = sample_rate() if callable(sample_rate) else sample_rate
+        if audio is None or len(to_numpy(audio)) == 0:
+            # one bad line shouldn't lose the whole book: a short pause keeps the timing
+            audio = silence(rate, 0.4)
         out.append({"out": seg["out"], "sample_rate": rate, "duration_s": write_wav(seg["out"], audio, rate)})
     progress(1.0, "Spoken")
-    return {"segments": out}
+    return {"segments": out, **({"warnings": warnings} if warnings else {})}
+
+
+def has_letters(text: str) -> bool:
+    import unicodedata
+
+    return any(unicodedata.category(ch).startswith("L") for ch in text or "")
+
+
+def strip_marks(text: str) -> str:
+    import unicodedata
+
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+
+
+def silence(rate: int, seconds: float):
+    import numpy as np
+
+    return np.zeros(max(1, int(rate * seconds)), dtype=np.float32)

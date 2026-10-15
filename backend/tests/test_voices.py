@@ -613,7 +613,7 @@ def test_runner_scripts_compile_and_stay_out_of_the_app(name, tmp_path):
             mods.add((node.module or "").split(".")[0])
     # they run inside the engine venvs, where the app (and its deps) aren't installed
     assert not mods & {"app", "fastapi", "sqlalchemy", "httpx", "pydantic"}, mods
-    allowed = {"json", "os", "random", "sys", "traceback", "numpy", "soundfile", "torch", "runner_io", "omnivoice",
+    allowed = {"json", "os", "random", "sys", "traceback", "unicodedata", "numpy", "soundfile", "torch", "runner_io", "omnivoice",
                "voxcpm", "chatterbox", "kokoro", "faster_whisper"}
     assert mods <= allowed, mods - allowed
 

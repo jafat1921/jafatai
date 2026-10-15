@@ -11,6 +11,7 @@ from app.api import tokens
 from app.api import files
 from app.api import stories
 from app.api import poetry
+from app.api import ads
 from app.api import admin
 
 router = APIRouter(prefix="/api")
@@ -26,6 +27,7 @@ router.include_router(video_podcast.router)
 router.include_router(audio.text_router)
 router.include_router(stories.router)
 router.include_router(poetry.router)
+router.include_router(ads.router)
 router.include_router(tokens.router, include_in_schema=False)
 router.include_router(admin.router, include_in_schema=False)
 # signed links handed out by the MCP server; not something to call by hand

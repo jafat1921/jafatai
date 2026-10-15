@@ -3,3 +3,5 @@
 *.jpg binary
 *.mp4 binary
 *.safetensors binary
+*.ttf binary
+*.otf binary

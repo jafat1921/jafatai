@@ -6,7 +6,8 @@ audio   -> songs, music, sound effects, speech and voice transcripts; served by 
            its own ComfyUI / GPU
 general -> LLM work, ffmpeg assembly / branding, exports, autopilot orchestration, Photo Studio renders and
            looks on video, podcast writing / mixing / publishing, the AI video podcast's orchestration and cut
-           (CPU only; its lip-sync takes are ordinary generate jobs on the video lane)
+           (CPU only; its lip-sync takes are ordinary generate jobs on the video lane), Ad Studio's concepts
+           and layouts (its photos are generate jobs on the image lane)
 
 Kept free of app imports on purpose: migration 0009 backfills with the same classifier.
 """

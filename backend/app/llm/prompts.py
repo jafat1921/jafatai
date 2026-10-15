@@ -710,3 +710,85 @@ def poetry_scene_messages(title: str, language: str, groups: list[list[str]], ch
     return [{"role": "system", "content": "You are a director of photography turning poetry into film. "
                                           "Answer only with JSON."},
             {"role": "user", "content": "\n\n".join(parts)}]
+
+
+# ---------------------------------------------------------------- Ad Studio (contract v36)
+
+AD_LAYOUTS = ("frosted", "side_wash", "bottom_bar", "split", "badge", "minimal")
+
+
+class AdConcept(BaseModel):
+    insight: str = ""
+    kicker: str = ""
+    headline: str = Field(min_length=1)
+    body: str = ""
+    offers: list[str] = []
+    cta: str = ""
+    layout: str = "frosted"
+    photo_prompt: str = Field(min_length=1)
+    placement: str = ""
+    logo_surface: str = ""
+
+    @field_validator("layout")
+    @classmethod
+    def _layout(cls, v):
+        v = (v or "").strip().lower().replace(" ", "_").replace("-", "_")
+        return v if v in AD_LAYOUTS else "frosted"
+
+
+class AdConcepts(BaseModel):
+    concepts: list[AdConcept] = Field(min_length=1)
+
+
+AD_RULES = """Rules:
+- Write every word of copy (kicker, headline, body, offers, cta) in {language}, as a native copywriter in {market}
+  would write it for this audience: idiomatic, warm, specific. Never translated English, never word-for-word.
+- headline: at most 6 words. Put a line break (\n) where a designer would break it, at most one or two.
+- kicker: 2 to 5 words above the headline (an occasion, a question, a hook). body: one or two short lines.
+- cta: 1 to 3 words on a button (book, order, call...), in the imperative.
+- offers: ONLY lines copied exactly from the approved offers below, the ones that suit this concept (zero to
+  two). Never write a price, a percentage, a discount, a time limit, a guarantee or any other promise of your
+  own, and no numbers anywhere in the copy unless they appear in the approved offers.
+- layout, one of: frosted (copy on a frosted panel), side_wash (copy over a pale wash on one side), bottom_bar
+  (a solid brand bar under the photo), split (photo and a colour block side by side), badge (a round price or
+  discount badge; only when an approved offer has a number), minimal (a short headline centred on calm space).
+  Vary the layouts across concepts.
+- photo_prompt: in English, 50 to 90 words, a photograph for this advert: subject, setting, light, lens, mood,
+  the brand's colours where natural. It must leave calm, uncluttered space for the copy ({space}). No text,
+  letters, signs, logos or watermarks anywhere in the picture.
+- placement: where the subject sits in the frame, e.g. "right third, lower half".
+- logo_surface: a surface in the photo that could carry the logo (a van door, an apron, a mug, a shop window), or
+  "" when the logo should only be laid over the advert. Use it for at most one concept, and only when natural.
+- Each concept is a different idea (insight): a different moment, angle or feeling, not a rewording."""
+
+
+def ad_concept_messages(*, brand: str, subject: str, description: str, brief: str, occasion: str, market: str,
+                        language: str, tone: str, must_say: str, offers: list[str], count: int,
+                        products: list[str], rtl: bool, avoid: list[str] | None = None) -> list[dict]:
+    lang_name = aerab.NAMES.get(language, language)
+    space = ("the left side or the top, as copy reads right to left" if rtl else
+             "the left side or the top of the frame")
+    parts = [f"Write {count} advert concept{'s' if count > 1 else ''} for social media.",
+             f"The brand:\n{brand}" if brand else "",
+             f"What we advertise: {subject}" + (f" ({description})" if description else ""),
+             f"The client's brief: {brief}" if brief else "No brief: find the strongest ideas yourself.",
+             f"Occasion or season: {occasion}" if occasion else "",
+             f"Market: {market}" if market else "",
+             f"Tone: {tone}" if tone else "",
+             f"Must say (keep its meaning in every concept): {must_say}" if must_say else "",
+             ("Approved offers (copy them exactly, or leave them out):\n" + "\n".join(f"- {o}" for o in offers))
+             if offers else "Approved offers: none. Do not mention any price, discount or promise.",
+             ("The real product appears in the photo from the client's own pictures: "
+              + "; ".join(products) + ". Describe the scene around it; the product itself stays as it is.")
+             if products else "",
+             ("Already written, do something different from: " + " | ".join(avoid)) if avoid else "",
+             AD_RULES.format(language=lang_name, market=market or "the target market", space=space)]
+    rule = aerab.writing_rule(language)
+    if rule:
+        parts.append(rule)
+    parts.append(f'Answer as JSON {{"concepts": [{{"insight": "...", "kicker": "...", "headline": "...", '
+                 f'"body": "...", "offers": ["..."], "cta": "...", "layout": "frosted", "photo_prompt": "...", '
+                 f'"placement": "...", "logo_surface": ""}}]}} with exactly {count} concepts.')
+    return [{"role": "system", "content": "You are the creative director and senior copywriter of an advertising "
+                                          "agency. Answer only with JSON."},
+            {"role": "user", "content": "\n\n".join(p for p in parts if p)}]

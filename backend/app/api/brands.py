@@ -59,7 +59,8 @@ def kit_out(db: Session, kit: BrandKit) -> BrandKitOut:
         palette=list(kit.palette or []), style_text=kit.style_text or "", voice_text=kit.voice_text or "",
         tagline=kit.tagline or "", logos=dict(kit.logos or {}), products=list(kit.products or []),
         font_files=list(kit.font_files or []), reference_media_ids=list(kit.reference_media_ids or []),
-        settings=merged_settings(kit.settings), assets=assets, prompt_context=br.prompt_context(kit),
+        settings=merged_settings(kit.settings), contact=dict(kit.contact or {}), claims=list(kit.claims or []),
+        assets=assets, prompt_context=br.prompt_context(kit),
         created_at=kit.created_at, updated_at=kit.updated_at,
     )
 
@@ -104,6 +105,10 @@ def _apply_fields(db: Session, kit: BrandKit, data: dict) -> None:
             setattr(kit, k, data[k].strip() if k == "name" else data[k])
     if data.get("palette") is not None:
         kit.palette = data["palette"]
+    if data.get("contact") is not None:
+        kit.contact = {k: v for k, v in data["contact"].items() if v}
+    if data.get("claims") is not None:
+        kit.claims = list(data["claims"])
 
 
 def _make_default(db: Session, kit: BrandKit) -> None:

@@ -478,6 +478,11 @@ HANDLERS[poetry.JOB] = poetry_stages.handle
 HANDLERS[poetry_timing.JOB] = poetry_timing.handle
 HANDLERS[poetry.RENDER_JOB] = poetry_render.handle_render
 CPU_JOB_LEDGER.update({poetry.JOB: "autopilot", poetry.RENDER_JOB: "assembly"})
+from app.ads import service as ads, stages as ad_stages  # noqa: E402
+
+# Ad Studio: the orchestrator waits on its photos (they bill their own GPU time); the layout is Pillow
+HANDLERS[ads.JOB] = ad_stages.handle
+CPU_JOB_LEDGER[ads.JOB] = "autopilot"
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

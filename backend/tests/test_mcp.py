@@ -238,7 +238,11 @@ def test_signed_link_expires(anon, finished, monkeypatch):
 
 def test_tampered_or_foreign_links_are_refused(anon, finished):
     signed = file_links.sign(finished)
-    flipped = signed[:-1] + ("A" if signed[-1] != "A" else "B")
+    # change a character in the middle of the signature: the last base64 character can carry padding bits,
+    # so flipping it sometimes decodes to the same bytes and the test failed now and then
+    sig_start = signed.rindex(".") + 1
+    i = sig_start + (len(signed) - sig_start) // 2
+    flipped = signed[:i] + ("A" if signed[i] != "A" else "B") + signed[i + 1:]
     assert anon.get(f"/api/files/{flipped}").status_code == 404
     # a session cookie is signed with the same secret but another salt
     assert anon.get(f"/api/files/{make_session_token(finished.id)}").status_code == 404

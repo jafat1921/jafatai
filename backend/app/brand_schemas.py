@@ -4,7 +4,7 @@ Separate from app.schemas so the compositing code can import the settings model 
 the whole API surface.
 """
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -125,6 +125,34 @@ class Product(BaseModel):
     description: str = Field("", max_length=300)
 
 
+class Contact(BaseModel):
+    """An advert's footer (contract v36). Free text, shown as typed."""
+    phone: str = Field("", max_length=40)
+    website: str = Field("", max_length=120)
+    location: str = Field("", max_length=120)
+    email: str = Field("", max_length=120)
+    social: str = Field("", max_length=80, description="A handle such as @ixperts.se")
+
+    @field_validator("*")
+    @classmethod
+    def _tidy(cls, v):
+        return " ".join((v or "").split())
+
+
+def tidy_claims(v: list[str] | None) -> list[str] | None:
+    if v is None:
+        return None
+    out: list[str] = []
+    for c in v:
+        c = " ".join((c or "").split())
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+Claim = Annotated[str, Field(max_length=160)]
+
+
 class BrandKitIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     is_default: bool = False
@@ -137,6 +165,13 @@ class BrandKitIn(BaseModel):
     font_files: list[str] = Field([], max_length=4)
     reference_media_ids: list[str] = Field([], max_length=6)
     settings: dict[str, Any] = {}
+    contact: Contact = Contact()
+    claims: list[Claim] = Field([], max_length=30, description="Approved offer lines: prices, discounts, guarantees")
+
+    @field_validator("claims")
+    @classmethod
+    def _claims(cls, v):
+        return tidy_claims(v)
 
 
 class BrandKitPatch(BaseModel):
@@ -150,6 +185,13 @@ class BrandKitPatch(BaseModel):
     font_files: list[str] | None = Field(None, max_length=4)
     reference_media_ids: list[str] | None = Field(None, max_length=6)
     settings: dict[str, Any] | None = None
+    contact: Contact | None = None
+    claims: list[Claim] | None = Field(None, max_length=30)
+
+    @field_validator("claims")
+    @classmethod
+    def _claims(cls, v):
+        return tidy_claims(v)
 
 
 class AssetOut(BaseModel):
@@ -173,6 +215,8 @@ class BrandKitOut(BaseModel):
     font_files: list[str]
     reference_media_ids: list[str]
     settings: BrandSettings
+    contact: dict[str, str] = {}
+    claims: list[str] = []
     assets: dict[str, AssetOut] = {}
     prompt_context: str = ""
     created_at: Utc

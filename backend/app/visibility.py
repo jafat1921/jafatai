@@ -14,7 +14,7 @@ from sqlalchemy import String, cast, select, update
 from sqlalchemy.orm import Session
 
 from app.models import (
-    Album, BrandKit, Character, DubProject, Folder, Generation, Job, Look, MediaItem, PodcastEpisode,
+    AdCampaign, Album, BrandKit, Character, DubProject, Folder, Generation, Job, Look, MediaItem, PodcastEpisode,
     PodcastShow, PoetryShort, Project, Transcript, UserTemplate, VideoPodcast, VoiceProfile, VoiceScript,
 )
 from app.security import CurrentUser, is_admin
@@ -45,7 +45,7 @@ KINDS = {
     "voice": VoiceProfile, "script": VoiceScript, "dub": DubProject, "transcript": Transcript,
     "podcast_show": PodcastShow, "podcast_episode": PodcastEpisode, "video_podcast": VideoPodcast,
     "poetry": PoetryShort, "brand_kit": BrandKit, "template": UserTemplate, "folder": Folder, "album": Album,
-    "look": Look,
+    "look": Look, "ad_campaign": AdCampaign,
 }
 STORY_JOBS = ("story_audio", "story_video")
 SAMPLE = 20
@@ -103,7 +103,7 @@ def _follow(db: Session, found: _Found, workspace_id: str | None) -> None:
             nxt["media"] |= found.add("media", [t_id for t_type, t_id, _ in rows if t_type == "media"])
             nxt["job"] |= found.add("job", [j for _, _, j in rows if j])
             nxt["job"] |= found.add("job", db.scalars(select(Job.id).where(Job.generation_id.in_(todo["generation"]))))
-        for kind in ("dub", "transcript", "poetry", "video_podcast"):
+        for kind in ("dub", "transcript", "poetry", "video_podcast", "ad_campaign"):
             if todo[kind]:
                 model = KINDS[kind]
                 nxt["job"] |= found.add("job", db.scalars(select(model.job_id).where(model.id.in_(todo[kind]))))

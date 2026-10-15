@@ -228,7 +228,7 @@ const post = <T>(path: string, body?: unknown) => request<T>('POST', path, body 
 const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body)
 const del = (path: string) => request<void>('DELETE', path)
 
-async function postBlob(path: string, body: unknown): Promise<Blob> {
+export async function postBlob(path: string, body: unknown): Promise<Blob> {
   let res: Response
   try {
     res = await fetch(API_BASE + path, {

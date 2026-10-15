@@ -64,6 +64,14 @@ export const shellRoutes: RouteObject[] = [
     const { BrandTemplatePage } = await import('@/features/image/BrandTemplatePage')
     return <BrandTemplatePage />
   }),
+  page('image/ads', async () => {
+    const { AdStudioPage } = await import('@/features/image/ads/AdStudioPage')
+    return <AdStudioPage />
+  }),
+  page('image/ads/:id', async () => {
+    const { AdCampaignPage } = await import('@/features/image/ads/AdCampaignPage')
+    return <AdCampaignPage />
+  }),
   page('image/img2img', async () => {
     const { Img2ImgPage } = await import('@/features/image/Img2ImgPage')
     return <Img2ImgPage />

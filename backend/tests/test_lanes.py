@@ -59,6 +59,8 @@ def test_every_registered_job_type_has_a_lane():
         "story_audio": "audio", "story_video": "general",
         # Poetry Shorts: the orchestrator, the vocal split + Whisper timing on a GPU, the ffmpeg cut
         "poetry_short": "general", "poetry_timing": "audio", "poetry_render": "general",
+        # Ad Studio: the orchestrator writes concepts and lays out with Pillow; its photos are generate jobs
+        "ad_campaign": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

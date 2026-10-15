@@ -465,6 +465,36 @@ def create_project_from_idea(
         return {"project_id": out.project.id, "title": out.project.title, **_job(out.job)}
 
 
+
+@tool("generate", title="Make an ad campaign")
+def make_ad_campaign(
+    ctx: Context,
+    subject: Annotated[str, Field(min_length=1, max_length=200, description="The service or product")],
+    language: Annotated[str, Field(pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$", description="ISO 639-1 of the copy")]
+    = "en",
+    offers: Annotated[list[str], Field(max_length=6, description="The only prices, discounts or promises the "
+                                                                 "copy may use, word for word")] = [],
+    brief: Annotated[str, Field(max_length=2000)] = "",
+    occasion: Annotated[str, Field(max_length=120)] = "",
+    market: Annotated[str, Field(max_length=120)] = "",
+    tone: Annotated[str, Field(max_length=120)] = "",
+    formats: list[Literal["4:5", "9:16", "1:1", "16:9"]] = ["4:5"],
+    variants: Annotated[int, Field(ge=2, le=8)] = 3,
+    brand_kit_id: str | None = None,
+    product_media_ids: Annotated[list[str], Field(max_length=3)] = [],
+) -> dict:
+    """Ad Studio: concepts by an AI creative director, a photo each, and finished adverts with the brand kit's
+    logo, colours and contact footer, laid out per format. Runs in one go; the ads land in the Library."""
+    from app.api.ads import CreateIn, create_campaign
+
+    with acting(ctx, "generate") as (db, cur):
+        out = create_campaign(CreateIn(subject=subject, language=language, offers=offers, brief=brief,
+                                       occasion=occasion, market=market, tone=tone, formats=formats,
+                                       variants=variants, brand_kit_id=brand_kit_id,
+                                       product_media_ids=product_media_ids, review=False), db=db, cur=cur)
+        return {"campaign_id": out["id"], "title": out["title"], **_job(db.get(Job, out["job"]["id"])),
+                "next": "When the job is done, search_library for the ads (tag 'ad')"}
+
 # ---------------------------------------------------------------- jobs
 
 @tool("read", title="Get a job")

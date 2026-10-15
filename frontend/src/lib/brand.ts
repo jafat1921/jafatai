@@ -55,6 +55,23 @@ export interface BrandAsset {
   missing: boolean
 }
 
+export interface BrandContact {
+  phone?: string
+  website?: string
+  location?: string
+  email?: string
+  social?: string
+}
+
+export const CONTACT_FIELDS: { key: keyof BrandContact; label: string; placeholder: string; type: string }[] = [
+  { key: 'phone', label: 'Phone', placeholder: '+46 72 846 7394', type: 'tel' },
+  { key: 'website', label: 'Website', placeholder: 'www.example.com', type: 'text' },
+  { key: 'location', label: 'Location', placeholder: 'Stockholm, Sverige', type: 'text' },
+  { key: 'email', label: 'Email', placeholder: 'hello@example.com', type: 'email' },
+  { key: 'social', label: 'Social handle', placeholder: '@yourbrand', type: 'text' },
+]
+export const MAX_CLAIMS = 30
+
 export interface BrandKit {
   id: string
   workspace_id: string
@@ -69,6 +86,9 @@ export interface BrandKit {
   font_files: string[]
   reference_media_ids: string[]
   settings: BrandSettings
+  // contract v36: the ad footer and the offer lines Ad Studio may use
+  contact?: BrandContact
+  claims?: string[]
   assets: Record<string, BrandAsset>
   prompt_context?: string
   created_at: string
@@ -76,7 +96,7 @@ export interface BrandKit {
 }
 
 export type BrandKitPatch = Partial<
-  Pick<BrandKit, 'name' | 'palette' | 'style_text' | 'voice_text' | 'tagline' | 'logos' | 'products' | 'font_files' | 'reference_media_ids'>
+  Pick<BrandKit, 'name' | 'palette' | 'style_text' | 'voice_text' | 'tagline' | 'logos' | 'products' | 'font_files' | 'reference_media_ids' | 'contact' | 'claims'>
 > & { settings?: Partial<{ [K in keyof BrandSettings]: unknown }> }
 
 export interface BrandPlacement {
@@ -149,6 +169,8 @@ export interface KitDraft {
   font_files: string[]
   reference_media_ids: string[]
   settings: BrandSettings
+  contact: BrandContact
+  claims: string[]
 }
 
 export const draftFrom = (k: BrandKit): KitDraft => ({
@@ -162,6 +184,8 @@ export const draftFrom = (k: BrandKit): KitDraft => ({
   font_files: k.font_files ?? [],
   reference_media_ids: k.reference_media_ids ?? [],
   settings: { ...DEFAULT_SETTINGS, ...k.settings, closing: k.settings?.closing ?? 'auto' },
+  contact: k.contact ?? {},
+  claims: k.claims ?? [],
 })
 
 /** Everything wrong with a draft, in words. Empty means it can be saved. */
@@ -178,6 +202,10 @@ export function kitProblems(d: KitDraft): string[] {
     if (!p.name.trim()) out.push(`Product ${i + 1} needs a name.`)
   })
   if (d.font_files.length > MAX_FONTS) out.push(`Use at most ${MAX_FONTS} fonts.`)
+  if (d.claims.length > MAX_CLAIMS) out.push(`Use at most ${MAX_CLAIMS} offer lines.`)
+  d.claims.forEach((c, i) => {
+    if (c.length > 160) out.push(`Offer line ${i + 1} is longer than 160 characters.`)
+  })
   return out
 }
 
@@ -194,6 +222,8 @@ export function kitPatch(d: KitDraft): BrandKitPatch {
     font_files: d.font_files,
     reference_media_ids: d.reference_media_ids,
     settings: d.settings,
+    contact: Object.fromEntries(Object.entries(d.contact).map(([k, v]) => [k, (v ?? '').trim()]).filter(([, v]) => v)),
+    claims: d.claims.map((c) => c.trim()).filter(Boolean),
   }
 }
 

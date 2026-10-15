@@ -14,6 +14,7 @@ import { draftFrom, kitPatch, kitProblems, type BrandKit, type KitDraft } from '
 import { modKey } from '@/lib/keyboard'
 import { announce } from '@/stores/ui'
 import { ClosingSection } from './ClosingSection'
+import { ContactSection } from './ContactSection'
 import { EditorSection } from './EditorSection'
 import { ExtrasSection } from './ExtrasSection'
 import { FontsSection } from './FontsSection'
@@ -149,6 +150,7 @@ export function BrandKitEditor({ kit }: { kit: BrandKit }) {
         </div>
       </EditorSection>
 
+      <ContactSection contact={draft.contact} claims={draft.claims} onContact={(v) => set('contact', v)} onClaims={(v) => set('claims', v)} />
       <MoodRefsSection ids={draft.reference_media_ids} urls={urls} onChange={(v) => set('reference_media_ids', v)} />
       <ClosingSection
         kitId={kit.id}

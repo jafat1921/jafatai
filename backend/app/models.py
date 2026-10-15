@@ -555,6 +555,10 @@ class BrandKit(Base):
     font_files: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     reference_media_ids: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    # contract v36: {phone, website, location, email, social} for an advert's footer
+    contact: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    # approved offer lines ("From 215 kr/hour", "No lock-in"); the ad copywriter may only use these
+    claims: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 
@@ -829,9 +833,31 @@ class PoetryShort(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class AdCampaign(Base):
+    """An Ad Studio campaign (contract v36): the brief, the concepts with their photos, and one ad per concept
+    and format with its editable layer spec. JSON, written whole by the stage job and the editor."""
+    __tablename__ = "ad_campaign"
+    __table_args__ = (Index("ix_ad_campaign_ws_updated", "workspace_id", "updated_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    via_api: Mapped[bool] = _via()
+    title: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    brand_kit_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    language: Mapped[str] = mapped_column(String(12), default="en", server_default="en")
+    stage: Mapped[str] = mapped_column(String(20), default="concepts", server_default="concepts")
+    stages: Mapped[dict] = mapped_column(JSON, default=dict)
+    brief: Mapped[dict] = mapped_column(JSON, default=dict)
+    concepts: Mapped[list] = mapped_column(JSON, default=list)
+    ads: Mapped[list] = mapped_column(JSON, default=list)
+    job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 VIA_API_MODELS = (Project, Character, Generation, Job, MediaItem, Folder, Album, BrandKit, Look, VoiceProfile,
                   VoiceScript, DubProject, Transcript, PodcastShow, PodcastEpisode, VideoPodcast, UserTemplate,
-                  PoetryShort)
+                  PoetryShort, AdCampaign)
 # Session.info key: set for a token REST API request, and by the worker while it runs one of its jobs
 VIA_API = "via_api"
 

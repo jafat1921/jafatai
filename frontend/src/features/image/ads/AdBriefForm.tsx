@@ -10,13 +10,14 @@ import { SwitchRow } from '@/components/studio/switch-row'
 import { RefAdd, RefThumb } from '@/components/generate/RefSlot'
 import { useBrandKits } from '@/hooks/useBrandKits'
 import { useCreateAds } from '@/hooks/useAds'
-import { AD_LANGUAGES, FORMATS, IMAGE_MODELS, type AdCreate, type AdFormat } from '@/lib/ads'
+import { AD_LANGUAGES, defaultFooter, FORMATS, IMAGE_MODELS, type AdCreate, type AdFormat, type FooterItems } from '@/lib/ads'
 import { announce } from '@/stores/ui'
+import { FooterPicker } from './FooterPicker'
 
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
 const MAX_PRODUCTS = 3
 const MAX_OFFERS = 6
-const NAMES: Record<string, string> = { phone: 'phone', website: 'website', location: 'location' }
+const NAMES: Record<string, string> = { website: 'website or booking link', socials: 'social accounts' }
 
 const listOf = (w: string[]) => (w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`)
 
@@ -47,12 +48,16 @@ export function AdBriefForm() {
   const [offers, setOffers] = useState<string[]>([])
   const [offerLine, setOfferLine] = useState('')
   const [products, setProducts] = useState<string[]>([])
+  // null: the kit's defaults, so switching kits starts from the new kit's own picks
+  const [footer, setFooter] = useState<FooterItems | null>(null)
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((o) => ({ ...o, [k]: v }))
 
   const kitId = picked ?? (kits.find((k) => k.is_default) ?? kits[0])?.id ?? ''
   const kit = kits.find((k) => k.id === kitId)
   const claims = kit?.claims ?? []
-  const missing = kit ? (['phone', 'website', 'location'] as const).filter((k) => !kit.contact?.[k]?.trim()) : []
+  const missing = kit
+    ? [...(kit.contact?.website?.trim() || kit.contact?.booking_url?.trim() ? [] : ['website']), ...(kit.socials?.length ? [] : ['socials'])]
+    : []
   const custom = offers.filter((o) => !claims.includes(o))
 
   const toggleOffer = (o: string) => setOffers((cur) => (cur.includes(o) ? cur.filter((x) => x !== o) : cur.length < MAX_OFFERS ? [...cur, o] : cur))
@@ -68,6 +73,7 @@ export function AdBriefForm() {
     e.preventDefault()
     if (blocked) return
     const body: AdCreate = { ...f, brand_kit_id: kitId || null, formats, offers, product_media_ids: products }
+    if (footer && kit) body.footer_items = footer
     create.mutate(body, {
       onSuccess: (c) => {
         announce('Ad campaign started. The concepts are being written.')
@@ -84,7 +90,16 @@ export function AdBriefForm() {
 
       <div className="flex flex-col gap-1">
         <Label htmlFor={id('kit')}>Brand kit</Label>
-        <select id={id('kit')} className={SELECT} value={kitId} onChange={(e) => setKitId(e.target.value)} aria-describedby={id('kit-hint')}>
+        <select
+          id={id('kit')}
+          className={SELECT}
+          value={kitId}
+          onChange={(e) => {
+            setKitId(e.target.value)
+            setFooter(null)
+          }}
+          aria-describedby={id('kit-hint')}
+        >
           <option value="">No brand kit</option>
           {kits.map((k) => (
             <option key={k.id} value={k.id}>
@@ -237,6 +252,8 @@ export function AdBriefForm() {
           ))}
         </div>
       </fieldset>
+
+      {kit && <FooterPicker kit={kit} legend="The footers show" value={footer ?? defaultFooter(kit)} onChange={setFooter} />}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1">

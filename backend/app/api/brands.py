@@ -18,7 +18,7 @@ from app import library as lib
 from app import uploads
 from app.brand_schemas import (
     AssetOut, BrandApplyIn, BrandKitIn, BrandKitOut, BrandKitPatch, BrandPreviewIn, LogoRevealIn, LogoRevealOut,
-    ProjectBrandIn, merged_settings,
+    ProjectBrandIn, Social, merged_settings,
 )
 from app.db import get_db
 from app.models import BrandKit, Generation, MediaItem, Project, utcnow
@@ -59,7 +59,8 @@ def kit_out(db: Session, kit: BrandKit) -> BrandKitOut:
         palette=list(kit.palette or []), style_text=kit.style_text or "", voice_text=kit.voice_text or "",
         tagline=kit.tagline or "", logos=dict(kit.logos or {}), products=list(kit.products or []),
         font_files=list(kit.font_files or []), reference_media_ids=list(kit.reference_media_ids or []),
-        settings=merged_settings(kit.settings), contact=dict(kit.contact or {}), claims=list(kit.claims or []),
+        settings=merged_settings(kit.settings), contact=br.contact_of(kit), socials=br.socials_of(kit),
+        claims=list(kit.claims or []),
         assets=assets, prompt_context=br.prompt_context(kit),
         created_at=kit.created_at, updated_at=kit.updated_at,
     )
@@ -107,6 +108,9 @@ def _apply_fields(db: Session, kit: BrandKit, data: dict) -> None:
         kit.palette = data["palette"]
     if data.get("contact") is not None:
         kit.contact = {k: v for k, v in data["contact"].items() if v}
+    if data.get("socials") is not None:
+        # a PATCH dump leaves out the defaults it wasn't sent (show_in_ads); store every entry whole
+        kit.socials = [Social.model_validate(x).model_dump() for x in data["socials"]]
     if data.get("claims") is not None:
         kit.claims = list(data["claims"])
 

@@ -46,6 +46,17 @@ door hanger / leaflet. Defaults lean towards a cleaning business; nothing in the
 | `{palette}` | `in the brand colours navy #22223B and coral #E48C84` |
 | `{tagline}` / `{tagline_clause}` | the tagline / ` with the tagline "…"`; empty when the kit has none, without leaving a gap |
 | `{product_clause}` | ` Picture 3 is the <product>: match its shape, colours and label layout.` or empty |
+| `{phone}`, `{website}`, `{social}` | the kit's phone (else WhatsApp), website (else booking link; scheme stripped, `www.` too when long), first social handle shown in ads |
+| `{contact}` | at most two of those, short: `ixperts.se · @ixperts.se` (website, then the handle, else the phone) |
+| `{contact_clause}` | ` Along the bottom, "<contact>" in clear type.` or empty |
+| `{contact_under_clause}` | `, with "<contact>" in smaller clear type below it` or empty |
+| `{social_clause}` | `, and a rounded button reading "<handle>"` (the contact line without a handle) or empty |
+
+The contact tokens (contract v36 addendum) give the image model the exact strings, at most two short items so
+they come out legible. The digital cards use them in their scenes instead of a `[contact]` slot: **social post
+(square)** `{contact_under_clause}`, **social story (9:16)** `{social_clause}`, **website hero**
+`{contact_under_clause}`. A kit without contact details simply leaves the clause out. The print cards
+(flyer, door hanger, business card) keep their `[contact]` slot.
 
 ## 2. The logo, by surface
 

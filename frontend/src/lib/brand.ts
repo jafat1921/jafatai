@@ -57,20 +57,74 @@ export interface BrandAsset {
 
 export interface BrandContact {
   phone?: string
-  website?: string
-  location?: string
+  whatsapp?: string
   email?: string
-  social?: string
+  website?: string
+  booking_url?: string
+  location?: string
+  opening_hours?: string
 }
+export type ContactKey = keyof BrandContact
 
-export const CONTACT_FIELDS: { key: keyof BrandContact; label: string; placeholder: string; type: string }[] = [
-  { key: 'phone', label: 'Phone', placeholder: '+46 72 846 7394', type: 'tel' },
-  { key: 'website', label: 'Website', placeholder: 'www.example.com', type: 'text' },
-  { key: 'location', label: 'Location', placeholder: 'Stockholm, Sverige', type: 'text' },
-  { key: 'email', label: 'Email', placeholder: 'hello@example.com', type: 'email' },
-  { key: 'social', label: 'Social handle', placeholder: '@yourbrand', type: 'text' },
+export const CONTACT_FIELDS: { key: ContactKey; label: string; placeholder: string; type: string; max: number }[] = [
+  { key: 'website', label: 'Website', placeholder: 'www.example.com', type: 'text', max: 120 },
+  { key: 'booking_url', label: 'Booking link', placeholder: 'boka.example.com', type: 'text', max: 200 },
+  { key: 'phone', label: 'Phone', placeholder: '+46 72 846 7394', type: 'tel', max: 40 },
+  { key: 'whatsapp', label: 'WhatsApp number', placeholder: 'Same as the phone, or another', type: 'tel', max: 40 },
+  { key: 'email', label: 'Email', placeholder: 'hello@example.com', type: 'email', max: 120 },
+  { key: 'location', label: 'Address or area', placeholder: 'Sveavägen 12, Stockholm', type: 'text', max: 120 },
+  { key: 'opening_hours', label: 'Opening hours', placeholder: 'Mon–Fri 8–18', type: 'text', max: 60 },
 ]
 export const MAX_CLAIMS = 30
+
+export type SocialPlatform = 'instagram' | 'facebook' | 'tiktok' | 'linkedin' | 'x' | 'youtube' | 'pinterest' | 'snapchat' | 'threads' | 'whatsapp'
+
+export interface BrandSocial {
+  platform: SocialPlatform
+  handle: string
+  url?: string | null
+  show_in_ads?: boolean
+}
+
+export const SOCIAL_PLATFORMS: { id: SocialPlatform; label: string; placeholder: string }[] = [
+  { id: 'instagram', label: 'Instagram', placeholder: '@yourbrand' },
+  { id: 'facebook', label: 'Facebook', placeholder: '@yourbrand' },
+  { id: 'tiktok', label: 'TikTok', placeholder: '@yourbrand' },
+  { id: 'linkedin', label: 'LinkedIn', placeholder: 'your-company' },
+  { id: 'x', label: 'X', placeholder: '@yourbrand' },
+  { id: 'youtube', label: 'YouTube', placeholder: '@yourbrand' },
+  { id: 'pinterest', label: 'Pinterest', placeholder: '@yourbrand' },
+  { id: 'snapchat', label: 'Snapchat', placeholder: '@yourbrand' },
+  { id: 'threads', label: 'Threads', placeholder: '@yourbrand' },
+  { id: 'whatsapp', label: 'WhatsApp', placeholder: '+46 72 846 7394' },
+]
+export const MAX_SOCIALS = 10
+export const platformLabel = (p: string) => SOCIAL_PLATFORMS.find((x) => x.id === p)?.label ?? p
+/** The key the API uses to pick a social in an ad: "instagram:ixperts.se". */
+export const socialKey = (s: Pick<BrandSocial, 'platform' | 'handle'>) => `${s.platform}:${s.handle.replace(/^[@+]+/, '').toLowerCase()}`
+
+/** A handle as the server will store it, for the list's preview; a pasted link keeps its name only. */
+export function tidyHandle(platform: SocialPlatform, raw: string): string {
+  let h = raw.replace(/\s+/g, '')
+  if (/^(https?:\/\/|www\.)/i.test(h) || h.includes('/')) {
+    const path = h.replace(/^(https?:\/\/)?[^/]+/i, '').split(/[?#]/)[0]
+    const skip = new Set(['company', 'in', 'school', 'showcase', 'add', 'c', 'user', 'channel', 'pages', 'people'])
+    const parts = path.split('/').filter(Boolean)
+    h = (parts.find((x) => !skip.has(x.toLowerCase())) ?? parts[0] ?? '').replace(/^@/, '')
+  }
+  if (!h) return ''
+  if (platform === 'whatsapp') return (h.startsWith('+') || h.startsWith('00') || raw.includes('wa.me') ? '+' : '') + h.replace(/\D/g, '').replace(/^00/, '')
+  h = h.replace(/^@+/, '')
+  return platform === 'linkedin' ? h : `@${h}`
+}
+
+export function socialProblem(s: BrandSocial): string | null {
+  const label = platformLabel(s.platform)
+  if (!s.handle.trim() && !(s.url ?? '').trim()) return `Add the ${label} handle or a link to the profile.`
+  const h = tidyHandle(s.platform, s.handle.trim() ? s.handle : (s.url ?? ''))
+  if (s.platform === 'whatsapp') return /^\+?\d{6,15}$/.test(h) ? null : `The WhatsApp entry needs a phone number.`
+  return /^@?[\p{L}\p{N}_.-]{1,60}$/u.test(h) ? null : `“${s.handle}” isn't a ${label} handle.`
+}
 
 export interface BrandKit {
   id: string
@@ -88,6 +142,7 @@ export interface BrandKit {
   settings: BrandSettings
   // contract v36: the ad footer and the offer lines Ad Studio may use
   contact?: BrandContact
+  socials?: BrandSocial[]
   claims?: string[]
   assets: Record<string, BrandAsset>
   prompt_context?: string
@@ -96,7 +151,7 @@ export interface BrandKit {
 }
 
 export type BrandKitPatch = Partial<
-  Pick<BrandKit, 'name' | 'palette' | 'style_text' | 'voice_text' | 'tagline' | 'logos' | 'products' | 'font_files' | 'reference_media_ids' | 'contact' | 'claims'>
+  Pick<BrandKit, 'name' | 'palette' | 'style_text' | 'voice_text' | 'tagline' | 'logos' | 'products' | 'font_files' | 'reference_media_ids' | 'contact' | 'socials' | 'claims'>
 > & { settings?: Partial<{ [K in keyof BrandSettings]: unknown }> }
 
 export interface BrandPlacement {
@@ -170,6 +225,7 @@ export interface KitDraft {
   reference_media_ids: string[]
   settings: BrandSettings
   contact: BrandContact
+  socials: BrandSocial[]
   claims: string[]
 }
 
@@ -185,6 +241,7 @@ export const draftFrom = (k: BrandKit): KitDraft => ({
   reference_media_ids: k.reference_media_ids ?? [],
   settings: { ...DEFAULT_SETTINGS, ...k.settings, closing: k.settings?.closing ?? 'auto' },
   contact: k.contact ?? {},
+  socials: (k.socials ?? []).map((s) => ({ ...s, show_in_ads: s.show_in_ads ?? true })),
   claims: k.claims ?? [],
 })
 
@@ -202,6 +259,11 @@ export function kitProblems(d: KitDraft): string[] {
     if (!p.name.trim()) out.push(`Product ${i + 1} needs a name.`)
   })
   if (d.font_files.length > MAX_FONTS) out.push(`Use at most ${MAX_FONTS} fonts.`)
+  if (d.socials.length > MAX_SOCIALS) out.push(`Use at most ${MAX_SOCIALS} social accounts.`)
+  d.socials.forEach((s) => {
+    const p = socialProblem(s)
+    if (p) out.push(p)
+  })
   if (d.claims.length > MAX_CLAIMS) out.push(`Use at most ${MAX_CLAIMS} offer lines.`)
   d.claims.forEach((c, i) => {
     if (c.length > 160) out.push(`Offer line ${i + 1} is longer than 160 characters.`)
@@ -222,7 +284,8 @@ export function kitPatch(d: KitDraft): BrandKitPatch {
     font_files: d.font_files,
     reference_media_ids: d.reference_media_ids,
     settings: d.settings,
-    contact: Object.fromEntries(Object.entries(d.contact).map(([k, v]) => [k, (v ?? '').trim()]).filter(([, v]) => v)),
+    contact: Object.fromEntries(CONTACT_FIELDS.map((f) => [f.key, (d.contact[f.key] ?? '').trim()]).filter(([, v]) => v)),
+    socials: d.socials.map((s) => ({ platform: s.platform, handle: s.handle.trim(), url: s.url?.trim() || null, show_in_ads: s.show_in_ads ?? true })),
     claims: d.claims.map((c) => c.trim()).filter(Boolean),
   }
 }

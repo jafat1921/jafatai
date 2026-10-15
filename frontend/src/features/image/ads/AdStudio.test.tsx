@@ -69,6 +69,9 @@ const spec: AdSpec = {
   logo: { position: 'tl', variant: 'auto' },
   footer: true,
   contact: { phone: '+46 72 846 7394' },
+  socials: [],
+  follow: { show: false, text: '' },
+  footer_items: { contact: ['phone'], socials: [] },
   focus: { x: 0.5, y: 0.5 },
   photo_id: 'p1',
 }
@@ -123,7 +126,7 @@ function campaign(extra: Partial<AdCampaign> = {}): AdCampaign {
       logo_on_surface: true,
       font_preset: null,
     },
-    brand_kit: { id: 'k1', name: 'iXperts', palette: KIT.palette, contact: {}, claims: [], has_fonts: false, has_logo: true, missing_contact: ['website', 'location'] },
+    brand_kit: { id: 'k1', name: 'iXperts', palette: KIT.palette, contact: {}, socials: [], claims: [], has_fonts: false, has_logo: true, missing_contact: ['website', 'socials'] },
     concepts: [concept(1), concept(2)],
     ads: [],
     ad_json_url: null,
@@ -161,7 +164,11 @@ describe('brief form', () => {
     renderAt('/image/ads', routes)
     expect(await screen.findByText('Say what you are advertising first.')).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: 'iXperts' })).toHaveAttribute('href', '/brand-kits/k1')
-    expect(screen.getByText(/Add your website and location/)).toBeInTheDocument()
+    expect(screen.getByText(/Add your website or booking link and social accounts/)).toBeInTheDocument()
+    // the footer pick starts from the kit's digital details; unticking one sends the campaign's own pick
+    const phone = screen.getByRole('checkbox', { name: 'Phone' })
+    expect(phone).toBeChecked()
+    await userEvent.click(phone)
     await userEvent.type(screen.getByLabelText('What are you advertising?'), 'Weekly home cleaning')
     await userEvent.click(screen.getByRole('button', { name: 'Från 215 kr/timme' }))
     await userEvent.type(screen.getByLabelText('Another offer'), '15% rabatt{Enter}')
@@ -182,6 +189,7 @@ describe('brief form', () => {
       formats: ['4:5', '9:16'],
       review: true,
       product_media_ids: [],
+      footer_items: { contact: [], socials: [] },
     })
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/image/ads/ad1'))
   })
@@ -253,5 +261,60 @@ describe('campaign page', () => {
     expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ texts: { headline: 'Ny rubrik' }, style: 'split', colours: { accent: '#E8857B' } })
     // nothing went to a GPU route
     expect(calls.some((c) => c.path.startsWith('/images'))).toBe(false)
+  })
+
+  it('picks the footer items, socials and the follow line per ad', async () => {
+    const kitOut = {
+      id: 'k1',
+      name: 'iXperts',
+      palette: KIT.palette,
+      contact: { phone: '+46 72 846 7394', website: 'https://www.ixperts.se', location: 'Stockholm' },
+      socials: [
+        { platform: 'instagram' as const, handle: '@ixperts.se', url: null, show_in_ads: true },
+        { platform: 'tiktok' as const, handle: '@ixperts', url: null, show_in_ads: false },
+      ],
+      claims: [],
+      has_fonts: false,
+      has_logo: true,
+      missing_contact: [],
+    }
+    const own: AdSpec = {
+      ...spec,
+      contact: { website: 'https://www.ixperts.se', phone: '+46 72 846 7394' },
+      socials: [kitOut.socials[0]],
+      footer_items: { contact: ['website', 'phone'], socials: ['instagram:ixperts.se'] },
+    }
+    const done = campaign({
+      stage: 'done',
+      status: 'done',
+      review: null,
+      brand_kit: kitOut,
+      ads: [{ ...ad, spec: own, report: { ...ad.report, footer: { rows: 2, items: ['website'], dropped: ['location'], folded: false, size: 23 } } }],
+    })
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:preview', revokeObjectURL: () => {} }))
+    const calls = mockApi((method, path) => {
+      if (method === 'POST' && path === '/ads/ad1/ads/a1/preview') return new Response('png', { status: 200, headers: { 'Content-Type': 'image/png' } })
+      if (method === 'PATCH' && path === '/ads/ad1/ads/a1') return { ...ad, version: 2, spec: own }
+      if (path === '/ads/ad1') return done
+      return []
+    })
+    renderAt('/image/ads/ad1', routes)
+    const tile = await screen.findByRole('listitem', { name: 'Concept 1, Feed 4:5' })
+    await userEvent.click(within(tile).getByRole('button', { name: 'Edit' }))
+    const editor = screen.getByRole('complementary', { name: 'Edit Feed 4:5' })
+    expect(within(editor).getByText(/Left out to fit this format: address/)).toBeInTheDocument()
+    expect(within(editor).getByRole('checkbox', { name: 'Website' })).toBeChecked()
+    expect(within(editor).queryByRole('checkbox', { name: 'Email' })).toBeNull()
+    await userEvent.click(within(editor).getByRole('checkbox', { name: 'Address' }))
+    await userEvent.click(within(editor).getByRole('checkbox', { name: /Instagram/ }))
+    await userEvent.click(within(editor).getByRole('checkbox', { name: /TikTok/ }))
+    await userEvent.click(within(editor).getByRole('switch', { name: '“Follow us” line' }))
+    await userEvent.type(within(editor).getByLabelText(/Its words/), 'Häng med')
+    await userEvent.click(within(editor).getByRole('button', { name: 'Save this ad' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/ads/ad1/ads/a1')).toBeTruthy())
+    expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({
+      footer_items: { contact: ['website', 'phone', 'location'], socials: ['tiktok:ixperts'] },
+      follow: { show: true, text: 'Häng med' },
+    })
   })
 })

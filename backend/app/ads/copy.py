@@ -1,12 +1,16 @@
-"""Keeping the copywriter honest (contract v36): offers only from the approved list, no invented numbers.
+"""Keeping the copywriter honest (contract v36): offers only from the approved list, no invented numbers,
+no invented ways to reach the brand.
 
 The LLM is asked to copy offers verbatim and to write no numbers of its own; this is the check after it.
 An offer line that isn't one of the approved ones is dropped. Any number or percentage in the kicker,
 headline, body or CTA that doesn't appear in the approved offers (or in the brief's own must-say line, the
-subject's name and description) goes, together with the currency or unit stuck to it.
+subject's name and description, the kit's phone numbers) goes, together with the currency or unit stuck to it.
+Handles, web addresses and emails that aren't the kit's go too, and so does a platform the kit has no account
+on: "Boka via WhatsApp" loses "via WhatsApp" when there's no WhatsApp number.
 """
 import re
 import unicodedata
+from dataclasses import dataclass, field
 
 TEXT_FIELDS = ("kicker", "headline", "body", "cta")
 # a number as copy writes it: 215, 1 500, 1.500,50, 15%, 15 %, ٪۱۵
@@ -70,10 +74,96 @@ def strip_numbers(text: str, allowed: set[str]) -> tuple[str, list[str]]:
     return "\n".join(ln for ln in out.split("\n") if ln.strip(" .,-–·")), removed
 
 
-def guard(concept: dict, approved: list[str], extra_text: str = "") -> tuple[dict, dict]:
-    """(the concept with only approved offers and numbers, what was taken out)."""
+# ---------------------------------------------------------------- channels
+
+# the platform names copy might mention; X and Threads are ordinary words too often to police
+PLATFORM_WORDS = {"instagram": "Instagram", "facebook": "Facebook", "tiktok": "TikTok", "linkedin": "LinkedIn",
+                  "youtube": "YouTube", "pinterest": "Pinterest", "snapchat": "Snapchat", "whatsapp": "WhatsApp"}
+# the little words that tie a channel to its verb: via WhatsApp, på Instagram, on TikTok, auf Facebook
+_TIE = r"(?:via|on|at|through|in|på|i|hos|auf|über|bei|sur|en|op|su|na|w|em|por|ile|kautta|par)"
+_TLDS = ("com", "se", "net", "org", "io", "co", "uk", "de", "no", "dk", "fi", "nl", "fr", "es", "it", "pk", "in",
+         "ae", "sa", "app", "shop", "store", "online", "site", "info", "biz", "eu", "nu", "me", "tv", "ai", "pl",
+         "pt", "tr", "at", "ch", "be", "us", "ca", "au")
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_URL = re.compile(r"(?<![\w@.])(?:https?://)?(?:www\.)?((?:[a-z0-9-]+\.)+(?:%s))\b(?:/[^\s,;!?]*)?" % "|".join(_TLDS),
+                  re.I)
+_HANDLE = re.compile(r"(?<![\w@])@([\w.]*\w)")
+_DANGLING = re.compile(r"\s+(?:och|and|or|eller|und|oder|et|ou|y|o|e|of|og|ja|tai|ve|veya|lub)$", re.I)
+
+
+def _host(v: str) -> str:
+    v = re.sub(r"^https?://", "", (v or "").strip().lower())
+    return v.split("/")[0].removeprefix("www.")
+
+
+@dataclass
+class Channels:
+    """What the kit really has, so the copy may name it."""
+    platforms: set[str] = field(default_factory=set)
+    handles: set[str] = field(default_factory=set)
+    hosts: set[str] = field(default_factory=set)
+    emails: set[str] = field(default_factory=set)
+    numbers: set[str] = field(default_factory=set)
+
+    def host_ok(self, host: str) -> bool:
+        host = host.lower().removeprefix("www.")
+        return any(host == h or host.endswith("." + h) for h in self.hosts)
+
+
+def channels_of(contact: dict | None, socials: list[dict] | None) -> Channels:
+    contact, ch = contact or {}, Channels()
+    for s in socials or []:
+        ch.platforms.add(s.get("platform") or "")
+        ch.handles.add((s.get("handle") or "").lstrip("@+").lower())
+        if s.get("url"):
+            ch.hosts.add(_host(s["url"]))
+    for k in ("website", "booking_url"):
+        if contact.get(k):
+            ch.hosts.add(_host(contact[k]))
+    if contact.get("email"):
+        ch.emails.add(contact["email"].strip().lower())
+    if contact.get("whatsapp"):
+        ch.platforms.add("whatsapp")
+    for k in ("phone", "whatsapp"):
+        d = re.sub(r"\D", "", contact.get(k) or "")
+        if len(d) >= 6:
+            # +46 72 846 73 94 is written 072-846 73 94 at home
+            ch.numbers |= {d, d[-9:], "0" + d[-9:]}
+    ch.platforms.discard("")
+    ch.handles.discard("")
+    return ch
+
+
+def strip_channels(text: str, ch: Channels) -> tuple[str, list[str]]:
+    """The text without handles, links, emails or platforms the kit doesn't have."""
+    removed: list[str] = []
+
+    def drop(m: re.Match, ok: bool) -> str:
+        if ok:
+            return m.group(0)
+        removed.append(m.group(0).strip())
+        return " "
+
+    out = _EMAIL.sub(lambda m: drop(m, m.group(0).lower() in ch.emails), text or "")
+    out = _URL.sub(lambda m: drop(m, ch.host_ok(m.group(1))), out)
+    out = _HANDLE.sub(lambda m: drop(m, m.group(1).lower() in ch.handles), out)
+    for key, word in PLATFORM_WORDS.items():
+        if key not in ch.platforms:
+            out = re.sub(rf"(?:\s+{_TIE})?\s*\b{word}\b", lambda m: drop(m, False), out, flags=re.I)
+    out = "\n".join(re.sub(r"\s+([.,!?;:])", r"\1", re.sub(r"[ \t]{2,}", " ", ln)).strip(" ,;:-–")
+                    for ln in out.split("\n"))
+    if removed:
+        # "Följ @ixperts och @fake" shouldn't end on its "och"
+        out = "\n".join(_DANGLING.sub("", ln) for ln in out.split("\n"))
+    return "\n".join(ln for ln in out.split("\n") if ln.strip(" .,-–·")), removed
+
+
+def guard(concept: dict, approved: list[str], extra_text: str = "",
+          channels: Channels | None = None) -> tuple[dict, dict]:
+    """(the concept with only approved offers, numbers and channels, what was taken out)."""
     c = dict(concept)
-    report = {"offers_dropped": [], "numbers_removed": []}
+    ch = channels or Channels()
+    report = {"offers_dropped": [], "numbers_removed": [], "channels_removed": []}
     kept: list[str] = []
     for o in c.get("offers") or []:
         a = match_offer(o, approved)
@@ -83,8 +173,11 @@ def guard(concept: dict, approved: list[str], extra_text: str = "") -> tuple[dic
             report["offers_dropped"].append(o)
     c["offers"] = kept[:2]
     allowed = set().union(*(numbers(a) for a in approved), numbers(extra_text)) if (approved or extra_text) else set()
+    allowed |= ch.numbers
     for k in TEXT_FIELDS:
-        text, gone = strip_numbers(c.get(k) or "", allowed)
+        text, gone = strip_channels(c.get(k) or "", ch)
+        report["channels_removed"] += gone
+        text, gone = strip_numbers(text, allowed)
         c[k] = text
         report["numbers_removed"] += gone
     if not c.get("headline", "").strip():

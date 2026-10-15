@@ -459,3 +459,33 @@ def test_0020_adds_user_template(tmp_path):
     assert "user_template" not in {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0024_moves_the_old_social_line_into_socials(tmp_path):
+    import json
+
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0023")
+    con = sqlite3.connect(db)
+    now = "2026-10-15 12:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'ws', ?)", (now,))
+    for kid, contact in (("k1", {"phone": "+46 70", "social": "@ixperts.se"}),
+                         ("k2", {"social": "https://www.linkedin.com/company/ixperts/"}), ("k3", {"phone": "1"})):
+        con.execute("INSERT INTO brand_kit (id, workspace_id, name, created_at, updated_at, contact) "
+                    "VALUES (?, 'w1', 'Kit', ?, ?, ?)", (kid, now, now, json.dumps(contact)))
+    con.commit()
+    con.close()
+    _alembic(db, "upgrade", "0024")
+    con = sqlite3.connect(db)
+    rows = {r[0]: (json.loads(r[1]), json.loads(r[2])) for r in con.execute("SELECT id, contact, socials FROM brand_kit")}
+    con.close()
+    assert rows["k1"][0] == {"phone": "+46 70"}
+    assert rows["k1"][1] == [{"platform": "instagram", "handle": "@ixperts.se",
+                              "url": "https://instagram.com/ixperts.se", "show_in_ads": True}]
+    assert rows["k2"][1][0]["platform"] == "linkedin" and rows["k2"][1][0]["handle"] == "ixperts"
+    assert rows["k3"] == ({"phone": "1"}, [])
+    _alembic(db, "downgrade", "0023")
+    con = sqlite3.connect(db)
+    assert json.loads(con.execute("SELECT contact FROM brand_kit WHERE id = 'k1'").fetchone()[0])["social"] == "@ixperts.se"
+    con.close()
+    _alembic(db, "upgrade", "head")

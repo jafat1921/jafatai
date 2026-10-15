@@ -3,7 +3,7 @@
 The iXperts prototype, generalised: the photo cover-cropped to the format, a treatment that gives the copy
 somewhere to sit (frosted panel, side wash, bottom bar, split colour block, price badge, or nothing at all),
 the logo with its white background keyed out, the copy fitted to its box in size steps so nothing ever
-overflows, a CTA pill, and the contact footer with drawn icons.
+overflows, a CTA pill, and the contact and social footer (app/ads/footer.py).
 
 Every text element is checked against the pixels it sits on (WCAG AA: 4.5:1 for copy, 3:1 for the big
 headline and the CTA). When a check fails, the engine adds a panel behind the copy, then makes it more
@@ -21,12 +21,16 @@ from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from app import brand_render as br
 from app.ads import fonts as fz
-from app.ads import icons
+from app.ads import footer as ft
 
 log = logging.getLogger("mixai.ads")
 
-FORMATS = {"4:5": (1080, 1350), "9:16": (1080, 1920), "1:1": (1080, 1080), "16:9": (1920, 1080)}
-FORMAT_LABELS = {"4:5": "Feed 4:5", "9:16": "Story 9:16", "1:1": "Square 1:1", "16:9": "Banner 16:9"}
+FORMATS = {"4:5": (1080, 1350), "9:16": (1080, 1920), "1:1": (1080, 1080), "16:9": (1920, 1080),
+           "1.91:1": (1200, 628), "2:3": (1000, 1500), "yt": (1280, 720)}
+FORMAT_LABELS = {"4:5": "Feed 4:5", "9:16": "Story 9:16", "1:1": "Square 1:1", "16:9": "Banner 16:9",
+                 "1.91:1": "Link ad 1.91:1", "2:3": "Pinterest 2:3", "yt": "YouTube thumbnail"}
+# the newer digital sizes borrow the proportions of the nearest original layout
+LAYOUT_OF = {"1.91:1": "16:9", "yt": "16:9", "2:3": "4:5"}
 STYLES = ("frosted", "side_wash", "bottom_bar", "split", "badge", "minimal")
 STYLE_LABELS = {"frosted": "Frosted panel", "side_wash": "Side wash", "bottom_bar": "Bottom bar",
                 "split": "Split colour block", "badge": "Price badge", "minimal": "Minimal centred"}
@@ -38,7 +42,7 @@ NEED = {"headline": AA_LARGE, "cta": AA_LARGE, "badge": AA_LARGE}  # everything 
 
 DEFAULT_TEXT, DEFAULT_ACCENT = "#22223B", "#E2685C"
 WHITE = (255, 255, 255)
-CONTACT_ORDER = ("phone", "website", "location", "email", "social")
+CONTACT_ORDER = ft.CONTACT_KEYS
 
 # sizes as a share of the frame's short side, before fitting
 BASE = {"headline": 0.080, "kicker": 0.027, "body": 0.031, "offer": 0.032, "cta": 0.035, "footer": 0.025}
@@ -342,15 +346,18 @@ def _mirror_box(box, w):
     return (w - x1, y0, w - x0, y1)
 
 
-def geometry(style: str, fmt: str, *, footer: bool, logo_pos: str, rtl: bool) -> Geo:
+def geometry(style: str, fmt: str, *, footer_h: int, logo_pos: str, rtl: bool) -> Geo:
+    """Where everything goes. footer_h is the planned footer's height, 0 for none."""
     w, h = FORMATS[fmt]
     s = min(w, h)
     m = round(0.065 * s)
     st, sb = (round(h * f) for f in SAFE.get(fmt, (0, 0)))
-    fh = round(0.089 * s) if footer else 0
+    fh = footer_h
+    footer = fh > 0
     top, bottom = st + m, h - sb - fh - m
     foot = (0, h - sb - fh, w, h - sb) if footer else None
     band = (h - sb - fh, h - sb) if footer else None
+    fmt = LAYOUT_OF.get(fmt, fmt)
     wide, tall = fmt == "16:9", fmt == "9:16"
     logo_h, logo_w = round(0.085 * s), round(0.25 * s)
     pos = logo_pos if logo_pos in LOGO_POSITIONS else "tl"
@@ -600,69 +607,6 @@ def _badge(img, g: Geo, spec, faces, colours, lang, report) -> None:
     report["contrast"]["badge"] = round(ratio(lum(fg), lum(bg)), 2)
 
 
-def _footer(img, g: Geo, spec, faces, colours, lang, rtl, report) -> None:
-    if g.footer is None:
-        return
-    contact = spec.get("contact") or {}
-    items = [(k, _label(k, contact.get(k))) for k in CONTACT_ORDER if (contact.get(k) or "").strip()]
-    d = ImageDraw.Draw(img)
-    bg = colours["footer"]
-    d.rectangle(g.footer, fill=rgb(bg))
-    if not items:
-        return
-    fg = ensure_contrast(colours["footer_text"], lum(bg), AA_TEXT)
-    ic = colours["accent"] if ratio(lum(colours["accent"]), lum(bg)) >= AA_LARGE else fg
-    # a phone number or web address in an Urdu ad still wants a Latin face
-    latin = fz.PRESETS[fz.DEFAULT_PRESET]["faces"]["footer"]
-    y0, y1 = g.footer_band
-    avail = g.w - 2 * round(g.m * 0.7)
-    size = max(FLOOR["footer"], round(BASE["footer"] * g.s * 1.08))
-
-    def font_for(lbl: str, px: int):
-        face = faces["footer"] if br.is_rtl(lbl) else latin
-        return fz.load(str(face.path), px, face.weight)
-
-    while True:
-        icon_px = round(size * 1.15)
-        widths = [icon_px + round(size * 0.55) + _width(d, lbl, font_for(lbl, size), lang) for _, lbl in items]
-        spacing = round(size * 1.6)
-        total = sum(widths) + spacing * (len(widths) - 1)
-        if total <= avail:
-            break
-        if size > FLOOR["footer"]:
-            size -= 1
-            continue
-        items, widths = items[:-1], widths[:-1]  # the least important detail goes when nothing else helps
-        report["footer_dropped"] = report.get("footer_dropped", 0) + 1
-        if not items:
-            return
-    total = sum(widths) + spacing * (len(widths) - 1)
-    start = not (len(items) < 3 or g.w > g.h)
-    x = round(g.m * 0.7) if start else (g.w - total) / 2
-    if rtl and start:
-        x = g.w - round(g.m * 0.7) - total
-    cy = (y0 + y1) / 2
-    seq = list(zip(items, widths))
-    for (kind, lbl), wd in (reversed(seq) if rtl else seq):
-        f = font_for(lbl, size)
-        asc, desc = f.getmetrics()
-        im = icons.icon(kind, icon_px, rgb(ic))
-        img.paste(im, (round(x), round(cy - icon_px / 2)), im)
-        _draw(d, (x + icon_px + round(size * 0.55), cy - (asc + desc) / 2), lbl, f, rgb(fg), lang)
-        x += wd + spacing
-    report["contrast"]["footer"] = round(ratio(lum(fg), lum(bg)), 2)
-
-
-def _label(kind: str, value: str | None) -> str:
-    v = " ".join((value or "").split())
-    if kind == "website":
-        for pre in ("https://", "http://"):
-            if v.lower().startswith(pre):
-                v = v[len(pre):]
-        v = v.rstrip("/")
-    return v
-
-
 def _logo(img, g: Geo, spec, assets: AdAssets, colours, report) -> None:
     if g.logo is None or (spec.get("logo") or {}).get("position") == "none":
         return
@@ -727,9 +671,12 @@ def render(spec: dict, assets: AdAssets) -> tuple[Image.Image, dict]:
         colours["block"] = own.get("block") or hexs(mix(colours["accent"], WHITE, 0.84))
     faces, caps = fz.faces(spec.get("font_preset") or fz.DEFAULT_PRESET, script, assets.brand_fonts)
     has_badge = style == "badge" and bool((texts.get("badge_big") or "").strip())
-    g = geometry(style if style != "badge" or has_badge else "frosted", fmt,
-                 footer=bool(spec.get("footer", True)), logo_pos=(spec.get("logo") or {}).get("position") or "tl",
-                 rtl=rtl)
+    fw, fh = FORMATS[fmt]
+    foot = ft.plan(spec, fmt, fw, min(fw, fh), faces)
+    # a footer that was asked for but has nothing to show is still a brand-coloured strip
+    footer_h = foot.height or (round(0.089 * min(fw, fh)) if spec.get("footer", True) else 0)
+    g = geometry(style if style != "badge" or has_badge else "frosted", fmt, footer_h=footer_h,
+                 logo_pos=(spec.get("logo") or {}).get("position") or "tl", rtl=rtl)
     report: dict = {"format": fmt, "style": style, "size": [g.w, g.h], "contrast": {}, "treatment": [],
                     "script": script, "rtl": rtl}
     focus = spec.get("focus") or {}
@@ -867,7 +814,8 @@ def render(spec: dict, assets: AdAssets) -> tuple[Image.Image, dict]:
         placed.append((cta_block, (cx, cy, cx + cta_block.width, cy + cta_block.height)))
 
     _badge(img, g, spec, faces, colours, lang, report)
-    _footer(img, g, spec, faces, colours, lang, rtl, report)
+    if g.footer is not None:
+        ft.draw(img, g.footer, foot, faces, colours, lang, rtl, report)
     report["boxes"] = {b.role: [round(v) for v in r] for b, r in placed}
     report["copy_box"] = [round(v) for v in inner]
     report["ink"] = ink

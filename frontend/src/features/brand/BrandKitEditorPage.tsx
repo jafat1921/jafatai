@@ -150,7 +150,14 @@ export function BrandKitEditor({ kit }: { kit: BrandKit }) {
         </div>
       </EditorSection>
 
-      <ContactSection contact={draft.contact} claims={draft.claims} onContact={(v) => set('contact', v)} onClaims={(v) => set('claims', v)} />
+      <ContactSection
+        contact={draft.contact}
+        socials={draft.socials}
+        claims={draft.claims}
+        onContact={(v) => set('contact', v)}
+        onSocials={(v) => set('socials', v)}
+        onClaims={(v) => set('claims', v)}
+      />
       <MoodRefsSection ids={draft.reference_media_ids} urls={urls} onChange={(v) => set('reference_media_ids', v)} />
       <ClosingSection
         kitId={kit.id}

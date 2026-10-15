@@ -3,7 +3,7 @@ title: "Contract v36: Ad Studio"
 status: Active
 created: 2026-10-15
 extends: contract-v7 (brand kits), contract-v33 (stage-job pattern), contract-v34 (via_api), contract-v35 (logo on a surface)
-migration: 0023_ad_studio
+migration: 0023_ad_studio, 0024_brand_socials (addendum §7)
 ---
 
 # Contract v36: Ad Studio
@@ -139,3 +139,78 @@ Nastaliq (Naskh where Pillow has no raqm), other Arabic-script languages in Nask
 
 `make_ad_campaign(subject, language, offers, brief, occasion, market, tone, formats, variants, brand_kit_id,
 product_media_ids)` runs with review off; returns `campaign_id` and the job.
+
+## 7. Addendum: contact, socials and digital formats (migration 0024)
+
+Adverts are for social media and the web, not print: there is no QR code, and the footer leans digital.
+
+### Brand kit
+
+`contact` keys: `phone`, `whatsapp` (a number; may equal the phone), `email`, `website`, `booking_url`,
+`location` (address or area), `opening_hours` (≤ 60). Whitespace tidied, empty keys dropped.
+
+`socials`: up to 10 `{platform, handle, url?, show_in_ads}` (`show_in_ads` defaults to true), platform one of
+`instagram facebook tiktok linkedin x youtube pinterest snapchat threads whatsapp`. The handle has its spaces
+removed; a pasted profile link moves to `url` and the handle is read from it (`linkedin.com/company/acme` →
+`acme`, `tiktok.com/@acme` → `@acme`, `wa.me/4672…` → `+4672…`). Every platform but LinkedIn shows an `@`;
+WhatsApp's handle is the number (6–15 digits). Without a `url` the profile link is built from the handle.
+Repeats (same platform and handle) collapse; a bad handle is 422.
+
+Old kits: the one-line `contact.social` becomes `socials[0]` (platform read from a link, else Instagram), in
+migration 0024 and whenever an old body still sends `contact.social`. `BrandKitOut` and the campaign's
+`brand_kit` carry `socials`; `missing_contact` is now `["website"]` (no website or booking link) and/or
+`["socials"]`.
+
+### Formats
+
+`formats` takes up to 7 of `4:5`, `9:16` (stories, reels, TikTok; safe zones as before), `1:1`, `16:9`,
+`1.91:1` (1200×628 link ads), `2:3` (1000×1500 Pinterest) and `yt` (1280×720 YouTube thumbnail, the 16:9
+layout at that size). Photos: `2:3` uses the portrait photo, `1.91:1` and `yt` the wide one. A `yt` ad has
+no footer unless one is asked for.
+
+### Footer picks
+
+`CreateIn.footer_items` (whole campaign) and `AdPatch.footer_items` (one ad; merged over the campaign's):
+`{"contact": ["website", "phone", …] | null, "socials": ["instagram:ixperts.se", …] | null}`; a social key is
+`platform:handle` without `@`/`+`, lower case. Default: `website`, `booking_url`, `phone`, `whatsapp` and the
+socials with `show_in_ads`. The address, email and hours show only when picked.
+
+`AdPatch.follow`: `{"show": bool, "text": str ≤ 40}`. Default on for `9:16`, off elsewhere; an empty text is
+"Follow us" in the ad language (`Följ oss`, `Folge uns`, `ہَمیں فالو کَریں`…).
+
+`spec` gains `socials` (the chosen ones), `follow` and `footer_items` (what is picked, as keys); `contact` holds
+only the chosen fields.
+
+### Footer layout (`app/ads/footer.py`)
+
+Reading order: website, booking link, the "Follow us" line, the socials, phone, WhatsApp, email, hours,
+address. Phone and WhatsApp on the same number share one line with both icons: `Ring/WhatsApp 072 846 73 94`
+(the call word per language; Arabic-script ads show the icons only). When every social has the same handle the
+icons sit in a row followed by the handle once (`@ixperts.se`); otherwise each icon has its own handle.
+
+| format | rows |
+|---|---|
+| 9:16 | up to 3: the "Follow us" line, then the icons + handle row (both 1.25× / 1.1× larger), then the contacts; inside the story safe zones |
+| 4:5, 2:3 | one row, or two (contacts, then socials) |
+| 1:1 | one compact row |
+| 16:9, 1.91:1, yt | one bar |
+
+It never overflows: the type shrinks to its floor, then wraps where the format allows, then differing handles
+fold into one icon row with the first handle, then the least important item goes (address first, then hours,
+email, WhatsApp, phone, the follow line; the website last), and a single label still too wide is cut with
+"…". `report.footer` = `{rows, items, dropped, folded, size}`; `footer_dropped` stays as the count.
+
+Icons: phone, globe, pin, envelope, clock (hours), calendar (booking) and a WhatsApp fallback are drawn with
+Pillow. Platform marks are Simple Icons SVGs (CC0, `backend/app/assets/icons/`) drawn with resvg; without
+resvg each falls back to a drawn mark. Simple Icons has no LinkedIn mark, so LinkedIn is always a drawn "in"
+tile.
+
+### The copywriter and the guard
+
+The concept prompt lists the kit's channels by name ("Instagram, WhatsApp, phone, website"); a CTA may use
+one in the ad's language ("Boka via WhatsApp", "Följ oss på Instagram") and the copy may not write any handle,
+number, address or email. The guard then removes, from kicker/headline/body/cta: handles not in the kit,
+web addresses whose host isn't the kit's website, booking link or a social profile, emails not in the kit,
+mentions of a platform the kit has no account on (with the little word before it: "via WhatsApp",
+"på TikTok"), and phone numbers other than the kit's (local `0…` forms of the kit's numbers count).
+`guard.channels_removed` lists what went.

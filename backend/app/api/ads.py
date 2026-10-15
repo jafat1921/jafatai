@@ -26,10 +26,21 @@ from app.services import generation_file, get_owned, job_out
 
 router = APIRouter(prefix="/ads", tags=["ads"])
 
-Format = Literal["4:5", "9:16", "1:1", "16:9"]
+Format = Literal["4:5", "9:16", "1:1", "16:9", "1.91:1", "2:3", "yt"]
+ContactKey = Literal["phone", "whatsapp", "email", "website", "booking_url", "location", "opening_hours"]
 Style = Literal["frosted", "side_wash", "bottom_bar", "split", "badge", "minimal"]
 Line = Field(None, max_length=300)
 PREVIEW_MAX = 960
+
+
+class FooterItems(BaseModel):
+    contact: list[ContactKey] | None = Field(None, description="Contact fields to show, in any order")
+    socials: list[str] | None = Field(None, max_length=10, description='Social keys, "platform:handle"')
+
+
+class FollowIn(BaseModel):
+    show: bool | None = None
+    text: str | None = Field(None, max_length=40, description='Empty: "Follow us" in the ad language')
 
 
 class CreateIn(BaseModel):
@@ -49,13 +60,15 @@ class CreateIn(BaseModel):
     tone: str = Field("", max_length=120)
     must_say: str = Field("", max_length=200)
     offers: list[str] = Field([], max_length=6, description="The only offers the copy may use")
-    formats: list[Format] = Field(["4:5"], min_length=1, max_length=4)
+    formats: list[Format] = Field(["4:5"], min_length=1, max_length=7)
     variants: int = Field(3, ge=2, le=8, description="How many concepts")
     product_media_ids: list[str] = Field([], max_length=3, description="Photos of the real product")
     image_model: str = Field(svc.DEFAULT_MODEL, max_length=60)
     font_preset: str | None = Field(None, max_length=20)
     review: bool = Field(True, description="Stop after the concepts for an OK")
     logo_on_surface: bool = True
+    footer_items: FooterItems | None = Field(None, description="What the footers show; default: website, "
+                                                             "booking link, phone, WhatsApp, socials for ads")
 
     @field_validator("offers")
     @classmethod
@@ -112,6 +125,8 @@ class AdPatch(BaseModel):
                   str] | None = None
     logo: LogoIn | None = None
     footer: bool | None = None
+    footer_items: FooterItems | None = None
+    follow: FollowIn | None = None
     focus: FocusIn | None = None
     reset: bool = Field(False, description="Drop every edit of this ad first")
 
@@ -308,6 +323,10 @@ def _apply_patch(rec: dict, body: AdPatch) -> dict:
         o["logo"] = {**(o.get("logo") or {}), **body.logo.model_dump(exclude_none=True)}
     if body.footer is not None:
         o["footer"] = body.footer
+    if body.footer_items is not None:
+        o["footer_items"] = {**(o.get("footer_items") or {}), **body.footer_items.model_dump(exclude_none=True)}
+    if body.follow is not None:
+        o["follow"] = {**(o.get("follow") or {}), **body.follow.model_dump(exclude_none=True)}
     if body.focus is not None:
         o["focus"] = body.focus.model_dump()
     return o

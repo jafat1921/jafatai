@@ -29,6 +29,8 @@ export function AdCampaignPage() {
   return <Campaign key={q.data.id} camp={q.data} />
 }
 
+const MISSING: Record<string, string> = { website: 'website or booking link', socials: 'social accounts' }
+
 function AdCard({ camp, ad, selected, onEdit, busy }: { camp: AdCampaign; ad: Ad; selected: boolean; onEdit: () => void; busy: boolean }) {
   const regen = useRegenerateConcept(camp.id)
   const concept = camp.concepts.find((c) => c.id === ad.concept_id)
@@ -147,7 +149,7 @@ function Campaign({ camp }: { camp: AdCampaign }) {
 
         {camp.brand_kit && camp.brand_kit.missing_contact.length > 0 && (
           <p className="text-small text-studio-muted" role="note">
-            The footer is missing your {camp.brand_kit.missing_contact.join(', ')}.{' '}
+            The footer is missing your {camp.brand_kit.missing_contact.map((m) => MISSING[m] ?? m).join(' and ')}.{' '}
             <Link className="underline underline-offset-2" to={`/brand-kits/${camp.brand_kit.id}`}>
               Add them to {camp.brand_kit.name}
             </Link>

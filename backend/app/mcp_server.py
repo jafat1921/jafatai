@@ -478,7 +478,7 @@ def make_ad_campaign(
     occasion: Annotated[str, Field(max_length=120)] = "",
     market: Annotated[str, Field(max_length=120)] = "",
     tone: Annotated[str, Field(max_length=120)] = "",
-    formats: list[Literal["4:5", "9:16", "1:1", "16:9"]] = ["4:5"],
+    formats: list[Literal["4:5", "9:16", "1:1", "16:9", "1.91:1", "2:3", "yt"]] = ["4:5"],
     variants: Annotated[int, Field(ge=2, le=8)] = 3,
     brand_kit_id: str | None = None,
     product_media_ids: Annotated[list[str], Field(max_length=3)] = [],

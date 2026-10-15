@@ -2060,7 +2060,7 @@
       },
       "preview_prompt": "A square social media post: a photo of [photo], the headline \"[headline]\" in bold type, \"[contact]\" at the bottom, a round logo for {brand} in the corner, {colours} accents.",
       "scene": {
-        "prompt_scaffold": "A square social media post design. A full-bleed photo of [photo], with a clean colour band across the bottom in {colours}. On it, the bold headline \"[headline]\" and below it \"[contact]\" in clear sans-serif type. The top-right corner is left as an empty white circle for a logo.",
+        "prompt_scaffold": "A square social media post design. A full-bleed photo of [photo], with a clean colour band across the bottom in {colours}. On it, the bold headline \"[headline]\"{contact_under_clause}, in clear sans-serif type. The top-right corner is left as an empty white circle for a logo.",
         "aspect": "1:1",
         "model": "qwen_image_2512"
       },
@@ -2090,7 +2090,7 @@
       },
       "preview_prompt": "A vertical phone story design: a photo of [photo], the headline \"[headline]\" in bold type, \"[contact]\" in a rounded button, a round {brand} logo at the top, {colours} accents.",
       "scene": {
-        "prompt_scaffold": "A vertical 9:16 phone story design. A photo of [photo] fills the frame. In the lower third, the bold headline \"[headline]\", then \"{brand}\"{tagline_clause}, and a rounded button reading \"[contact]\", in {colours}. Near the top centre there is an empty white circle, left blank for a logo.",
+        "prompt_scaffold": "A vertical 9:16 phone story design. A photo of [photo] fills the frame. In the lower third, the bold headline \"[headline]\", then \"{brand}\"{tagline_clause}{social_clause}, in {colours}. Near the top centre there is an empty white circle, left blank for a logo.",
         "aspect": "9:16",
         "model": "qwen_image_2512"
       },
@@ -2365,7 +2365,7 @@
       },
       "preview_prompt": "A wide website hero banner: a photo of [photo] on the right, a calm panel on the left with the headline \"[headline]\" and a round {brand} logo above it, {colours} accents.",
       "scene": {
-        "prompt_scaffold": "A wide website hero banner. The right two thirds show a photo of [photo]. The left third is a calm solid panel in {colours} with the bold headline \"[headline]\"{tagline_clause} in clean type. Above the headline there is an empty white rectangle, left blank for a logo.",
+        "prompt_scaffold": "A wide website hero banner. The right two thirds show a photo of [photo]. The left third is a calm solid panel in {colours} with the bold headline \"[headline]\"{tagline_clause}{contact_under_clause}, in clean type. Above the headline there is an empty white rectangle, left blank for a logo.",
         "aspect": "16:9",
         "model": "qwen_image_2512"
       },

@@ -76,6 +76,40 @@ describe('Brand kit editor', () => {
     expect(await screen.findByText('All changes saved')).toBeInTheDocument()
   })
 
+  it('edits the social accounts: add, normalise, reorder, hide from ads, remove', async () => {
+    const { calls, user } = editor(kit('k1', { name: 'Leaf Coffee', contact: { social: '@legacy' } as never, socials: [{ platform: 'instagram', handle: '@leafcoffee', show_in_ads: true }] }))
+    const list = screen.getByRole('list', { name: 'Social accounts' })
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Add a social account' }))
+    // the new row takes the first platform not used yet
+    expect(screen.getAllByLabelText('Platform')[1]).toHaveValue('facebook')
+    await user.selectOptions(screen.getAllByLabelText('Platform')[1], 'tiktok')
+    const handle = screen.getAllByLabelText('Handle')[1]
+    await user.click(handle)
+    await user.paste('https://www.tiktok.com/@leaf.coffee')
+    await user.tab()
+    expect(handle).toHaveValue('@leaf.coffee')
+    await user.click(screen.getByRole('button', { name: 'Move TikTok up' }))
+    expect(screen.getByRole('button', { name: 'Move TikTok up' })).toBeDisabled()
+    await user.click(screen.getByRole('switch', { name: 'Show Instagram in ads' }))
+
+    // a bad handle blocks saving and says why
+    await user.click(screen.getByRole('button', { name: 'Add a social account' }))
+    await user.click(screen.getAllByLabelText('Handle')[2])
+    await user.paste('not a handle!')
+    expect(within(screen.getByRole('list', { name: 'Social accounts' })).getByRole('alert')).toHaveTextContent("isn't a Facebook handle")
+    expect(screen.getByRole('button', { name: /^Save/ })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Remove Facebook' }))
+
+    await user.click(screen.getByRole('button', { name: /^Save/ }))
+    const patch = calls.find((c) => c.method === 'PATCH')
+    expect((patch?.body as { socials: unknown }).socials).toEqual([
+      { platform: 'tiktok', handle: '@leaf.coffee', url: null, show_in_ads: true },
+      { platform: 'instagram', handle: '@leafcoffee', url: null, show_in_ads: false },
+    ])
+    expect(document.body.textContent).not.toMatch(/licen[cs]e/i)
+  })
+
   it('stops at six colours and six mood references', () => {
     const six = kit('k1', {
       palette: ['#111111', '#222222', '#333333', '#444444', '#555555', '#666666'].map((hex) => ({ hex })),

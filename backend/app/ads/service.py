@@ -19,7 +19,9 @@ from app import brand as br
 from app import library as lib
 from app.ads import copy as cp
 from app.ads import fonts as fz
+from app.ads import footer as ft
 from app.ads import layout as lay
+from app.brand_schemas import social_key
 from app.config import get_settings
 from app.models import AdCampaign, BrandKit, Generation, Job, MediaItem, new_id, utcnow
 from app.services import gen_out, generation_file, job_out, media_url, next_version
@@ -34,12 +36,14 @@ IMAGE_MODELS = ("zimage_turbo", "qwen_image_2512", "hidream_o1")
 DEFAULT_MODEL = "zimage_turbo"
 RTL_LANGS = ("he", "yi")  # plus every Arabic-script language aerab knows
 
-GROUPS = {"4:5": "portrait", "9:16": "portrait", "1:1": "square", "16:9": "wide"}
+GROUPS = {"4:5": "portrait", "9:16": "portrait", "2:3": "portrait", "1:1": "square", "16:9": "wide",
+          "1.91:1": "wide", "yt": "wide"}
 PHOTO_NEGATIVE = "text, letters, words, captions, watermark, logo, signage, label text, blurry, distorted"
 
 DEFAULTS = {"subject": "", "description": "", "brief": "", "occasion": "", "market": "", "tone": "",
             "must_say": "", "offers": [], "formats": ["4:5"], "variants": 3, "image_model": DEFAULT_MODEL,
-            "product_media_ids": [], "review": True, "logo_on_surface": True, "font_preset": None}
+            "product_media_ids": [], "review": True, "logo_on_surface": True, "font_preset": None,
+            "footer_items": None}
 
 TEXT_KEYS = ("kicker", "headline", "body", "cta")
 SPEC_TEXTS = ("kicker", "headline", "body", "offers", "cta", "badge_big", "badge_small")
@@ -185,11 +189,25 @@ def texts_of(con: dict) -> dict:
             "badge_big": big, "badge_small": small}
 
 
+def footer_choice(b: dict, o: dict, kit: BrandKit | None) -> tuple[dict, list[dict]]:
+    """(contact, socials) the footer shows: the ad's own pick, else the campaign's, else the defaults (the
+    digital ones: website, booking link, phone and WhatsApp, and the socials flagged for ads)."""
+    pick = {**(b.get("footer_items") or {}), **(o.get("footer_items") or {})}
+    have, socials = br.contact_of(kit), br.socials_of(kit)
+    keys = pick.get("contact")
+    keys = ft.DEFAULT_CONTACT if keys is None else keys
+    contact = {k: have[k] for k in ft.CONTACT_KEYS if k in keys and have.get(k)}
+    sk = pick.get("socials")
+    chosen = [x for x in socials if (social_key(x) in sk if sk is not None else x.get("show_in_ads", True))]
+    return contact, chosen
+
+
 def spec_for(c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None) -> dict:
     """The effective layer spec: concept copy and kit defaults, with the ad's own edits on top."""
     o = rec.get("overrides") or {}
     b = brief_of(c)
-    contact = dict(kit.contact or {}) if kit is not None else {}
+    contact, socials = footer_choice(b, o, kit)
+    follow = {"show": rec["format"] == "9:16", "text": "", **(o.get("follow") or {})}
     style = o.get("style") or con.get("layout") or "frosted"
     logo_default = "tc" if style == "minimal" else "tl"
     return {
@@ -201,8 +219,12 @@ def spec_for(c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None) -> dict:
         "palette": list(kit.palette or []) if kit is not None else [],
         "logo": {"position": (o.get("logo") or {}).get("position") or logo_default,
                  "variant": (o.get("logo") or {}).get("variant") or "auto"},
-        "footer": bool(o["footer"]) if "footer" in o else bool(contact),
+        # a thumbnail has no footer unless asked for: it's a picture to click, not an advert to call from
+        "footer": bool(o["footer"]) if "footer" in o else bool(contact or socials) and rec["format"] != "yt",
         "contact": contact,
+        "socials": socials,
+        "follow": follow,
+        "footer_items": {"contact": list(contact), "socials": [social_key(x) for x in socials]},
         "focus": dict(o.get("focus") or {"x": 0.5, "y": 0.5}),
         "photo_id": photo_id(con, GROUPS[rec["format"]]),
     }
@@ -271,7 +293,7 @@ def write_ad(db: Session, c: AdCampaign, con: dict, rec: dict, kit: BrandKit | N
         thumbs.for_generation(g)
     except Exception:  # a missing thumb is made on first view anyway
         pass
-    slim = {k: report.get(k) for k in ("contrast", "treatment", "fonts", "fit", "logo", "footer_dropped")}
+    slim = {k: report.get(k) for k in ("contrast", "treatment", "fonts", "fit", "logo", "footer", "footer_dropped")}
     rec.update(media_id=item.id, generation_id=g.id, status="ready", error=None, dirty=False,
                photo_id=spec.get("photo_id"), report=slim)
     put_ad(c, rec)
@@ -347,16 +369,19 @@ def status_of(db: Session, c: AdCampaign) -> tuple[str, str | None]:
 
 
 def missing_contact(kit: BrandKit | None) -> list[str]:
+    """What a digital ad usually wants and the kit hasn't got: a link and somewhere to follow."""
     if kit is None:
         return []
-    have = kit.contact or {}
-    return [k for k in ("phone", "website", "location") if not (have.get(k) or "").strip()]
+    have = br.contact_of(kit)
+    out = [] if have.get("website") or have.get("booking_url") else ["website"]
+    return out + ([] if br.socials_of(kit) else ["socials"])
 
 
 def kit_out(kit: BrandKit | None) -> dict | None:
     if kit is None:
         return None
-    return {"id": kit.id, "name": kit.name, "palette": list(kit.palette or []), "contact": dict(kit.contact or {}),
+    return {"id": kit.id, "name": kit.name, "palette": list(kit.palette or []), "contact": br.contact_of(kit),
+            "socials": br.socials_of(kit),
             "claims": list(kit.claims or []), "has_fonts": bool(kit.font_files),
             "has_logo": bool((kit.logos or {}).get("primary") or (kit.logos or {}).get("light")),
             "missing_contact": missing_contact(kit)}

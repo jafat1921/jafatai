@@ -125,12 +125,31 @@ def logo_rule(kit: BrandKit, logo: LogoPick, light_ink: str) -> str:
             f"{keep}, and keep the exact letter shapes.")
 
 
+def contact_tokens(kit: BrandKit) -> dict[str, str]:
+    """The kit's contact details for the cards that print text. The image model gets the exact strings and at
+    most two of them, so the line stays short enough to come out legible."""
+    c = brand.contact_of(kit)
+    socials = [x for x in brand.socials_of(kit) if x.get("show_in_ads", True)] or brand.socials_of(kit)
+    web = (c.get("website") or c.get("booking_url") or "").removeprefix("https://").removeprefix("http://")
+    web = web.removeprefix("www.").rstrip("/") if len(web) > 24 else web.rstrip("/")
+    social = socials[0]["handle"] if socials else ""
+    phone = c.get("phone") or c.get("whatsapp") or ""
+    line = " · ".join([x for x in (web, social or phone) if x][:2])
+    return {
+        "phone": phone, "website": web, "social": social, "contact": line,
+        "contact_clause": f' Along the bottom, "{line}" in clear type.' if line else "",
+        "contact_under_clause": f', with "{line}" in smaller clear type below it' if line else "",
+        "social_clause": f', and a rounded button reading "{social or line}"' if social or line else "",
+    }
+
+
 def tokens(kit: BrandKit, logo: LogoPick, product: tuple[dict, str] | None, t: dict) -> dict[str, str]:
     desc = (brand.logo_ref(kit, logo.variant).get("description") or "").strip()
     cols = colours(kit)
     tag = (kit.tagline or "").strip()
     prod = product[0] if product else None
     return {
+        **contact_tokens(kit),
         "brand": kit.name,
         "logo": f"the {kit.name} logo" + (f" ({desc})" if desc else ""),
         "logo_colours": logo_rule(kit, logo, t.get("light_ink") or "white"),

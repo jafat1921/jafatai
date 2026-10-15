@@ -30,7 +30,7 @@ function ConceptCard({ camp, concept, busy }: { camp: AdCampaign; concept: AdCon
   const dirty = FIELDS.some((k) => d[k] !== concept[k])
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((o) => ({ ...o, [k]: v }))
   const lang = camp.language
-  const dropped = [...(concept.guard.offers_dropped ?? []), ...(concept.guard.numbers_removed ?? [])]
+  const dropped = [...(concept.guard.offers_dropped ?? []), ...(concept.guard.numbers_removed ?? []), ...(concept.guard.channels_removed ?? [])]
 
   const save = () => {
     const body: ConceptPatch = {}
@@ -114,7 +114,7 @@ function ConceptCard({ camp, concept, busy }: { camp: AdCampaign; concept: AdCon
       )}
       {dropped.length > 0 && (
         <p className="text-small text-studio-muted" role="note">
-          Left out because they weren't in your offers: <span dir="auto">{dropped.join(' · ')}</span>
+          Left out because they weren't in your offers or brand kit: <span dir="auto">{dropped.join(' · ')}</span>
         </p>
       )}
       <details className="text-small">

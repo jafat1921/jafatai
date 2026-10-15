@@ -745,7 +745,11 @@ AD_RULES = """Rules:
   would write it for this audience: idiomatic, warm, specific. Never translated English, never word-for-word.
 - headline: at most 6 words. Put a line break (\n) where a designer would break it, at most one or two.
 - kicker: 2 to 5 words above the headline (an occasion, a question, a hook). body: one or two short lines.
-- cta: 1 to 3 words on a button (book, order, call...), in the imperative.
+- cta: 1 to 3 words on a button (book, order, call...), in the imperative. It may name one of the brand's
+  channels listed above the way people say it in {language} ("book via WhatsApp", "follow us on Instagram"),
+  never a channel that isn't listed.
+- Never write a handle, phone number, web address or email anywhere in the copy: the footer carries the real
+  ones.
 - offers: ONLY lines copied exactly from the approved offers below, the ones that suit this concept (zero to
   two). Never write a price, a percentage, a discount, a time limit, a guarantee or any other promise of your
   own, and no numbers anywhere in the copy unless they appear in the approved offers.
@@ -764,7 +768,8 @@ AD_RULES = """Rules:
 
 def ad_concept_messages(*, brand: str, subject: str, description: str, brief: str, occasion: str, market: str,
                         language: str, tone: str, must_say: str, offers: list[str], count: int,
-                        products: list[str], rtl: bool, avoid: list[str] | None = None) -> list[dict]:
+                        products: list[str], rtl: bool, avoid: list[str] | None = None,
+                        channels: list[str] | None = None) -> list[dict]:
     lang_name = aerab.NAMES.get(language, language)
     space = ("the left side or the top, as copy reads right to left" if rtl else
              "the left side or the top of the frame")
@@ -778,6 +783,8 @@ def ad_concept_messages(*, brand: str, subject: str, description: str, brief: st
              f"Must say (keep its meaning in every concept): {must_say}" if must_say else "",
              ("Approved offers (copy them exactly, or leave them out):\n" + "\n".join(f"- {o}" for o in offers))
              if offers else "Approved offers: none. Do not mention any price, discount or promise.",
+             ("The brand's channels (the only ones a CTA may name): " + ", ".join(channels)) if channels else
+             "The brand's channels: none listed. Don't name any platform, app or website.",
              ("The real product appears in the photo from the client's own pictures: "
               + "; ".join(products) + ". Describe the scene around it; the product itself stays as it is.")
              if products else "",

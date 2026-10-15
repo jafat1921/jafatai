@@ -140,7 +140,7 @@ def test_concepts_obey_the_offers_and_stop_for_review(client, llm):
     assert first["offers"] == ["Från 215 kr/timme", "Ingen bindningstid"]
     assert "25" not in first["headline"] and "199" not in first["body"]
     assert "Gratis första städningen" in first["guard"]["offers_dropped"]
-    assert c["brand_kit"]["claims"] == OFFERS and c["brand_kit"]["missing_contact"] == []
+    assert c["brand_kit"]["claims"] == OFFERS and c["brand_kit"]["missing_contact"] == ["socials"]
     # nothing was made on a GPU before the OK
     with SessionLocal() as db:
         assert db.query(Generation).filter(Generation.target_type == "ad_photo").count() == 0
@@ -358,7 +358,7 @@ def test_untick_and_validation(client, llm):
     assert client.post("/api/ads", json={"subject": "x", "image_model": "qwen_image_edit_2511"}).status_code == 422
     assert client.post("/api/ads", json={"subject": "x", "brand_kit_id": "nope"}).status_code == 404
     opts = client.get("/api/ads/options").json()
-    assert {s["id"] for s in opts["styles"]} == set(lay.STYLES) and len(opts["formats"]) == 4
+    assert {s["id"] for s in opts["styles"]} == set(lay.STYLES) and len(opts["formats"]) == 7
     assert client.delete(f"/api/ads/{c['id']}").status_code == 204
     assert client.get(f"/api/ads/{c['id']}").status_code == 404
 

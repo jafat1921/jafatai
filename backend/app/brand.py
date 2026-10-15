@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app import uploads
 from app.brand_render import BrandRenderError, KitAssets, apply_to_image, apply_to_video, logo_reveal_clip
-from app.brand_schemas import BrandSettings, merged_settings
+from app.brand_schemas import BrandSettings, legacy_social, merged_settings
 from app.config import get_settings
 from app.llm import LLMError, chat_sync
 from app.models import BrandKit, Generation, Job, MediaItem, Project, new_id
@@ -247,6 +247,24 @@ def get_kit(db: Session, workspace_id: str, kit_id: str | None = None, project_i
                                                  BrandKit.is_default.is_(True))).first()
     kit = db.get(BrandKit, kit_id)
     return kit if kit is not None and kit.workspace_id == workspace_id else None
+
+
+def contact_of(kit: BrandKit | None) -> dict[str, str]:
+    """The kit's filled contact fields; the pre-0024 `social` line lives in socials now."""
+    if kit is None:
+        return {}
+    return {k: v for k, v in (kit.contact or {}).items() if k != "social" and isinstance(v, str) and v.strip()}
+
+
+def socials_of(kit: BrandKit | None) -> list[dict]:
+    if kit is None:
+        return []
+    rows = [dict(s) for s in kit.socials or [] if isinstance(s, dict) and s.get("handle")]
+    if not rows:
+        # a kit row the 0024 migration hasn't seen (or a test database made from the models)
+        old = legacy_social((kit.contact or {}).get("social") or "")
+        rows = [old] if old else []
+    return rows
 
 
 def logo_ref(kit: BrandKit, variant: str = "primary") -> dict:

@@ -175,23 +175,34 @@ class Run:
                                    description=b["description"], brief=b["brief"], occasion=b["occasion"],
                                    market=b["market"], language=c.language, tone=b["tone"], must_say=b["must_say"],
                                    offers=b["offers"], count=count, products=products, rtl=svc.is_rtl(c.language),
-                                   avoid=avoid)
+                                   avoid=avoid, channels=self.channel_names())
         try:
             res = chat_sync("creative", msgs, schema=AdConcepts, think=False, temperature=0.85,
                             max_tokens=900 + 450 * count, tick=lambda: self.tick(0.1))
         except LLMError as e:
             raise StageFailed(f"The copywriter is offline: {e}") from e
         extra = " ".join([b["must_say"], b["subject"], b["description"], self.kit.name if self.kit else ""])
+        channels = cp.channels_of(br.contact_of(self.kit), br.socials_of(self.kit))
         out = []
         for data in res.data.concepts[:count]:
-            clean, report = cp.guard(data.model_dump(), b["offers"], extra)
-            if report["offers_dropped"] or report["numbers_removed"]:
+            clean, report = cp.guard(data.model_dump(), b["offers"], extra, channels)
+            if any(report.values()):
                 log.info("ad campaign %s: guard took out %s", c.id, report)
             out.append((clean, report))
         if not out:
             raise StageFailed("The copywriter came back with no concepts")
         self.mark(out)
         return [{**d, "_guard": g} for d, g in out]
+
+    def channel_names(self) -> list[str]:
+        """The kit's channels as the copywriter hears of them: names only, the footer has the details."""
+        contact, socials = br.contact_of(self.kit), br.socials_of(self.kit)
+        names = [cp.PLATFORM_WORDS.get(s["platform"], s["platform"].title()) for s in socials]
+        if contact.get("whatsapp"):
+            names.append("WhatsApp")
+        names += [label for k, label in (("phone", "phone"), ("website", "website"),
+                                          ("booking_url", "online booking"), ("email", "email")) if contact.get(k)]
+        return list(dict.fromkeys(names))
 
     def mark(self, rows: list[tuple[dict, dict]]) -> None:
         """Full aerab on everything the writer wrote, in one pass for the whole batch."""

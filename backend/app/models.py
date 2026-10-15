@@ -555,8 +555,10 @@ class BrandKit(Base):
     font_files: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     reference_media_ids: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
-    # contract v36: {phone, website, location, email, social} for an advert's footer
+    # contract v36: {phone, whatsapp, email, website, booking_url, location, opening_hours} for an advert's footer
     contact: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    # [{platform, handle, url, show_in_ads}], at most 10 (migration 0024 moved the old contact.social here)
+    socials: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     # approved offer lines ("From 215 kr/hour", "No lock-in"); the ad copywriter may only use these
     claims: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

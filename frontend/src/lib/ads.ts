@@ -1,10 +1,10 @@
 import { postBlob, request } from './api'
-import type { BrandContact, PaletteColour } from './brand'
+import { socialKey, type BrandContact, type BrandSocial, type ContactKey, type PaletteColour } from './brand'
 import type { Job } from './types'
 
 // contract-v36-ad-studio.md
 
-export type AdFormat = '4:5' | '9:16' | '1:1' | '16:9'
+export type AdFormat = '4:5' | '9:16' | '1:1' | '16:9' | '1.91:1' | '2:3' | 'yt'
 export type AdStyle = 'frosted' | 'side_wash' | 'bottom_bar' | 'split' | 'badge' | 'minimal'
 export type LogoPosition = 'tl' | 'tr' | 'tc' | 'bl' | 'br' | 'none'
 export type AdStageKey = 'concepts' | 'photos' | 'layout'
@@ -26,6 +26,18 @@ export interface AdBrief {
   review: boolean
   logo_on_surface: boolean
   font_preset: string | null
+  footer_items?: FooterItems | null
+}
+
+/** What a footer shows: contact keys and social keys ("instagram:ixperts.se"). */
+export interface FooterItems {
+  contact: ContactKey[]
+  socials: string[]
+}
+
+export interface AdFollow {
+  show: boolean
+  text: string
 }
 
 export interface AdGen {
@@ -52,7 +64,7 @@ export interface AdConcept {
   placement: string
   logo_surface: string
   error: string | null
-  guard: { offers_dropped?: string[]; numbers_removed?: string[] }
+  guard: { offers_dropped?: string[]; numbers_removed?: string[]; channels_removed?: string[] }
   photos: Partial<Record<'portrait' | 'square' | 'wide', { base: AdGen | null; logo: AdGen | null; final: string | null; note: string | null }>>
 }
 
@@ -78,6 +90,9 @@ export interface AdSpec {
   logo: { position: LogoPosition; variant: string }
   footer: boolean
   contact: BrandContact
+  socials: BrandSocial[]
+  follow: AdFollow
+  footer_items: FooterItems
   focus: { x: number; y: number }
   photo_id: string | null
 }
@@ -89,6 +104,7 @@ export interface AdReport {
   fit?: { scale: number; headline_scale: number; trimmed: string[] }
   logo?: { variant: string; plate: boolean }
   footer_dropped?: number
+  footer?: { rows: number; items: string[]; dropped: string[]; folded: boolean; size: number }
 }
 
 export interface Ad {
@@ -115,6 +131,7 @@ export interface AdKit {
   name: string
   palette: PaletteColour[]
   contact: BrandContact
+  socials: BrandSocial[]
   claims: string[]
   has_fonts: boolean
   has_logo: boolean
@@ -174,6 +191,8 @@ export interface AdPatch {
   colours?: Partial<Record<ColourRole, string>>
   logo?: { position?: LogoPosition; variant?: string }
   footer?: boolean
+  footer_items?: Partial<FooterItems>
+  follow?: Partial<AdFollow>
   focus?: { x: number; y: number }
   reset?: boolean
 }
@@ -208,7 +227,30 @@ export const FORMATS: { id: AdFormat; label: string; hint: string }[] = [
   { id: '9:16', label: 'Story 9:16', hint: '1080 × 1920' },
   { id: '1:1', label: 'Square 1:1', hint: '1080 × 1080' },
   { id: '16:9', label: 'Banner 16:9', hint: '1920 × 1080' },
+  { id: '1.91:1', label: 'Link ad 1.91:1', hint: '1200 × 628' },
+  { id: '2:3', label: 'Pinterest 2:3', hint: '1000 × 1500' },
+  { id: 'yt', label: 'YouTube thumbnail', hint: '1280 × 720' },
 ]
+
+// the footer leans digital: links and handles first, the address only when picked
+export const FOOTER_CONTACT: { key: ContactKey; label: string }[] = [
+  { key: 'website', label: 'Website' },
+  { key: 'booking_url', label: 'Booking link' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'email', label: 'Email' },
+  { key: 'opening_hours', label: 'Opening hours' },
+  { key: 'location', label: 'Address' },
+]
+export const DEFAULT_FOOTER_CONTACT: ContactKey[] = ['website', 'booking_url', 'phone', 'whatsapp']
+
+/** The footer pick a campaign starts from: the digital contact items the kit has, and its socials flagged for ads. */
+export function defaultFooter(kit: { contact?: BrandContact; socials?: BrandSocial[] } | null | undefined): FooterItems {
+  return {
+    contact: DEFAULT_FOOTER_CONTACT.filter((k) => kit?.contact?.[k]?.trim()),
+    socials: (kit?.socials ?? []).filter((s) => s.show_in_ads ?? true).map(socialKey),
+  }
+}
 
 export const STYLES: { id: AdStyle; label: string }[] = [
   { id: 'frosted', label: 'Frosted panel' },
@@ -301,7 +343,17 @@ export function patchFrom(base: AdSpec, edit: AdSpec): AdPatch {
   if (Object.keys(colours).length) out.colours = colours
   if (edit.logo.position !== base.logo.position) out.logo = { position: edit.logo.position }
   if (edit.footer !== base.footer) out.footer = edit.footer
+  const items: Partial<FooterItems> = {}
+  if (!sameSet(edit.footer_items.contact, base.footer_items.contact)) items.contact = edit.footer_items.contact
+  if (!sameSet(edit.footer_items.socials, base.footer_items.socials)) items.socials = edit.footer_items.socials
+  if (Object.keys(items).length) out.footer_items = items
+  const follow: Partial<AdFollow> = {}
+  if (edit.follow.show !== base.follow.show) follow.show = edit.follow.show
+  if (edit.follow.text !== base.follow.text) follow.text = edit.follow.text
+  if (Object.keys(follow).length) out.follow = follow
   return out
 }
+
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
 
 export const conceptFor = (c: AdCampaign, ad: Ad) => c.concepts.find((x) => x.id === ad.concept_id)

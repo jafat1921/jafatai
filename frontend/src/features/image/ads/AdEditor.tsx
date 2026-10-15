@@ -9,6 +9,7 @@ import {
   adsApi,
   COLOUR_ROLES,
   FONT_PRESETS,
+  FOOTER_CONTACT,
   FORMATS,
   LOGO_POSITIONS,
   patchFrom,
@@ -22,15 +23,32 @@ import {
   type LogoPosition,
 } from '@/lib/ads'
 import { announce } from '@/stores/ui'
+import { FooterPicker } from './FooterPicker'
 
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
 const PREVIEW_DELAY = 400
+
+const footerName = (key: string) => {
+  if (key.startsWith('social')) return 'a social handle'
+  if (key === 'follow') return 'the “Follow us” line'
+  return FOOTER_CONTACT.find((f) => f.key === key)?.label.toLowerCase() ?? key
+}
+
+// an ad laid out before the footer picks existed has no footer_items or follow in its spec yet
+function withFooter(spec: AdSpec): AdSpec {
+  return {
+    ...spec,
+    socials: spec.socials ?? [],
+    follow: spec.follow ?? { show: false, text: '' },
+    footer_items: spec.footer_items ?? { contact: Object.keys(spec.contact ?? {}) as AdSpec['footer_items']['contact'], socials: [] },
+  }
+}
 
 /** One ad's side panel: change the words, layout, fonts, colours and logo; the picture follows as you type. */
 export function AdEditor({ camp, ad, onClose }: { camp: AdCampaign; ad: Ad; onClose: () => void }) {
   const uid = useId()
   const id = (s: string) => `${uid}-${s}`
-  const base = ad.spec as AdSpec
+  const base = useMemo(() => withFooter(ad.spec as AdSpec), [ad.spec])
   const [edit, setEdit] = useState<AdSpec>(base)
   const [preview, setPreview] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -215,6 +233,38 @@ export function AdEditor({ camp, ad, onClose }: { camp: AdCampaign; ad: Ad; onCl
           Contact footer
         </label>
       </div>
+
+      {edit.footer && (
+        <div className="flex flex-col gap-2 rounded-[6px] border border-studio-border p-2">
+          <FooterPicker kit={camp.brand_kit} value={edit.footer_items} onChange={(v) => setEdit((o) => ({ ...o, footer_items: v }))} />
+          {(camp.brand_kit?.socials?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex items-center gap-2 pb-1 text-small">
+                <Switch
+                  checked={edit.follow.show}
+                  disabled={!edit.footer_items.socials.length}
+                  onCheckedChange={(v) => setEdit((o) => ({ ...o, follow: { ...o.follow, show: v } }))}
+                  aria-label="“Follow us” line"
+                />
+                “Follow us” line
+              </label>
+              {edit.follow.show && (
+                <div className="flex min-w-[10rem] flex-1 flex-col gap-1">
+                  <label htmlFor={id('follow')} className="text-small text-studio-muted">
+                    Its words (empty: “Follow us” in the ad's language)
+                  </label>
+                  <Input id={id('follow')} dir="auto" lang={lang} maxLength={40} value={edit.follow.text} onChange={(e) => setEdit((o) => ({ ...o, follow: { ...o.follow, text: e.target.value } }))} />
+                </div>
+              )}
+            </div>
+          )}
+          {(ad.report.footer?.dropped.length ?? 0) > 0 && (
+            <p className="text-small text-studio-muted" role="note">
+              Left out to fit this format: {ad.report.footer?.dropped.map(footerName).join(', ')}.
+            </p>
+          )}
+        </div>
+      )}
 
       {palette.length > 0 && (
         <fieldset className="grid grid-cols-2 gap-2">

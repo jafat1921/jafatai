@@ -14,7 +14,8 @@ from tests.test_brand import asset, png, run_jobs
 
 DIR = Path(lib_api.TEMPLATE_DIR)
 SLOT = re.compile(r"\[([^\[\]]{1,60})\]")
-KNOWN = {"brand", "logo", "logo_colours", "colours", "palette", "tagline", "tagline_clause", "product_clause"}
+KNOWN = {"brand", "logo", "logo_colours", "colours", "palette", "tagline", "tagline_clause", "product_clause",
+         "phone", "website", "social", "contact", "contact_clause", "contact_under_clause", "social_clause"}
 CAT = "Brand & marketing"
 
 

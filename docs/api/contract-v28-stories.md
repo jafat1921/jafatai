@@ -24,7 +24,7 @@ The work is commercial, so only engines whose weights allow commercial use are a
 | `voxcpm` (VoxCPM2) | Apache-2.0 | **The default.** Designed voices: the description plus a seed |
 | `chatterbox` | MIT | Output carries a Perth watermark. It has no voice design: the seed is used, the description is not |
 | `kokoro` | Apache-2.0 | Preset voices (`preset`, e.g. `bf_emma`) |
-| `omnivoice` | **CC-BY-NC** | **422** on these routes, always |
+| `omnivoice` | **CC-BY-NC** | Accepted only while `AUDIO_ALLOW_NONCOMMERCIAL` is on; see v28c |
 
 OmniVoice's licence label now reads "CC-BY-NC (weights, non-commercial); code Apache-2.0" everywhere.
 
@@ -250,3 +250,75 @@ default.
 - `GET /api/stories/{job_id}/files/{name}` honours `Range` (206 Partial Content), so players can seek and interrupted downloads can resume.
 - The Caddy example (`deploy/Caddyfile.mixai`) compresses text types only, so media is passed through as-is.
 
+## Addendum (v28c): Urdu narration
+
+Owner-approved 2026-10-15. Everything above stands except where listed here.
+
+### OmniVoice on `POST /api/stories/audio`
+
+- `engine: "omnivoice"` is accepted while `AUDIO_ALLOW_NONCOMMERCIAL` is on (the server default). With it
+  off the answer is **422** `"OmniVoice isn't available on this server"`, and the list of engines in the
+  unknown-engine 422 leaves it out.
+- `language`: OmniVoice takes any well-formed code (it speaks 600+ languages), so `ur`, `pa`, `sd`, `ps`
+  and the rest go through. The other engines keep their lists; `chatterbox` + `ur` is still a 422, which
+  now names OmniVoice as the engine that speaks it.
+- `cast`: each speaker is `design{description, seed?}` (a `preset` is a 422). The description is read the
+  way `POST /api/audio/speak` reads it: cut down to OmniVoice's own attributes (gender, age, pitch, accent,
+  whisper), e.g. "warm elderly Lahori narrator, female" becomes "female, elderly, indian accent". The seed
+  keeps each speaker the same person across the book. Still **one runner call per book** (one model load),
+  each line with its speaker's seed and voice.
+- `emotion` on OmniVoice: `whisper` adds the whisper attribute for that line; the others are ignored
+  (OmniVoice's design list has no other delivery).
+- The result carries `"licence": "non-commercial"` when OmniVoice spoke the book. It is absent for
+  `voxcpm`, `chatterbox` and `kokoro`.
+
+### `aerab` on the request
+
+`aerab: bool`, default `true`, as on `POST /api/audio/speak`.
+
+- Lines in `ur`, `ar`, `fa`, `ps`, `sd`, `pnb` that carry no marks get aerab / tashkeel before they are
+  spoken, through the app's verified pass: the LLM only proposes the marks, they are moved onto the
+  writer's own letters, and a line whose letters it changed is spoken as written.
+- A line that already carries marks is left exactly as sent.
+- The unmarked lines of the whole book go to the LLM together, 40 lines a call (a 30-page, 300-line book
+  is about 8 calls, not 300, plus a short strict retry for any line still sparsely marked).
+- `pages[].lines[].text` in the result is the text as spoken, marked, so the story video's captions (and
+  its `.srt`) show the aerab. Lines that needed nothing come back as sent.
+- `aerab: false` speaks every line exactly as written. With the LLM unreachable the book is still
+  narrated, unmarked.
+- `check`: `match` ignores the marks (Whisper never writes them).
+
+### Questions from the draft
+
+(a) **Marking prose yourself.** `POST /api/text/aerab` with `{"text": "…" (1–60,000 characters),
+"language": "ur" | null}` (null or `"auto"`: the letters decide) answers `TextAerabOut`:
+`{"text", "marked", "kept", "low_coverage", "language"}`. `marked` counts lines that got marks, `kept`
+lines left as written because the marking pass changed their letters, `low_coverage` lines still sparsely
+marked after the strict retry. Use it for prose; `POST /api/audio/lyrics/aerab` is for lyrics (≤ 6,000
+characters, `{"lyrics"}`). A text with no Arabic-script lines is a 422; the LLM offline is a 503.
+
+(b) **Scope.** Both `POST /api/stories/audio` and `POST /api/text/aerab` need the token's `generate`
+scope (every POST does); `read` is enough for `GET /api/jobs/{id}` and the files route.
+
+(c) **Timing.** Measure on the server. The code has no per-line estimate for OmniVoice; the only number is
+the runner's time limit (600 s + 20 s a line), which is a ceiling, not a forecast.
+
+### Changes from the draft
+
+1. OmniVoice was a 422 on the story routes, always; it is now accepted behind `AUDIO_ALLOW_NONCOMMERCIAL`,
+   with the neutral 422 wording when the switch is off (no licence text in the message).
+2. `licence` is a new, optional result field, set only for OmniVoice.
+3. `aerab` is a new request field (default `true`). Before v28c every Arabic-script line was sent for
+   marks, marked or not, and the result kept the text as sent; now only unmarked lines are marked and the
+   result returns the marked text.
+4. Aerab runs over the whole book at once (40 lines a call) rather than a call per page: fewer calls for
+   the same result.
+
+### Tests
+
+`backend/tests/test_stories.py` (v28c): OmniVoice accepted with the switch on and the neutral 422 with it
+off; an Urdu book on OmniVoice with designed voices (one runner call, per-line seeds, instructs cut to
+OmniVoice's attributes, whisper on one line) and the `licence` marker; no marker on VoxCPM2; the aerab
+pass marking bare lines in one LLM call and leaving the writer's marked line alone, with the marked text in
+the result; `aerab: false` making no LLM call; `match` ignoring marks. The LLM is the faked transport the
+aerab tests use.

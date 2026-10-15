@@ -4,6 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -19,6 +20,8 @@ from app.main import app
 from app.models import Job, Workspace
 from app.podcast.publish import GROUND
 from app.worker import process_one
+from app.llm import set_transport
+from tests.test_aerab import Marker
 from tests.test_library import png_bytes, upload
 
 
@@ -103,10 +106,14 @@ def test_generate_token_can_post_and_read_only_token_gets_403(client, monkeypatc
     assert ro.get(f"/api/jobs/{job['id']}").status_code == 200
 
 
-def test_omnivoice_is_refused_on_story_routes_even_when_allowed(client):
+def test_omnivoice_needs_the_noncommercial_switch(client, monkeypatch):
     assert get_settings().audio_allow_noncommercial is True
+    assert client.post("/api/stories/audio", json={**BOOK, "engine": "omnivoice"}).status_code == 202
+    monkeypatch.setattr(get_settings(), "audio_allow_noncommercial", False)
     r = client.post("/api/stories/audio", json={**BOOK, "engine": "omnivoice"})
-    assert r.status_code == 422 and "CC-BY-NC" in r.json()["detail"]
+    assert r.status_code == 422 and r.json()["detail"] == "OmniVoice isn't available on this server"
+    r = client.post("/api/stories/audio", json={**BOOK, "engine": "piper"})
+    assert r.status_code == 422 and "omnivoice" not in r.json()["detail"]
 
 
 @pytest.mark.parametrize("change, needle", [
@@ -193,6 +200,69 @@ def test_kokoro_and_chatterbox_voices(client, monkeypatch):
     narrate(client, monkeypatch, calls, engine="chatterbox")
     segs = calls[0]["job"]["segments"]
     assert calls[0]["runner"] == "tts_chatterbox" and segs[1]["exaggeration"] > 1 and "exaggeration" not in segs[0]
+
+
+# ---------------------------------------------------------------- Urdu narration (v28c)
+
+PLAIN, MARKED = "دل کی بات", "دِل کی بات"
+OWN = "دِلْ کِی بَات"
+URDU = {
+    "language": "ur", "engine": "omnivoice",
+    "cast": {"narrator": {"design": {"description": "warm elderly Lahori narrator, female, slow", "seed": 11}},
+             "Ali": {"design": {"description": "small boy, bright high voice", "seed": 22}}},
+    "pages": [{"key": "p1", "lines": [{"speaker": "narrator", "text": PLAIN},
+                                      {"speaker": "Ali", "text": OWN, "emotion": "whisper"}]},
+              {"key": "p2", "lines": [{"speaker": "narrator", "text": f"{PLAIN} ہے"}]}],
+}
+
+
+@pytest.fixture
+def llm():
+    def install(fn):
+        fake = Marker(fn)
+        set_transport(httpx.MockTransport(fake))
+        return fake
+    yield install
+    set_transport(None)
+
+
+def test_urdu_book_on_omnivoice_with_designed_voices(client, monkeypatch, llm):
+    fake = llm(lambda x: x.replace("دل", "دِل"))
+    calls = []
+    out = narrate(client, monkeypatch, calls, **URDU)
+    tts = [c for c in calls if c["runner"] == "tts_omnivoice"]
+    assert len(tts) == 1 and tts[0]["job"]["language"] == "ur" and tts[0]["job"]["per_segment"] is True
+    segs = tts[0]["job"]["segments"]
+    assert [s["seed"] for s in segs] == [11, 22, 11]
+    # the free description is cut down to OmniVoice's own attributes
+    assert segs[0]["instruct"] == "female, elderly, indian accent"
+    assert segs[1]["instruct"] == "male, child, high pitch, whisper"
+    res = out["result"]
+    assert res["engine"] == "omnivoice" and res["licence"] == "non-commercial"
+    assert res["seeds"] == {"narrator": 11, "Ali": 22}
+
+    # the two bare lines went in one LLM call; the line the writer marked was left alone
+    assert fake.calls == 1
+    assert [s["text"] for s in segs] == [MARKED, OWN, f"{MARKED} ہے"]
+    p1, p2 = res["pages"]
+    assert [ln["text"] for ln in p1["lines"]] == [MARKED, OWN] and p2["lines"][0]["text"] == f"{MARKED} ہے"
+
+
+def test_aerab_false_speaks_the_lines_as_written(client, monkeypatch, llm):
+    fake = llm(lambda x: x.replace("دل", "دِل"))
+    calls = []
+    out = narrate(client, monkeypatch, calls, **URDU, aerab=False)
+    assert fake.calls == 0
+    assert [s["text"] for s in calls[0]["job"]["segments"]] == [PLAIN, OWN, f"{PLAIN} ہے"]
+    assert out["result"]["pages"][0]["lines"][0]["text"] == PLAIN
+
+
+def test_commercial_engines_carry_no_licence_marker(client, monkeypatch):
+    assert "licence" not in narrate(client, monkeypatch)["result"]
+
+
+def test_match_ignores_aerab():
+    assert stories.match(MARKED, PLAIN) == 1.0
 
 
 def test_music_bed_is_generated_ducked_and_mixed(client, monkeypatch):

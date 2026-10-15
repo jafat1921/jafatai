@@ -30,7 +30,7 @@ from app import library as lib
 from app import montage as mt
 from app import models_catalog as mc
 from app import subtitles as st
-from app import venv_runner, voices
+from app import venv_runner, voice_instruct, voices
 from app.config import get_settings
 from app.lanes import gpu_lane
 from app.models import Generation, Job, MediaItem, new_id
@@ -44,7 +44,8 @@ log = logging.getLogger("mixai.stories")
 
 AUDIO_JOB = "story_audio"
 VIDEO_JOB = "story_video"
-ENGINES = ("voxcpm", "chatterbox", "kokoro")
+# OmniVoice only while AUDIO_ALLOW_NONCOMMERCIAL is on (v28c); it is the one that speaks Urdu
+ENGINES = ("voxcpm", "chatterbox", "kokoro", "omnivoice")
 EMOTIONS = ("happy", "sad", "excited", "scared", "angry", "whisper", "calm")
 # VoxCPM2 reads the hint in its voice description; Chatterbox only has an intensity knob
 HINTS = {"happy": "happy, smiling", "sad": "sad, subdued", "excited": "excited, lively", "scared": "scared, trembling",
@@ -100,11 +101,11 @@ def file_names(result: dict | None) -> set[str]:
 # ---------------------------------------------------------------- queueing the narration
 
 def check_engine(engine: str, language: str) -> voices.Engine:
-    if engine == "omnivoice":
-        raise HTTPException(422, "OmniVoice can't be used for stories: its weights are CC-BY-NC (non-commercial). "
-                                 "Use voxcpm, chatterbox or kokoro")
-    if engine not in ENGINES:
-        raise HTTPException(422, f"'{engine}' isn't a story engine (use {', '.join(ENGINES)})")
+    usable = [x for x in ENGINES if voices.allowed(voices.ENGINES[x])]
+    if engine == "omnivoice" and engine not in usable:
+        raise HTTPException(422, "OmniVoice isn't available on this server")
+    if engine not in usable:
+        raise HTTPException(422, f"'{engine}' isn't a story engine (use {', '.join(usable)})")
     try:
         e = voices.get_engine(engine)
         voices.check_language(e, language)
@@ -133,6 +134,9 @@ def clean_cast(cast: dict, e: voices.Engine, language: str) -> dict:
             seed = d.get("seed")
             out[name] = {"description": " ".join(d["description"].split()),
                          "seed": int(seed) % 2**31 if seed is not None else new_seed()}
+            if e.id == "omnivoice":
+                # read the way /audio/speak reads it; OmniVoice refuses any word off its own list
+                out[name]["instruct"] = voice_instruct.normalise(out[name]["description"]).text
     return out
 
 
@@ -178,20 +182,22 @@ def queue_audio(db: Session, cur, req: dict) -> Job:
 
 # ---------------------------------------------------------------- speaking
 
-def _with_aerab(ctx, texts: list[str], language: str) -> list[str]:
-    joined = "\n".join(texts)
-    if not get_settings().urdu_aerab or not aerab.applies(language, joined):
+def with_aerab(ctx, texts: list[str], language: str) -> list[str]:
+    """Aerab on the lines that have none yet; a line the writer marked stays theirs. The lines go to the LLM
+    together (aerab sends BATCH a call), so a 30-page book is a handful of calls, not one a line."""
+    todo = [i for i, t in enumerate(texts) if aerab.unmarked(t)]
+    if not todo or not aerab.applies(language, "\n".join(texts[i] for i in todo)):
         return texts
-    from app.llm import LLMError
-
-    try:
-        ctx.progress(0.02, "Adding aerab to the story")
-        r = aerab.mark_sync(joined, aerab.target(language, joined), tick=lambda: ctx.progress(0.02, "Adding aerab"))
-    except LLMError as err:
-        log.warning("aerab skipped for story %s: %s", ctx.job.id, err)
-        return texts
-    marked = r.text.split("\n")
-    return marked if r.marked and len(marked) == len(texts) else texts
+    out = list(texts)
+    tick = lambda: ctx.progress(0.02, "Adding aerab to the story")  # noqa: E731
+    tick()
+    # the verified pass takes MAX_LINES at a time; with the LLM away the lines stay as written
+    for b in range(0, len(todo), aerab.MAX_LINES):
+        idx = todo[b:b + aerab.MAX_LINES]
+        done = aerab.finish_lines_sync([texts[i] for i in idx], language, tick, what=f"story {ctx.job.id}")
+        for i, t in zip(idx, done):
+            out[i] = t
+    return out
 
 
 def runner_segments(e: voices.Engine, cast: dict, rows: list[dict], work: Path) -> list[dict]:
@@ -207,6 +213,12 @@ def runner_segments(e: voices.Engine, cast: dict, rows: list[dict], work: Path) 
             seg["seed"] = c["seed"]
             if e.id == "voxcpm":
                 seg["instruct"] = ", ".join(x for x in (c["description"], HINTS.get(emotion or "")) if x)
+            elif e.id == "omnivoice":
+                # whisper is the only delivery on OmniVoice's design list
+                ins = voice_instruct.normalise(f"{c['description']}, whisper").text if emotion == "whisper" \
+                    else c.get("instruct")
+                if ins:
+                    seg["instruct"] = ins
             elif emotion:
                 seg["exaggeration"] = EXAGGERATION[emotion]
         segs.append(seg)
@@ -254,7 +266,8 @@ _WORD = re.compile(r"[^\W_]+(?:['’][^\W_]+)*")
 
 
 def words(text: str) -> list[str]:
-    return [w.replace("’", "'") for w in _WORD.findall(text.lower())]
+    # harakat aren't word characters to the regex (they'd split every word) and Whisper never writes them
+    return [w.replace("’", "'") for w in _WORD.findall(aerab.strip(text).lower())]
 
 
 def match(expected: str, heard: str) -> float:
@@ -280,7 +293,9 @@ def narrate(ctx, p: dict, out: Path, work: Path) -> dict:
     e = voices.get_engine(p["engine"])
     pages = req["pages"]
     rows = [{**ln, "page": i} for i, page in enumerate(pages) for ln in page["lines"]]
-    spoken = _with_aerab(ctx, [" ".join(ln["text"].split()) for ln in rows], language)
+    spoken = [" ".join(ln["text"].split()) for ln in rows]
+    if req.get("aerab", True):
+        spoken = with_aerab(ctx, spoken, language)
     for ln, s in zip(rows, spoken):
         ln["spoken"] = s
     segs = runner_segments(e, p["cast"], rows, work)
@@ -296,8 +311,10 @@ def narrate(ctx, p: dict, out: Path, work: Path) -> dict:
         files = [Path(s["out"]) for s in segs[k:k + n]]
         gaps = [gap_line] * (n - 1) + [0.0]
         t, times = 0.0, []
-        for ln, d, g in zip(page["lines"], durs[k:k + n], gaps):
-            times.append({"start": round(t, 3), "end": round(t + d, 3), "speaker": ln["speaker"], "text": ln["text"]})
+        for ln, d, g in zip(rows[k:k + n], durs[k:k + n], gaps):
+            # a marked line comes back marked, so the video's captions carry the aerab too
+            text = ln["spoken"] if ln["spoken"] != " ".join(ln["text"].split()) else ln["text"]
+            times.append({"start": round(t, 3), "end": round(t + d, 3), "speaker": ln["speaker"], "text": text})
             t += d + g
         wav = work / f"page{i:04d}.wav"
         ctx.progress(0.64 + 0.06 * i / len(pages), f"Joining page {i + 1} of {len(pages)}")
@@ -328,8 +345,11 @@ def narrate(ctx, p: dict, out: Path, work: Path) -> dict:
         for pg, m in zip(out_pages, _check(ctx, out_pages, [out / pg["file"] for pg in out_pages], language, lane)):
             pg["match"] = m
     seeds = {name: c["seed"] for name, c in p["cast"].items() if "seed" in c}
-    return {"pages": out_pages, "full": {"file": "full.mp3", "duration": round(t, 3), "pages": spans},
-            "engine": e.id, "seeds": seeds}
+    res = {"pages": out_pages, "full": {"file": "full.mp3", "duration": round(t, 3), "pages": spans},
+           "engine": e.id, "seeds": seeds}
+    if e.noncommercial:
+        res["licence"] = "non-commercial"  # a partner API field; the app's own screens never show it
+    return res
 
 
 # ---------------------------------------------------------------- the music bed

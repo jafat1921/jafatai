@@ -63,13 +63,16 @@ class StoryAudioIn(BaseModel):
         "gap_line": 0.35, "gap_page": 1.2, "check": True}]})
 
     language: str = Field("en", min_length=2, max_length=12, pattern=r"^[A-Za-z]{2,3}(-[A-Za-z]{2,4})?$")
-    engine: str = Field("voxcpm", max_length=20, description="voxcpm (default), chatterbox or kokoro")
+    engine: str = Field("voxcpm", max_length=20,
+                        description="voxcpm (default), chatterbox, kokoro, or omnivoice where the server allows it")
     cast: dict[str, StoryVoice] = Field(min_length=1, max_length=13)
     pages: list[StoryPage] = Field(min_length=1, max_length=200)
     music: StoryMusic | None = None
     gap_line: float = Field(0.35, ge=0, le=5)
     gap_page: float = Field(1.2, ge=0, le=10)
     check: bool = False
+    # Arabic-script lines (ur, ar, fa, ps, sd, pnb) with no marks get aerab before they're spoken
+    aerab: bool = True
 
     @model_validator(mode="after")
     def speakers_known(self):

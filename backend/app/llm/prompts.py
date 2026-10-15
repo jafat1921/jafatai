@@ -665,3 +665,48 @@ def extract_locations_messages(project, scenes, known: list[str]) -> list[dict]:
     )
     return [{"role": "system", "content": "You are a production designer and location scout. Answer only with JSON."},
             {"role": "user", "content": user}]
+
+
+# ---------------------------------------------------------------- Poetry Shorts (contract v33)
+
+class PoetryScene(BaseModel):
+    image: str = Field(min_length=1)
+    motion: str = ""
+
+
+class PoetryScenes(BaseModel):
+    character: str = ""
+    setting: str = ""
+    scenes: list[PoetryScene] = Field(min_length=1)
+
+
+POETRY_RULES = """Rules:
+- The same person in every scene, described the same way each time (age, build, clothing, colours). Nobody speaks
+  or sings on screen: faces stay calm, mouths closed; the person is often seen from behind or at a distance.
+- One setting family across the whole Short (the same city, valley or house), seen from new places. Let the light
+  move on from scene to scene, for example golden hour, then dusk, then lantern-lit night.
+- Follow the poem's imagery: what the lines say becomes what we see (dust, wind, rain, a candle, a door, petals).
+- Motion is slow and cinematic: walking away, cloth or dust drifting, lanterns swaying, a slow push-in or drift.
+  One move per scene, no cuts, no fast action.
+- No text, letters, captions, signs or watermarks anywhere in the frame.
+- Write in English. image: 40 to 80 words, the opening frame as a film still (subject, place, light, lens, colour).
+  motion: 15 to 35 words, what moves and how the camera moves."""
+
+
+def poetry_scene_messages(title: str, language: str, groups: list[list[str]], character: str, setting: str,
+                          mood: str = "", aspect: str = "9:16") -> list[dict]:
+    frame = {"9:16": "a vertical 9:16 frame", "1:1": "a square frame"}.get(aspect, "a wide 16:9 frame")
+    poem = "\n\n".join(f"Scene {i}:\n" + "\n".join(lines) for i, lines in enumerate(groups, 1))
+    parts = [f"A sung poem{f' called {title}' if title else ''}, in language '{language}', becomes a short film "
+             f"in {frame}, one scene per group of lines.", f"The poem, grouped by scene:\n---\n{poem[:8000]}\n---",
+             f"The person: {character or 'not given; choose one person who fits the poem and keep them'}",
+             f"The setting: {setting or 'not given; choose one that fits the poem and keep it'}"]
+    if mood:
+        parts.append(f"Mood: {mood}")
+    parts.append(POETRY_RULES)
+    parts.append(f'Answer as JSON {{"character": "the person in one sentence", "setting": "the setting in one '
+                 f'sentence", "scenes": [{{"image": "...", "motion": "..."}}]}} with exactly {len(groups)} scenes, '
+                 "in order.")
+    return [{"role": "system", "content": "You are a director of photography turning poetry into film. "
+                                          "Answer only with JSON."},
+            {"role": "user", "content": "\n\n".join(parts)}]

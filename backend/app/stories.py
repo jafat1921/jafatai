@@ -27,6 +27,7 @@ from app import audio_edit as ae
 from app import brand_render as br
 from app import dialogue as dl
 from app import library as lib
+from app import montage as mt
 from app import models_catalog as mc
 from app import subtitles as st
 from app import venv_runner, voices
@@ -34,7 +35,9 @@ from app.config import get_settings
 from app.lanes import gpu_lane
 from app.models import Generation, Job, MediaItem, new_id
 from app.podcast import produce
-from app.podcast.publish import GROUND, PARCHMENT, ffmetadata
+# the ffmpeg side moved to app.montage (Poetry Shorts cut the same way); the names stay importable from here
+from app.montage import FPS, MAX_SLOW, SIZES, XFADE, clip, video_clip, xfade_graph  # noqa: F401
+from app.podcast.publish import GROUND, PARCHMENT
 from app.services import enqueue_generation, generation_file, new_seed, owned_source
 
 log = logging.getLogger("mixai.stories")
@@ -58,20 +61,11 @@ KEEP_DAYS = 7
 WAIT_PRIORITY = -5
 POLL_S = 30
 
-SIZES = {"16:9": (1920, 1080), "9:16": (1080, 1920)}
-FPS = 30
-XFADE = 0.4
-ZOOM = 0.06
 # stills are drawn at twice the frame so zoompan's whole-pixel steps don't shimmer
 OVERSAMPLE = 2
 PICTURE_SHARE = 0.6  # 9:16: the picture's share of the height; captions go below
 # a still this close to the frame's shape fills it instead of sitting on its blurred copy
 FILL_TOLERANCE = 0.03
-# a clip a little short of its page is slowed down to fit rather than frozen on its last frame
-MAX_SLOW = 0.15
-# (size against the usual subtitle size, characters per line)
-CAPTIONS = {"16:9": (1.2, 42), "9:16": (1.15, 22)}
-VENC = ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", str(FPS)]
 
 
 class StoryError(RuntimeError):
@@ -588,58 +582,6 @@ def end_frame(aspect: str, text: str, language: str | None) -> Image.Image:
 
 # ---------------------------------------------------------------- the video
 
-def _ff(args: list[str], tick=None) -> None:
-    ae.run(args, timeout=4 * 3600, tick=tick, loglevel="error")
-
-
-def clip(still: Path, dst: Path, frames: int, aspect: str, zoom: bool = True, tick=None) -> None:
-    w, h = SIZES[aspect]
-    z = f"1+{ZOOM}*on/{max(1, frames - 1)}" if zoom else "1"
-    vf = (f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={FPS},"
-          "format=yuv420p")
-    _ff(["-loop", "1", "-framerate", str(FPS), "-i", str(still), "-vf", vf, "-frames:v", str(frames),
-         *VENC, "-crf", "14", "-an", str(dst)], tick)
-
-
-def video_clip(src: Path, dst: Path, frames: int, aspect: str, tick=None) -> str:
-    """A Library clip made exactly `frames` long: trimmed from the start when longer; when shorter, slowed
-    if up to MAX_SLOW covers it, else held on its last frame. Cover-cropped to the frame, its own sound
-    dropped, 30 fps. No zoom: the clip already moves."""
-    w, h = SIZES[aspect]
-    want = frames / FPS
-    have = aa.stream_info(src).duration or 0.0
-    speed, how = 1.0, "trimmed" if have >= want else "held"
-    if 0 < have < want <= have * (1 + MAX_SLOW):
-        speed, how = want / have, "slowed"
-    # tpad also covers the odd frame lost to rounding after a slow-down; -frames:v cuts the rest
-    vf = (f"setpts={speed:.6f}*(PTS-STARTPTS),fps={FPS},scale={w}:{h}:force_original_aspect_ratio=increase,"
-          f"crop={w}:{h},setsar=1,tpad=stop_mode=clone:stop_duration={want + 1:.3f},format=yuv420p")
-    _ff(["-i", str(src), "-vf", vf, "-frames:v", str(frames), *VENC, "-crf", "16", "-an", str(dst)], tick)
-    return how
-
-
-def xfade_graph(durs: list[float], audio: int, plan: dict) -> str:
-    """Clips 0..n-1 cross-faded XFADE into each other (each clip but the last runs XFADE long, so the
-    page starts stay on the narration's clock), and the audio at input `audio` placed after the title."""
-    parts, cur = [], "0:v"
-    for k in range(1, len(durs)):
-        off = sum(durs[:k]) - k * XFADE
-        parts.append(f"[{cur}][{k}:v]xfade=transition=fade:duration={XFADE}:offset={off:.4f}[v{k}]")
-        cur = f"v{k}"
-    parts.append(f"[{cur}]format=yuv420p[vout]")
-    a = [f"atrim=end={ae._f(plan['audio_len'])}", "asetpts=PTS-STARTPTS", "aresample=44100"]
-    if plan["title_s"]:
-        # the title card fades into the narrator's first second
-        a.append("afade=t=in:d=1")
-    if plan["trimmed"]:
-        a.append(f"afade=t=out:st={ae._f(max(0.0, plan['audio_len'] - 0.6))}:d=0.6")
-    if plan["title_s"]:
-        a.append(f"adelay=delays={round(plan['title_s'] * 1000)}:all=1")
-    a += [f"apad=whole_dur={ae._f(plan['total'])}", f"atrim=end={ae._f(plan['total'])}"]
-    parts.append(f"[{audio}:a]{','.join(a)}[aout]")
-    return ";".join(parts)
-
-
 def chapter_rows(plan: dict) -> list[dict]:
     ch = plan["chapters"]
     end_audio = plan["title_s"] + plan["audio_len"]
@@ -696,36 +638,13 @@ def handle_video(ctx) -> dict:
             clip(still, c, frames, aspect, zoom=s["kind"] != "end", tick=tick)
             still.unlink(missing_ok=True)
         ctx.progress(0.7, "Joining the pages")
-        inputs = []
-        for c in clips:
-            inputs += ["-i", str(c)]
         joined = work / "joined.mp4"
         cues = plan["cues"] if p.get("captions") else []
-        _ff([*inputs, "-i", str(audio), "-filter_complex", xfade_graph(durs, len(clips), plan),
-             "-map", "[vout]", "-map", "[aout]", *VENC, "-crf", "16" if cues else "20", "-c:a", "aac", "-b:a", "192k",
-             "-t", ae._f(plan["total"]), str(joined)], tick=lambda: ctx.progress(0.75, "Joining the pages"))
-        burned = None
-        if cues:
-            ctx.progress(0.85, "Burning in the captions")
-            scale, chars = CAPTIONS[aspect]
-            burned = st.burn(joined, work / "captioned.mp4", cues, language=language, width=w, height=h,
-                             timeout=4 * 3600, encode=[*VENC, "-crf", "20"], scale=scale, chars=chars)
-            joined = work / "captioned.mp4"
-        ctx.progress(0.96, "Adding the chapters")
-        meta = work / "chapters.txt"
-        meta.write_text(ffmetadata({"title": (p.get("title_card") or {}).get("title") or ""}, chapter_rows(plan)),
-                        encoding="utf-8")
-        part = work / "final.mp4"
-        _ff(["-i", str(joined), "-i", str(meta), "-map", "0", "-map_metadata", "1", "-map_chapters", "1", "-c", "copy",
-             "-movflags", "+faststart", str(part)])
-        part.replace(dst)
-        st.write_srt(srt, plan["cues"], language)
-        # a small copy to watch over a slow link before downloading the full one (~0.5 Mbit/s)
-        ctx.progress(0.98, "Making the preview")
-        pw, ph = (640, 360) if w >= h else (360, 640)
-        _ff(["-i", str(dst), "-vf", f"scale={pw}:{ph}:flags=lanczos,format=yuv420p", "-c:v", "libx264",
-             "-preset", "veryfast", "-b:v", "430k", "-maxrate", "500k", "-bufsize", "1000k", "-c:a", "aac",
-             "-b:a", "64k", "-movflags", "+faststart", str(preview)])
+        mt.join(clips, durs, audio, plan, joined, "16" if cues else "20",
+                tick=lambda: ctx.progress(0.75, "Joining the pages"))
+        burned = mt.finish(joined, work, dst, aspect=aspect, language=language, cues=cues,
+                           title=(p.get("title_card") or {}).get("title") or "", chapters=chapter_rows(plan),
+                           srt=srt, srt_cues=plan["cues"], preview=preview, progress=ctx.progress)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     out_ = {"file": dst.name, "duration": round(aa.stream_info(dst).duration, 3), "width": w, "height": h,

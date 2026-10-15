@@ -23,8 +23,10 @@ GPU_LANES = ("image", "video")
 # job types that always run on the video GPU whatever their generation says (SeedVR2 / FlashVSR segments)
 VIDEO_JOB_TYPES = frozenset({"upscale"})
 # speech-to-text on a voice's reference clip: a GPU model, but either card will do; stem splits likewise
-# a story's narration (contract v28) speaks and checks the whole book in one job
-AUDIO_JOB_TYPES = frozenset({"voice_transcribe", "transcribe", "voice_sample", "audio_stems", "story_audio"})
+# a story's narration (contract v28) speaks and checks the whole book in one job; a Poetry Short's line
+# timing (contract v33) splits the vocals off its song and listens to them
+AUDIO_JOB_TYPES = frozenset({"voice_transcribe", "transcribe", "voice_sample", "audio_stems", "story_audio",
+                             "poetry_timing"})
 # a dub_stage job's lane depends on its payload's stage, so it is set when the job is made (dub_lane)
 DUB_GPU_STAGES = frozenset({"separate", "transcribe", "render", "verify"})
 

@@ -28,6 +28,14 @@ export const shellRoutes: RouteObject[] = [
     return <Img2VidPage />
   }),
   { path: 'video/projects', element: <ProjectsPage /> },
+  page('video/poetry', async () => {
+    const { PoetryListPage } = await import('@/features/video/poetry/PoetryListPage')
+    return <PoetryListPage />
+  }),
+  page('video/poetry/:id', async () => {
+    const { PoetryShortPage } = await import('@/features/video/poetry/PoetryShortPage')
+    return <PoetryShortPage />
+  }),
   page('video/prompt-templates', async () => {
     const { TemplatesPage } = await import('@/features/templates/TemplatesPage')
     return <TemplatesPage type="video" />

@@ -264,7 +264,7 @@ def _style(family: str, width: int, height: int, scale: float = 1.0) -> str:
 
 
 def ass_text(cues, width: int, height: int, language: str | None = None, scale: float = 1.0,
-             chars: int | None = None) -> str:
+             chars: int | None = None, fade: float = 0.0) -> str:
     items = as_cues(cues)
     families = sorted({font_for(language, c.text) for c in items} or {LATIN})
     out = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}", "WrapStyle: 2",
@@ -274,12 +274,14 @@ def ass_text(cues, width: int, height: int, language: str | None = None, scale: 
            "Alignment, MarginL, MarginR, MarginV, Encoding"]
     out += [_style(f, width, height, scale) for f in families]
     out += ["", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
+    # a verse fading in (Poetry Shorts); the fade out is kept shorter so lines don't blur into each other
+    fad = f"{{\\fad({round(fade * 1000)},{round(fade * 600)})}}" if fade > 0 else ""
     for c in items:
         fam = font_for(language, c.text)
         # logical order: libass runs FriBidi itself, pre-reversed text would come out backwards
         text = "\\N".join(ass_escape(ln) for ln in lines_for(c.text, language, chars))
         name = (c.speaker or "").replace(",", " ")
-        out.append(f"Dialogue: 0,{_ass_time(c.start)},{_ass_time(c.end)},{_STYLE_NAMES[fam]},{name},0,0,0,,{text}")
+        out.append(f"Dialogue: 0,{_ass_time(c.start)},{_ass_time(c.end)},{_STYLE_NAMES[fam]},{name},0,0,0,,{fad}{text}")
     return "\n".join(out) + "\n"
 
 
@@ -337,8 +339,8 @@ def _out_args(dst: Path, encode: list[str] | None) -> list[str]:
 
 
 def _burn_ass(src: Path, dst: Path, items, language, width, height, work: Path, timeout, encode, scale=1.0,
-              chars=None) -> None:
-    (work / "subs.ass").write_text(ass_text(items, width, height, language, scale, chars), encoding="utf-8")
+              chars=None, fade=0.0) -> None:
+    (work / "subs.ass").write_text(ass_text(items, width, height, language, scale, chars, fade), encoding="utf-8")
     _, shaping = ass_support()
     # a bare file name in the working dir dodges the escaping a Windows path would need
     vf = "ass=filename=subs.ass"
@@ -449,9 +451,10 @@ def _burn_pillow(src: Path, dst: Path, items: list[Cue], language, width, height
 
 def burn(src_video: Path, dst: Path, cues, *, language: str | None = None, width: int | None = None,
          height: int | None = None, timeout: int = 7200, encode: list[str] | None = None, scale: float = 1.0,
-         chars: int | None = None) -> dict:
+         chars: int | None = None, fade: float = 0.0) -> dict:
     """Burn `cues` into `src_video`, writing `dst`; the audio is copied untouched. `scale` sizes the type
     against the usual and `chars` caps a line (story videos: bigger captions, a narrower line on 9:16).
+    `fade` fades each cue in over that many seconds; libass only, the Pillow fallback cuts them in.
 
     Returns {"renderer": "ass" | "pillow" | "none", "fonts_missing": [family, ...]}.
     """
@@ -472,7 +475,7 @@ def burn(src_video: Path, dst: Path, cues, *, language: str | None = None, width
     try:
         if renderer == "ass":
             try:
-                _burn_ass(src, dst, items, language, width, height, work, timeout, encode, scale, chars)
+                _burn_ass(src, dst, items, language, width, height, work, timeout, encode, scale, chars, fade)
             except BurnError as e:
                 log.warning("libass couldn't burn the subtitles, drawing them with Pillow: %s", e)
                 renderer = "pillow"

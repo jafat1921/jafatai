@@ -782,6 +782,30 @@ class UserTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class PoetryShort(Base):
+    """A sung poem as a short video (contract v33). The poem's lines carry their timings; the scenes carry
+    their keyframe and clip generation ids. All JSON, written whole by the stage job and the editor."""
+    __tablename__ = "poetry_short"
+    __table_args__ = (Index("ix_poetry_short_ws_updated", "workspace_id", "updated_at"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    title: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    language: Mapped[str] = mapped_column(String(12), default="ur", server_default="ur")
+    stage: Mapped[str] = mapped_column(String(20), default="poem", server_default="poem")
+    stages: Mapped[dict] = mapped_column(JSON, default=dict)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    poem: Mapped[dict] = mapped_column(JSON, default=dict)  # {lyrics, tags, written}
+    lines: Mapped[list] = mapped_column(JSON, default=list)  # [{text, section, start, end}]
+    song: Mapped[dict] = mapped_column(JSON, default=dict)
+    timing: Mapped[dict] = mapped_column(JSON, default=dict)
+    scenes: Mapped[list] = mapped_column(JSON, default=list)
+    outputs: Mapped[dict] = mapped_column(JSON, default=dict)
+    job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(Session, "before_flush")
 def _classify_new_jobs(session, _ctx, _instances):
     # one place instead of every enqueue site (generate, upscale, brand, zip, autopilot, ai_*...)

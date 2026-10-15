@@ -467,6 +467,13 @@ from app import stories  # noqa: E402
 HANDLERS[stories.AUDIO_JOB] = stories.handle_audio
 HANDLERS[stories.VIDEO_JOB] = stories.handle_video
 CPU_JOB_LEDGER[stories.VIDEO_JOB] = "assembly"
+from app.poetry import render as poetry_render, service as poetry, stages as poetry_stages, timing as poetry_timing  # noqa: E402
+
+# Poetry Shorts: the orchestrator waits on its song, keyframes and clips; the timing listens on a GPU; the cut is ffmpeg
+HANDLERS[poetry.JOB] = poetry_stages.handle
+HANDLERS[poetry_timing.JOB] = poetry_timing.handle
+HANDLERS[poetry.RENDER_JOB] = poetry_render.handle_render
+CPU_JOB_LEDGER.update({poetry.JOB: "autopilot", poetry.RENDER_JOB: "assembly"})
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

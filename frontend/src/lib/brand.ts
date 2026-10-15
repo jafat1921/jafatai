@@ -1,5 +1,6 @@
 // contract-v7-brand.md. snake_case so kits pass through untouched.
-import type { Generation, Shot } from './types'
+import { request } from './api'
+import type { Generation, Job, Shot } from './types'
 
 export type LogoVariant = 'primary' | 'light' | 'dark'
 export type ClosingPref = 'auto' | 'ai_packshot' | 'logo_reveal'
@@ -144,10 +145,43 @@ export interface BrandKit {
   contact?: BrandContact
   socials?: BrandSocial[]
   claims?: string[]
+  // M16b: the owner's own adverts, read into layout rules for Ad Studio
+  ad_style?: BrandAdStyle
   assets: Record<string, BrandAsset>
   prompt_context?: string
   created_at: string
   updated_at: string
+}
+
+export interface AdStyleRules {
+  layouts?: string[]
+  pinned?: boolean
+  mask?: string | null
+  shapes?: string[]
+  headline_weight?: string
+  headline_case?: string
+  serif?: boolean
+  colour_usage?: string
+  background?: string
+  density?: string
+  badge?: boolean
+  notes?: string
+}
+
+export interface BrandAdStyle {
+  references: { media_id: string; media_url: string | null }[]
+  rules: AdStyleRules | null
+  status: 'none' | 'working' | 'ready' | 'failed'
+  error: string | null
+  job_id: string | null
+  updated_at: string | null
+}
+
+export const MAX_AD_REFS = 6
+
+export const brandApi = {
+  putAdStyle: (kitId: string, references: string[]) => request<BrandKit>('PUT', `/brand-kits/${kitId}/ad-style`, { references }),
+  extractAdStyle: (kitId: string) => request<Job>('POST', `/brand-kits/${kitId}/ad-style/extract`, {}),
 }
 
 export type BrandKitPatch = Partial<

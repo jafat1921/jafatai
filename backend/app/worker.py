@@ -470,6 +470,10 @@ from app import stories  # noqa: E402
 # the narration is GPU time (TTS, Whisper); the video is ffmpeg on the general lane
 HANDLERS[stories.AUDIO_JOB] = stories.handle_audio
 HANDLERS[stories.VIDEO_JOB] = stories.handle_video
+from app import aerab  # noqa: E402
+
+# POST /api/text/aerab/jobs: a whole book's marks, LLM work on the general lane
+HANDLERS[aerab.JOB] = aerab.handle
 CPU_JOB_LEDGER[stories.VIDEO_JOB] = "assembly"
 from app.poetry import render as poetry_render, service as poetry, stages as poetry_stages, timing as poetry_timing  # noqa: E402
 
@@ -483,6 +487,11 @@ from app.ads import service as ads, stages as ad_stages  # noqa: E402
 # Ad Studio: the orchestrator waits on its photos (they bill their own GPU time); the layout is Pillow
 HANDLERS[ads.JOB] = ad_stages.handle
 CPU_JOB_LEDGER[ads.JOB] = "autopilot"
+from app.ads import style as ad_style  # noqa: E402
+
+# reading the brand's own adverts is LLM work on the general lane
+HANDLERS[ad_style.JOB] = ad_style.handle
+CPU_JOB_LEDGER[ad_style.JOB] = "brand"
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

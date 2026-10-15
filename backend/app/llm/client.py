@@ -353,6 +353,25 @@ def chat_sync(role: Role, messages: list[dict], *, tick: Callable[[], None] | No
     return asyncio.run(_with_ticks(chat(role, messages, **kw), tick, tick_every))
 
 
+async def capabilities(model: str) -> list[str] | None:
+    """What Ollama says a model can do (/api/show: "completion", "vision", "tools"...). None when the server
+    isn't Ollama or the answer has no list (older Ollama), so the caller falls back to its configuration."""
+    async with _client(10.0) as client:
+        try:
+            if not await _use_native(client):
+                return None
+            r = await client.post(f"{server_root()}/api/show", json={"model": model})
+            if r.status_code == 404:
+                return []
+            r.raise_for_status()
+            caps = r.json().get("capabilities")
+            return [str(c) for c in caps] if isinstance(caps, list) else None
+        except httpx.ConnectError as e:
+            raise _unreachable() from e
+        except (httpx.HTTPError, ValueError) as e:
+            raise LLMError(f"Couldn't ask about {model}: {e}") from e
+
+
 async def list_models() -> list[str]:
     async with _client(10.0) as client:
         try:

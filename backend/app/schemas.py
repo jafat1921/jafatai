@@ -1125,6 +1125,8 @@ class AerabOut(BaseModel):
     kept: int
     low_coverage: int = 0
     language: str | None = None
+    complete: bool = True
+    remaining_chars: int = 0
 
 
 class TextAerabIn(BaseModel):
@@ -1139,6 +1141,12 @@ class TextAerabOut(BaseModel):
     kept: int
     low_coverage: int
     language: str | None
+    # false when the time budget ran out first: the text is marked up to that point, `remaining_chars`
+    # of it still bare (the jobs route has no budget)
+    complete: bool = True
+    remaining_chars: int = 0
+    # share of the whole text's words that carry a mark
+    coverage: float = 1.0
 
 
 # ---------------------------------------------------------------- audio editor and Score a Clip (contract v15)

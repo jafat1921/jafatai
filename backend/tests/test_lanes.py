@@ -61,6 +61,9 @@ def test_every_registered_job_type_has_a_lane():
         "poetry_short": "general", "poetry_timing": "audio", "poetry_render": "general",
         # Ad Studio: the orchestrator writes concepts and lays out with Pillow; its photos are generate jobs
         "ad_campaign": "general",
+        "ad_style": "general",  # the vision model reads the brand's own adverts
+        # long Urdu/Arabic prose marked in the background (contract v23b): LLM calls only
+        "text_aerab": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

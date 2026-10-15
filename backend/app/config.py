@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     # Ad Studio's copywriter: this model when set, else the largest of ads_llm_models that is installed
     ads_llm_model: str = ""
     ads_llm_models: Annotated[list[str], NoDecode] = ["gemma4:26b", "qwen2.5:14b-instruct", "gemma4:e4b"]
+    # the eye that picks the best photo and checks the finished ads; empty: LLM_MODEL_VISION, then the copywriter
+    ads_vision_model: str = ""
     # auto: use Ollama's native /api/chat when the server answers /api/version
     # (it honours num_ctx and think=false), else plain OpenAI-compatible calls
     llm_api: str = "auto"
@@ -101,6 +103,8 @@ class Settings(BaseSettings):
     # .env files carry on; aerab_languages says which languages it covers
     urdu_aerab: bool = True
     aerab_languages: str = "ur,ar,fa,ps,sd,pnb"
+    # the model that adds the marks; empty: the creative role's model (LLM_MODEL_CREATIVE)
+    aerab_llm_model: str = ""
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
     # where the engine venvs keep their Hugging Face downloads (empty: their own default)

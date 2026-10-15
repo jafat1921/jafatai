@@ -290,3 +290,116 @@ Every ad's `report.quality`:
 ```
 
 Empty `dropped` lists are left out.
+
+## 9. Addendum: the design leap (M16b, migration 0025)
+
+Modelled on the owner's own Canva adverts: cut-out people on organic shapes, photos in arches and circles, huge
+prices, editorial type. Everything stays exact (copy, offers guard, channels guard, aerab/RTL) and every edit is
+still a CPU re-render; only photos, cut-outs, upscales and "before" pictures use the GPU.
+
+### Layouts
+
+`Style` gains seven layouts (all formats; `/ads/options` lists them with a `needs` hint):
+
+| id | label | what it is | needs |
+|---|---|---|---|
+| `cutout_blob` | Cut-out on a shape | light ground, the subject cut out (BiRefNet) standing on an organic accent blob with small dots, logo top centre, headline start side, badge circle, footer bar | (a cut-out; without one the photo fills the blob) |
+| `arch_mask` | Photo in an arch | off-white ground, headline top centre, the photo in a large arch with a smaller detail circle, badge over the arch edge, logo bottom start, contact row on the light ground | |
+| `circle_mask` | Photo in a circle | the same with a circle | |
+| `big_price` | Big price | full-bleed photo with a white haze on the copy side, a huge headline, an accent band "Från **215** kr/timme" (the number ≈3×), the other offers as plain lines, the logo above the CTA, light footer | an approved offer with a number (else it falls back to `side_wash`) |
+| `editorial` | Editorial | oversized headline on a calm ground, a small rounded photo | |
+| `before_after` | Before / after | two halves with "Before"/"After" labels in the ad language (`Före`/`Efter`, `پَہلے`/`بَعد`…); the before picture is an edit of the photo | a before picture (else `split`) |
+| `quote` | Quote card | a testimonial set in large type with its author; **only** text from `brief.quotes`, never written by the AI | a quote (else `editorial`) |
+
+`split` is refined (a soft curved edge and an accent rule). `report.fallback` names a layout that couldn't be
+honoured and what was used instead. The copywriter spreads its concepts across layouts; a layout that needs
+something the brief hasn't got is never picked.
+
+### CreateIn
+
+| field | type | default | notes |
+|---|---|---|---|
+| `quality` | `draft` \| `final` | `final` | draft: one photo per concept, no upscale, no vision QA |
+| `candidates` | 1–4 | 3 | photos made per concept and orientation on `final`; the best is kept |
+| `quotes` | `[{text 1–300, by ≤ 80}]` ≤ 6 | [] | testimonials for the quote layout, used verbatim |
+| `use_style` | bool | true | follow the kit's style references when it has some |
+
+### Concept
+
+Gains `key_word` (one word or short phrase of the headline, marked by the copywriter), `headline_options`
+(`[{headline, key_word, score}]`, the best of about twelve ranked headlines, best first) and `quote` (index into
+`brief.quotes` or null). `ConceptPatch` takes `key_word` and `quote`.
+
+`photos[group]` gains `candidates: [{id, status, thumb_url, media_url, score, issues, picked}]`, `pick: {by:
+"vision"|"heuristic"|"only", model}`, `before: Gen|null`, `upscaled: bool`, `cutout: bool`, `subject: {box, face,
+source}|null` (boxes are `[x0, y0, x1, y1]` in 0..1 of the photo).
+
+### Photos (stage 2, per concept and orientation)
+
+1. `candidates` photos with different seeds (`params.photo_role: "candidate"`).
+2. Best-of: the vision model scores each (no garbled text, natural hands and faces, copy space where the layout
+   needs it, mood, sharpness) and returns subject and face boxes. The model is `ADS_VISION_MODEL`, else
+   `LLM_MODEL_VISION`, else the copywriter, the first whose Ollama `/api/show` lists the `vision` capability (an
+   OpenAI-compatible server is trusted as configured). Without one, or when it fails: the calmest copy area
+   (least edge density) wins, ties go to the first.
+3. The logo-on-surface edit as before; a `before_after` concept also gets its before picture (an edit of the
+   photo: same place, before the work was done).
+4. `final`: an ESRGAN quick upscale (`image_upscale_esrgan`) when the photo is smaller than its largest format.
+5. The cut-out mask (BiRefNet, the Photo Studio cut-out tool) on `final`, and on `draft` for `cutout_blob`.
+
+### Layout engine
+
+- **Smart placement**: the subject (mask, else the vision boxes) decides the crop focus and which side the copy
+  takes; copy, panels and badges keep off the subject and its face. `spec.placement.flip` (null = auto) forces
+  the copy to the other side; a user's `focus` is never changed. `report.placement` = `{focus, flip, overlap,
+  source}`.
+- **Typography**: tighter headline leading and tracking (Latin), the `highlight` word in the accent colour
+  (nudged to 3:1 when it must; works in RTL), an 8-pt grid for margins and gaps, a logo clear space of half its
+  height, and a font pairing per layout when the brief and the ad leave the preset open (editorial and quote:
+  Editorial; arch/circle: Elegant; the rest Modern).
+- **Shapes**: arch, circle, teardrop and blob masks are drawn 4× and scaled down (anti-aliased); blobs are smooth
+  closed Catmull-Rom curves through seeded jittered radii, so the same seed always gives the same blob.
+
+### AdPatch / spec additions
+
+```json
+{"texts": {"highlight": "Veckostädning", "quote": "...", "quote_by": "Anna, Solna"},
+ "shape": {"mask": "arch|circle|teardrop|blob", "colour": "#E8857B", "seed": 42},
+ "placement": {"flip": true}}
+```
+
+`spec` gains `shape`, `placement`, `subject`, `style_ref` (the rules applied, or null) and `assets: {cutout,
+before}`. Ads gain `auto` (`{style?, flip?}`, what the QA pass settled on; an explicit `style` edit wins).
+
+### Creative-director loop
+
+After the concepts, one call (schema `AdHeadlines`) writes about twelve headlines per concept and ranks them; the
+best goes in (guarded like everything else), the top five stay as `headline_options`. The native-editor check
+follows. On `final`, every finished ad gets a vision QA (schema `AdQA`: overlap, legibility, mood, score 0–10);
+a failing ad is re-laid with the other side, then the next layout, up to two retries, and the best kept.
+`report.quality.qa` = `{checked, by: "vision"|"heuristic", score, issues, retried: [{style, flip, score}],
+flagged}`; without vision a heuristic QA (subject overlap, contrast) runs instead. Edits never call the LLM.
+
+### Style references (brand kit)
+
+`BrandKitOut.ad_style` = `{references: [{media_id, media_url}], rules: AdStyleRules|null, status:
+"none"|"working"|"ready"|"failed", error, job_id, updated_at}` (column `brand_kit.ad_style`, migration 0025).
+
+| method | path | body | returns |
+|---|---|---|---|
+| PUT | `/brand-kits/{id}/ad-style` | `{references: [media_id] ≤ 6}` | BrandKitOut; with references an `ad_style` job reads them (general lane); an empty list clears the rules |
+| POST | `/brand-kits/{id}/ad-style/extract` | | 202 Job; 409 without references |
+
+References are uploaded with `POST /brand-kits/assets?purpose=reference`. The vision model reads each one and
+the answers are merged (majority, first reference breaks ties):
+
+```json
+{"layouts": ["cutout_blob", "arch_mask"], "pinned": true, "mask": "arch", "shapes": ["blob", "dots"],
+ "headline_weight": "bold", "headline_case": "sentence", "serif": false, "colour_usage": "bold",
+ "background": "light", "density": "balanced", "badge": true, "notes": "..."}
+```
+
+Ad Studio then prefers those layouts (pinned: only those, spread across concepts), uses the mask shape, the
+headline case and weight, a serif pairing when `serif`, and the density for margins. The campaign's
+`brand_kit.ad_style` = `{active, layouts, summary}`; `active` is false when `use_style` is off or there are no
+rules.

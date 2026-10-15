@@ -367,6 +367,7 @@ class BrandKitOut(BaseModel):
     contact: dict[str, str] = {}
     socials: list[dict[str, Any]] = []
     claims: list[str] = []
+    ad_style: dict[str, Any] = {}
     assets: dict[str, AssetOut] = {}
     prompt_context: str = ""
     created_at: Utc

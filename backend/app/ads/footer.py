@@ -213,11 +213,13 @@ def plan(spec: dict, fmt: str, w: int, s: int, faces: dict) -> Plan:
     lang = spec.get("language") or None
     story = fmt == "9:16"
     max_rows = MAX_ROWS.get(fmt, 1)
-    floor = max(16, round(0.0204 * s))
+    # 26 px at 1080 wide: the footer is read on a phone too
+    floor = max(16, round(0.0241 * s))
     top = max(floor, round(0.025 * s * 1.08 * SIZE.get(fmt, 1.0)))
     avail = w - 2 * (round(0.065 * s * 0.7) + card_inset(fmt, s))
     p = Plan()
-    scale = {"social": 1.25, "follow": 1.1} if story else {}
+    # a story's card stays compact: the subject goes on above it
+    scale = {"social": 1.12, "follow": 1.0} if story else {}
 
     def fits(rows, size):
         return all(row_width(r, round(size * scale.get(r[0].row, 1.0)), faces, lang) <= avail for r in rows)

@@ -176,6 +176,6 @@ def design_preview(body: DesignPreviewIn, db: Session = Depends(get_db), cur: Cu
     out = vc.queue_speech(db, cur, speak, flow="voice_design")
     db.commit()
     if out.get("engine_resolved") == "omnivoice":
-        ins = voice_instruct.normalise(body.description)
+        ins = voice_instruct.normalise(body.description, language)
         out.update(understood=ins.understood, ignored=ins.ignored)
     return SpeakOut(**out)

@@ -714,7 +714,25 @@ def poetry_scene_messages(title: str, language: str, groups: list[list[str]], ch
 
 # ---------------------------------------------------------------- Ad Studio (contract v36)
 
-AD_LAYOUTS = ("frosted", "side_wash", "bottom_bar", "split", "badge", "minimal")
+AD_LAYOUTS = ("frosted", "side_wash", "bottom_bar", "split", "badge", "minimal", "cutout_blob", "arch_mask",
+              "circle_mask", "big_price", "editorial", "before_after", "quote")
+# what each layout is, for the creative director (and the style-reference reader)
+AD_LAYOUT_NOTES = {
+    "frosted": "copy on a frosted panel over the photo",
+    "side_wash": "copy over a pale wash on one side of the photo",
+    "bottom_bar": "a solid brand bar under the photo",
+    "split": "photo and a colour block side by side",
+    "badge": "a round price or discount badge on the photo (needs an approved offer with a number)",
+    "minimal": "a short headline centred on calm space",
+    "cutout_blob": "the person or product cut out, standing on an organic colour shape on a light ground",
+    "arch_mask": "the photo inside a large arch on an off-white ground, headline on top",
+    "circle_mask": "the photo inside a large circle on an off-white ground",
+    "big_price": "huge headline and a colour band with the price number very large (needs an offer with a number)",
+    "editorial": "oversized headline type with a small photo",
+    "before_after": "two halves, before and after the work (only for visible transformations: cleaning, "
+                    "renovation, gardening, styling)",
+    "quote": "a customer's own quote set large (only when the client gave quotes)",
+}
 # the photoreal engines a concept may ask for when the brief leaves the model on auto
 AD_PHOTO_MODELS = ("zimage_turbo", "qwen_image_2512")
 
@@ -731,6 +749,18 @@ class AdConcept(BaseModel):
     photo_model: str = ""
     placement: str = ""
     logo_surface: str = ""
+    # one word (or a short phrase) of the headline to set in the accent colour
+    key_word: str = ""
+    # quote layout: which of the client's quotes (1-based); never a quote of the model's own
+    quote: int | None = None
+
+    @field_validator("quote", mode="before")
+    @classmethod
+    def _quote(cls, v):
+        try:
+            return int(v) if v not in (None, "", 0) else None
+        except (TypeError, ValueError):
+            return None
 
     @field_validator("layout")
     @classmethod
@@ -784,10 +814,10 @@ AD_RULES = """Copy rules:
 - offers: ONLY lines copied exactly from the approved offers below, the ones that suit this concept (zero to
   two). Never write a price, a percentage, a discount, a time limit, a guarantee or any other promise of your
   own, and no numbers anywhere in the copy unless they appear in the approved offers.
-- layout, one of: frosted (copy on a frosted panel), side_wash (copy over a pale wash on one side), bottom_bar
-  (a solid brand bar under the photo), split (photo and a colour block side by side), badge (a round price or
-  discount badge; only when an approved offer has a number), minimal (a short headline centred on calm space).
-  Vary the layouts across concepts.
+- layout: one of the layouts listed below. Vary the layouts across concepts: no two concepts on the same one
+  unless there are more concepts than layouts.
+- key_word: the one word of the headline (or two that belong together) a designer would set in the accent
+  colour, copied exactly as it is written in the headline.
 - Each concept is a different idea (insight): a different moment, angle or feeling, not a rewording."""
 
 AD_PHOTO_RULES = """Photo rules (photo_prompt, in English, 50 to 90 words):
@@ -803,6 +833,8 @@ AD_PHOTO_RULES = """Photo rules (photo_prompt, in English, 50 to 90 words):
 - Nothing random: no name badges, lanyards, stickers, odd emblems, floating objects or props the moment
   doesn't need, and no text, letters, numbers, signs, logos or watermarks anywhere in the picture.
 - Copy space: describe the calm, uncluttered area the layout needs, in the words "copy space": {space}.
+- cutout_blob: one person (or the product) whole and clearly outlined against a plain, light, uncluttered
+  background, so it can be cut out cleanly; nothing in front of them.
 - photo_model: "zimage_turbo" for people, hands and homes (natural skin, quick), or "qwen_image_2512" for
   detailed interiors, products, materials and crowded scenes.
 - placement: where the subject sits in the frame, e.g. "right third, lower half".
@@ -819,6 +851,13 @@ def ad_copy_space(layout: str, rtl: bool) -> str:
         "bottom_bar": "the bottom third, subject in the upper two thirds",
         "split": "none needed, the photo sits beside a colour block; the subject can fill the frame",
         "minimal": "the upper half, subject low in the frame",
+        "cutout_blob": "none, one subject alone on a plain light background, clear outline",
+        "arch_mask": "none, the subject centred with room around them",
+        "circle_mask": "none, the subject centred with room around them",
+        "big_price": f"the whole {side} half, subject on the {other}",
+        "editorial": "none, a simple calm frame with the subject centred",
+        "before_after": "none, a wide straight-on view of the whole space in even light",
+        "quote": "the subject in the middle band of the frame, face clearly lit",
     }.get(layout, f"the upper {side} area")
 
 
@@ -833,9 +872,15 @@ def _examples(language: str) -> str:
 def ad_concept_messages(*, brand: str, subject: str, description: str, brief: str, occasion: str, market: str,
                         language: str, tone: str, must_say: str, offers: list[str], count: int,
                         products: list[str], rtl: bool, avoid: list[str] | None = None,
-                        channels: list[str] | None = None, colours: list[str] | None = None) -> list[dict]:
+                        channels: list[str] | None = None, colours: list[str] | None = None,
+                        layouts: list[str] | None = None, quotes: list[dict] | None = None,
+                        style_note: str = "") -> list[dict]:
     lang_name = aerab.NAMES.get(language, language)
-    spaces = "; ".join(f"{k} -> {ad_copy_space(k, rtl)}" for k in AD_LAYOUTS)
+    allowed = [x for x in (layouts or AD_LAYOUTS) if x in AD_LAYOUTS] or list(AD_LAYOUTS)
+    spaces = "; ".join(f"{k} -> {ad_copy_space(k, rtl)}" for k in allowed)
+    menu = "Layouts you may use:\n" + "\n".join(f"- {k}: {AD_LAYOUT_NOTES[k]}" for k in allowed)
+    quote_list = "\n".join(f"{i}. \"{q['text']}\"" + (f" ({q['by']})" if q.get("by") else "")
+                            for i, q in enumerate(quotes or [], 1))
     parts = [f"Write {count} advert concept{'s' if count > 1 else ''} for social media.",
              f"The brand:\n{brand}" if brand else "",
              f"What we advertise: {subject}" + (f" ({description})" if description else ""),
@@ -852,7 +897,11 @@ def ad_concept_messages(*, brand: str, subject: str, description: str, brief: st
               + "; ".join(products) + ". Describe the scene around it; the product itself stays as it is.")
              if products else "",
              ("Already written, do something different from: " + " | ".join(avoid)) if avoid else "",
+             ("The client's own customer quotes (a quote layout uses one of these word for word; give its "
+              "number in \"quote\"; never write a quote yourself):\n" + quote_list) if quotes else "",
+             f"The brand's own adverts look like this; stay in that style: {style_note}" if style_note else "",
              AD_RULES.format(language=lang_name, market=market or "the target market"),
+             menu,
              _examples(language),
              AD_PHOTO_RULES.format(market=market or "the target market",
                                    colours=", ".join(colours or []) or "the brand's colours",
@@ -861,9 +910,9 @@ def ad_concept_messages(*, brand: str, subject: str, description: str, brief: st
     if rule:
         parts.append(rule)
     parts.append(f'Answer as JSON {{"concepts": [{{"insight": "...", "kicker": "...", "headline": "...", '
-                 f'"body": "...", "offers": ["..."], "cta": "...", "layout": "frosted", "photo_prompt": "...", '
-                 f'"photo_model": "zimage_turbo", "placement": "...", "logo_surface": ""}}]}} with exactly '
-                 f'{count} concepts.')
+                 f'"body": "...", "offers": ["..."], "cta": "...", "layout": "{allowed[0]}", "key_word": "...", '
+                 f'"photo_prompt": "...", "photo_model": "zimage_turbo", "placement": "...", "logo_surface": "", '
+                 f'"quote": null}}]}} with exactly {count} concepts.')
     return [{"role": "system", "content": "You are the creative director and senior copywriter of an advertising "
                                           f"agency in {market or 'the target market'}, writing in your mother "
                                           f"tongue, {lang_name}. Answer only with JSON."},
@@ -925,4 +974,51 @@ def ad_copy_check_messages(*, language: str, market: str, concepts: list[dict]) 
     parts.append('Answer as JSON {"lines": [{"concept": 1, "field": "headline", "score": 4, "issue": "", '
                  '"rewrite": ""}]} with one entry per line above.')
     return [{"role": "system", "content": "You edit advertising copy for native fluency. Answer only with JSON."},
+            {"role": "user", "content": "\n\n".join(parts)}]
+
+
+class AdHeadlineOption(BaseModel):
+    headline: str = ""
+    key_word: str = ""
+    score: float = 0
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def _score(cls, v):
+        try:
+            return max(0.0, min(10.0, float(v)))
+        except (TypeError, ValueError):
+            return 0.0
+
+
+class AdHeadlineSet(BaseModel):
+    concept: int = 0
+    options: list[AdHeadlineOption] = []
+
+
+class AdHeadlines(BaseModel):
+    concepts: list[AdHeadlineSet] = []
+
+
+def ad_headline_messages(*, language: str, market: str, concepts: list[dict], per: int = 12) -> list[dict]:
+    """The creative director's headline round: about a dozen headlines per concept, ranked by their author."""
+    lang_name = aerab.NAMES.get(language, language)
+    rows = [f"{i}. insight: {(c.get('insight') or '')!r}; headline now: {(c.get('headline') or '')!r}; "
+            f"body: {(c.get('body') or '')!r}" for i, c in enumerate(concepts, 1)]
+    parts = [f"You are the creative director. For each advert concept below write {per} different headlines in "
+             f"{lang_name} for {market or 'the target market'} (keep the current one among them if it is good), "
+             "then score every one from 0 to 10 for how a native reader would stop scrolling for it: concrete, "
+             "spoken, true to the insight. Order each list best first.",
+             "\n".join(rows),
+             "Rules: at most 5 words; a \\n where a designer would break the line (at most one); no numbers, "
+             "prices, promises, handles or links that the concept doesn't already have; no empty abstractions. "
+             "key_word: the one word (or two that belong together) to set in the accent colour, copied exactly "
+             "from that headline.",
+             _examples(language)]
+    rule = aerab.writing_rule(language)
+    if rule:
+        parts.append(rule)
+    parts.append('Answer as JSON {"concepts": [{"concept": 1, "options": [{"headline": "...", "key_word": "...", '
+                 '"score": 8}]}]} with one entry per concept.')
+    return [{"role": "system", "content": "You write and judge advertising headlines. Answer only with JSON."},
             {"role": "user", "content": "\n\n".join(parts)}]

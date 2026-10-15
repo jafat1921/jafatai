@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Megaphone, Plus } from 'lucide-react'
+import { Megaphone, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,14 +10,23 @@ import { SwitchRow } from '@/components/studio/switch-row'
 import { RefAdd, RefThumb } from '@/components/generate/RefSlot'
 import { useBrandKits } from '@/hooks/useBrandKits'
 import { useCreateAds } from '@/hooks/useAds'
-import { AD_LANGUAGES, defaultFooter, FORMATS, IMAGE_MODELS, type AdCreate, type AdFormat, type FooterItems } from '@/lib/ads'
+import { AD_LANGUAGES, defaultFooter, FORMATS, IMAGE_MODELS, MAX_QUOTES, type AdCreate, type AdFormat, type AdQualityLevel, type FooterItems } from '@/lib/ads'
 import { announce } from '@/stores/ui'
 import { FooterPicker } from './FooterPicker'
+import { Segmented } from './Segmented'
 
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
 const MAX_PRODUCTS = 3
 const MAX_OFFERS = 6
 const NAMES: Record<string, string> = { website: 'website or booking link', socials: 'social accounts' }
+
+const QUALITY = [
+  { id: 'draft', label: 'Draft' },
+  { id: 'final', label: 'Final' },
+] as const
+
+type QuoteRow = { key: number; text: string; by: string }
+let rowKey = 0
 
 const listOf = (w: string[]) => (w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`)
 
@@ -50,6 +59,11 @@ export function AdBriefForm() {
   const [products, setProducts] = useState<string[]>([])
   // null: the kit's defaults, so switching kits starts from the new kit's own picks
   const [footer, setFooter] = useState<FooterItems | null>(null)
+  const [quality, setQuality] = useState<AdQualityLevel>('final')
+  const [candidates, setCandidates] = useState(3)
+  const [quotes, setQuotes] = useState<QuoteRow[]>([])
+  const [useStyle, setUseStyle] = useState(true)
+  const editQuote = (key: number, v: Partial<QuoteRow>) => setQuotes((rows) => rows.map((r) => (r.key === key ? { ...r, ...v } : r)))
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((o) => ({ ...o, [k]: v }))
 
   const kitId = picked ?? (kits.find((k) => k.is_default) ?? kits[0])?.id ?? ''
@@ -59,6 +73,7 @@ export function AdBriefForm() {
     ? [...(kit.contact?.website?.trim() || kit.contact?.booking_url?.trim() ? [] : ['website']), ...(kit.socials?.length ? [] : ['socials'])]
     : []
   const custom = offers.filter((o) => !claims.includes(o))
+  const styleReady = kit?.ad_style?.status === 'ready'
 
   const toggleOffer = (o: string) => setOffers((cur) => (cur.includes(o) ? cur.filter((x) => x !== o) : cur.length < MAX_OFFERS ? [...cur, o] : cur))
   const addOffer = () => {
@@ -72,7 +87,17 @@ export function AdBriefForm() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (blocked) return
-    const body: AdCreate = { ...f, brand_kit_id: kitId || null, formats, offers, product_media_ids: products }
+    const body: AdCreate = {
+      ...f,
+      brand_kit_id: kitId || null,
+      formats,
+      offers,
+      product_media_ids: products,
+      quality,
+      candidates,
+      quotes: quotes.map((q) => ({ text: q.text.trim(), by: q.by.trim() })).filter((q) => q.text),
+      use_style: useStyle,
+    }
     if (footer && kit) body.footer_items = footer
     create.mutate(body, {
       onSuccess: (c) => {
@@ -254,6 +279,92 @@ export function AdBriefForm() {
       </fieldset>
 
       {kit && <FooterPicker kit={kit} legend="The footers show" value={footer ?? defaultFooter(kit)} onChange={setFooter} />}
+
+      {styleReady && kit && (
+        <div className="flex flex-col gap-1 rounded-[6px] border border-studio-border-strong bg-studio-raised p-2.5">
+          <span className="text-body font-medium">Using your style</span>
+          <p id={id('style-hint')} className="text-small text-studio-muted">
+            The layouts, shapes and type follow the ads you added to {kit.name}.
+          </p>
+          <label htmlFor={id('style')} className="flex min-h-6 items-center gap-1.5 text-small">
+            <input
+              id={id('style')}
+              type="checkbox"
+              className="size-4 shrink-0 accent-studio-accent focus-visible:outline-2 focus-visible:outline-studio-accent"
+              checked={useStyle}
+              onChange={(e) => setUseStyle(e.target.checked)}
+              aria-describedby={id('style-hint')}
+            />
+            Follow my ad style
+          </label>
+        </div>
+      )}
+
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="text-small font-medium">Quotes (optional)</legend>
+        <p id={id('quotes-hint')} className="text-small text-studio-muted">
+          For the quote card, word for word. Only your own words are used; the AI never writes reviews.
+        </p>
+        {quotes.length > 0 && (
+          <ul className="flex flex-col gap-2" aria-label="Quotes">
+            {quotes.map((q, i) => (
+              <li key={q.key} className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_12rem_auto]">
+                <div className="flex flex-col gap-1">
+                  <label htmlFor={id(`q-${q.key}`)} className="sr-only">
+                    Quote {i + 1}
+                  </label>
+                  <Textarea id={id(`q-${q.key}`)} dir="auto" rows={2} maxLength={300} value={q.text} onChange={(e) => editQuote(q.key, { text: e.target.value })} placeholder="What they said" aria-describedby={id('quotes-hint')} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor={id(`qb-${q.key}`)} className="sr-only">
+                    Who said quote {i + 1}
+                  </label>
+                  <Input id={id(`qb-${q.key}`)} dir="auto" maxLength={80} value={q.by} onChange={(e) => editQuote(q.key, { by: e.target.value })} placeholder="Anna, Solna" />
+                </div>
+                <Button type="button" size="icon-sm" variant="ghost" aria-label={`Remove quote ${i + 1}`} onClick={() => setQuotes((rows) => rows.filter((r) => r.key !== q.key))}>
+                  <X aria-hidden />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div>
+          <Button type="button" variant="ghost" size="sm" disabled={quotes.length >= MAX_QUOTES} onClick={() => setQuotes((rows) => [...rows, { key: ++rowKey, text: '', by: '' }])}>
+            <Plus aria-hidden />
+            Add a quote
+          </Button>
+        </div>
+      </fieldset>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1">
+          <span aria-hidden className="text-small font-medium">
+            Quality
+          </span>
+          <Segmented label="Quality" options={QUALITY} value={quality} onChange={setQuality} describedBy={id('q-hint')} className="self-start" />
+          <span id={id('q-hint')} className="text-small text-studio-muted">
+            {quality === 'draft' ? 'Draft: one photo each and no upscale, quicker.' : 'Final: a few photos each, the best one kept, upscaled and checked.'}
+          </span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={id('cand')}>Photos to choose from: {quality === 'draft' ? 1 : candidates}</Label>
+          <input
+            id={id('cand')}
+            type="range"
+            min={1}
+            max={4}
+            step={1}
+            value={quality === 'draft' ? 1 : candidates}
+            disabled={quality === 'draft'}
+            onChange={(e) => setCandidates(Number(e.target.value))}
+            aria-describedby={id('cand-hint')}
+            className="h-8 accent-studio-accent disabled:opacity-50"
+          />
+          <span id={id('cand-hint')} className="text-small text-studio-muted">
+            {quality === 'draft' ? 'Only for Final.' : 'Made per concept and shape; the best one goes in the ads.'}
+          </span>
+        </div>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1">

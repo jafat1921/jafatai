@@ -44,8 +44,10 @@ def test_transfer_keeps_the_writers_letters():
     assert aerab.transfer(PLAIN, MARKED) == MARKED
     # an Arabic ye / kaf swapped in by the LLM still lands on the Urdu letters
     assert aerab.transfer(PLAIN, "دِل كي بات") == MARKED
-    # a changed word is refused
-    assert aerab.transfer(PLAIN, "دِل کا بات") is None
+    # one changed letter (کی -> کا) no longer sinks the line: its neighbours keep their marks
+    assert aerab.transfer(PLAIN, "دِل کا بات") == MARKED
+    # a rewritten line is still refused
+    assert aerab.transfer(PLAIN, "دِل میں اُمید") is None
     # marks the writer typed win
     assert aerab.transfer("دُل کی بات", MARKED) == "دُل کی بات"
     assert aerab.strip(MARKED) == PLAIN
@@ -68,7 +70,7 @@ def test_add_aerab_endpoint(client, llm):
     r = client.post("/api/audio/lyrics/aerab", json={"lyrics": f"[chorus]\n{PLAIN}\n{PLAIN}"})
     assert r.status_code == 200, r.text
     assert r.json() == {"lyrics": f"[chorus]\n{MARKED}\n{MARKED}", "marked": 2, "kept": 0, "low_coverage": 0,
-                        "language": "ur"}
+                        "language": "ur", "complete": True, "remaining_chars": 0}
     assert fake.calls == 1
     assert client.post("/api/audio/lyrics/aerab", json={"lyrics": "[verse]\nhello"}).status_code == 422
 

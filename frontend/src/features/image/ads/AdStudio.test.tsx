@@ -252,7 +252,7 @@ describe('campaign page', () => {
     const headline = within(editor).getByLabelText('Headline')
     await userEvent.clear(headline)
     await userEvent.type(headline, 'Ny rubrik')
-    await userEvent.selectOptions(within(editor).getByLabelText('Layout'), 'split')
+    await userEvent.click(within(editor).getByRole('radio', { name: 'Split colour block' }))
     await userEvent.selectOptions(within(editor).getByLabelText('Accent'), '#E8857B')
     await waitFor(() => expect(calls.some((c) => c.path === '/ads/ad1/ads/a1/preview')).toBe(true), { timeout: 3000 })
     await waitFor(() => expect(within(editor).getByRole('img', { name: 'Preview with your changes' })).toHaveAttribute('src', 'blob:preview'))
@@ -316,5 +316,145 @@ describe('campaign page', () => {
       footer_items: { contact: ['website', 'phone', 'location'], socials: ['tiktok:ixperts'] },
       follow: { show: true, text: 'Häng med' },
     })
+  })
+})
+
+describe('design leap (M16b)', () => {
+  it('sends the shape, placement and key word only when they changed', () => {
+    const own: AdSpec = { ...spec, style: 'cutout_blob', texts: { ...spec.texts, highlight: 'ljusen' }, shape: { mask: 'blob', colour: '#E8857B', seed: 7 }, placement: { flip: null } }
+    expect(patchFrom(own, own)).toEqual({})
+    const edit: AdSpec = { ...own, texts: { ...own.texts, highlight: '' }, shape: { ...own.shape!, colour: '#22223B', seed: 99 }, placement: { flip: true } }
+    expect(patchFrom(own, edit)).toEqual({ texts: { highlight: '' }, shape: { colour: '#22223B', seed: 99 }, placement: { flip: true } })
+    expect(patchFrom(own, { ...own, shape: { ...own.shape!, mask: 'arch' } })).toEqual({ shape: { mask: 'arch' } })
+  })
+
+  it('edits the key word, shape colour, copy side and mask shape, and shows the final check', async () => {
+    const own: AdSpec = { ...spec, style: 'cutout_blob', texts: { ...spec.texts, highlight: 'ljusen' }, shape: { mask: 'arch', colour: '#E8857B', seed: 7 }, placement: { flip: null } }
+    const done = campaign({
+      stage: 'done',
+      status: 'done',
+      review: null,
+      ads: [
+        {
+          ...ad,
+          spec: own,
+          report: {
+            ...ad.report,
+            fallback: 'big_price -> side_wash',
+            quality: { contrast: {}, all_pass: true, dropped: {}, copy_check: [], treatment: [], qa: { checked: true, by: 'vision', score: 5, issues: ['copy over the face'], retried: [], flagged: true } },
+          },
+        },
+      ],
+    })
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:preview', revokeObjectURL: () => {} }))
+    const calls = mockApi((method, path) => {
+      if (method === 'POST' && path === '/ads/ad1/ads/a1/preview') return new Response('png', { status: 200, headers: { 'Content-Type': 'image/png' } })
+      if (method === 'PATCH' && path === '/ads/ad1/ads/a1') return { ...ad, version: 2, spec: own }
+      if (path === '/ads/ad1') return done
+      return []
+    })
+    renderAt('/image/ads/ad1', routes)
+    const tile = await screen.findByRole('listitem', { name: 'Concept 1, Feed 4:5' })
+    await userEvent.click(within(tile).getByRole('button', { name: 'Edit' }))
+    const editor = screen.getByRole('complementary', { name: 'Edit Feed 4:5' })
+    expect(within(editor).getByText('The final check flagged this ad: copy over the face')).toBeInTheDocument()
+    expect(within(editor).getByText(/Big price couldn.t be used for this ad, so it uses Side wash instead/)).toBeInTheDocument()
+    expect(within(editor).getByRole('radio', { name: 'Cut-out on a shape' })).toHaveAttribute('aria-checked', 'true')
+
+    const kw = within(editor).getByLabelText('Key word')
+    expect(kw).toHaveValue('ljusen')
+    expect(kw).toHaveAttribute('dir', 'auto')
+    await userEvent.clear(kw)
+    await userEvent.type(kw, 'Tänd')
+    await waitFor(() => expect(calls.some((c) => c.path === '/ads/ad1/ads/a1/preview' && (c.body as { texts?: { highlight?: string } }).texts?.highlight === 'Tänd')).toBe(true), { timeout: 3000 })
+
+    const hex = within(editor).getByLabelText('Shape colour')
+    await userEvent.clear(hex)
+    await userEvent.type(hex, '22223b')
+    await userEvent.click(within(editor).getByRole('radio', { name: 'Swap' }))
+    expect(within(editor).queryByRole('radiogroup', { name: 'Mask shape' })).toBeNull()
+    await userEvent.click(within(editor).getByRole('radio', { name: 'Photo in an arch' }))
+    await userEvent.click(within(within(editor).getByRole('radiogroup', { name: 'Mask shape' })).getByRole('radio', { name: 'Circle' }))
+    expect(document.body.textContent).not.toMatch(/licen[cs]e|commercial/i)
+
+    await userEvent.click(within(editor).getByRole('button', { name: 'Save this ad' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/ads/ad1/ads/a1')).toBeTruthy())
+    expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({
+      texts: { highlight: 'Tänd' },
+      style: 'arch_mask',
+      shape: { mask: 'circle', colour: '#22223B' },
+      placement: { flip: true },
+    })
+  })
+
+  it('sends quality, photo candidates, quotes and the style switch with the brief', async () => {
+    const styled = { ...KIT, ad_style: { references: [], rules: { layouts: ['arch_mask'] }, status: 'ready', error: null, job_id: null, updated_at: T } } as BrandKit
+    const calls = mockApi((method, path) => {
+      if (path === '/brand-kits') return [styled]
+      if (method === 'POST' && path === '/ads') return campaign({ status: 'running', review: null })
+      if (path === '/ads/ad1') return campaign()
+      return []
+    })
+    renderAt('/image/ads', routes)
+    expect(await screen.findByText('Using your style')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('What are you advertising?'), 'Cleaning')
+    await userEvent.click(screen.getByRole('button', { name: 'Add a quote' }))
+    await userEvent.type(screen.getByLabelText('Quote 1'), 'Spotless every time')
+    await userEvent.type(screen.getByLabelText('Who said quote 1'), 'Anna, Solna')
+    await userEvent.click(screen.getByRole('button', { name: 'Add a quote' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove quote 2' }))
+    expect(screen.getByText(/the AI never writes reviews/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Final' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByLabelText(/Photos to choose from/)).toBeEnabled()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Follow my ad style' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Draft' }))
+    expect(screen.getByLabelText(/Photos to choose from/)).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /Make the ads/ }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/ads')).toBeTruthy())
+    expect(calls.find((c) => c.method === 'POST' && c.path === '/ads')!.body).toMatchObject({
+      quality: 'draft',
+      candidates: 3,
+      quotes: [{ text: 'Spotless every time', by: 'Anna, Solna' }],
+      use_style: false,
+    })
+  })
+
+  it('offers the ranked headlines and shows the photo picks on a concept', async () => {
+    const c1 = concept(1, {
+      key_word: 'ljusen',
+      headline_options: [
+        { headline: 'Tänd ljusen 1', key_word: 'ljusen', score: 9 },
+        { headline: 'Mys utan\ndamm', key_word: 'Mys', score: 8 },
+      ],
+      photos: {
+        portrait: {
+          base: null,
+          logo: null,
+          final: 'g2',
+          note: null,
+          candidates: [
+            { id: 'g1', status: 'done', thumb_url: '/t/g1', media_url: null, score: 6.5, issues: [], picked: false },
+            { id: 'g2', status: 'done', thumb_url: '/t/g2', media_url: null, score: 8, issues: [], picked: true },
+          ],
+          pick: { by: 'vision', model: 'gemma' },
+        },
+      },
+    })
+    let camp = campaign({ concepts: [c1, concept(2)] })
+    const calls = mockApi((method, path, _q, body) => {
+      if (method === 'PATCH' && path === '/ads/ad1/concepts/c1') {
+        camp = { ...camp, concepts: camp.concepts.map((c) => (c.id === 'c1' ? { ...c, ...(body as object) } : c)) }
+        return camp
+      }
+      if (path === '/ads/ad1') return camp
+      return []
+    })
+    renderAt('/image/ads/ad1', routes)
+    const card = await screen.findByRole('listitem', { name: 'Concept 1' })
+    expect(within(card).getByLabelText('Key word')).toHaveValue('ljusen')
+    expect(within(card).getByRole('img', { name: 'Photo 2, used in the ads, score 8' })).toBeInTheDocument()
+    expect(within(card).getByRole('radio', { name: 'Frosted panel' })).toHaveAttribute('aria-checked', 'true')
+    await userEvent.click(within(card).getByRole('button', { name: 'Mys utan damm' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ headline: 'Mys utan\ndamm', key_word: 'Mys' }))
   })
 })

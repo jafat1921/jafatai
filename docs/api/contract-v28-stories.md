@@ -322,3 +322,9 @@ OmniVoice's attributes, whisper on one line) and the `licence` marker; no marker
 pass marking bare lines in one LLM call and leaving the writer's marked line alone, with the marked text in
 the result; `aerab: false` making no LLM call; `match` ignoring marks. The LLM is the faked transport the
 aerab tests use.
+
+### Note (2026-10-15): aerab on prose, see v23b
+
+- The marking pass now aligns the LLM's letters with the writer's and keeps the marks wherever they agree, so a line is no longer spoken bare because the model swapped one letter (ي for ی, a dropped ZWNJ, an added tatweel). Under 80% agreement the line is still spoken as written. The spoken letters are always the writer's own.
+- Long lines go to the LLM sentence by sentence, about 700 characters a call, so a book is more, shorter calls than "40 lines a call" above; the text comes back with its spacing exactly as sent.
+- For marking prose yourself, `POST /api/text/aerab` now answers within about 45 s with `complete` / `remaining_chars` (and `coverage`), and `POST /api/text/aerab/jobs` marks a whole book as a job (poll `GET /api/jobs/{id}`; `result` has the `TextAerabOut` fields). Answer (a) above stands otherwise.

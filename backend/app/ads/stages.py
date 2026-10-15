@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 
 from fastapi import HTTPException
+from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -22,12 +23,15 @@ from app import library as lib
 from app import models_catalog as mc
 from app import styles as st
 from app.ads import colours as col
+from app.ads import layout as lay
+from app.ads import placement
 from app.ads import copy as cp
 from app.ads import service as svc
 from app.autopilot import POLL_S, WAIT_PRIORITY, StageFailed, Wait
 from app.llm import LLMError, chat_sync
-from app.llm.prompts import (AD_CHECK_FIELDS, AD_PHOTO_MODELS, AdConcepts, AdCopyCheck, ad_concept_messages,
-                              ad_copy_check_messages, ad_copy_space)
+from app.ads import vision as eye
+from app.llm.prompts import (AD_CHECK_FIELDS, AD_PHOTO_MODELS, AdConcepts, AdCopyCheck, AdHeadlines,
+                              ad_concept_messages, ad_copy_check_messages, ad_copy_space, ad_headline_messages)
 from app.models import AdCampaign, Generation, Job, MediaItem
 from app.services import enqueue_generation
 
@@ -52,6 +56,17 @@ LOOK = "Editorial lifestyle photograph, natural light, real textures, candid and
 def copy_space(style: str, group: str, rtl: bool) -> str:
     """The composition clause: where the layout will set the copy, so the photo leaves that region calm."""
     side, other = ("right", "left") if rtl else ("left", "right")
+    if style == "cutout_blob":
+        return ("Composition: one subject alone, whole and clearly outlined, against a plain light uncluttered "
+                "background, nothing in front of them, room around them.")
+    if style in ("arch_mask", "circle_mask", "editorial"):
+        return "Composition: the subject centred with room around them, a simple calm frame."
+    if style == "before_after":
+        return "Composition: a wide straight-on view of the whole space in even light, no people in the way."
+    if style == "quote":
+        return "Composition: the subject in the middle band of the frame, the face clearly lit."
+    if style == "big_price":
+        style = "side_wash"
     if style in ("frosted", "badge", "side_wash"):
         if group == "wide" or style == "side_wash":
             return (f"Composition: the subject in the {other} half of the frame; copy space in the {side} half, "
@@ -64,6 +79,33 @@ def copy_space(style: str, group: str, rtl: bool) -> str:
     if style == "split":
         return "Composition: the subject centred and close, filling the frame."
     return "Composition: the subject low in the frame; copy space in the upper half, large, calm and empty."
+
+
+# what a failing ad is tried in next, in order
+RETRY_LAYOUTS = ("side_wash", "split", "frosted", "editorial")
+
+
+def lay_over_photo() -> tuple[str, ...]:
+    return lay.OVER_PHOTO
+
+
+def key_word_in(word: str, headline: str) -> str:
+    """The marked key word when the headline really has it (after the guard and the editor's rewrites)."""
+    w = " ".join((word or "").split())
+    return w if w and w.lower() in " ".join((headline or "").split()).lower() else ""
+
+
+def prefer_layout(con: dict, rec: dict, photo: dict, rtl: bool) -> str | None:
+    """A feed ad whose photo has a strong subject on the copy's far side reads best as a side wash or a split
+    with the subject whole (the first live run): layouts that would set copy over it give way."""
+    if rec["format"] not in ("4:5", "2:3") or con.get("layout") not in ("minimal", "bottom_bar"):
+        return None
+    box = (photo.get("subject") or {}).get("box")
+    if not box:
+        return None
+    cx, width = (box[0] + box[2]) / 2, box[2] - box[0]
+    far = cx < 0.42 if rtl else cx > 0.58
+    return "side_wash" if far and width > 0.25 else None
 
 
 def brand_tokens(kit) -> list[str]:
@@ -116,10 +158,26 @@ class Run:
         self.message = ""
         self.spins = 0
         self._writer: str | None | bool = False  # False: not looked up yet
+        self._eye: str | None | bool = False
 
     @property
     def b(self) -> dict:
         return svc.brief_of(self.c)
+
+    @property
+    def final(self) -> bool:
+        return self.b.get("quality") != "draft"
+
+    def eye(self) -> str | None:
+        """The vision model for this run, looked up once; None means heuristics."""
+        if self._eye is False:
+            try:
+                self._eye = eye.vision_model(self.writer())
+            except Exception as e:  # an odd server answer must never stop the campaign
+                log.warning("ad campaign %s: no vision model (%s)", self.c.id, e)
+                self._eye = None
+            self.r["vision"] = self._eye
+        return self._eye or None
 
     def rec(self) -> dict:
         return svc.stage(self.c, self.current)
@@ -218,12 +276,16 @@ class Run:
         for mid in b["product_media_ids"]:
             item = self.db.get(MediaItem, mid)
             products.append(item.title if item is not None and item.title else "the client's product")
+        rules = svc.campaign_rules(c, self.kit)
+        allowed, pinned = svc.layouts_for(b, rules)
         msgs = ad_concept_messages(brand=brand_context(self.kit), subject=b["subject"],
                                    description=b["description"], brief=b["brief"], occasion=b["occasion"],
                                    market=b["market"], language=c.language, tone=b["tone"], must_say=b["must_say"],
                                    offers=b["offers"], count=count, products=products, rtl=svc.is_rtl(c.language),
                                    avoid=avoid, channels=self.channel_names(),
-                                   colours=col.palette_words(self.kit.palette) if self.kit else [])
+                                   colours=col.palette_words(self.kit.palette) if self.kit else [],
+                                   layouts=allowed, quotes=b.get("quotes") or [],
+                                   style_note=(rules or {}).get("notes") or eye.summary(rules))
         try:
             res = chat_sync("creative", msgs, schema=AdConcepts, think=False, temperature=0.85,
                             max_tokens=900 + 450 * count, tick=lambda: self.tick(0.1), model=self.writer())
@@ -231,10 +293,26 @@ class Run:
             raise StageFailed(f"The copywriter is offline: {e}") from e
         extra = " ".join([b["must_say"], b["subject"], b["description"], self.kit.name if self.kit else ""])
         channels = cp.channels_of(br.contact_of(self.kit), br.socials_of(self.kit))
-        rows = self.self_check([d.model_dump() for d in res.data.concepts[:count]])
+        rows = [d.model_dump() for d in res.data.concepts[:count]]
+        svc.spread(rows, allowed, pinned)
+        for r in rows:
+            q = r.get("quote")
+            # a quote is only ever one of the client's own; the index must point at one
+            if not (isinstance(q, int) and 1 <= q <= len(b.get("quotes") or [])):
+                r["quote"] = 1 if r.get("layout") == "quote" and b.get("quotes") else None
+        rows = self.self_check(self.headline_round(rows))
         out = []
         for data in rows:
             clean, report = cp.guard(data, b["offers"], extra, channels)
+            clean["key_word"] = key_word_in(clean.get("key_word") or "", clean.get("headline") or "")
+            opts = []
+            for o in clean.get("headline_options") or []:
+                h2, _ = cp.guard({"headline": o["headline"], "offers": []}, b["offers"], extra, channels)
+                if h2.get("headline"):
+                    opts.append({"headline": h2["headline"], "key_word": key_word_in(o.get("key_word") or "",
+                                                                                       h2["headline"]),
+                                 "score": o.get("score")})
+            clean["headline_options"] = opts[:5]
             if any(report.values()):
                 log.info("ad campaign %s: guard took out %s", c.id, report)
             out.append((clean, report))
@@ -242,6 +320,38 @@ class Run:
             raise StageFailed("The copywriter came back with no concepts")
         self.mark(out)
         return [{**d, "_guard": g} for d, g in out]
+
+    def headline_round(self, rows: list[dict]) -> list[dict]:
+        """About twelve headlines per concept, ranked by the creative director; the best goes in. A failed
+        round keeps the first draft."""
+        if not rows:
+            return rows
+        self.tick(0.3, "Writing headline options")
+        msgs = ad_headline_messages(language=self.c.language, market=self.b["market"], concepts=rows)
+        try:
+            res = chat_sync("creative", msgs, schema=AdHeadlines, think=False, temperature=0.9,
+                            max_tokens=500 + 420 * len(rows), tick=lambda: self.tick(0.3), model=self.writer())
+        except LLMError as e:
+            log.warning("ad campaign %s: the headline round failed (%s); keeping the draft", self.c.id, e)
+            return rows
+        out = [dict(r) for r in rows]
+        for st in res.data.concepts:
+            if not (1 <= st.concept <= len(out)):
+                continue
+            opts = [o for o in st.options if " ".join(o.headline.replace("\\n", "\n").split())]
+            opts = sorted(opts, key=lambda o: -o.score)
+            if not opts:
+                continue
+            row = out[st.concept - 1]
+            cands = [{"headline": o.headline.replace("\\n", "\n").strip(), "key_word": o.key_word.strip(),
+                      "score": o.score} for o in opts]
+            first = cands[0]
+            if first["headline"] and len(first["headline"].split()) <= 6:
+                if row.get("headline") and row["headline"] != first["headline"]:
+                    cands.append({"headline": row["headline"], "key_word": row.get("key_word") or "", "score": None})
+                row["headline"], row["key_word"] = first["headline"], first["key_word"] or row.get("key_word") or ""
+            row["headline_options"] = [c for c in cands if c["headline"]]
+        return out
 
     def writer(self) -> str | None:
         if self._writer is False:
@@ -322,8 +432,9 @@ class Run:
             d = self.write(1, avoid=[" ".join((con.get("headline") or "").split())])[0]
             g = d.pop("_guard")
             keep_photo = bool(con.get("photos"))
-            for k in ("insight", "kicker", "headline", "body", "cta", "offers", "copy_check"):
-                con[k] = d.get(k) or ([] if k in ("offers", "copy_check") else "")
+            for k in ("insight", "kicker", "headline", "body", "cta", "offers", "copy_check", "key_word",
+                      "headline_options"):
+                con[k] = d.get(k) or ([] if k in ("offers", "copy_check", "headline_options") else "")
             if not keep_photo:
                 for k in ("layout", "photo_prompt", "photo_model", "placement", "logo_surface"):
                     con[k] = d.get(k) or ""
@@ -418,10 +529,173 @@ class Run:
                       "logo_on_surface": surface, "brand": {"kit_id": self.kit.id},
                       "created_by": {"user_id": self.c.created_by, "flow": "ad_studio:logo"}, **chosen}
 
-    def enqueue(self, con: dict, prompt: str, params: dict) -> Generation:
+    def enqueue(self, con: dict, prompt: str, params: dict, role: str = "candidate") -> Generation:
         return self.link(enqueue_generation(self.db, workspace_id=self.c.workspace_id, project_id=None,
                                             target_type="ad_photo", target_id=con["id"], kind="image",
-                                            prompt=prompt, params=params))
+                                            prompt=prompt, params={**params, "photo_role": role}))
+
+    def _base(self, con: dict, group: str) -> dict:
+        return {"ad_campaign": self.c.id, "concept_id": con["id"], "photo_group": group,
+                "created_by": {"user_id": self.c.created_by, "flow": "ad_studio"}}
+
+    def before_request(self, con: dict, src: Generation, group: str) -> tuple[str, dict]:
+        """The before half of a before/after: the same place, before the job, as an edit of the photo."""
+        subject = col.scrub(self.b["subject"], brand_tokens(self.kit))
+        text = (f"Picture 1 shows the result of {subject}, just finished. Show exactly the same place from the same "
+                "camera position, with the same room, furniture, light and colours, as it looked BEFORE the work "
+                "was done: untidy, dusty and worn, the job clearly still to do. No people. No text, letters or "
+                "numbers anywhere. Change nothing else.")
+        m, chosen = mc.choose(mc.AUTO, "edit", text, refs=1)
+        p = src.params or {}
+        return text, {**self._base(con, group), "aspect": p.get("aspect"), "width": p.get("width"),
+                      "height": p.get("height"), "instruction": text, "reference_ids": [src.id], "model": m.id,
+                      **chosen}
+
+    def need_px(self, group: str) -> int:
+        return max(max(lay.FORMATS[f]) for f in self.b["formats"] if svc.GROUPS.get(f) == group)
+
+    def upscale_request(self, con: dict, src: Generation, group: str, size: tuple[int, int],
+                        need: int) -> tuple[str, dict]:
+        """A quick Real-ESRGAN pass up to the largest format this photo serves."""
+        w, h = size
+        sc = min(4.0, need / max(w, h))
+        width, height = max(2, int(w * sc) // 2 * 2), max(2, int(h * sc) // 2 * 2)
+        up = {"engine": "quick", "target": "2x", "variant": None, "denoise": None, "template": "image_upscale_esrgan",
+              "width": width, "height": height, "scale": round(sc, 3), "capped": False, "source_id": src.id,
+              "source_file": src.file_path, "source_version": src.version, "source_size": [w, h]}
+        return src.prompt or "Ad photo", {**self._base(con, group), "upscale": up, "size": [width, height],
+                                          "aspect": (src.params or {}).get("aspect")}
+
+    def cutout_request(self, con: dict, src: Generation, group: str) -> tuple[str, dict]:
+        """The subject mask: Photo Studio's BiRefNet cut-out of the photo (the layout keeps the mask only)."""
+        from app.photo import restore
+
+        params, _ = restore.build_restore(self.db, src, "cutout", {"edge": {"feather": 0.8, "shift": 0}})
+        return "Cut-out", {**self._base(con, group), **params}
+
+    def child(self, con: dict, rec: dict, key: str, src: Generation, make, role: str):
+        """One follow-up GPU job on the chosen photo: ("wait", ids), ("done", gen) or ("skip", None) after the
+        tries ran out. A new source (say the logo edit came in) starts it again."""
+        g = self.db.get(Generation, rec.get(key) or "")
+        if g is not None and (g.params or {}).get("ad_source") != src.id:
+            g = None
+            rec[f"{key}_tries"] = 0
+        if g is not None and g.status in svc.LIVE:
+            return "wait", [g.job_id]
+        if g is not None and g.status in svc.FINISHED:
+            return "done", g
+        if g is not None and rec.get(f"{key}_tries", 0) >= svc.ATTEMPTS:
+            return "skip", None
+        prompt, params = make()
+        g = self.enqueue(con, prompt, {**params, "ad_source": src.id}, role=role)
+        rec[key] = g.id
+        rec[f"{key}_tries"] = rec.get(f"{key}_tries", 0) + 1
+        return "wait", [g.job_id]
+
+    def pick(self, con: dict, grp: str, rec: dict, done: list[str]) -> None:
+        """The best of the candidates: the vision model's verdict, else the calmest copy area and sharpness."""
+        scores = dict(rec.get("scores") or {})
+        if len(done) == 1 and not self.final:
+            rec.update(base=done[0], pick={"by": "only", "model": None}, scores=scores)
+            return
+        rtl = svc.is_rtl(self.c.language)
+        layout = con.get("layout") or "frosted"
+        idea = col.scrub(con.get("photo_prompt") or self.b["subject"], brand_tokens(self.kit))
+        space = copy_space(layout, grp, rtl)
+        model = self.eye()
+        for i, gid in enumerate(done):
+            if gid in scores:
+                continue
+            self.tick(0.5, f"Choosing the best photo for concept {con['n']}")
+            g = self.db.get(Generation, gid)
+            img = svc._open(svc.generation_file(g))
+            if img is None:
+                continue
+            if model:
+                try:
+                    scores[gid] = eye.score_photo(img, idea, space, model, tick=lambda: self.tick(0.5))
+                except eye.Unavailable as e:
+                    log.warning("ad campaign %s: photo scoring fell back to heuristics (%s)", self.c.id, e)
+                    model = self._eye = None
+            if gid not in scores:
+                scores[gid] = {"score": placement.heuristic_score(img, layout, rtl), "issues": [], "by": "heuristic"}
+        # TODO: let the editor swap in another candidate by hand; today the strip only shows them
+        best = eye.best(scores, done) or done[0]
+        by = "only" if len(done) == 1 else ("vision" if all(scores.get(x, {}).get("by") == "vision" for x in done)
+                                           else "heuristic")
+        rec.update(base=best, scores=scores, pick={"by": by, "model": model if by == "vision" else None})
+        sc = scores.get(best) or {}
+        if sc.get("subject_box"):
+            rec["subject"] = {"box": sc["subject_box"], "face": sc.get("face_box"), "source": "vision"}
+
+    def advance(self, con: dict, grp: str, rec: dict):
+        """One orientation's photo, step by step: candidates, the pick, the logo edit, the before picture, the
+        upscale and the cut-out. ("wait", job ids), ("failed", why) or ("ready", None)."""
+        db = self.db
+        cands = list(rec.get("candidates") or ([rec["base"]] if rec.get("base") else []))
+        gens = {gid: db.get(Generation, gid) for gid in cands}
+        live = [g.job_id for g in gens.values() if g is not None and g.status in svc.LIVE]
+        if live:
+            return "wait", live
+        done = [gid for gid in cands if gens.get(gid) is not None and gens[gid].status in svc.FINISHED]
+        if not done:
+            if cands and rec.get("tries", 0) >= svc.ATTEMPTS:
+                g = next((x for x in gens.values() if x is not None), None)
+                job = db.get(Job, g.job_id or "") if g is not None else None
+                return "failed", (job.error if job else None) or "no picture came back"
+            prompt, params = self.photo_request(con, grp)
+            n = max(1, min(4, int(self.b.get("candidates") or 3))) if self.final else 1
+            new = [self.enqueue(con, prompt, params) for _ in range(n)]
+            for k in ("base", "logo", "final", "note", "before", "upscale", "cutout", "mask", "subject", "pick",
+                      "before_final"):
+                rec.pop(k, None)
+            rec.update(candidates=[g.id for g in new], scores={}, tries=rec.get("tries", 0) + 1, logo_tries=0)
+            return "wait", [g.job_id for g in new]
+        rec["candidates"] = cands
+        if rec.get("base") not in done:
+            self.pick(con, grp, rec, done)
+        src = base = db.get(Generation, rec["base"])
+        logo_gen = self.wants_logo(con) if rec.get("note") is None else None
+        if logo_gen:
+            lg = db.get(Generation, rec.get("logo") or "")
+            if lg is not None and lg.status in svc.LIVE:
+                return "wait", [lg.job_id]
+            if lg is not None and lg.status in svc.FINISHED:
+                src = lg
+            elif lg is not None and rec.get("logo_tries", 0) >= svc.ATTEMPTS:
+                # the plain photo is a perfectly good ad; the overlay logo is still there
+                rec["note"] = "The logo didn't take on the surface; the plain photo is used"
+            else:
+                prompt, params = self.logo_request(con, base, logo_gen)
+                lg = self.enqueue(con, prompt, params, role="logo")
+                rec.update(logo=lg.id, logo_tries=rec.get("logo_tries", 0) + 1, final=None)
+                return "wait", [lg.job_id]
+        waits, final, before, mask = [], src.id, None, None
+        if con.get("layout") == "before_after":
+            st_, got = self.child(con, rec, "before", src, lambda: self.before_request(con, src, grp), "before")
+            waits += got if st_ == "wait" else []
+            before = got.id if st_ == "done" else None
+        if self.final:
+            path = svc.generation_file(src)
+            size = None
+            if path is not None and path.is_file():
+                with Image.open(path) as im:
+                    size = im.size
+            need = self.need_px(grp)
+            if size and max(size) < need * 0.95:
+                st_, got = self.child(con, rec, "upscale", src,
+                                      lambda: self.upscale_request(con, src, grp, size, need), "upscale")
+                waits += got if st_ == "wait" else []
+                final = got.id if st_ == "done" else final
+        if self.final or con.get("layout") == "cutout_blob":
+            st_, got = self.child(con, rec, "cutout", src, lambda: self.cutout_request(con, src, grp), "cutout")
+            waits += got if st_ == "wait" else []
+            if st_ == "done":
+                mask = ((got.params or {}).get("cutout") or {}).get("mask_file")
+        if waits:
+            return "wait", waits
+        rec.update(final=final, before_final=before, mask=mask)
+        return "ready", None
 
     def stage_photos(self, _reviewed: bool):
         db, c = self.db, self.c
@@ -431,46 +705,14 @@ class Run:
             for grp in svc.groups(self.b["formats"]):
                 total += 1
                 rec = dict(photos.get(grp) or {})
-                g = db.get(Generation, rec.get("base") or "")
-                if g is not None and g.status in svc.LIVE:
-                    waits.append(g.job_id)
-                    continue
-                if g is None or g.status not in svc.FINISHED:
-                    if g is not None and rec.get("tries", 0) >= svc.ATTEMPTS:
-                        job = db.get(Job, g.job_id or "")
-                        failed.append((con, (job.error if job else None) or "no picture came back"))
-                        continue
-                    prompt, params = self.photo_request(con, grp)
-                    g = self.enqueue(con, prompt, params)
-                    rec.update(base=g.id, tries=rec.get("tries", 0) + 1, logo=None, logo_tries=0, final=None,
-                               note=None)
-                    photos[grp] = rec
-                    waits.append(g.job_id)
-                    continue
-                logo_gen = self.wants_logo(con) if rec.get("note") is None else None
-                if logo_gen:
-                    lg = db.get(Generation, rec.get("logo") or "")
-                    if lg is not None and lg.status in svc.LIVE:
-                        waits.append(lg.job_id)
-                        continue
-                    if lg is None or lg.status not in svc.FINISHED:
-                        if lg is not None and rec.get("logo_tries", 0) >= svc.ATTEMPTS:
-                            # the plain photo is a perfectly good ad; the overlay logo is still there
-                            rec.update(final=g.id, note="The logo didn't take on the surface; the plain photo is used")
-                            photos[grp] = rec
-                            ready += 1
-                            continue
-                        prompt, params = self.logo_request(con, g, logo_gen)
-                        lg = self.enqueue(con, prompt, params)
-                        rec.update(logo=lg.id, logo_tries=rec.get("logo_tries", 0) + 1, final=None)
-                        photos[grp] = rec
-                        waits.append(lg.job_id)
-                        continue
-                    rec["final"] = lg.id
-                else:
-                    rec["final"] = g.id
+                state, got = self.advance(con, grp, rec)
                 photos[grp] = rec
-                ready += 1
+                if state == "wait":
+                    waits += got
+                elif state == "failed":
+                    failed.append((con, got))
+                else:
+                    ready += 1
             con["photos"] = photos
             svc.put_concept(c, con)
         if waits:
@@ -491,7 +733,12 @@ class Run:
         made = 0
         for i, con in enumerate(cons):
             self.tick(i / max(1, len(cons)), f"Laying out concept {con['n']}")
-            made += svc.render_concept(self.db, c, svc.concept(c, con["id"]), self.kit)
+            con = svc.concept(c, con["id"])
+            made += svc.render_concept(self.db, c, con, self.kit)
+            for a in svc.ads_of(c, con["id"]):
+                if a.get("status") == "ready" and a.get("qa_gen") != a.get("generation_id"):
+                    self.tick(i / max(1, len(cons)), f"Checking the ads of concept {con['n']}")
+                    self.check_ad(con, a)
         svc.write_ad_json(self.db, c)
         svc.touch(c)
         self.r["ads_made"] = made
@@ -499,6 +746,66 @@ class Run:
             raise StageFailed("No ad could be laid out")
         return None
 
+    def verdict(self, img, report: dict, headline: str) -> dict:
+        model = self.eye() if self.final else None
+        if model:
+            try:
+                return eye.qa(img, headline, model, tick=lambda: self.tick())
+            except eye.Unavailable as e:
+                log.warning("ad campaign %s: the vision QA fell back to the layout's checks (%s)", self.c.id, e)
+                self._eye = None
+        return eye.heuristic_qa(report)
+
+    def check_ad(self, con: dict, rec: dict) -> None:
+        """The creative director's last look: a failing ad is laid out again on the other side, then in another
+        layout (CPU only), up to two retries; the best is kept, and flagged when even that one fails."""
+        db, c, kit = self.db, self.c, self.kit
+        o = rec.get("overrides") or {}
+        auto = dict(rec.get("auto") or {})
+        first = prefer_layout(con, rec, svc.photo_rec(con, svc.GROUPS[rec["format"]]), svc.is_rtl(c.language))
+        if first and not o.get("style") and not auto.get("style"):
+            auto["style"] = first
+        trial = {**rec, "auto": auto}
+        img, rep = svc.render_report(db, c, con, trial, kit)
+        headline = (svc.spec_for(c, con, trial, kit)["texts"].get("headline") or "")
+        v = self.verdict(img, rep, headline)
+        best = (v["score"], dict(auto), v)
+        tries = []
+        if not v["pass"]:
+            style0 = rep.get("layout") or rep.get("style")
+            options = []
+            if (o.get("placement") or {}).get("flip") is None and style0 in lay_over_photo():
+                options.append({"flip": not bool(auto.get("flip"))})
+            if not o.get("style"):
+                b = self.b
+                allowed, _ = svc.layouts_for(b, svc.campaign_rules(c, kit))
+                alt = next((x for x in RETRY_LAYOUTS if x in allowed and x != style0), None)
+                if alt:
+                    options.append({"style": alt, "flip": None})
+            for opt in options[:2]:
+                a2 = {**auto, **opt}
+                t2 = {**rec, "auto": a2}
+                img2, rep2 = svc.render_report(db, c, con, t2, kit)
+                v2 = self.verdict(img2, rep2, headline)
+                tries.append({"style": a2.get("style") or style0, "flip": bool(a2.get("flip")), "score": v2["score"]})
+                if v2["score"] > best[0]:
+                    best = (v2["score"], a2, v2)
+                if v2["pass"]:
+                    break
+        score, chosen, vv = best
+        rec["qa"] = {"checked": True, "by": vv["by"], "score": score, "issues": vv["issues"], "retried": tries,
+                     "flagged": not vv["pass"]}
+        changed = {k: v for k, v in chosen.items() if v is not None} != {k: v for k, v in (rec.get("auto") or {}).items()
+                                                                       if v is not None}
+        rec["auto"] = {k: v for k, v in chosen.items() if v is not None}
+        if changed:
+            rec = svc.write_ad(db, c, con, rec, kit)
+        else:
+            rep_ = dict(rec.get("report") or {})
+            rep_["quality"] = {**(rep_.get("quality") or {}), "qa": rec["qa"]}
+            rec["report"] = rep_
+        rec["qa_gen"] = rec.get("generation_id")
+        svc.put_ad(c, rec)
 
 def handle(ctx) -> dict:
     W = _w()

@@ -2,7 +2,8 @@
 import logging
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,9 +15,9 @@ from app.config import get_settings
 from app.db import get_db
 from app.llm import LLMError, chat
 from app.models import Generation, Job, MediaItem, new_id
-from app.schemas import (AerabIn, AerabOut, AudioGenerateIn, ImageBatchOut, LyricsIn, LyricsOut, SpeakIn, SpeakOut,
-                         TextAerabIn, TextAerabOut)
-from app.security import CurrentUser, require_editor
+from app.schemas import (AerabIn, AerabOut, AudioGenerateIn, ImageBatchOut, JobOut, LyricsIn, LyricsOut, SpeakIn,
+                         SpeakOut, TextAerabIn, TextAerabOut)
+from app.security import CurrentUser, is_admin, require_editor
 from app.services import enqueue_generation, job_out, owned_source
 
 log = logging.getLogger("mixai.audio")
@@ -155,11 +156,11 @@ async def write_lyrics(body: LyricsIn, cur: CurrentUser = Depends(require_editor
     return LyricsOut(lyrics=lyrics, tags=tags, **stats)
 
 
-async def _mark_or_503(text: str, language: str | None) -> aerab.Result:
-    if not aerab.lines_to_mark(text):
-        raise HTTPException(422, "There are no Arabic-script lines to mark")
+async def _mark_or_503(text: str, language: str | None, debug: bool = False) -> aerab.Result:
+    _check_lines(text)
     try:
-        return await aerab.mark(text, language)
+        # under the 60 s a proxy in front of us allows; what is left is reported, or use the jobs route
+        return await aerab.mark(text, language, budget=aerab.SYNC_BUDGET_S, debug=debug)
     except LLMError as e:
         log.warning("aerab unavailable: %s", e)
         raise HTTPException(503, "The aerab writer is offline") from None
@@ -168,7 +169,13 @@ async def _mark_or_503(text: str, language: str | None) -> aerab.Result:
 @router.post("/lyrics/aerab", response_model=AerabOut)
 async def add_aerab(body: AerabIn, cur: CurrentUser = Depends(require_editor)):
     r = await _mark_or_503(body.lyrics, body.language)
-    return AerabOut(lyrics=r.text, language=r.language, **r.stats())
+    return AerabOut(lyrics=r.text, language=r.language, complete=r.complete, remaining_chars=r.remaining_chars,
+                    **r.stats())
+
+
+def _check_lines(text: str) -> None:
+    if not aerab.lines_to_mark(text):
+        raise HTTPException(422, "There are no Arabic-script lines to mark")
 
 
 # mounted at /api/text by app.api (contract v23): the one "Add aerab" every editor calls
@@ -176,6 +183,24 @@ text_router = APIRouter(prefix="/text", tags=["text"])
 
 
 @text_router.post("/aerab", response_model=TextAerabOut)
-async def text_aerab(body: TextAerabIn, cur: CurrentUser = Depends(require_editor)):
-    r = await _mark_or_503(body.text, body.language)
-    return TextAerabOut(text=r.text, language=r.language, **r.stats())
+async def text_aerab(body: TextAerabIn, cur: CurrentUser = Depends(require_editor),
+                     debug: bool = Query(False, include_in_schema=False)):
+    if debug and not is_admin(cur):
+        raise HTTPException(403, "Only the admin can see the raw replies")
+    r = await _mark_or_503(body.text, body.language, debug)
+    out = TextAerabOut(**r.out())
+    if debug:
+        return JSONResponse({**out.model_dump(), "debug": list(r.replies)})
+    return out
+
+
+@text_router.post("/aerab/jobs", response_model=JobOut, status_code=202, summary="Add aerab to a long text",
+                  description="The same pass as POST /api/text/aerab with no time budget, for whole books. "
+                              "Poll GET /api/jobs/{id}; when it is done, `result` holds the TextAerabOut fields.")
+def text_aerab_job(body: TextAerabIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    _check_lines(body.text)
+    job = Job(workspace_id=cur.workspace_id, type=aerab.JOB, message="Waiting for a worker · Adding aerab",
+              payload={"text": body.text, "language": body.language})
+    db.add(job)
+    db.commit()
+    return job_out(job)

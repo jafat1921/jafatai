@@ -5,8 +5,23 @@ import type { Job } from './types'
 // contract-v36-ad-studio.md
 
 export type AdFormat = '4:5' | '9:16' | '1:1' | '16:9' | '1.91:1' | '2:3' | 'yt'
-export type AdStyle = 'frosted' | 'side_wash' | 'bottom_bar' | 'split' | 'badge' | 'minimal'
-export type LogoPosition = 'tl' | 'tr' | 'tc' | 'bl' | 'br' | 'none'
+export type AdStyle =
+  | 'frosted'
+  | 'side_wash'
+  | 'bottom_bar'
+  | 'split'
+  | 'badge'
+  | 'minimal'
+  | 'cutout_blob'
+  | 'arch_mask'
+  | 'circle_mask'
+  | 'big_price'
+  | 'editorial'
+  | 'before_after'
+  | 'quote'
+export type MaskShape = 'arch' | 'circle' | 'teardrop' | 'blob'
+export type AdQualityLevel = 'draft' | 'final'
+export type LogoPosition = 'tl' | 'tr' | 'tc' | 'bl' | 'br' | 'stack' | 'none'
 export type AdStageKey = 'concepts' | 'photos' | 'layout'
 export type ColourRole = 'text' | 'accent' | 'button' | 'button_text' | 'footer' | 'footer_text' | 'pill' | 'block'
 
@@ -27,6 +42,16 @@ export interface AdBrief {
   logo_on_surface: boolean
   font_preset: string | null
   footer_items?: FooterItems | null
+  // M16b; older campaigns don't carry these
+  quality?: AdQualityLevel
+  candidates?: number
+  quotes?: AdQuote[]
+  use_style?: boolean
+}
+
+export interface AdQuote {
+  text: string
+  by: string
 }
 
 /** What a footer shows: contact keys and social keys ("instagram:ixperts.se"). */
@@ -48,6 +73,35 @@ export interface AdGen {
   version: number
 }
 
+export interface AdCandidate {
+  id: string
+  status: string
+  thumb_url: string | null
+  media_url: string | null
+  score: number | null
+  issues: string[]
+  picked: boolean
+}
+
+export interface AdPhotoSet {
+  base: AdGen | null
+  logo: AdGen | null
+  final: string | null
+  note: string | null
+  candidates?: AdCandidate[]
+  pick?: { by: 'vision' | 'heuristic' | 'only'; model: string | null }
+  before?: AdGen | null
+  upscaled?: boolean
+  cutout?: boolean
+  subject?: { box: number[] | null; face: number[] | null; source: string } | null
+}
+
+export interface HeadlineOption {
+  headline: string
+  key_word: string
+  score: number
+}
+
 export interface AdConcept {
   id: string
   n: number
@@ -67,7 +121,10 @@ export interface AdConcept {
   copy_check?: AdQuality['copy_check']
   error: string | null
   guard: { offers_dropped?: string[]; numbers_removed?: string[]; channels_removed?: string[] }
-  photos: Partial<Record<'portrait' | 'square' | 'wide', { base: AdGen | null; logo: AdGen | null; final: string | null; note: string | null }>>
+  photos: Partial<Record<'portrait' | 'square' | 'wide', AdPhotoSet>>
+  key_word?: string
+  headline_options?: HeadlineOption[]
+  quote?: number | null
 }
 
 export interface AdTexts {
@@ -78,6 +135,15 @@ export interface AdTexts {
   cta: string
   badge_big: string
   badge_small: string
+  highlight?: string
+  quote?: string
+  quote_by?: string
+}
+
+export interface AdShape {
+  mask: MaskShape
+  colour: string
+  seed: number
 }
 
 export interface AdSpec {
@@ -97,6 +163,11 @@ export interface AdSpec {
   footer_items: FooterItems
   focus: { x: number; y: number }
   photo_id: string | null
+  shape?: AdShape
+  placement?: { flip: boolean | null }
+  style_ref?: Record<string, unknown> | null
+  assets?: { cutout: boolean; before: boolean }
+  subject?: { box: number[] | null; face: number[] | null; source: string } | null
 }
 
 export interface AdReport {
@@ -109,6 +180,18 @@ export interface AdReport {
   footer?: { rows: number; items: string[]; dropped: string[]; folded: boolean; size: number; box?: number[]; card?: boolean }
   buttons?: Record<'cta' | 'offer', { shape: string; bg: string; fg: string; arrow: boolean; inverted?: boolean }>
   quality?: AdQuality
+  placement?: { focus: { x: number; y: number }; flip: boolean; overlap: number; source: string }
+  highlight?: string | null
+  fallback?: string | null
+}
+
+export interface AdQA {
+  checked: boolean
+  by: 'vision' | 'heuristic'
+  score: number | null
+  issues: string[]
+  retried: { style: AdStyle; flip: boolean; score: number | null }[]
+  flagged: boolean
 }
 
 export interface AdQuality {
@@ -117,6 +200,7 @@ export interface AdQuality {
   dropped: Partial<Record<'offers' | 'numbers' | 'channels' | 'copy_trimmed' | 'footer', string[]>>
   copy_check: { field: string; score: number | null; issue: string; before?: string; after?: string }[]
   treatment: string[]
+  qa?: AdQA
 }
 
 export interface Ad {
@@ -148,6 +232,7 @@ export interface AdKit {
   has_fonts: boolean
   has_logo: boolean
   missing_contact: string[]
+  ad_style?: { active: boolean; layouts: string[]; summary: string }
 }
 
 export interface AdCampaign {
@@ -194,6 +279,8 @@ export interface ConceptPatch {
   offers?: string[]
   layout?: AdStyle
   photo_prompt?: string
+  key_word?: string
+  quote?: number | null
 }
 
 export interface AdPatch {
@@ -206,16 +293,20 @@ export interface AdPatch {
   footer_items?: Partial<FooterItems>
   follow?: Partial<AdFollow>
   focus?: { x: number; y: number }
+  shape?: Partial<AdShape>
+  placement?: { flip: boolean | null }
   reset?: boolean
 }
 
 export interface AdOptions {
   formats: { id: AdFormat; label: string; width: number; height: number }[]
-  styles: { id: AdStyle; label: string }[]
+  styles: { id: AdStyle; label: string; needs?: string | null }[]
   font_presets: { id: string; label: string }[]
   logo_positions: LogoPosition[]
   image_models: { id: string; label: string; default: boolean }[]
   variants: { min: number; max: number; default: number }
+  mask_shapes?: MaskShape[]
+  candidates?: { min: number; max: number; default: number }
 }
 
 export const adsApi = {
@@ -264,14 +355,33 @@ export function defaultFooter(kit: { contact?: BrandContact; socials?: BrandSoci
   }
 }
 
-export const STYLES: { id: AdStyle; label: string }[] = [
+// `needs` mirrors the server's hint; without it the layout falls back to another one
+export const STYLES: { id: AdStyle; label: string; needs?: string }[] = [
   { id: 'frosted', label: 'Frosted panel' },
   { id: 'side_wash', label: 'Side wash' },
   { id: 'bottom_bar', label: 'Bottom bar' },
   { id: 'split', label: 'Split colour block' },
   { id: 'badge', label: 'Price badge' },
   { id: 'minimal', label: 'Minimal centred' },
+  { id: 'cutout_blob', label: 'Cut-out on a shape' },
+  { id: 'arch_mask', label: 'Photo in an arch' },
+  { id: 'circle_mask', label: 'Photo in a circle' },
+  { id: 'big_price', label: 'Big price', needs: 'needs a price offer' },
+  { id: 'editorial', label: 'Editorial' },
+  { id: 'before_after', label: 'Before / after', needs: 'needs a before picture' },
+  { id: 'quote', label: 'Quote card', needs: 'needs a quote' },
 ]
+
+export const styleLabel = (id: string) => STYLES.find((s) => s.id === id)?.label ?? id
+
+export const MASK_SHAPES: { id: MaskShape; label: string }[] = [
+  { id: 'arch', label: 'Arch' },
+  { id: 'circle', label: 'Circle' },
+  { id: 'teardrop', label: 'Teardrop' },
+  { id: 'blob', label: 'Blob' },
+]
+export const MASK_LAYOUTS: AdStyle[] = ['arch_mask', 'circle_mask']
+export const MAX_QUOTES = 6
 
 export const FONT_PRESETS = [
   { id: 'modern', label: 'Modern' },
@@ -287,6 +397,7 @@ export const LOGO_POSITIONS: { id: LogoPosition; label: string }[] = [
   { id: 'tr', label: 'Top right' },
   { id: 'bl', label: 'Bottom left' },
   { id: 'br', label: 'Bottom right' },
+  { id: 'stack', label: 'Above the button' },
   { id: 'none', label: 'No logo' },
 ]
 
@@ -364,6 +475,14 @@ export function patchFrom(base: AdSpec, edit: AdSpec): AdPatch {
   if (edit.follow.show !== base.follow.show) follow.show = edit.follow.show
   if (edit.follow.text !== base.follow.text) follow.text = edit.follow.text
   if (Object.keys(follow).length) out.follow = follow
+  if (edit.shape && base.shape) {
+    const shape: Partial<AdShape> = {}
+    if (edit.shape.mask !== base.shape.mask) shape.mask = edit.shape.mask
+    if (edit.shape.colour && edit.shape.colour !== base.shape.colour) shape.colour = edit.shape.colour
+    if (edit.shape.seed !== base.shape.seed) shape.seed = edit.shape.seed
+    if (Object.keys(shape).length) out.shape = shape
+  }
+  if (edit.placement && (edit.placement.flip ?? null) !== (base.placement?.flip ?? null)) out.placement = { flip: edit.placement.flip ?? null }
   return out
 }
 

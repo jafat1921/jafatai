@@ -13,6 +13,7 @@ import { useBrandKit, useDeleteKit, useSetDefaultKit, useUpdateKit } from '@/hoo
 import { draftFrom, kitPatch, kitProblems, type BrandKit, type KitDraft } from '@/lib/brand'
 import { modKey } from '@/lib/keyboard'
 import { announce } from '@/stores/ui'
+import { AdStyleSection } from './AdStyleSection'
 import { ClosingSection } from './ClosingSection'
 import { ContactSection } from './ContactSection'
 import { EditorSection } from './EditorSection'
@@ -159,6 +160,7 @@ export function BrandKitEditor({ kit }: { kit: BrandKit }) {
         onClaims={(v) => set('claims', v)}
       />
       <MoodRefsSection ids={draft.reference_media_ids} urls={urls} onChange={(v) => set('reference_media_ids', v)} />
+      <AdStyleSection kit={kit} />
       <ClosingSection
         kitId={kit.id}
         value={draft.settings.closing ?? 'auto'}

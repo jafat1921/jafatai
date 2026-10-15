@@ -34,3 +34,15 @@ def test_every_gallery_omnivoice_voice_is_already_clean():
         if v["engine"] == "omnivoice":
             ins = normalise(v["instruct"])
             assert ins.text == v["instruct"] and not ins.ignored, v["id"]
+
+
+def test_urdu_never_gets_high_pitch_and_ages_in_numbers_are_read():
+    # heard live: OmniVoice's high pitch turns Urdu into noise; moderate pitch speaks the line clearly
+    assert normalise("male, child, high pitch, indian accent", "ur").text == "male, child, moderate pitch, indian accent"
+    assert normalise("very high pitch, squeaky girl", "pnb").text == "female, child, moderate pitch"
+    assert normalise("Male, 4-year-old boy, high pitch, Pakistani accent", "ur").text == \
+        "male, child, moderate pitch, indian accent"
+    # English keeps it, and "bright" is no longer read as a pitch
+    assert normalise("female, high pitch", "en").text == "female, high pitch"
+    assert normalise("bright warm narrator, female").text == "female"
+    assert normalise("a 70 year old man").text == "male, elderly"

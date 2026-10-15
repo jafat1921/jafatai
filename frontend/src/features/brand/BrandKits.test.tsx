@@ -199,3 +199,59 @@ describe('Brand kits list', () => {
     expect(calls.some((c) => c.path === '/brand-kits/b/default')).toBe(true)
   })
 })
+
+describe('Ad style references', () => {
+  const styled = (status: 'ready' | 'failed' | 'working', extra = {}) =>
+    kit('k1', {
+      name: 'Leaf Coffee',
+      ad_style: {
+        references: [
+          { media_id: 'r1', media_url: '/m/r1.png' },
+          { media_id: 'r2', media_url: '/m/r2.png' },
+        ],
+        rules: { layouts: ['cutout_blob', 'arch_mask'], pinned: true, shapes: ['blob', 'dots'], headline_weight: 'bold', headline_case: 'sentence', serif: false, colour_usage: 'bold', background: 'light', density: 'balanced', badge: true, notes: 'Lots of air' },
+        status,
+        error: status === 'failed' ? 'the vision model is off' : null,
+        job_id: null,
+        updated_at: null,
+      },
+      ...extra,
+    })
+
+  it('shows the rules it read and saves the list when an ad is removed', async () => {
+    const k = styled('ready')
+    const calls = mockApi((method, path, _q, body) => {
+      if (method === 'PUT' && path === '/brand-kits/k1/ad-style') {
+        const refs = (body as { references: string[] }).references
+        return { ...k, ad_style: { ...k.ad_style!, references: k.ad_style!.references.filter((r) => refs.includes(r.media_id)), status: 'working' } }
+      }
+      if (path === '/brand-kits/k1') return k
+      if (path === '/media') return { items: [] }
+    })
+    renderAt('/brand-kits/k1', [{ path: '/brand-kits/:kitId', element: <BrandKitEditorPage /> }], (qc) => qc.setQueryData(qk.brandKit('k1'), k))
+    const user = userEvent.setup()
+    expect(screen.getByRole('heading', { name: 'Ad style references (2/6)' })).toBeInTheDocument()
+    expect(screen.getByText('Cut-out on a shape, Photo in an arch (only these)')).toBeInTheDocument()
+    expect(screen.getByText('bold, sentence case')).toBeInTheDocument()
+    expect(screen.getByText('Lots of air')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove ad 1' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ references: ['r2'] }))
+    expect(await screen.findByText('Reading your ads…')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ad style references (1/6)' })).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/licen[cs]e/i)
+  })
+
+  it('says why reading failed and tries again', async () => {
+    const k = styled('failed')
+    const calls = mockApi((method, path) => {
+      if (method === 'POST' && path === '/brand-kits/k1/ad-style/extract') return { id: 'j1', type: 'ad_style', status: 'queued', progress: 0, message: '', attempts: 0, created_at: '' }
+      if (path === '/brand-kits/k1') return k
+      if (path === '/media') return { items: [] }
+    })
+    renderAt('/brand-kits/k1', [{ path: '/brand-kits/:kitId', element: <BrandKitEditorPage /> }], (qc) => qc.setQueryData(qk.brandKit('k1'), k))
+    const user = userEvent.setup()
+    expect(screen.getByRole('alert')).toHaveTextContent('the vision model is off')
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/brand-kits/k1/ad-style/extract')).toBe(true))
+  })
+})

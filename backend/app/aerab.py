@@ -1,12 +1,16 @@
 """Aerab / tashkeel for the Arabic-script languages (contract v23): Urdu, Arabic, Persian, Pashto, Sindhi and
 Punjabi in Shahmukhi. Without the short vowels the TTS, song and video models guess, and guess wrong.
 
-The LLM only proposes the marks. They are then moved onto the writer's own letters, and a line whose
-letters the LLM changed (a "corrected" spelling, a swapped word) is left exactly as it was written.
+The LLM only proposes the marks. They are then moved onto the writer's own letters: the two letter
+sequences are aligned, marks land only where they agree, and a line the LLM rewrote too much (under
+MIN_ALIGNED of its letters line up) is left exactly as it was written.
 """
+import asyncio
 import logging
 import re
+import time
 import unicodedata
+from difflib import SequenceMatcher
 from typing import NamedTuple
 
 from pydantic import BaseModel
@@ -28,9 +32,11 @@ _SOFT = "‌‍ـ"
 _ARABIC_SCRIPT = re.compile("[؀-ۿݐ-ݿࢠ-ࣿ]")
 _MARKER = re.compile(r"^\s*\[[^\]]+\]\s*$")
 
-# Code points an LLM likes to swap in for the ones each language uses. Only the safety check folds them:
+# Code points an LLM likes to swap in for the ones each language uses. Only the alignment folds them:
 # the writer's own letters are what ends up in the text, so Arabic keeps ي ى ك ة and Urdu keeps ی ک ہ.
-_URDU_FOLD = {"ي": "ی", "ى": "ی", "ك": "ک", "ه": "ہ", "ە": "ہ", "ة": "ۃ"}
+# Letters are compared decomposed (NFD), so ۂ ۀ ۓ ئ ؤ arrive as their base letter plus a hamza above,
+# and the hamza is ignored like the joiners (_IGNORE).
+_URDU_FOLD = {"ي": "ی", "ى": "ی", "ے": "ی", "ك": "ک", "ه": "ہ", "ە": "ہ", "ة": "ہ", "ۃ": "ہ"}
 _FOLDS = {
     "ur": _URDU_FOLD,
     "pnb": _URDU_FOLD,
@@ -40,9 +46,18 @@ _FOLDS = {
     # Sindhi's ye is ي and its k is ڪ (ک is kh)
     "sd": {"ی": "ي", "ى": "ي", "ك": "ڪ", "ہ": "ه", "ە": "ه"},
     # vocalising MSA, models like to add or drop a hamza seat or write the wasla; the writer's alif stands
-    "ar": {"ی": "ي", "ک": "ك", "ہ": "ه", "ە": "ه", "ۃ": "ة", "أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا"},
+    "ar": {"ی": "ي", "ک": "ك", "ہ": "ه", "ە": "ه", "ۃ": "ة", "ٱ": "ا"},
 }
-_FOLD_TABLES = {k: str.maketrans(v) for k, v in _FOLDS.items()}
+# every language: Arabic-Indic and Persian digits, and the script's own punctuation
+_COMMON_FOLD = {**{chr(0x0660 + d): str(d) for d in range(10)}, **{chr(0x06F0 + d): str(d) for d in range(10)},
+                "۔": ".", "،": ",", "؟": "?", "؛": ";", "٪": "%", "٫": ".", "٬": ","}
+_FOLD_TABLES = {k: str.maketrans({**_COMMON_FOLD, **v}) for k, v in _FOLDS.items()}
+# never compared: joiners, tatweel, direction marks, BOM, and the hamza above / below a decomposed letter
+_IGNORE = _SOFT + "‎‏؜﻿ٕٔ"
+# Arabic presentation forms (old InPage exports, some models): compared as the letters they stand for
+_PRESENTATION = re.compile("[ﭐ-﷿ﹰ-﻿]")
+# a madda the LLM puts on a bare alif turns it into آ, which is a different letter, so it never transfers
+_MADDA = "ٓ"
 
 # letters that give a language away
 _SINDHI = set("ٻڄڃڇڊڌڍڏڙڦڱڳڻڪٽٺ")
@@ -63,8 +78,19 @@ _FUNCTION = {"و", "کی", "کا", "کے", "کو", "سے", "ہے", "نے", "می
              "د", "په", "چې", "دا", "۾", "جو", "جي", "کان"}
 
 MAX_LINES = 600
+# lines and sentences per pass; a long prose line is split into sentences first (SPLIT_OVER)
+MAX_UNITS = 3000
 BATCH = 40
 RETRY_BATCH = 10
+# characters per call: small enough that one call stays well inside a proxy's 60 s
+BATCH_CHARS = 700
+SPLIT_OVER = 100
+# share of letters that must line up with the LLM's before any of its marks are used
+MIN_ALIGNED = 0.8
+# /api/text/aerab answers inside this, with whatever is marked by then
+SYNC_BUDGET_S = 45.0
+# no new call is started with less than this left in the budget
+MIN_CALL_S = 6.0
 # share of words that must carry a mark; Arabic is vocalised in full, the others leave long vowels bare
 MIN_COVERAGE = {"ar": 0.7}
 MIN_COVERAGE_DEFAULT = 0.5
@@ -231,20 +257,28 @@ class Marked(BaseModel):
     lines: list[str]
 
 
+# zabar, zer, pesh, jazm, tashdeed and the izafat zer in one plain sentence; long vowels stay bare
+_EXAMPLE = ("شہر لاہور کے بچے نے صبر اور محبت سے علم سیکھا۔",
+            "شَہْرِ لاہور کے بَچّے نے صَبْر اَور مُحَبَّت سے عِلْم سیکھا۔")
+
+
 def messages(lines: list[str], language: str | None = None, strict: bool = False) -> list[dict]:
     lang = language if language in _RULES else "ur"
     name, (what, marks, letters) = NAMES[lang], _RULES[lang]
     rules = [
-        f"You add {what} to {name} lines that will be spoken or sung, so every word is pronounced correctly.",
+        f"You add {what} to {name} text that will be read aloud, spoken or sung: prose, dialogue, verse. "
+        "Every word must be pronounced correctly from the marks alone.",
         f"For each line, return the same line with full marks: {marks}.",
         "Mark the vowel of every letter whose sound is not obvious from the spelling."
         + (" Arabic is vocalised in full: every letter gets its mark." if lang == "ar"
            else " Long vowels written with alif, wao or ye need no extra mark."),
         f"Never add, remove, replace or reorder a letter or a word. Do not correct spelling, do not translate, "
-        f"{letters}, keep the spaces.",
+        f"{letters}, keep the spaces and the punctuation.",
         f"Lines that are not {name} come back unchanged.",
         'Reply as JSON: {"lines": [the lines in the same order, one string per line]}. Same number of lines.',
     ]
+    if lang in ("ur", "pnb"):
+        rules.insert(3, f"Example. Line: {_EXAMPLE[0]}\nMarked: {_EXAMPLE[1]}")
     if strict:
         rules.insert(2, "An earlier pass left most words of these lines bare. Mark EVERY word this time.")
     user = "\n".join(f"{i + 1}. {line}" for i, line in enumerate(lines))
@@ -253,54 +287,92 @@ def messages(lines: list[str], language: str | None = None, strict: bool = False
 
 # ---------------------------------------------------------------- putting marks back
 
-def _clusters(text: str) -> list[tuple[str, str]]:
-    """(letter, marks after it) for every letter; spaces and joiners are dropped."""
-    out: list[tuple[str, str]] = []
-    for ch in unicodedata.normalize("NFC", text):
-        if is_mark(ch):
+def _expand(ch: str) -> str:
+    if _PRESENTATION.match(ch):
+        ch = unicodedata.normalize("NFKC", ch)
+    return unicodedata.normalize("NFD", ch)
+
+
+def _clusters(text: str, fold: dict) -> list[list]:
+    """[folded letter, marks, position in `text`, marks typed after it] for every letter (and digit, and
+    punctuation mark); spaces and _IGNORE are dropped. "marks" also holds what a ligature carried inside it."""
+    out: list[list] = []
+    for pos, raw in enumerate(text):
+        if is_mark(raw):
             if out:
-                out[-1] = (out[-1][0], out[-1][1] + ch)
-        elif not ch.isspace() and ch not in _SOFT:
-            out.append((ch, ""))
+                out[-1][1] += raw
+                out[-1][3] += raw
+            continue
+        if raw.isspace() or raw in _IGNORE:
+            continue
+        for ch in _expand(raw):
+            if is_mark(ch):
+                if out and ch != _MADDA:
+                    out[-1][1] += ch
+            elif not ch.isspace() and ch not in _IGNORE:
+                out.append([ch.translate(fold), "", pos, ""])
     return out
 
 
-def transfer(original: str, marked: str, language: str | None = None) -> str | None:
-    """`original` with the marks from `marked`, or None when the two don't spell the same letters."""
+def align(original: str, marked: str, language: str | None = None) -> tuple[str | None, float]:
+    """(`original` with the marks from `marked`, share of letters that lined up). The text is None when
+    fewer than MIN_ALIGNED of them did. Marks only land inside runs of letters the two agree on; the
+    writer's letters are never touched, and marks the writer typed win over the LLM's."""
     fold = _FOLD_TABLES.get(language or "ur", _FOLD_TABLES["ur"])
-    src = _clusters(original)
-    got = _clusters(marked)
-    if len(src) != len(got) or any(a.translate(fold) != b.translate(fold) for (a, _), (b, _) in zip(src, got)):
-        return None
-    out, i = [], 0
-    text = unicodedata.normalize("NFC", original)
-    for ch in text:
+    src = _clusters(original, fold)
+    got = _clusters(unicodedata.normalize("NFC", marked), fold)
+    if not src:
+        return original, 1.0
+    sm = SequenceMatcher(None, [c[0] for c in src], [c[0] for c in got], autojunk=False)
+    proposed: dict[int, str] = {}
+    lined_up = 0
+    for a, b, size in sm.get_matching_blocks():
+        lined_up += size
+        # a lone matching letter between two rewritten stretches is more likely luck than the same word
+        if size >= 2 or size == len(src):
+            for k in range(size):
+                proposed[a + k] = got[b + k][1].replace(_MADDA, "")
+    ratio = lined_up / max(len(src), len(got))
+    if ratio < MIN_ALIGNED:
+        return None, ratio
+    at: dict[int, list[int]] = {}
+    for j, c in enumerate(src):
+        at.setdefault(c[2], []).append(j)
+    out = []
+    for pos, ch in enumerate(original):
         if is_mark(ch):
             continue
         out.append(ch)
-        if ch.isspace() or ch in _SOFT:
+        js = at.get(pos)
+        if not js:
             continue
-        # marks the writer typed win over the LLM's
-        own = src[i][1]
-        out.append(own or got[i][1])
-        i += 1
-    return "".join(out)
+        if any(src[j][1] for j in js):
+            out.append("".join(src[j][3] for j in js))
+        else:
+            out.append("".join(proposed.get(j, "") for j in js))
+    return "".join(out), ratio
+
+
+def transfer(original: str, marked: str, language: str | None = None) -> str | None:
+    """`original` with the marks from `marked`, or None when the two spell too different a line."""
+    return align(original, marked, language)[0]
 
 
 def _unnumber(line: str, n: int) -> str:
     return re.sub(rf"^\s*{n}\s*[.)\-:]\s*", "", line)
 
 
-def _apply(rows: list[str], idx: list[int], proposed: list[str], language: str | None) -> set[int]:
-    """Marks the rows at `idx` in place from `proposed`; returns the rows whose letters didn't match."""
-    refused = set()
+def _apply(rows: list[str], idx: list[int], proposed: list[str], language: str | None) -> tuple[set[int], list[float]]:
+    """Marks the rows at `idx` in place from `proposed`: (rows refused, how well each one lined up)."""
+    refused, ratios = set(), []
     for k, i in enumerate(idx):
-        got = transfer(rows[i], _unnumber(proposed[k], k + 1), language) if k < len(proposed) else None
+        got, ratio = align(rows[i], _unnumber(proposed[k], k + 1), language) if k < len(proposed) else (None, 0.0)
+        ratios.append(ratio)
         if got is None:
             refused.add(i)
         else:
             rows[i] = got
-    return refused
+    return refused, ratios
 
 
 def merge(text: str, proposed: list[str], language: str | None = None) -> tuple[str, int, int]:
@@ -308,12 +380,41 @@ def merge(text: str, proposed: list[str], language: str | None = None) -> tuple[
     rows = text.split("\n")
     before = list(rows)
     todo = [i for i, row in enumerate(rows) if needs_marks(row)]
-    refused = _apply(rows, todo, proposed, language)
+    refused, _ = _apply(rows, todo, proposed, language)
     return "\n".join(rows), sum(rows[i] != before[i] for i in todo), len(refused)
 
 
 def lines_to_mark(text: str) -> list[str]:
     return [row for row in text.split("\n") if needs_marks(row)][:MAX_LINES]
+
+
+# ---------------------------------------------------------------- prose: sentences, not paragraphs
+
+# the end of a sentence: its stop (and a closing quote), then the space that is kept as it was
+_SENTENCE_END = re.compile(r"[۔؟!?.]+[\"'”’»)\]]*(\s+)")
+
+
+def sentences(row: str) -> list[str]:
+    """`row` as [sentence, gap, sentence, ...]; "".join() gives it back exactly. Short rows stay whole."""
+    if len(row) <= SPLIT_OVER:
+        return [row]
+    out, at = [], 0
+    for m in _SENTENCE_END.finditer(row):
+        out += [row[at:m.start(1)], m.group(1)]
+        at = m.end(1)
+    out.append(row[at:])
+    return out
+
+
+def units(text: str) -> list[str]:
+    """The text cut into what the LLM sees (lines, and the sentences of long lines) and what it never
+    sees (newlines, the spaces between sentences)."""
+    out: list[str] = []
+    for k, row in enumerate(text.split("\n")):
+        if k:
+            out.append("\n")
+        out += sentences(row)
+    return out
 
 
 class Result(NamedTuple):
@@ -322,75 +423,136 @@ class Result(NamedTuple):
     kept: int = 0
     low_coverage: int = 0
     language: str | None = None
+    complete: bool = True
+    remaining_chars: int = 0
+    coverage: float = 1.0
+    replies: tuple = ()
 
     def stats(self) -> dict:
         return {"marked": self.marked, "kept": self.kept, "low_coverage": self.low_coverage}
 
-
-ASK = dict(schema=Marked, think=False, temperature=0.2, max_tokens=4000, timeout=180.0)
-
-
-def _plan(text: str, language: str | None) -> tuple[str, list[str], list[int]]:
-    lang = resolve(language, text) or detect_language(text) or "ur"
-    rows = text.split("\n")
-    return lang, rows, [i for i, row in enumerate(rows) if needs_marks(row)][:MAX_LINES]
+    def out(self) -> dict:
+        """The TextAerabOut fields."""
+        return {"text": self.text, "language": self.language, **self.stats(), "complete": self.complete,
+                "remaining_chars": self.remaining_chars, "coverage": round(self.coverage, 3)}
 
 
-def _chunks(idx: list[int], size: int) -> list[list[int]]:
-    return [idx[b:b + size] for b in range(0, len(idx), size)]
+class _OutOfTime(Exception):
+    pass
 
 
-def _weak(rows: list[str], idx: list[int], lang: str) -> list[int]:
+def _batches(parts: list[str], idx: list[int], size: int) -> list[list[int]]:
+    """Up to `size` units a call, and no more than BATCH_CHARS characters unless one unit is longer."""
+    out, cur, chars = [], [], 0
+    for i in idx:
+        n = len(parts[i])
+        if cur and (len(cur) >= size or chars + n > BATCH_CHARS):
+            out.append(cur)
+            cur, chars = [], 0
+        cur.append(i)
+        chars += n
+    return out + [cur] if cur else out
+
+
+def _weak(rows: list[str], idx, lang: str) -> list[int]:
     return [i for i in idx if coverage(rows[i]) < min_coverage(lang)]
 
 
-def _result(rows, before, todo, refused, lang) -> Result:
-    return Result("\n".join(rows), sum(rows[i] != before[i] for i in todo), len(refused),
-                  len(_weak(rows, todo, lang)), lang)
-
-
-async def mark(text: str, language: str | None = None) -> Result:
-    """Aerab for every Arabic-script line of `text` (lyrics, a script). Raises LLMError when the LLM is away;
-    the strict retry of sparse lines is best effort."""
+async def _run(text: str, language: str | None, budget: float | None = None, progress=None,
+               keep_replies: bool = False) -> Result:
+    from app.config import get_settings
     from app.llm import LLMError, chat
 
-    lang, rows, todo = _plan(text, language)
-    if not todo:
-        return Result(text, language=lang)
-    before = list(rows)
+    lang = resolve(language, text) or detect_language(text) or "ur"
+    parts = units(text)
+    wanted = [i for i, u in enumerate(parts) if needs_marks(u)]
+    if not wanted:
+        return Result(text, language=lang, coverage=coverage(text))
+    todo = wanted[:MAX_UNITS]
+    model = get_settings().aerab_llm_model.strip() or None
+    deadline = time.monotonic() + budget if budget else None
+    before = list(parts)
     refused: set[int] = set()
-    for chunk in _chunks(todo, BATCH):
-        res = await chat("creative", messages([rows[i] for i in chunk], lang), **ASK)
-        refused |= _apply(rows, chunk, res.data.lines, lang)
+    done: set[int] = set()
+    replies: list[dict] = []
+    total = sum(len(parts[i]) for i in todo) or 1
+
+    async def ask(chunk: list[int], strict: bool):
+        size = sum(len(parts[i]) for i in chunk)
+        wait = min(180.0, 60.0 + size / 10)
+        if deadline is not None:
+            left = deadline - time.monotonic()
+            if left < MIN_CALL_S:
+                raise _OutOfTime
+            wait = min(wait, left)
+        sent = [parts[i] for i in chunk]
+        call = chat("creative", messages(sent, lang, strict), schema=Marked, think=False,
+                    temperature=0.2, max_tokens=min(4000, 300 + 3 * size), timeout=wait, model=model)
+        try:
+            # the budget covers chat()'s own JSON repair call as well
+            res = await (asyncio.wait_for(call, wait) if deadline is not None else call)
+        except asyncio.TimeoutError:
+            raise _OutOfTime from None
+        except LLMError:
+            if deadline is not None and time.monotonic() >= deadline - 1:
+                raise _OutOfTime from None
+            raise
+        bad, ratios = _apply(parts, chunk, res.data.lines, lang)
+        log.info("aerab %s %s: %d units, %d chars, %.1f s, accepted %d, refused %d, aligned %.2f",
+                 res.model, "retry" if strict else "pass", len(chunk), size, res.seconds, len(chunk) - len(bad),
+                 len(bad), sum(ratios) / max(1, len(ratios)))
+        if keep_replies:
+            replies.append({"pass": "retry" if strict else "first", "model": res.model,
+                            "seconds": round(res.seconds, 2), "sent": sent,
+                            "reply": res.content, "aligned": [round(r, 3) for r in ratios]})
+        return bad
+
+    failures = 0
     try:
-        for chunk in _chunks(_weak(rows, todo, lang), RETRY_BATCH):
-            res = await chat("creative", messages([rows[i] for i in chunk], lang, strict=True), **ASK)
-            again = _apply(rows, chunk, res.data.lines, lang)
+        for chunk in _batches(parts, todo, BATCH):
+            try:
+                bad = await ask(chunk, False)
+            except LLMError as e:
+                # nothing came back yet: the LLM is away, and the caller says so
+                if not done:
+                    raise
+                failures += 1
+                log.warning("aerab batch skipped (%d units): %s", len(chunk), e)
+                if failures >= 2:
+                    break
+                continue
+            failures = 0
+            refused |= bad
+            done |= set(chunk)
+            if progress:
+                progress(sum(len(before[i]) for i in done) / total)
+    except _OutOfTime:
+        log.info("aerab ran out of its %.0f s budget with %d of %d units done", budget, len(done), len(todo))
+    try:
+        for chunk in _batches(parts, _weak(parts, sorted(done), lang), RETRY_BATCH):
+            again = await ask(chunk, True)
             refused = (refused - set(chunk)) | (again & refused)
+    except _OutOfTime:
+        pass
     except LLMError as e:
         log.warning("aerab retry skipped: %s", e)
-    return _result(rows, before, todo, refused, lang)
+    remaining = sum(len(before[i]) for i in wanted if i not in done)
+    out = "".join(parts)
+    return Result(out, sum(parts[i] != before[i] for i in done), len(refused), len(_weak(parts, done, lang)), lang,
+                  complete=remaining == 0, remaining_chars=remaining, coverage=coverage(out), replies=tuple(replies))
 
 
-def mark_sync(text: str, language: str | None = None, tick=None) -> Result:
-    from app.llm import LLMError, chat_sync
+async def mark(text: str, language: str | None = None, budget: float | None = None, debug: bool = False) -> Result:
+    """Aerab for every Arabic-script line of `text` (lyrics, a script, a book). Raises LLMError when the LLM
+    is away; the strict retry of sparse lines is best effort. With `budget` (seconds) it stops starting new
+    calls when time runs out and says what is left (`complete`, `remaining_chars`)."""
+    return await _run(text, language, budget, keep_replies=debug)
 
-    lang, rows, todo = _plan(text, language)
-    if not todo:
-        return Result(text, language=lang)
-    before = list(rows)
-    refused: set[int] = set()
-    for chunk in _chunks(todo, BATCH):
-        res = chat_sync("creative", messages([rows[i] for i in chunk], lang), tick=tick, **ASK)
-        refused |= _apply(rows, chunk, res.data.lines, lang)
-    try:
-        for chunk in _chunks(_weak(rows, todo, lang), RETRY_BATCH):
-            res = chat_sync("creative", messages([rows[i] for i in chunk], lang, strict=True), tick=tick, **ASK)
-            again = _apply(rows, chunk, res.data.lines, lang)
-            refused = (refused - set(chunk)) | (again & refused)
-    except LLMError as e:
-        log.warning("aerab retry skipped: %s", e)
-    return _result(rows, before, todo, refused, lang)
+
+def mark_sync(text: str, language: str | None = None, tick=None, progress=None) -> Result:
+    from app.llm.client import _with_ticks
+
+    return asyncio.run(_with_ticks(_run(text, language, progress=progress), tick, 4.0))
 
 
 # ---------------------------------------------------------------- the second pass after an AI writer
@@ -428,6 +590,27 @@ def finish_lines_sync(texts: list[str], language: str | None = None, tick=None, 
         return list(texts)
     out = finish_sync(joined, language, tick, what).text.split("\n")
     return out if len(out) == len(texts) else list(texts)
+
+
+# ---------------------------------------------------------------- the jobs route
+
+JOB = "text_aerab"
+
+
+def handle(ctx) -> dict:
+    """POST /api/text/aerab/jobs: the same pass with no time budget, for whole books."""
+    from app.llm import LLMError
+
+    p = ctx.job.payload or {}
+    ctx.progress(0.01, "Adding aerab")
+    try:
+        r = mark_sync(p.get("text") or "", p.get("language"), tick=lambda: ctx.progress(ctx.job.progress or 0.01),
+                      progress=lambda f: ctx.progress(0.02 + 0.95 * f, "Adding aerab"))
+    except LLMError as e:
+        log.warning("aerab job %s: %s", ctx.job.id, e)
+        raise RuntimeError("The aerab writer is offline") from None
+    ctx.progress(1.0, "Done")
+    return r.out()
 
 
 # ---------------------------------------------------------------- quoted dialogue in video prompts

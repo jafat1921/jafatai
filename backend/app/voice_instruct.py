@@ -35,7 +35,8 @@ _add("age", "elderly", "elderly", "old", "elder", "aged", "senior", "grandfather
 _add("pitch", "very low pitch", "very low pitch", "very low", "very deep", "booming")
 _add("pitch", "low pitch", "low pitch", "low", "deep", "bass", "baritone", "husky", "gravelly")
 _add("pitch", "moderate pitch", "moderate pitch", "moderate", "medium pitch", "mid pitch")
-_add("pitch", "high pitch", "high pitch", "high", "bright", "soprano", "light voice")
+# "bright" is a colour of the voice, not its pitch: as high pitch it turned Urdu child voices into noise
+_add("pitch", "high pitch", "high pitch", "high", "soprano", "light voice")
 _add("pitch", "very high pitch", "very high pitch", "very high", "squeaky")
 _add("whisper", "whisper", "whisper", "whispering", "whispered", "hushed")
 for accent, *names in (
@@ -55,6 +56,10 @@ SLOTS = ("gender", "age", "pitch", "accent", "whisper")
 FILLER = {"a", "an", "the", "voice", "voiced", "tone", "with", "speaker", "ji", "sahab", "sahib", "accent", "pitch"}
 _PHRASES = sorted(_WORDS, key=len, reverse=True)
 _CJK = re.compile(r"[一-鿿]")
+# OmniVoice's high and very high pitch come out as noise in these languages (heard live: Whisper finds no
+# words, the owner hears static); moderate pitch speaks the same line clearly
+NO_HIGH_PITCH = {"ur", "pnb", "pa", "sd", "ps"}
+_YEARS_OLD = re.compile(r"\b(\d{1,3})[\s-]*(?:years?|yrs?)[\s-]*old\b")
 
 
 @dataclass
@@ -66,7 +71,7 @@ class Instruct:
     speed: float = 1.0
 
 
-def normalise(description: str | None) -> Instruct:
+def normalise(description: str | None, language: str | None = None) -> Instruct:
     raw = " ".join((description or "").split())
     if not raw:
         return Instruct(None)
@@ -99,9 +104,15 @@ def normalise(description: str | None) -> Instruct:
             ignored.append(part)
         elif left:
             ignored.append(" ".join(left))
+    # "4-year-old boy" gives the age as a number
+    m = _YEARS_OLD.search(raw.lower())
+    if m and "age" not in picked:
+        picked["age"] = _age_word(m[1])
     # a boy or girl with no other age word is a child
-    if "age" not in picked and re.search(r"\b(boy|girl)s?\b", raw.lower()):
+    if "age" not in picked and re.search(r"\b(boy|girl|kid)s?\b", raw.lower()):
         picked["age"] = "child"
+    if (language or "").lower() in NO_HIGH_PITCH and picked.get("pitch") in ("high pitch", "very high pitch"):
+        picked["pitch"] = "moderate pitch"
     items = [picked[s] for s in SLOTS if s in picked]
     return Instruct(", ".join(items) or None, understood=items, ignored=ignored, speed=speed)
 

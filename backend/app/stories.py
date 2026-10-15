@@ -136,7 +136,7 @@ def clean_cast(cast: dict, e: voices.Engine, language: str) -> dict:
                          "seed": int(seed) % 2**31 if seed is not None else new_seed()}
             if e.id == "omnivoice":
                 # read the way /audio/speak reads it; OmniVoice refuses any word off its own list
-                out[name]["instruct"] = voice_instruct.normalise(out[name]["description"]).text
+                out[name]["instruct"] = voice_instruct.normalise(out[name]["description"], language).text
     return out
 
 

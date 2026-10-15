@@ -199,7 +199,9 @@ def test_every_style_in_every_format(fmt, style):
     img, rep = lay.render({"format": fmt, "style": style, "texts": texts, "contact": CONTACT, "language": "sv"},
                           lay.AdAssets(photo=photo()))
     assert img.size == lay.FORMATS[fmt]
-    assert rep["contrast"]["body"] >= lay.AA_TEXT and rep["contrast"]["headline"] >= lay.AA_LARGE
+    # a small box drops the body before the type gets tiny, and says so
+    assert "body" in rep["contrast"] or "body" in rep["fit"]["trimmed"]
+    assert rep["contrast"].get("body", 9) >= lay.AA_TEXT and rep["contrast"]["headline"] >= lay.AA_LARGE
     assert rep["contrast"]["footer"] >= lay.AA_TEXT
     x0, y0, x1, y1 = rep["copy_box"]
     for role, (bx0, by0, bx1, by1) in rep["boxes"].items():
@@ -316,10 +318,17 @@ def test_story_footer_is_a_card_inside_the_safe_zone():
         assert y0 >= 1920 * 0.13 and y1 <= 1920 * (1 - 0.18) + 1, style
         # nothing of the copy runs into the card
         assert all(b[3] <= y0 for b in rep["boxes"].values()), style
-    # below the card the photo fades into the footer colour, so there's no stray strip of photo
+    # behind the card only a soft shade: the photo carries on to the bottom edge instead of an empty gradient
+    img, rep = lay.render({"format": "9:16", "style": "frosted", "contact": CONTACT, "language": "sv",
+                           "texts": {"headline": "Tänd ljusen", "body": "Varje vecka", "cta": "Boka"}},
+                          lay.AdAssets(photo=photo()))
     assert "story_fade" in rep["treatment"]
+    y1 = rep["footer"]["box"][3]
     below = np.array(img.crop((0, y1 + 20, img.width, img.height))).reshape(-1, 3).mean(axis=0)
-    assert lay.lum(tuple(int(v) for v in below)) < 0.1
+    assert lay.lum(tuple(int(v) for v in below)) > 0.12
+    # and the copy sits in the middle-lower part of the story, not up under the status bar
+    head = rep["boxes"]["headline"]
+    assert head[1] > 1920 * 0.3
     # a feed footer is still the edge-to-edge bar
     _, rep = lay.render({"format": "4:5", "style": "frosted", "contact": CONTACT, "texts": {"headline": "Hej"}},
                         lay.AdAssets(photo=photo()))
@@ -360,8 +369,20 @@ def test_pipeline_makes_library_ads_and_ad_json(client, llm):
         assert item.kind == "image" and "ad" in item.tags
         photos = db.query(Generation).filter(Generation.target_type == "ad_photo").all()
         # one portrait photo per concept serves 4:5 and 9:16; concept 2's logo goes on the apron
-        base = [g for g in photos if not g.params.get("logo_on_surface")]
-        assert len(base) == 2 and {g.params["aspect"] for g in base} == {"9:16"}
+        # final quality: three candidates per concept and orientation, the best one picked
+        cands = [g for g in photos if g.params.get("photo_role") == "candidate"]
+        assert len(cands) == 6 and {g.params["aspect"] for g in cands} == {"9:16"}
+        picked = {con["photos"]["portrait"]["base"]["id"] for con in c["concepts"]}
+        base = [g for g in cands if g.id in picked]
+        assert len(base) == 2
+        # then the ESRGAN upscale to the story's full size and the BiRefNet cut-out mask
+        roles = sorted(g.params.get("photo_role") for g in photos if g.params.get("photo_role") != "candidate")
+        assert roles.count("upscale") == 2 and roles.count("cutout") == 2
+        ups = [g for g in photos if g.params.get("photo_role") == "upscale"]
+        assert all(g.params["upscale"]["template"] == "image_upscale_esrgan" and
+                   max(g.params["size"]) >= 1920 * 0.95 for g in ups)
+        assert all(con["photos"]["portrait"]["cutout"] and con["photos"]["portrait"]["upscaled"]
+                   for con in c["concepts"])
         # on auto each concept gets the photoreal engine it asked for
         assert sorted(g.params["model"] for g in base) == ["qwen_image_2512", "zimage_turbo"]
         assert all("text" in (g.params.get("negative") or "text") for g in base)

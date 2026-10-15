@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { BrandKit, BrandKitPatch, BrandSettings, LogoRevealRequest, PreviewKind } from '@/lib/brand'
+import { brandApi, type BrandKit, type BrandKitPatch, type BrandSettings, type LogoRevealRequest, type PreviewKind } from '@/lib/brand'
 import type { Project } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob } from './useJobs'
@@ -70,6 +70,28 @@ export function useSetDefaultKit() {
       qc.setQueryData(qk.brandKit(kit.id), kit)
     },
   })
+}
+
+const STYLE_POLL_MS = 3000
+
+/** The kit's ad-style references: save the list (which starts a read), read again, and poll while it works. */
+export function useAdStyle(kit: BrandKit) {
+  const qc = useQueryClient()
+  const live = useQuery({
+    queryKey: qk.brandKit(kit.id),
+    queryFn: () => api.brandKits.get(kit.id),
+    initialData: kit,
+    refetchInterval: (q) => (q.state.data?.ad_style?.status === 'working' ? STYLE_POLL_MS : false),
+  })
+  const put = useMutation({ mutationFn: (refs: string[]) => brandApi.putAdStyle(kit.id, refs), onSuccess: (k) => storeKit(qc, k) })
+  const extract = useMutation({
+    mutationFn: () => brandApi.extractAdStyle(kit.id),
+    onSuccess: (job) => {
+      upsertJob(qc, job)
+      qc.invalidateQueries({ queryKey: qk.brandKit(kit.id) })
+    },
+  })
+  return { kit: live.data ?? kit, put, extract }
 }
 
 export function useLogoReveal(id: string) {

@@ -561,6 +561,8 @@ class BrandKit(Base):
     socials: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     # approved offer lines ("From 215 kr/hour", "No lock-in"); the ad copywriter may only use these
     claims: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # M16b: {references: [media ids], rules, status, error, job_id, updated_at} read from the brand's own adverts
+    ad_style: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 

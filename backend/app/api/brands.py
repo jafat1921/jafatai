@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -16,6 +16,7 @@ from app import brand as br
 from app import brand_render as rnd
 from app import library as lib
 from app import uploads
+from app.ads import style as ad_style
 from app.brand_schemas import (
     AssetOut, BrandApplyIn, BrandKitIn, BrandKitOut, BrandKitPatch, BrandPreviewIn, LogoRevealIn, LogoRevealOut,
     ProjectBrandIn, Social, merged_settings,
@@ -60,7 +61,7 @@ def kit_out(db: Session, kit: BrandKit) -> BrandKitOut:
         tagline=kit.tagline or "", logos=dict(kit.logos or {}), products=list(kit.products or []),
         font_files=list(kit.font_files or []), reference_media_ids=list(kit.reference_media_ids or []),
         settings=merged_settings(kit.settings), contact=br.contact_of(kit), socials=br.socials_of(kit),
-        claims=list(kit.claims or []),
+        claims=list(kit.claims or []), ad_style=ad_style.out(db, kit),
         assets=assets, prompt_context=br.prompt_context(kit),
         created_at=kit.created_at, updated_at=kit.updated_at,
     )
@@ -113,6 +114,33 @@ def _apply_fields(db: Session, kit: BrandKit, data: dict) -> None:
         kit.socials = [Social.model_validate(x).model_dump() for x in data["socials"]]
     if data.get("claims") is not None:
         kit.claims = list(data["claims"])
+
+
+class AdStyleIn(BaseModel):
+    references: list[str] = Field([], max_length=6, description="Library images of the brand's own adverts")
+
+
+@router.put("/brand-kits/{kit_id}/ad-style", response_model=BrandKitOut,
+            summary="Set the brand's own adverts as Ad Studio style references",
+            description="With references, an ad_style job reads them for layout, shapes, type and density; an "
+                        "empty list clears the rules.")
+def put_ad_style(kit_id: str, body: AdStyleIn, db: Session = Depends(get_db),
+                 cur: CurrentUser = Depends(require_editor)):
+    kit = _kit(db, kit_id, cur.workspace_id)
+    ad_style.set_references(db, kit, body.references)
+    db.commit()
+    return kit_out(db, kit)
+
+
+@router.post("/brand-kits/{kit_id}/ad-style/extract", response_model=JobOut, status_code=202,
+             summary="Read the style references again")
+def extract_ad_style(kit_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    kit = _kit(db, kit_id, cur.workspace_id)
+    if not (kit.ad_style or {}).get("references"):
+        raise HTTPException(409, "Add some of your own adverts first")
+    job = ad_style.queue(db, kit)
+    db.commit()
+    return job_out(job)
 
 
 def _make_default(db: Session, kit: BrandKit) -> None:

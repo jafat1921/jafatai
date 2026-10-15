@@ -350,7 +350,8 @@ def test_text_aerab_endpoint(client, router):
     router(mark=swap((AR, AR_MARKED), (FA, FA_MARKED)))
     r = client.post("/api/text/aerab", json={"text": f"MAYA\n{AR}", "language": "ar"})
     assert r.status_code == 200, r.text
-    assert r.json() == {"text": f"MAYA\n{AR_MARKED}", "marked": 1, "kept": 0, "low_coverage": 0, "language": "ar"}
+    assert r.json() == {"text": f"MAYA\n{AR_MARKED}", "marked": 1, "kept": 0, "low_coverage": 0, "language": "ar",
+                        "complete": True, "remaining_chars": 0, "coverage": 1.0}
     r = client.post("/api/text/aerab", json={"text": FA})
     assert r.json()["language"] == "fa" and r.json()["text"] == FA_MARKED
     assert client.post("/api/text/aerab", json={"text": "only English here"}).status_code == 422

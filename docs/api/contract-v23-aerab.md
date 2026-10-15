@@ -78,3 +78,52 @@ Response adds `low_coverage`.
 - Used in: Speak script, Lyrics editor (language-aware, Arabic included), Dialogue (per line, and "Add aerab to all lines" in the toolbar), Podcast script (per line and all lines), Dub line editor (target text), Transcribe (tidied text), and the film Scene editor (script).
 - `AerabOnNote` ("Aerab: on" / "Tashkeel: on") in the Podcast source step, the New dub form and the scene's "Let AI draft" form when the language (or the idea) is Arabic-script. The lyrics writer keeps its "With aerab" / "With tashkeel" checkbox, now for every Arabic-script language.
 - Song and speech payloads send `aerab` for every Arabic-script language, not just `ur`.
+
+## Addendum (v23b): prose, tolerant letter check, time budget, jobs route
+
+Added 2026-10-15 after BlogCreatorPro sent Urdu children's-book prose and got 1-3% of it marked. Everything above stands except where listed here.
+
+### Tolerant letter check
+
+The LLM's line is no longer refused for any one letter that differs. The writer's letters and the LLM's are aligned (folded, see below) and:
+- marks are copied only onto letters inside runs where the two agree (a run of one letter between two rewritten stretches doesn't count);
+- a letter the LLM changed, dropped or added gets no mark, and the writer's letter stays;
+- the line is accepted when at least **80%** of its letters line up (over the longer of the two), otherwise it is kept as written and counted in `kept`, as before;
+- the output is always the writer's own code points; marks the writer typed still win over the LLM's; a madda is never transferred (it would make ا into آ).
+
+Folding (comparison only): every language folds Arabic-Indic and Persian digits onto 0-9 and ۔ ، ؟ ؛ ٪ onto . , ? ; %. Letters are compared decomposed, so ۂ ۀ ۓ ئ ؤ أ إ count as their base letter, and the hamza above / below, ZWNJ, ZWJ, tatweel, direction marks and BOM are ignored. Presentation forms (ﻻ, isolated / final glyphs) count as the letters they stand for. Urdu and Shahmukhi also fold ے ي ى onto ی and ه ە ة ۃ onto ہ. The per-language rules above are otherwise unchanged.
+
+### Prose
+
+Lines longer than 100 characters are cut into sentences (after ۔ ؟ ! . ? and any closing quote, where whitespace follows) before they are sent; the spaces and newlines between them are put back exactly. Calls carry up to 40 units and about 700 characters, with `max_tokens` and the call timeout sized to the batch. `marked`, `kept` and `low_coverage` count these units (a short line is one unit).
+
+### `POST /api/text/aerab`
+
+- Answers within about **45 s**. When time runs out it returns what is marked so far with `"complete": false` and `"remaining_chars"` (characters of Arabic-script text not yet sent). Otherwise `complete: true`, `remaining_chars: 0`.
+- New field `coverage`: share of the whole text's words carrying a mark (one-letter and function words not counted).
+- 503 only when the first call fails for a reason other than the budget (LLM offline).
+- `POST /api/audio/lyrics/aerab` has the same budget and adds `complete` and `remaining_chars`.
+
+### `POST /api/text/aerab/jobs` (new)
+
+Same body as `/api/text/aerab`. **202** with the job (`type: "text_aerab"`, general lane). No time budget. Poll `GET /api/jobs/{id}`; when `status` is `done`, `result` holds the `TextAerabOut` fields (`text, marked, kept, low_coverage, language, complete, remaining_chars, coverage`). The LLM offline fails the job with `error: "The aerab writer is offline"`. 422 when there is nothing to mark. Token scope `generate`. Use it for whole books.
+
+### Debug (admin only)
+
+`?debug=1` on `/api/text/aerab` adds `debug: [{pass, model, seconds, sent, reply, aligned}]`, the raw LLM replies per call. Admin session or admin token only (403 for anyone else); not in the OpenAPI schema.
+
+### Config
+
+`AERAB_LLM_MODEL` (default empty: the creative role's `LLM_MODEL_CREATIVE`) picks the model that adds the marks. Each call is logged at INFO with model, seconds, units accepted / refused and the mean alignment.
+
+### Prompt
+
+The marking prompt now covers prose, dialogue and verse ("text that will be read aloud, spoken or sung"), asks to keep punctuation, and Urdu / Shahmukhi get one fully marked example sentence (zabar, zer, pesh, jazm, tashdeed, izafat).
+
+### Render-time callers
+
+Stories, Speak, songs and the AI writers' second pass use the same batching, sizing and tolerant check (no time budget; a failed batch after the first is skipped and logged, two in a row stop the pass).
+
+### Tests
+
+`backend/tests/test_aerab_prose.py`. Changed: `test_aerab.py::test_transfer_keeps_the_writers_letters` (one changed letter, کی to کا, is now accepted with the other marks; a rewritten line is still refused), and the exact-response asserts in `test_aerab.py::test_add_aerab_endpoint` and `test_aerab_langs.py::test_text_aerab_endpoint` (new fields).

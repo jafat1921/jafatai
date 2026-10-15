@@ -1,18 +1,94 @@
 import { useId, useState } from 'react'
-import { RefreshCw, Save } from 'lucide-react'
+import { Check, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { Chip } from '@/components/studio/chip'
 import { usePatchConcept, useRegenerateConcept } from '@/hooks/useAds'
-import { STYLES, type AdCampaign, type AdConcept, type AdStyle, type ConceptPatch } from '@/lib/ads'
+import { styleLabel, type AdCampaign, type AdConcept, type AdPhotoSet, type ConceptPatch } from '@/lib/ads'
+import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { LayoutPicker } from './LayoutPicker'
 
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
-const FIELDS = ['kicker', 'headline', 'body', 'cta', 'layout', 'photo_prompt'] as const
-type Draft = Pick<AdConcept, (typeof FIELDS)[number]>
+const FIELDS = ['kicker', 'headline', 'key_word', 'body', 'cta', 'layout', 'quote', 'photo_prompt'] as const
+type Draft = {
+  kicker: string
+  headline: string
+  key_word: string
+  body: string
+  cta: string
+  layout: AdConcept['layout']
+  quote: number | null
+  photo_prompt: string
+}
 
-const draftOf = (c: AdConcept): Draft => ({ kicker: c.kicker, headline: c.headline, body: c.body, cta: c.cta, layout: c.layout, photo_prompt: c.photo_prompt })
+const draftOf = (c: AdConcept): Draft => ({
+  kicker: c.kicker,
+  headline: c.headline,
+  key_word: c.key_word ?? '',
+  body: c.body,
+  cta: c.cta,
+  layout: c.layout,
+  quote: c.quote ?? null,
+  photo_prompt: c.photo_prompt,
+})
+
+const GROUPS = [
+  ['portrait', 'Portrait'],
+  ['square', 'Square'],
+  ['wide', 'Wide'],
+] as const
+
+const PICKED_BY: Record<string, string> = { vision: 'picked by the photo check', heuristic: 'picked for the calmest copy space' }
+
+// a compact strip per orientation: what was made and which one the ads use
+function Candidates({ n, photos }: { n: number; photos: AdConcept['photos'] }) {
+  const sets = GROUPS.map(([k, label]) => [label, photos[k]] as [string, AdPhotoSet | undefined]).filter(([, p]) => (p?.candidates?.length ?? 0) > 0)
+  if (!sets.length) return null
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-small font-medium">Photos made</span>
+      {sets.map(([label, p]) => (
+        <div key={label} className="flex flex-wrap items-center gap-1.5">
+          <span className="w-16 text-small text-studio-muted">{label}</span>
+          <ul className="flex flex-wrap gap-1.5" aria-label={`Concept ${n}, ${label.toLowerCase()} photos`}>
+            {p!.candidates!.map((c, i) => {
+              const score = c.score != null ? `score ${Math.round(c.score * 10) / 10}` : null
+              return (
+                <li key={c.id} className="relative">
+                  <span className={cn('block size-12 overflow-hidden rounded-[4px] border bg-studio-raised', c.picked ? 'border-studio-accent ring-2 ring-studio-accent' : 'border-studio-border-strong')}>
+                    {c.thumb_url || c.media_url ? (
+                      <img
+                        src={c.thumb_url ?? c.media_url ?? undefined}
+                        alt={`Photo ${i + 1}${c.picked ? ', used in the ads' : ''}${score ? `, ${score}` : ''}${c.issues.length ? `: ${c.issues.join(', ')}` : ''}`}
+                        className="size-full object-cover"
+                      />
+                    ) : (
+                      <span className="sr-only">Photo {i + 1} not ready</span>
+                    )}
+                  </span>
+                  {c.picked && (
+                    <span aria-hidden className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-studio-accent text-studio-accent-fg">
+                      <Check className="size-3" />
+                    </span>
+                  )}
+                  {score && (
+                    <span aria-hidden className="block text-center text-[11px] text-studio-muted">
+                      {Math.round(c.score! * 10) / 10}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          {p!.pick && PICKED_BY[p!.pick.by] && <span className="text-small text-studio-muted">{PICKED_BY[p!.pick.by]}</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function ConceptCard({ camp, concept, busy }: { camp: AdCampaign; concept: AdConcept; busy: boolean }) {
   const uid = useId()
@@ -27,14 +103,17 @@ function ConceptCard({ camp, concept, busy }: { camp: AdCampaign; concept: AdCon
     setSeen(server)
     setD(draftOf(concept))
   }
-  const dirty = FIELDS.some((k) => d[k] !== concept[k])
+  const was = draftOf(concept)
+  const dirty = FIELDS.some((k) => d[k] !== was[k])
+  const quotes = camp.brief.quotes ?? []
+  const options = (concept.headline_options ?? []).filter((o) => o.headline.trim())
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((o) => ({ ...o, [k]: v }))
   const lang = camp.language
   const dropped = [...(concept.guard.offers_dropped ?? []), ...(concept.guard.numbers_removed ?? []), ...(concept.guard.channels_removed ?? [])]
 
   const save = () => {
     const body: ConceptPatch = {}
-    for (const k of FIELDS) if (d[k] !== concept[k]) (body as Record<string, unknown>)[k] = d[k]
+    for (const k of FIELDS) if (d[k] !== was[k]) (body as Record<string, unknown>)[k] = d[k]
     patch.mutate({ conceptId: concept.id, ...body }, { onSuccess: () => announce(`Concept ${concept.n} saved.`) })
   }
 
@@ -74,32 +153,75 @@ function ConceptCard({ camp, concept, busy }: { camp: AdCampaign; concept: AdCon
           A new line here is a line break in the ad.
         </span>
       </div>
+      {options.length > 0 && (
+        <div className="flex flex-col gap-1" role="group" aria-labelledby={id('alt-h')}>
+          <span id={id('alt-h')} className="text-small font-medium">
+            Other headlines
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {options.map((o) => (
+              <Chip
+                key={o.headline}
+                selected={o.headline === concept.headline}
+                disabled={busy || patch.isPending}
+                className="h-auto min-h-7 py-0.5 text-left"
+                onClick={() =>
+                  patch.mutate(
+                    { conceptId: concept.id, headline: o.headline, key_word: o.key_word },
+                    { onSuccess: () => announce(`Concept ${concept.n} now uses that headline.`) },
+                  )
+                }
+              >
+                <span dir="auto" lang={lang} className="whitespace-normal">
+                  {o.headline.replace(/\n/g, ' ')}
+                </span>
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex flex-col gap-1">
+        <label htmlFor={id('kw')} className="text-small font-medium">
+          Key word
+        </label>
+        <Input id={id('kw')} dir="auto" lang={lang} maxLength={60} value={d.key_word} onChange={(e) => set('key_word', e.target.value)} aria-describedby={id('kw-hint')} />
+        <span id={id('kw-hint')} className="text-small text-studio-muted">
+          Set in the accent colour. Leave it empty for no highlight.
+        </span>
+      </div>
       <div className="flex flex-col gap-1">
         <label htmlFor={id('body')} className="text-small font-medium">
           Body
         </label>
         <Textarea id={id('body')} dir="auto" lang={lang} rows={2} maxLength={600} value={d.body} onChange={(e) => set('body', e.target.value)} />
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="flex flex-col gap-1">
+        <label htmlFor={id('cta')} className="text-small font-medium">
+          Button
+        </label>
+        <Input id={id('cta')} dir="auto" lang={lang} maxLength={60} value={d.cta} onChange={(e) => set('cta', e.target.value)} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span aria-hidden className="text-small font-medium">
+          Layout: {styleLabel(d.layout)}
+        </span>
+        <LayoutPicker compact label={`Concept ${concept.n} layout`} value={d.layout} onChange={(v) => set('layout', v)} />
+      </div>
+      {d.layout === 'quote' && quotes.length > 0 && (
         <div className="flex flex-col gap-1">
-          <label htmlFor={id('cta')} className="text-small font-medium">
-            Button
+          <label htmlFor={id('quote')} className="text-small font-medium">
+            Quote
           </label>
-          <Input id={id('cta')} dir="auto" lang={lang} maxLength={60} value={d.cta} onChange={(e) => set('cta', e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={id('layout')} className="text-small font-medium">
-            Layout
-          </label>
-          <select id={id('layout')} className={SELECT} value={d.layout} onChange={(e) => set('layout', e.target.value as AdStyle)}>
-            {STYLES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
+          <select id={id('quote')} className={SELECT} value={d.quote ?? ''} onChange={(e) => set('quote', e.target.value === '' ? null : Number(e.target.value))}>
+            <option value="">Pick one for me</option>
+            {quotes.map((q, i) => (
+              <option key={i} value={i}>
+                {q.by ? `${q.text} (${q.by})` : q.text}
               </option>
             ))}
           </select>
         </div>
-      </div>
+      )}
       {concept.offers.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-small font-medium">Offers used</span>
@@ -112,6 +234,7 @@ function ConceptCard({ camp, concept, busy }: { camp: AdCampaign; concept: AdCon
           </ul>
         </div>
       )}
+      <Candidates n={concept.n} photos={concept.photos} />
       {dropped.length > 0 && (
         <p className="text-small text-studio-muted" role="note">
           Left out because they weren't in your offers or brand kit: <span dir="auto">{dropped.join(' · ')}</span>

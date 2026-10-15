@@ -53,10 +53,12 @@ PHOTO_NEGATIVE = ("text, letters, words, numbers, captions, watermark, logo, sig
 DEFAULTS = {"subject": "", "description": "", "brief": "", "occasion": "", "market": "", "tone": "",
             "must_say": "", "offers": [], "formats": ["4:5"], "variants": 3, "image_model": AUTO_MODEL,
             "product_media_ids": [], "review": True, "logo_on_surface": True, "font_preset": None,
-            "footer_items": None}
+            "footer_items": None, "quality": "final", "candidates": 3, "quotes": [], "use_style": True}
+QUALITIES = ("draft", "final")
 
 TEXT_KEYS = ("kicker", "headline", "body", "cta")
-SPEC_TEXTS = ("kicker", "headline", "body", "offers", "cta", "badge_big", "badge_small")
+SPEC_TEXTS = ("kicker", "headline", "body", "offers", "cta", "badge_big", "badge_small", "highlight", "quote",
+              "quote_by")
 
 
 class AdError(RuntimeError):
@@ -202,9 +204,50 @@ def mark_dirty(c: AdCampaign, concept_id: str) -> None:
 def new_concept(n: int, data: dict, guard: dict) -> dict:
     return {"id": new_id(), "n": n, "approved": True, "edited": False, "copy_dirty": False,
             **{k: data.get(k) or "" for k in ("insight", "kicker", "headline", "body", "cta", "layout",
-                                               "photo_prompt", "photo_model", "placement", "logo_surface")},
+                                               "photo_prompt", "photo_model", "placement", "logo_surface",
+                                               "key_word")},
             "offers": list(data.get("offers") or []), "guard": guard, "copy_check": list(data.get("copy_check") or []),
+            "headline_options": list(data.get("headline_options") or []), "quote": data.get("quote"),
             "photos": {}, "error": None}
+
+
+def style_rules(kit: BrandKit | None) -> dict | None:
+    st = (kit.ad_style or {}) if kit is not None else {}
+    return st.get("rules") if st.get("status") == "ready" else None
+
+
+def campaign_rules(c: AdCampaign, kit: BrandKit | None) -> dict | None:
+    return style_rules(kit) if brief_of(c).get("use_style", True) else None
+
+
+def layouts_for(b: dict, rules: dict | None) -> tuple[list[str], bool]:
+    """(the layouts this brief can fill, best first; whether the brand's own ads pin them)."""
+    has_number = any(lay.split_price(o)[1] for o in b.get("offers") or [])
+    allowed = [x for x in lay.STYLES if not (
+        (lay.STYLE_NEEDS.get(x) == "offer_number" and not has_number) or (x == "quote" and not b.get("quotes")))]
+    if rules and rules.get("layouts"):
+        pref = [x for x in rules["layouts"] if x in allowed]
+        if pref and rules.get("pinned"):
+            return pref, True
+        allowed = pref + [x for x in allowed if x not in pref]
+    return allowed, False
+
+
+def spread(rows: list[dict], allowed: list[str], pinned: bool) -> None:
+    """Concepts spread across layouts: a repeat (or a layout the brief can't fill) moves to the next unused
+    one. A before/after is only ever the writer's own choice."""
+    pool = [x for x in allowed if x != "before_after"] or list(allowed)
+    used: list[str] = []
+    for r in rows:
+        want = r.get("layout")
+        if want not in allowed or (want in used and len(used) < len(pool)):
+            want = next((x for x in pool if x not in used), pool[len(used) % len(pool)])
+        r["layout"] = want
+        used.append(want)
+
+
+def concept_seed(con: dict) -> int:
+    return sum(ord(ch) * (i + 1) for i, ch in enumerate(con.get("id") or "")) % 10000
 
 
 def groups(formats: list[str]) -> list[str]:
@@ -222,6 +265,10 @@ def photo_id(con: dict, group: str) -> str | None:
     """The concept's finished photo for a group: the logo-on-surface version when it came, else the plain one."""
     rec = (con.get("photos") or {}).get(group) or {}
     return rec.get("final") or None
+
+
+def photo_rec(con: dict, group: str) -> dict:
+    return dict((con.get("photos") or {}).get(group) or {})
 
 
 # ---------------------------------------------------------------- the layer spec
@@ -249,22 +296,58 @@ def footer_choice(b: dict, o: dict, kit: BrandKit | None) -> tuple[dict, list[di
     return contact, chosen
 
 
+def quote_of(b: dict, con: dict) -> dict:
+    """The client's own quote this concept uses, word for word; nothing when it has none."""
+    quotes = [q for q in b.get("quotes") or [] if (q.get("text") or "").strip()]
+    i = con.get("quote")
+    if not quotes:
+        return {}
+    q = quotes[i - 1] if isinstance(i, int) and 1 <= i <= len(quotes) else quotes[0]
+    return {"quote": q["text"].strip(), "quote_by": (q.get("by") or "").strip()}
+
+
+def preset_for(b: dict, o: dict, kit: BrandKit | None, style: str, rules: dict | None) -> str:
+    if o.get("font_preset") or b.get("font_preset"):
+        return o.get("font_preset") or b.get("font_preset")
+    if kit is not None and kit.font_files:
+        return fz.BRAND
+    if rules and rules.get("serif") and style not in lay.LAYOUT_FONTS:
+        return "elegant"
+    return lay.LAYOUT_FONTS.get(style, fz.DEFAULT_PRESET)
+
+
 def spec_for(c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None) -> dict:
     """The effective layer spec: concept copy and kit defaults, with the ad's own edits on top."""
     o = rec.get("overrides") or {}
     b = brief_of(c)
     contact, socials = footer_choice(b, o, kit)
     follow = {"show": rec["format"] == "9:16", "text": "", **(o.get("follow") or {})}
-    style = o.get("style") or con.get("layout") or "frosted"
-    logo_default = "tc" if style == "minimal" else "tl"
+    auto = rec.get("auto") or {}
+    style = o.get("style") or auto.get("style") or con.get("layout") or "frosted"
+    style = style if style in lay.STYLES else "frosted"
+    rules = campaign_rules(c, kit)
+    group = GROUPS[rec["format"]]
+    prec = photo_rec(con, group)
+    shape_o = o.get("shape") or {}
+    mask = shape_o.get("mask") or ((rules or {}).get("mask") if style == "arch_mask" else None)
+    placement = {"flip": (o.get("placement") or {}).get("flip", auto.get("flip"))}
+    texts = {**texts_of(con), "highlight": con.get("key_word") or "", **quote_of(b, con)}
     return {
-        "format": rec["format"], "style": style if style in lay.STYLES else "frosted",
-        "font_preset": o.get("font_preset") or b.get("font_preset") or default_preset(kit),
+        "format": rec["format"], "style": style,
+        "font_preset": preset_for(b, o, kit, style, rules),
         "language": c.language, "rtl": is_rtl(c.language),
-        "texts": {**texts_of(con), **{k: v for k, v in (o.get("texts") or {}).items() if k in SPEC_TEXTS}},
+        "texts": {**texts, **{k: v for k, v in (o.get("texts") or {}).items() if k in SPEC_TEXTS}},
+        "shape": {"mask": mask, "colour": shape_o.get("colour") or None,
+                  "seed": int(shape_o["seed"]) if shape_o.get("seed") is not None else concept_seed(con)},
+        "placement": placement,
+        "subject": prec.get("subject"),
+        "style_ref": {k: rules.get(k) for k in ("headline_weight", "headline_case", "density", "serif", "mask")}
+        if rules else None,
+        "assets": {"cutout": bool(prec.get("mask")), "before": bool(prec.get("before_final"))},
+        "mask_file": prec.get("mask"), "before_id": prec.get("before_final"),
         "colours": dict(o.get("colours") or {}),
         "palette": list(kit.palette or []) if kit is not None else [],
-        "logo": {"position": (o.get("logo") or {}).get("position") or logo_default,
+        "logo": {"position": (o.get("logo") or {}).get("position") or lay.LOGO_DEFAULT.get(style, "tl"),
                  "variant": (o.get("logo") or {}).get("variant") or "auto"},
         # a thumbnail has no footer unless asked for: it's a picture to click, not an advert to call from
         "footer": bool(o["footer"]) if "footer" in o else bool(contact or socials) and rec["format"] != "yt",
@@ -272,7 +355,8 @@ def spec_for(c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None) -> dict:
         "socials": socials,
         "follow": follow,
         "footer_items": {"contact": list(contact), "socials": [social_key(x) for x in socials]},
-        "focus": dict(o.get("focus") or {"x": 0.5, "y": 0.5}),
+        # auto: the layout engine places the subject; a focus the user dragged is kept as it is
+        "focus": dict(o.get("focus") or {"x": 0.5, "y": 0.5, "auto": True}),
         "photo_id": photo_id(con, GROUPS[rec["format"]]),
     }
 
@@ -284,13 +368,26 @@ def _open(path: Path | None) -> Image.Image | None:
         return ImageOps.exif_transpose(im).convert("RGB")
 
 
-def assets_for(db: Session, kit: BrandKit | None, photo_gen_id: str | None) -> lay.AdAssets:
+def _mask(rel: str | None) -> Image.Image | None:
+    path = get_settings().data_dir / rel if rel else None
+    if path is None or not path.is_file():
+        return None
+    with Image.open(path) as im:
+        return im.convert("L")
+
+
+def assets_for(db: Session, kit: BrandKit | None, photo_gen_id: str | None, mask_file: str | None = None,
+               before_id: str | None = None) -> lay.AdAssets:
     g = db.get(Generation, photo_gen_id) if photo_gen_id else None
     photo = _open(generation_file(g)) if g is not None and g.status in FINISHED else None
+    bg = db.get(Generation, before_id) if before_id else None
+    before = _open(generation_file(bg)) if bg is not None and bg.status in FINISHED else None
+    mask = _mask(mask_file) if photo is not None else None
     if kit is None:
-        return lay.AdAssets(photo=photo)
+        return lay.AdAssets(photo=photo, mask=mask, before=before)
     ws = kit.workspace_id
-    return lay.AdAssets(photo=photo, logo=br.media_file(db, ws, br.logo_ref(kit).get("media_id")),
+    return lay.AdAssets(photo=photo, mask=mask, before=before,
+                        logo=br.media_file(db, ws, br.logo_ref(kit).get("media_id")),
                         logo_light=br.media_file(db, ws, br.logo_ref(kit, "light").get("media_id")),
                         logo_dark=br.media_file(db, ws, br.logo_ref(kit, "dark").get("media_id")),
                         brand_fonts=[p for p in (br.media_file(db, ws, m) for m in kit.font_files or []) if p])
@@ -302,7 +399,7 @@ def kit_of(db: Session, c: AdCampaign) -> BrandKit | None:
 
 
 def render_spec(db: Session, c: AdCampaign, spec: dict, kit: BrandKit | None):
-    return lay.render(spec, assets_for(db, kit, spec.get("photo_id")))
+    return lay.render(spec, assets_for(db, kit, spec.get("photo_id"), spec.get("mask_file"), spec.get("before_id")))
 
 
 def write_ad(db: Session, c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None) -> dict:
@@ -341,8 +438,10 @@ def write_ad(db: Session, c: AdCampaign, con: dict, rec: dict, kit: BrandKit | N
     except Exception:  # a missing thumb is made on first view anyway
         pass
     slim = {k: report.get(k) for k in ("contrast", "treatment", "fonts", "fit", "logo", "footer", "footer_dropped",
-                                       "buttons")}
+                                       "buttons", "placement", "highlight", "fallback", "layout", "price", "shape")}
     slim["quality"] = quality_of(report, con)
+    if rec.get("qa"):
+        slim["quality"]["qa"] = rec["qa"]
     rec.update(media_id=item.id, generation_id=g.id, status="ready", error=None, dirty=False,
                photo_id=spec.get("photo_id"), report=slim)
     put_ad(c, rec)
@@ -370,6 +469,13 @@ def quality_of(report: dict, con: dict) -> dict:
     return {"contrast": contrast, "all_pass": all(v["pass"] for v in contrast.values()),
             "dropped": {k: v for k, v in dropped.items() if v}, "copy_check": notes,
             "treatment": list(report.get("treatment") or [])}
+
+
+def render_report(db: Session, c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None):
+    """(image, the report write_ad would store) without saving anything: the QA pass tries layouts with it."""
+    img, report = render_spec(db, c, spec_for(c, con, rec, kit), kit)
+    report["quality"] = quality_of(report, con)
+    return img, report
 
 
 def new_ad(con: dict, fmt: str) -> dict:
@@ -449,23 +555,44 @@ def missing_contact(kit: BrandKit | None) -> list[str]:
     return out + ([] if br.socials_of(kit) else ["socials"])
 
 
-def kit_out(kit: BrandKit | None) -> dict | None:
+def kit_out(kit: BrandKit | None, use_style: bool = True) -> dict | None:
     if kit is None:
         return None
     return {"id": kit.id, "name": kit.name, "palette": list(kit.palette or []), "contact": br.contact_of(kit),
             "socials": br.socials_of(kit),
             "claims": list(kit.claims or []), "has_fonts": bool(kit.font_files),
             "has_logo": bool((kit.logos or {}).get("primary") or (kit.logos or {}).get("light")),
-            "missing_contact": missing_contact(kit)}
+            "missing_contact": missing_contact(kit), "ad_style": style_out(kit, use_style)}
+
+
+def style_out(kit: BrandKit | None, use_style: bool = True) -> dict:
+    from app.ads import vision as eye
+
+    rules = style_rules(kit)
+    return {"active": bool(rules and use_style), "has_rules": bool(rules),
+            "layouts": list((rules or {}).get("layouts") or []), "summary": eye.summary(rules)}
 
 
 def concept_out(db: Session, con: dict) -> dict:
     photos = {}
     for grp, rec in (con.get("photos") or {}).items():
+        scores = rec.get("scores") or {}
+        cands = []
+        for gid in rec.get("candidates") or []:
+            g = _gen(db, gid)
+            if g is not None:
+                sc = scores.get(gid) or {}
+                cands.append({**g, "score": sc.get("score"), "issues": sc.get("issues") or [],
+                              "picked": gid == rec.get("base")})
         photos[grp] = {"base": _gen(db, rec.get("base")), "logo": _gen(db, rec.get("logo")),
-                       "final": rec.get("final"), "note": rec.get("note")}
+                       "final": rec.get("final"), "note": rec.get("note"), "candidates": cands,
+                       "pick": rec.get("pick"), "before": _gen(db, rec.get("before_final")),
+                       "upscaled": bool(rec.get("upscale") and rec.get("final") == rec.get("upscale")),
+                       "cutout": bool(rec.get("mask")), "subject": rec.get("subject")}
     return {**{k: con.get(k) for k in ("id", "n", "approved", "edited", "insight", "kicker", "headline", "body", "cta",
                                        "layout", "photo_prompt", "photo_model", "placement", "logo_surface", "error")},
+            "key_word": con.get("key_word") or "", "headline_options": list(con.get("headline_options") or []),
+            "quote": con.get("quote"),
             "offers": list(con.get("offers") or []), "guard": con.get("guard") or {},
             "copy_check": list(con.get("copy_check") or []), "photos": photos}
 
@@ -476,6 +603,7 @@ def ad_out(db: Session, c: AdCampaign, rec: dict, con: dict | None, kit: BrandKi
     return {"id": rec["id"], "concept_id": rec["concept_id"], "format": rec["format"],
             "status": rec.get("status") or "pending", "error": rec.get("error"), "media_id": rec.get("media_id"),
             "generation_id": rec.get("generation_id"), "version": g.version if g is not None else None,
+            "auto": rec.get("auto") or {},
             "image_url": o.media_url if o else None, "thumb_url": o.thumb_url if o else None,
             "width": lay.FORMATS[rec["format"]][0], "height": lay.FORMATS[rec["format"]][1],
             "overrides": rec.get("overrides") or {}, "report": rec.get("report") or {},
@@ -494,7 +622,7 @@ def campaign_out(db: Session, c: AdCampaign) -> dict:
         "status": status, "review": review,
         "stages": [{"key": k, "label": label, "status": stage(c, k).get("status", "pending"),
                     "detail": stage(c, k).get("detail")} for k, label in STAGES],
-        "brief": brief_of(c), "brand_kit": kit_out(kit),
+        "brief": brief_of(c), "brand_kit": kit_out(kit, brief_of(c).get("use_style", True)),
         "concepts": [concept_out(db, x) for x in c.concepts or []],
         "ads": [ad_out(db, c, a, cons.get(a["concept_id"]), kit) for a in c.ads or []],
         "ad_json_url": media_url(f"{rel}/ad.json") if has_json else None,

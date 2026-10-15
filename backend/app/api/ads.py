@@ -28,7 +28,9 @@ router = APIRouter(prefix="/ads", tags=["ads"])
 
 Format = Literal["4:5", "9:16", "1:1", "16:9", "1.91:1", "2:3", "yt"]
 ContactKey = Literal["phone", "whatsapp", "email", "website", "booking_url", "location", "opening_hours"]
-Style = Literal["frosted", "side_wash", "bottom_bar", "split", "badge", "minimal"]
+Style = Literal["frosted", "side_wash", "bottom_bar", "split", "badge", "minimal", "cutout_blob", "arch_mask",
+                "circle_mask", "big_price", "editorial", "before_after", "quote"]
+MaskShape = Literal["arch", "circle", "teardrop", "blob"]
 Line = Field(None, max_length=300)
 PREVIEW_MAX = 960
 
@@ -41,6 +43,11 @@ class FooterItems(BaseModel):
 class FollowIn(BaseModel):
     show: bool | None = None
     text: str | None = Field(None, max_length=40, description='Empty: "Follow us" in the ad language')
+
+
+class QuoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=300, description="A customer's own words, used verbatim")
+    by: str = Field("", max_length=80)
 
 
 class CreateIn(BaseModel):
@@ -70,6 +77,10 @@ class CreateIn(BaseModel):
     logo_on_surface: bool = True
     footer_items: FooterItems | None = Field(None, description="What the footers show; default: website, "
                                                              "booking link, phone, WhatsApp, socials for ads")
+    quality: Literal["draft", "final"] = Field("final", description="draft: one photo each, no upscale, no vision QA")
+    candidates: int = Field(3, ge=1, le=4, description="Photos made per concept and orientation on final")
+    quotes: list[QuoteIn] = Field([], max_length=6, description="Testimonials for the quote layout, verbatim")
+    use_style: bool = Field(True, description="Follow the brand kit's style references when it has some")
 
     @field_validator("offers")
     @classmethod
@@ -91,6 +102,8 @@ class ConceptPatch(BaseModel):
     offers: list[str] | None = Field(None, max_length=3)
     layout: Style | None = None
     photo_prompt: str | None = Field(None, min_length=1, max_length=2000)
+    key_word: str | None = Field(None, max_length=60)
+    quote: int | None = Field(None, ge=1, le=6)
 
 
 class RegenerateIn(BaseModel):
@@ -106,16 +119,34 @@ class AdTexts(BaseModel):
     cta: str | None = Field(None, max_length=60)
     badge_big: str | None = Field(None, max_length=12)
     badge_small: str | None = Field(None, max_length=20)
+    highlight: str | None = Field(None, max_length=60, description="The key word set in the accent colour")
+    quote: str | None = Field(None, max_length=300)
+    quote_by: str | None = Field(None, max_length=80)
 
 
 class LogoIn(BaseModel):
-    position: Literal["tl", "tr", "tc", "bl", "br", "none"] | None = None
+    position: Literal["tl", "tr", "tc", "bl", "br", "stack", "none"] | None = None
     variant: Literal["auto", "primary", "light", "dark"] | None = None
 
 
 class FocusIn(BaseModel):
     x: float = Field(0.5, ge=0, le=1)
     y: float = Field(0.5, ge=0, le=1)
+
+
+class ShapeIn(BaseModel):
+    mask: MaskShape | None = None
+    colour: str | None = None
+    seed: int | None = Field(None, ge=0, le=9999)
+
+    @field_validator("colour")
+    @classmethod
+    def _hex(cls, v):
+        return norm_hex(v) if v else v
+
+
+class PlacementIn(BaseModel):
+    flip: bool | None = Field(None, description="true: the copy on the other side; null: placed automatically")
 
 
 class AdPatch(BaseModel):
@@ -129,6 +160,8 @@ class AdPatch(BaseModel):
     footer_items: FooterItems | None = None
     follow: FollowIn | None = None
     focus: FocusIn | None = None
+    shape: ShapeIn | None = None
+    placement: PlacementIn | None = None
     reset: bool = Field(False, description="Drop every edit of this ad first")
 
     @field_validator("colours")
@@ -173,7 +206,9 @@ def options(kit_id: str | None = None, db: Session = Depends(get_db), cur: Curre
                for m in svc.IMAGE_MODELS if m in mc.MODELS and not mc.hidden(mc.MODELS[m])]
     return {"formats": [{"id": f, "label": lay.FORMAT_LABELS[f], "width": w, "height": h}
                         for f, (w, h) in lay.FORMATS.items()],
-            "styles": [{"id": s, "label": lay.STYLE_LABELS[s]} for s in lay.STYLES],
+            "styles": [{"id": s, "label": lay.STYLE_LABELS[s], "needs": lay.STYLE_NEEDS.get(s)} for s in lay.STYLES],
+            "mask_shapes": ["arch", "circle", "teardrop", "blob"], "qualities": ["draft", "final"],
+            "candidates": {"min": 1, "max": 4, "default": 3},
             "font_presets": fz.presets_out(bool(kit is not None and kit.font_files)),
             "logo_positions": list(lay.LOGO_POSITIONS), "image_models": models,
             "variants": {"min": 2, "max": 8, "default": 3}, "product_photos": {"max": 3}}
@@ -331,6 +366,10 @@ def _apply_patch(rec: dict, body: AdPatch) -> dict:
         o["follow"] = {**(o.get("follow") or {}), **body.follow.model_dump(exclude_none=True)}
     if body.focus is not None:
         o["focus"] = body.focus.model_dump()
+    if body.shape is not None:
+        o["shape"] = {**(o.get("shape") or {}), **body.shape.model_dump(exclude_unset=True)}
+    if body.placement is not None:
+        o["placement"] = body.placement.model_dump()
     return o
 
 

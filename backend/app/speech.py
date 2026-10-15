@@ -63,7 +63,7 @@ def runner_job(params: dict, e: voices.Engine, texts: list[str], work: Path, see
     instruct = ", ".join(x for x in ((v.get("design") or {}).get("description"), params.get("emotion")) if x) or None
     if e.id == "omnivoice" and instruct:
         # OmniVoice refuses any word outside its own attribute list; keep what it understands
-        ins = voice_instruct.normalise(instruct)
+        ins = voice_instruct.normalise(instruct, params.get("language"))
         instruct = ins.text
         hint = (v.get("design") or {}).get("speed") or ins.speed
         if speed == 1.0 and not duration and hint != 1.0:

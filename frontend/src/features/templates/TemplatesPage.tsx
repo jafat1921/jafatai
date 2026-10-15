@@ -13,7 +13,7 @@ import { EmptyState, ErrorState } from '@/components/studio/states'
 import { useImageTools } from '@/hooks/useMedia'
 import { useDeleteTemplate, useRenameTemplate, useStartTemplate, useTemplates } from '@/hooks/useStudio'
 import { splitPlaceholders } from '@/lib/images'
-import { isControlTemplate, isEditTemplate, localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
+import { isBrandTemplate, isControlTemplate, isEditTemplate, localStart, TARGET_ROUTE, type TemplatePrefill } from '@/lib/templates'
 import { announce } from '@/stores/ui'
 import { AUDIO_ROUTE, audioKindOf, KIND_NOUN } from '@/lib/audio'
 import type { Template, TemplateStart, TemplateType } from '@/lib/types'
@@ -45,6 +45,7 @@ function meta(t: Template) {
   if (aspect) bits.push(aspect)
   if (t.type === 'video') bits.push(d.authoring_mode && d.authoring_mode !== 'quick' ? 'Studio project' : 'Quick video')
   else if (t.type === 'audio') bits.push(KIND_NOUN[audioKindOf(t)].one)
+  else if (isBrandTemplate(t)) bits.push('Brand · your logo goes in by itself')
   else if (isEditTemplate(t)) bits.push(`Edit · needs ${(t.ref_labels ?? []).join(' + ') || 'a photo'}`)
   else if (isControlTemplate(t)) bits.push(t.control?.as_is ? 'Needs your sketch' : 'Needs a photo or map')
   else if (typeof d.count === 'number') bits.push(`${d.count} variations`)
@@ -52,7 +53,8 @@ function meta(t: Template) {
   return bits.join(' · ')
 }
 
-const scaffoldOf = (t: Template) => String(t.defaults?.prompt_scaffold ?? t.defaults?.instruction_scaffold ?? t.defaults?.logline_hint ?? '')
+const scaffoldOf = (t: Template) =>
+  String(t.scene?.prompt_scaffold ?? t.defaults?.prompt_scaffold ?? t.defaults?.instruction_scaffold ?? t.defaults?.logline_hint ?? '')
 
 const haystack = (t: Template) =>
   [t.title, t.description, t.category, ...(t.tags ?? []), ...(t.ref_labels ?? []), scaffoldOf(t)].join(' ').toLowerCase()
@@ -64,6 +66,8 @@ const MODES: { value: Mode; label: string }[] = [
 ]
 // sketch, depth and pose cards start from the user's own picture too
 const fromPicture = (t: Template) => isEditTemplate(t) || isControlTemplate(t)
+// brand cards do both: the user's photo, or a scene made for them
+const inModeOf = (t: Template, m: Mode | null) => !m || isBrandTemplate(t) || (m === 'edit') === fromPicture(t)
 
 function MineMenu({ t }: { t: Template }) {
   const uid = useId()
@@ -186,7 +190,7 @@ function Card({ t, onStart, starting }: { t: Template; onStart: () => void; star
         )}
         <p className="mt-auto font-mono text-[12px] text-studio-muted">{meta(t)}</p>
         <Button variant="primary" onClick={onStart} loading={starting} aria-label={`Use the ${t.title} prompt template`}>
-          {isEditTemplate(t) ? 'Use with my photos' : isControlTemplate(t) ? 'Use with my picture' : 'Use prompt template'}
+          {isBrandTemplate(t) ? 'Use with my brand' : isEditTemplate(t) ? 'Use with my photos' : isControlTemplate(t) ? 'Use with my picture' : 'Use prompt template'}
           <ArrowRight aria-hidden />
         </Button>
       </div>
@@ -216,8 +220,8 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
     () => templates.data?.filter((t) => !t.tool || t.tool.fallback || !tools.isSuccess || tools.data.some((x) => x.id === t.tool?.id && x.available)),
     [templates.data, tools.isSuccess, tools.data],
   )
-  const hasEdits = !!all?.some(fromPicture)
-  const inMode = useMemo(() => (all ?? []).filter((t) => !mode || (mode === 'edit') === fromPicture(t)), [all, mode])
+  const hasEdits = !!all?.some((t) => fromPicture(t) || isBrandTemplate(t))
+  const inMode = useMemo(() => (all ?? []).filter((t) => inModeOf(t, mode)), [all, mode])
   // the workspace's own get a section of their own; the rest come in category order from the server
   const shipped = useMemo(() => inMode.filter((t) => !t.mine), [inMode])
   const categories = useMemo(() => [...new Set(shipped.map((t) => t.category).filter((c): c is string => !!c))], [shipped])
@@ -229,7 +233,7 @@ export function TemplatesPage({ type }: { type: TemplateType }) {
   const chooseMode = (m: Mode | null) => {
     setMode(m)
     // a category from the other mode would leave nothing on screen
-    if (category && !all?.some((t) => t.category === category && (!m || (m === 'edit') === fromPicture(t)))) setCategory(null)
+    if (category && !all?.some((t) => t.category === category && inModeOf(t, m))) setCategory(null)
   }
 
   const open = (t: Template) =>

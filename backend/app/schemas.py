@@ -1022,6 +1022,31 @@ class VideoGenerateOut(MediaItemOut):
     magic_prompt: dict | None = None
 
 
+class BrandImageIn(BaseModel):
+    """A Brand template run (contract v35). {tokens} in the texts are filled from the kit on the server."""
+    model_config = ConfigDict(json_schema_extra={"examples": [
+        {"template_id": "image-brand-vehicle-wrap", "mode": "scene"},
+        {"template_id": "image-brand-uniform", "mode": "photo", "source_id": "3f2a9c1e-0000-4000-8000-000000000000",
+         "surface": "dark"}]})
+
+    template_id: str = Field(max_length=80, description="A card with target image-brand")
+    mode: Literal["photo", "scene"] = Field("photo", description="photo: your picture plus the logo; scene: make "
+                                                                 "the scene first, then put the logo on it")
+    source_id: str | None = Field(None, description="photo mode: the Library item (or generation) to brand")
+    brand_kit_id: str | None = Field(None, description="Empty uses the default kit, or the only one")
+    product_id: str | None = Field(None, description="Cards that take a product: one of the kit's product media ids")
+    surface: Literal["light", "dark"] | None = Field(None, description="What the logo lands on; dark picks the "
+                                                                       "light logo, or asks for light letters")
+    instruction: str | None = Field(None, max_length=4000, description="The logo edit; empty uses the card's")
+    scene_prompt: str | None = Field(None, max_length=4000, description="scene mode: empty uses the card's")
+    aspect: ImageAspect | None = None
+    count: int = Field(1, ge=1, le=4)
+    seed: int | None = Field(None, ge=0, le=2**31 - 1, description=_SEED)
+    model: str | None = Field(None, max_length=60, description="The edit model; empty uses the card's")
+    title: str | None = Field(None, max_length=300)
+    folder_id: str | None = Field(None, description=_FOLDER)
+
+
 class ImageBatchOut(BaseModel):
     items: list[MediaItemOut]
     jobs: list[JobOut]
@@ -1030,6 +1055,8 @@ class ImageBatchOut(BaseModel):
     # /images/edit with a template tool (v30): the tool that ran, or why the edit model ran instead
     tool_resolved: str | None = None
     tool_fallback: str | None = None
+    # /images/brand (v35): kit, logo variant and surface the run used
+    brand_template: dict | None = None
 
 
 AudioKind = Literal["song", "music", "sfx"]
@@ -1224,7 +1251,7 @@ class TemplateOut(BaseModel):
     examples: dict[str, str] = {}  # placeholder -> sample value (hint text, and what the preview shows)
     preview_url: str | None = None
     # image templates only (v29): which page runs it, and for edits the reference slots it needs
-    target: Literal["image-generate", "image-edit", "image-control"] | None = None
+    target: Literal["image-generate", "image-edit", "image-control", "image-brand"] | None = None
     refs_required: int = 0
     ref_labels: list[str] = []
     options: list[dict[str, Any]] = []  # [{slot, label, choices: [{label, value, aspect?}]}]
@@ -1233,10 +1260,14 @@ class TemplateOut(BaseModel):
     # v31: Depth / Sketch / Pose to image cards ({type, label, detector, licence, noncommercial, as_is})
     control: dict[str, Any] | None = None
     mine: bool = False  # saved in this workspace (Save as template); can be renamed and deleted
+    # v35 Brand templates: kit assets filled in for the user, the default surface, and the scene for "make it for me"
+    brand_refs: list[str] = []
+    surface: Literal["light", "dark"] | None = None
+    scene: dict[str, Any] | None = None
 
 
 class TemplateStartOut(BaseModel):
-    target: Literal["quick", "studio", "image", "image-edit", "image-control", "audio"]
+    target: Literal["quick", "studio", "image", "image-edit", "image-control", "image-brand", "audio"]
     prefill: dict[str, Any]
 
 

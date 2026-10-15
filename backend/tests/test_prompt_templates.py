@@ -32,8 +32,8 @@ def test_template_json_is_sound(kind, minimum):
         assert t["id"].startswith(f"{kind}-") and re.fullmatch(r"[a-z0-9-]+", t["id"])
         assert t["title"] and t["description"] and t["tags"]
         d = t["defaults"]
-        if t.get("target") in ("image-edit", "image-control"):
-            continue  # test_edit_templates, test_control_templates
+        if t.get("target") in ("image-edit", "image-control", "image-brand"):
+            continue  # test_edit_templates, test_control_templates, test_brand_templates.py
         texts = [d.get("prompt_scaffold", ""), d.get("logline_hint", ""), t.get("preview_prompt", "")]
         slots = set(SLOT.findall(d["prompt_scaffold"]))
         assert 2 <= len(slots) <= 4, t["id"]
@@ -65,7 +65,8 @@ def test_preview_script_fills_every_template():
     for t in mod.load_templates():
         r = mod.recipe(t)
         assert "[" not in r["prompt"] and r["params"]["width"] % 64 == 0
-        assert r["model"] == ("qwen_image_2512" if t["defaults"].get("model") == "qwen_image_2512" else "zimage_turbo")
+        qwen = t["defaults"].get("model") == "qwen_image_2512" or t.get("target") == "image-brand"
+        assert r["model"] == ("qwen_image_2512" if qwen else "zimage_turbo")
 
 
 def test_aliases_list_and_start(client):
@@ -158,12 +159,12 @@ def test_edit_templates():
 
 def test_every_template_loads_and_names_a_real_model():
     rows = [t for t in lib_api.templates().values() if t["type"] == "image"]
-    assert len(rows) == 73 and sum(t["target"] == "image-edit" for t in rows) == len(EDIT_IDS)
+    assert len(rows) == 90 and sum(t["target"] == "image-edit" for t in rows) == len(EDIT_IDS)
     assert {t["id"] for t in rows if t["target"] == "image-control"} == CONTROL_IDS
     for t in rows:
-        want = "edit" if t["target"] == "image-edit" else "image"
+        want = "edit" if t["target"] in ("image-edit", "image-brand") else "image"
         model = t["defaults"].get("model")
-        if t["target"] == "image-edit":
+        if want == "edit":
             assert model, t["id"]
         if model:
             assert models_catalog.MODELS[model].type == want, t["id"]

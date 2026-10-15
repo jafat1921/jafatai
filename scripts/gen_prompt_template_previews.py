@@ -9,7 +9,9 @@ Each scaffold is filled with the template's own `examples`, styled the way the a
 through the same graph builder the worker uses (Z-Image Turbo; Qwen-Image 2512 Lightning when the
 template asks for Qwen because it renders text). Video templates get a still "poster" at the video
 aspect from their `preview_prompt`; so do image edit templates, which have no picture of their own
-to edit, so their card shows a typical result instead. Results land in backend/app/templates/previews/<id>.webp
+to edit, so their card shows a typical result instead. Brand cards (contract v35) render their `preview_prompt`
+on Qwen-Image 2512 with a made-up placeholder brand ("YOUR BRAND", slate and apricot), so no real logo is
+needed and no customer's mark ends up in the shipped previews. Results land in backend/app/templates/previews/<id>.webp
 (long side 640). Existing previews are kept unless --force.
 
 The GPU is shared with live users: before each prompt we wait (up to --wait seconds) for anyone
@@ -52,6 +54,11 @@ SLOT = re.compile(r"\[([^\[\]]{1,60})\]")
 STYLE_SUBJECT = "A young woman with a lantern standing on an old stone bridge over a river, a small town behind her"
 STYLE_SEED = 20261014
 STYLE_ASPECT = "3:4"
+# what a Brand card's {tokens} become on its preview: deliberately nobody's brand
+PLACEHOLDER_BRAND = {"brand": "YOUR BRAND", "colours": "slate blue and warm apricot", "tagline": "",
+                     "tagline_clause": "", "palette": "in slate blue and warm apricot", "logo": "a simple round logo",
+                     "logo_colours": "", "product_clause": ""}
+BRACES = re.compile(r"\{([a-z_]{2,30})\}")
 
 
 def load_templates() -> list[dict]:
@@ -76,6 +83,13 @@ def recipe(t: dict) -> dict:
         return style_recipe(t)
     d = t["defaults"]
     ex = t.get("examples") or {}
+    if t.get("target") == "image-brand":
+        # Qwen draws the placeholder name legibly; the card shows the idea, not anyone's real logo
+        prompt = BRACES.sub(lambda m: PLACEHOLDER_BRAND[m.group(1)], fill(t["preview_prompt"], ex))
+        aspect = (t.get("scene") or {}).get("aspect") or "1:1"
+        w, h = size_for_aspect(aspect)
+        return {"prompt": prompt, "aspect": aspect, "model": "qwen_image_2512",
+                "params": {"width": w, "height": h, "negative": "", "model": "qwen_image_2512", "speed": "lightning"}}
     # edit and control cards have no picture of their own to work from: show a typical result
     if t.get("target") in ("image-edit", "image-control"):
         prompt = fill(t["preview_prompt"], ex)

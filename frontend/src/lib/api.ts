@@ -67,6 +67,7 @@ import type {
   ComfyCheck,
   Dashboard,
   ImageEditRequest,
+  BrandImageRequest,
   ImageGenerateRequest,
   ImageToolInfo,
   ImageControlRequest,
@@ -557,6 +558,8 @@ export const api = {
   images: {
     generate: (body: ImageGenerateRequest) => post<MediaBatch>('/images/generate', body),
     edit: (body: ImageEditRequest) => post<MediaBatch>('/images/edit', body),
+    // contract v35: a brand card, on the user's photo or on a scene made first
+    brand: (body: BrandImageRequest) => post<MediaBatch>('/images/brand', body),
     img2img: (body: Img2ImgRequest) => post<MediaBatch>('/images/img2img', body),
     tools: () => get<{ tools: ImageToolInfo[]; control?: ControlStatus }>('/images/tools'),
     // contract v31

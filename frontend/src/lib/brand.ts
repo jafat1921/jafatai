@@ -284,3 +284,13 @@ export const logoRetryNote = (issues: string[]) =>
   `Show the brand logo clearly: sharp, legible, undistorted and true to the reference. Fix: ${issues.join(' ')}`
 
 export const FONT_PREVIEW = 'Your brand, beautifully told · آپ کا برانڈ، خوبصورتی سے'
+
+// Brand templates (contract v35) pick the same way the server does: light = made for dark backgrounds
+const LOGO_ORDER: Record<'light' | 'dark', LogoVariant[]> = { dark: ['light', 'primary', 'dark'], light: ['dark', 'primary', 'light'] }
+
+export function logoFor(kit: BrandKit, surface: 'light' | 'dark') {
+  const variant = LOGO_ORDER[surface].find((v) => kit.logos?.[v]?.media_id)
+  if (!variant) return null
+  const a = kit.assets?.[kit.logos[variant]!.media_id]
+  return { variant, url: a && !a.missing ? (a.media_url ?? null) : null, relit: surface === 'dark' && variant !== 'light' }
+}

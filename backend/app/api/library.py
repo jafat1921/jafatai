@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app import brand
+from app import brand_templates as bt
 from app import control as ctl
 from app import image_tools as it
 from app import library as lib
@@ -29,9 +30,9 @@ from app.ai_jobs import rewrite_prompt_from_note
 from app.db import get_db, release
 from app.models import Generation, Job, MediaItem, Project, UserTemplate, new_id, utcnow
 from app.schemas import (
-    DashboardOut, ImageBatchOut, ImageControlIn, ImageEditIn, ImageGenerateIn, Img2ImgIn, JobOut, MediaDetailOut,
-    MediaItemOut, MediaPage, MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut, UpscalePage, UserTemplateIn,
-    UserTemplatePatch,
+    BrandImageIn, DashboardOut, ImageBatchOut, ImageControlIn, ImageEditIn, ImageGenerateIn, Img2ImgIn, JobOut,
+    MediaDetailOut, MediaItemOut, MediaPage, MediaPatch, RegenerateIn, TemplateOut, TemplateStartOut, UpscalePage,
+    UserTemplateIn, UserTemplatePatch,
 )
 from app.openapi import multipart
 from app.security import CurrentUser, get_current_user, require_editor
@@ -532,6 +533,88 @@ def image_control(body: ImageControlIn, db: Session = Depends(get_db), cur: Curr
                          tool_fallback=reason)
 
 
+def _brand_slots(text: str, what: str) -> None:
+    left = placeholders(text)
+    if left:
+        raise HTTPException(422, f"Replace {', '.join(f'[{x}]' for x in left)} in the {what} first")
+
+
+@router.post("/images/brand", response_model=ImageBatchOut, status_code=202)
+def brand_images(body: BrandImageIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    """Brand templates (contract v35): the user's photo, or a made-up scene, with the kit's logo put on it."""
+    t = templates().get(body.template_id)
+    if not bt.is_brand(t):
+        raise HTTPException(422, f"'{body.template_id}' isn't a Brand template")
+    kit = bt.pick_kit(db, cur.workspace_id, body.brand_kit_id)
+    surface = bt.surface_of(t, body.surface)
+    logo = bt.pick_logo(db, kit, surface)
+    product = bt.pick_product(db, kit, body.product_id, "product" in (t.get("brand_refs") or []))
+    values = bt.tokens(kit, logo, product, t)
+    d = t["defaults"]
+    instruction = bt.fill(body.instruction or d["instruction_scaffold"], values)
+    _brand_slots(instruction, "logo wording")
+    into = generate_into(db, cur.workspace_id, body.folder_id, "image")
+    refs = [logo.generation_id] + ([product[1]] if product else [])
+    model, chosen = mc.choose(body.model or d.get("model"), "edit", instruction, refs=1 + len(refs))
+    mc.check_refs(model, 1 + len(refs))
+    record = {"kit_id": kit.id, "kit_name": kit.name, "logo_variant": logo.variant, "surface": surface,
+              "mode": body.mode, "product_id": product[0]["media_id"] if product else None}
+    title = (body.title or "").strip() or f"{t['title']} · {kit.name}"
+    items, jobs = [], []
+
+    if body.mode == "photo":
+        if not body.source_id:
+            raise HTTPException(422, "Add your photo first")
+        media_id, src = _edit_source(db, cur.workspace_id, body.source_id)
+        if body.aspect:
+            w, h = lib.size_for_aspect(body.aspect)
+        else:
+            sw, sh = lib._image_dims(src)
+            w, h = lib.size_for_ratio(sw, sh) if sw and sh else lib.size_for_aspect("1:1")
+        for i in range(body.count):
+            params = {"width": w, "height": h, "aspect": body.aspect, "instruction": instruction,
+                      "edit_of": [{"media_id": media_id, "generation_id": src.id}],
+                      "reference_ids": [src.id, *refs], "model": model.id, "template_id": t["id"],
+                      "brand": {"kit_id": kit.id}, "brand_template": record,
+                      "created_by": {"user_id": cur.id, "flow": "brand_template:photo"}, **chosen}
+            seed = (body.seed + i) % 2**31 if body.seed is not None else None
+            item, job = _new_image_item(db, cur, title, instruction, params, seed, into)
+            items.append(item)
+            jobs.append(job)
+        db.commit()
+        return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs],
+                             model_resolved=model.id, brand_template=record)
+
+    # scene mode: v1 is the scene with a blank surface, v2 (queued when v1 lands) carries the logo
+    scene = t.get("scene") or {}
+    prompt = bt.fill(body.scene_prompt or scene.get("prompt_scaffold") or "", values)
+    if not prompt:
+        raise HTTPException(422, "This card has no scene to make; use your own photo")
+    _brand_slots(prompt, "scene")
+    aspect = body.aspect or scene.get("aspect") or d.get("aspect") or "1:1"
+    w, h = lib.size_for_aspect(aspect)
+    smodel, schosen = mc.choose(scene.get("model") or mc.AUTO, "image", prompt, count=body.count)
+    speed = mc.speed_of(smodel, None) if smodel.speeds else None
+    negative = st.joined_negative(scene.get("negative"), None, speed.cfg if speed else None)
+    for i in range(body.count):
+        seed = (body.seed + i) % 2**31 if body.seed is not None else None
+        spec = bt.chain_spec(instruction=instruction, model_id=model.id, chosen=chosen, refs=refs, size=(w, h),
+                             aspect=aspect, seed=seed, template_id=t["id"], record=record, user_id=cur.id)
+        params = {"aspect": aspect, "width": w, "height": h, "style": None, "user_prompt": prompt,
+                  "model": smodel.id, "template_id": t["id"], "brand_template": record, bt.CHAIN: spec,
+                  "created_by": {"user_id": cur.id, "flow": "brand_template:scene"}, **schosen}
+        if speed:
+            params["speed"] = speed.id
+        if negative:
+            params["negative"] = negative
+        item, job = _new_image_item(db, cur, title, prompt, params, seed, into)
+        items.append(item)
+        jobs.append(job)
+    db.commit()
+    return ImageBatchOut(items=lib.items_out(db, items), jobs=[job_out(j) for j in jobs], model_resolved=model.id,
+                         brand_template=record)
+
+
 # ---------------------------------------------------------------- prompt templates
 # Shown to users as "Prompt templates"; /templates stays as the old name for the same thing.
 
@@ -596,7 +679,8 @@ def _template_out(t: dict, preview_url: str | None = None) -> TemplateOut:
                        tags=t.get("tags") or [], examples=t.get("examples") or {}, preview_url=url,
                        requires_brand=bool(t.get("requires_brand")), refs_required=t.get("refs_required") or 0,
                        ref_labels=t.get("ref_labels") or [], options=t.get("options") or [],
-                       tool=it.template_tool(t), control=control_card(t), mine=bool(t.get("mine")))
+                       tool=it.template_tool(t), control=control_card(t), mine=bool(t.get("mine")),
+                       brand_refs=t.get("brand_refs") or [], surface=t.get("surface"), scene=t.get("scene"))
 
 
 # ---------------------------------------------------------------- my templates (v31)
@@ -715,9 +799,11 @@ def delete_my_template(template_id: str, db: Session = Depends(get_db), cur: Cur
 
 @router.get("/templates", response_model=list[TemplateOut])
 @router.get("/prompt-templates", response_model=list[TemplateOut])
-def list_templates(type: Literal["video", "image", "audio"] | None = None, db: Session = Depends(get_db),
+def list_templates(type: Literal["video", "image", "audio"] | None = None,
+                   category: str | None = Query(None, max_length=80), db: Session = Depends(get_db),
                    cur: CurrentUser = Depends(get_current_user)):
-    rows = [t for t in templates().values() if type in (None, t["type"]) and it.template_visible(t)]
+    rows = [t for t in templates().values() if type in (None, t["type"]) and it.template_visible(t)
+            and category in (None, t.get("category"))]
     order = categories()
 
     def rank(t: dict) -> int:
@@ -726,7 +812,7 @@ def list_templates(type: Literal["video", "image", "audio"] | None = None, db: S
 
     kinds = ("video", "image", "audio")
     shipped = [_template_out(t) for t in sorted(rows, key=lambda t: (kinds.index(t["type"]), rank(t)))]
-    if type not in (None, "image"):
+    if type not in (None, "image") or category not in (None, MINE):
         return shipped
     # the workspace's own lead the image cards (mine=true, category "My templates")
     mine = _mine_out(db, _my_rows(db, cur.workspace_id, vis.wanted(cur)))
@@ -768,6 +854,16 @@ def start_template(template_id: str, db: Session = Depends(get_db), cur: Current
         if t.get("tool"):
             prefill["tool"] = it.template_tool(t)
         target = "image-edit"
+    elif bt.is_brand(t):
+        # opens the Brand page: the kit fills the logo (and product) slots; the user adds a photo, or nothing
+        scene = t.get("scene") or {}
+        prefill = {"instruction": d.get("instruction_scaffold", ""), "model": d.get("model"),
+                   "count": d.get("count", 1), "aspect": d.get("aspect"), "ref_labels": t.get("ref_labels") or [],
+                   "options": t.get("options") or [], "brand_refs": t.get("brand_refs") or ["logo"],
+                   "surface": bt.surface_of(t, None), "scene_prompt": scene.get("prompt_scaffold", ""),
+                   "scene_aspect": scene.get("aspect") or d.get("aspect") or "1:1", "template_id": t["id"]}
+        scaffold = f"{prefill['scene_prompt']} {prefill['instruction']}"
+        target = "image-brand"
     elif t.get("target") == "image-control":
         # opens Control to image: the photo, map or sketch is still to come
         prefill = {"prompt": scaffold, "control": t["control"], "use_as_is": bool(d.get("use_as_is")),

@@ -2,6 +2,7 @@ import { audioKindOf } from './audio'
 import { DEFAULT_IMAGE_FORM, IMAGE_ASPECTS, type ImageForm } from './images'
 import { QUICK_ASPECTS, QUICK_STYLES, type QuickForm } from './quick'
 import type {
+  BrandSurface,
   ControlType,
   ImageAspect,
   MediaItem,
@@ -42,11 +43,13 @@ export const TARGET_ROUTE: Record<TemplateStart['target'], string> = {
   image: '/image/generate',
   'image-edit': '/image/edit',
   'image-control': '/image/control',
+  'image-brand': '/image/brand',
   audio: '/audio/song',
 }
 
 export const isEditTemplate = (t: Pick<Template, 'target'>) => t.target === 'image-edit'
 export const isControlTemplate = (t: Pick<Template, 'target'>) => t.target === 'image-control'
+export const isBrandTemplate = (t: Pick<Template, 'target'>) => t.target === 'image-brand'
 
 // Used when the server can't answer /start: the template's own defaults say the same thing.
 export function localStart(t: Template): TemplateStart {
@@ -56,6 +59,23 @@ export function localStart(t: Template): TemplateStart {
     return {
       target: 'image-edit',
       prefill: { ...rest, instruction: instruction_scaffold, refs_required: t.refs_required, ref_labels: t.ref_labels, options: t.options, tool: t.tool, template_id: t.id },
+    }
+  }
+  if (isBrandTemplate(t)) {
+    const { instruction_scaffold, ...rest } = d
+    return {
+      target: 'image-brand',
+      prefill: {
+        ...rest,
+        instruction: instruction_scaffold,
+        ref_labels: t.ref_labels,
+        options: t.options,
+        brand_refs: t.brand_refs,
+        surface: t.surface,
+        scene_prompt: t.scene?.prompt_scaffold,
+        scene_aspect: t.scene?.aspect,
+        template_id: t.id,
+      },
     }
   }
   if (isControlTemplate(t)) {
@@ -248,4 +268,45 @@ export function controlFormFrom(p: Prefill): ControlTemplateForm {
     style: str(p.style) ?? null,
     examples: examplesOf(p.examples),
   }
+}
+
+/** The Brand page opened from a brand card (contract v35). {tokens} stay in; the server fills them from the kit. */
+export interface BrandTemplateForm {
+  instruction: string
+  scenePrompt: string
+  sceneAspect: ImageAspect
+  aspect: ImageAspect | null
+  count: number
+  label: string
+  refs: string[]
+  surface: BrandSurface
+  options: TemplateOption[]
+  examples?: Record<string, string>
+}
+
+export function brandFormFrom(p: Prefill): BrandTemplateForm {
+  const labels = Array.isArray(p.ref_labels) ? p.ref_labels.filter((x): x is string => typeof x === 'string') : []
+  const refs = Array.isArray(p.brand_refs) ? p.brand_refs.filter((x): x is string => typeof x === 'string') : []
+  const count = num(p.count)
+  return {
+    instruction: str(p.instruction) ?? '',
+    scenePrompt: str(p.scene_prompt) ?? '',
+    sceneAspect: aspectOf(p.scene_aspect) ?? '1:1',
+    aspect: aspectOf(p.aspect),
+    count: count ? Math.min(4, Math.max(1, Math.round(count))) : 1,
+    label: labels[0] ?? 'Photo',
+    refs: refs.length ? refs : ['logo'],
+    surface: p.surface === 'dark' ? 'dark' : 'light',
+    options: Array.isArray(p.options) ? p.options.filter(isOption) : [],
+    examples: examplesOf(p.examples),
+  }
+}
+
+/** A picked choice that names a surface wins; otherwise the card's own. */
+export function surfaceFor(options: TemplateOption[], picked: Record<string, number>, fallback: BrandSurface): BrandSurface {
+  for (const o of options) {
+    const c = picked[o.slot] === undefined ? undefined : o.choices[picked[o.slot]]
+    if (c?.surface) return c.surface
+  }
+  return fallback
 }

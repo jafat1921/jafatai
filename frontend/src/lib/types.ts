@@ -1060,6 +1060,8 @@ export interface MediaBatch {
   // contract v30: the image tool that ran, or why the edit model ran instead
   tool_resolved?: string | null
   tool_fallback?: string | null
+  // contract v35: the kit, logo variant and surface a brand card used
+  brand_template?: { kit_id: string; kit_name: string; logo_variant: string; surface: BrandSurface; mode: 'photo' | 'scene' } | null
 }
 
 export type TemplateType = 'video' | 'image' | 'audio'
@@ -1078,7 +1080,7 @@ export interface Template {
   preview_url?: string | null
   requires_brand?: boolean
   // v29: image templates that open Edit Image, with the pictures they need
-  target?: 'image-generate' | 'image-edit' | 'image-control' | null
+  target?: 'image-generate' | 'image-edit' | 'image-control' | 'image-brand' | null
   refs_required?: number
   ref_labels?: string[]
   options?: TemplateOption[]
@@ -1088,19 +1090,41 @@ export interface Template {
   control?: { type: ControlType; label: string; detector: string; licence: string; noncommercial: boolean; as_is: boolean } | null
   // v31: saved in this workspace; can be renamed and deleted
   mine?: boolean
+  // v35 Brand templates: kit assets the card fills in, the usual surface, and the scene it can make
+  brand_refs?: string[]
+  surface?: BrandSurface | null
+  scene?: { prompt_scaffold: string; aspect?: string; model?: string } | null
+}
+
+export type BrandSurface = 'light' | 'dark'
+
+/** POST /images/brand (contract v35): {tokens} are filled from the kit on the server. */
+export interface BrandImageRequest {
+  template_id: string
+  mode: 'photo' | 'scene'
+  source_id?: string
+  brand_kit_id?: string
+  product_id?: string
+  surface?: BrandSurface
+  instruction?: string
+  scene_prompt?: string
+  aspect?: ImageAspect
+  count?: number
+  folder_id?: string
 }
 
 /** A picker that fills one [slot] of a template's prompt or instruction. */
 export interface TemplateOption {
   slot: string
   label: string
-  choices: { label: string; value: string; aspect?: ImageAspect; style_id?: string }[]
+  // v35: brand cards say whether a choice is a dark surface (the logo then goes light)
+  choices: { label: string; value: string; aspect?: ImageAspect; style_id?: string; surface?: BrandSurface }[]
   // v31: "styles" shows the style gallery instead of a plain list
   gallery?: 'styles'
 }
 
 export interface TemplateStart {
-  target: 'quick' | 'studio' | 'image' | 'image-edit' | 'image-control' | 'audio'
+  target: 'quick' | 'studio' | 'image' | 'image-edit' | 'image-control' | 'image-brand' | 'audio'
   prefill: Record<string, unknown>
 }
 

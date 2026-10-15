@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteD
 import { api } from '@/lib/api'
 import { tileState } from '@/lib/images'
 import { withInto } from '@/stores/generateInto'
-import type { Generation, ImageControlRequest, ImageEditRequest, ImageGenerateRequest, ImageOptions, ImageStyle, Img2ImgRequest, MediaDetail, StyleGroup, MediaItem, MediaKind, MediaOrigin, MediaPage, MediaQuery, RegenerateMode } from '@/lib/types'
+import type { BrandImageRequest, Generation, ImageControlRequest, ImageEditRequest, ImageGenerateRequest, ImageOptions, ImageStyle, Img2ImgRequest, MediaDetail, StyleGroup, MediaItem, MediaKind, MediaOrigin, MediaPage, MediaQuery, RegenerateMode } from '@/lib/types'
 import { qk } from './keys'
 import { upsertJob, useJobs } from './useJobs'
 
@@ -142,6 +142,7 @@ export const useImageOptions = () =>
   })
 
 export const useImageEdit = () => useBatch((body: ImageEditRequest) => api.images.edit(withInto('image', body)))
+export const useImageBrand = () => useBatch((body: BrandImageRequest) => api.images.brand(withInto('image', body)))
 export const useImg2Img = () => useBatch((body: Img2ImgRequest) => api.images.img2img(withInto('image', body)))
 export const useImageControl = () => useBatch((body: ImageControlRequest) => api.images.control(withInto('image', body)))
 

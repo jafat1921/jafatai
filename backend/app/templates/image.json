@@ -4,6 +4,7 @@
     "Portraits",
     "Portrait fun",
     "Product & ads",
+    "Brand & marketing",
     "Packaging",
     "Food",
     "Menu",
@@ -1742,6 +1743,676 @@
         "prompt_scaffold": "[subject], [materials]",
         "strength": 0.8,
         "count": 2
+      }
+    },
+    {
+      "id": "image-brand-vehicle-wrap",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Vehicle wrap",
+      "description": "Your logo as a printed wrap on a van, car or truck, following the panels.",
+      "thumb": null,
+      "tags": ["brand", "logo", "vehicle", "van", "wrap", "fleet"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white vinyl",
+      "refs_required": 1,
+      "ref_labels": ["Vehicle"],
+      "examples": {
+        "vehicle": "white panel van",
+        "setting": "a quiet suburban street on a bright morning"
+      },
+      "options": [
+        {
+          "slot": "vehicle",
+          "label": "Vehicle",
+          "choices": [
+            {"label": "Panel van", "value": "white panel van"},
+            {"label": "Small car", "value": "white compact hatchback"},
+            {"label": "Box truck", "value": "white box truck"},
+            {"label": "Pickup", "value": "white pickup truck"}
+          ]
+        }
+      ],
+      "preview_prompt": "A [vehicle] parked on [setting], its side panel wrapped with a bold round logo and the word {brand} in {colours}, professional fleet livery, crisp daylight.",
+      "scene": {
+        "prompt_scaffold": "A clean [vehicle] parked on [setting], seen from the side at a slight three-quarter angle. The side panel is completely plain white with no logo, no lettering and no stickers. Natural daylight, sharp detail, realistic reflections, commercial fleet photo.",
+        "aspect": "4:3",
+        "negative": "text, letters, logo, stickers, watermark, dents"
+      },
+      "defaults": {
+        "instruction_scaffold": "Print {logo} from picture 2 large and centred on the white side panel of the [vehicle] in picture 1, as a professional vehicle wrap. {logo_colours} Follow the perspective and the curves of the panel, with the van's own reflections and panel gaps showing through. Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-product-label",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Product label",
+      "description": "Your logo on a spray bottle, box, pouch or jar label. Add a product from the kit to match its shape.",
+      "thumb": null,
+      "tags": ["brand", "logo", "label", "packaging", "bottle", "product"],
+      "brand_refs": ["logo", "product"],
+      "surface": "light",
+      "light_ink": "white print",
+      "refs_required": 1,
+      "ref_labels": ["Product"],
+      "examples": {
+        "container": "white trigger spray bottle",
+        "surface": "a pale marble worktop with soft window light"
+      },
+      "options": [
+        {
+          "slot": "container",
+          "label": "Pack",
+          "choices": [
+            {"label": "Spray bottle", "value": "white trigger spray bottle"},
+            {"label": "Box", "value": "plain white folding carton box"},
+            {"label": "Pouch", "value": "white stand-up pouch"},
+            {"label": "Jar", "value": "frosted glass jar with a white lid"}
+          ]
+        }
+      ],
+      "preview_prompt": "A [container] standing on [surface], its label printed with a simple round logo and the word {brand} in {colours}, clean studio packshot.",
+      "scene": {
+        "prompt_scaffold": "Studio packshot of a [container] standing on [surface]. The front label is a clean blank white area with no text, no logo and no graphics. Soft diffused light, gentle shadow, sharp edges, product photography.",
+        "aspect": "1:1",
+        "negative": "text, letters, logo, barcode, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Print {logo} from picture 2 centred on the blank front label of the [container] in picture 1, as a real printed label {palette}. {logo_colours} Wrap it around the curve of the pack with the same light and gloss as the label.{product_clause} Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-uniform",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Uniform embroidery",
+      "description": "Your logo stitched straight into a polo, cap, apron or hoodie. Dark fabric gets light thread, never a patch.",
+      "thumb": null,
+      "tags": ["brand", "logo", "uniform", "embroidery", "polo", "workwear"],
+      "brand_refs": ["logo"],
+      "surface": "dark",
+      "light_ink": "white thread",
+      "refs_required": 1,
+      "ref_labels": ["Garment or person"],
+      "examples": {
+        "garment": "polo shirt",
+        "fabric": "deep navy cotton pique",
+        "spot": "left chest"
+      },
+      "options": [
+        {
+          "slot": "garment",
+          "label": "Garment",
+          "choices": [
+            {"label": "Polo shirt", "value": "polo shirt"},
+            {"label": "Cap", "value": "baseball cap"},
+            {"label": "Apron", "value": "bib apron"},
+            {"label": "Hoodie", "value": "zip hoodie"}
+          ]
+        },
+        {
+          "slot": "fabric",
+          "label": "Fabric",
+          "choices": [
+            {"label": "Navy", "value": "deep navy cotton pique", "surface": "dark"},
+            {"label": "Black", "value": "black cotton twill", "surface": "dark"},
+            {"label": "Charcoal", "value": "charcoal grey cotton", "surface": "dark"},
+            {"label": "White", "value": "crisp white cotton", "surface": "light"},
+            {"label": "Light grey", "value": "light grey marl cotton", "surface": "light"}
+          ]
+        },
+        {
+          "slot": "spot",
+          "label": "Where",
+          "choices": [
+            {"label": "Left chest", "value": "left chest"},
+            {"label": "Centre front", "value": "centre front"},
+            {"label": "Back", "value": "upper back"}
+          ]
+        }
+      ],
+      "preview_prompt": "Close-up of a [garment] in [fabric] laid flat, with a small logo and the word {brand} embroidered on the [spot] in fine raised stitching, soft daylight, visible thread texture.",
+      "scene": {
+        "prompt_scaffold": "A smiling cleaning professional in a [garment] made of [fabric], standing in a bright modern home, waist-up, natural light. The [spot] of the [garment] is completely plain fabric with no logo, no patch and no print.",
+        "aspect": "3:4",
+        "negative": "logo, patch, badge, text, letters, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Embroider {logo} from picture 2 directly into the fabric on the [spot] of the [garment] in picture 1, about the size of a palm. {logo_colours} No patch, no sticker and no backing behind it: the stitches sit straight in the fabric, with visible raised thread texture and the fabric's own folds and light running through it. Keep the person, the garment and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-storefront",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Storefront sign",
+      "description": "Your logo as built-up letters on a shop or office front, lit like the real thing.",
+      "thumb": null,
+      "tags": ["brand", "logo", "signage", "shopfront", "storefront", "sign"],
+      "brand_refs": ["logo"],
+      "surface": "dark",
+      "light_ink": "white backlit letters",
+      "refs_required": 1,
+      "ref_labels": ["Shopfront"],
+      "examples": {
+        "fascia": "a matte charcoal fascia board",
+        "street": "a tidy high street at dusk"
+      },
+      "options": [
+        {
+          "slot": "fascia",
+          "label": "Sign board",
+          "choices": [
+            {"label": "Charcoal", "value": "a matte charcoal fascia board", "surface": "dark"},
+            {"label": "White", "value": "a clean white fascia board", "surface": "light"},
+            {"label": "Timber", "value": "a pale oak timber fascia", "surface": "light"},
+            {"label": "Brushed metal", "value": "a brushed aluminium fascia", "surface": "light"}
+          ]
+        }
+      ],
+      "preview_prompt": "A small shopfront on [street] with [fascia] above the window carrying a round logo and the word {brand} as built-up letters in {colours}, warm interior light.",
+      "scene": {
+        "prompt_scaffold": "Front view of a small modern shopfront on [street], with [fascia] above a large clean window. The fascia board is completely empty, no letters, no logo and no sign. Realistic architecture photo, straight verticals, warm light from inside.",
+        "aspect": "16:9",
+        "negative": "text, letters, logo, signage, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Mount {logo} from picture 2 on [fascia] above the window of the shopfront in picture 1, as dimensional built-up sign letters with a soft glow at the edges. {logo_colours} Centre it on the board, follow the perspective of the front and cast a thin shadow onto the board. Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-window-decal",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Window decal",
+      "description": "Your logo as cut vinyl on glass: a shop window, a glass door or a car window.",
+      "thumb": null,
+      "tags": ["brand", "logo", "window", "decal", "vinyl", "glass"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "frosted white vinyl",
+      "refs_required": 1,
+      "ref_labels": ["Window or door"],
+      "examples": {
+        "glass": "a glass entrance door of a small office",
+        "decal": "full colour cut vinyl"
+      },
+      "options": [
+        {
+          "slot": "decal",
+          "label": "Decal",
+          "choices": [
+            {"label": "Full colour", "value": "full colour cut vinyl", "surface": "light"},
+            {"label": "Frosted white", "value": "frosted white etched vinyl", "surface": "dark"}
+          ]
+        }
+      ],
+      "preview_prompt": "Close view of [glass] with a round logo and the word {brand} applied as [decal] at eye level, soft reflections of the street, crisp detail.",
+      "scene": {
+        "prompt_scaffold": "Straight-on photo of [glass], clean and empty at eye level with no stickers, no lettering and no logo. Soft reflections, the room behind gently out of focus, daylight.",
+        "aspect": "3:4",
+        "negative": "text, letters, logo, stickers, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Apply {logo} from picture 2 to the glass in picture 1 as [decal], centred at eye level. {logo_colours} It sits flat on the glass, with the glass's own reflections passing over it and the room behind still visible around the letters. Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-reception-wall",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Reception wall logo",
+      "description": "Your logo in brushed metal or acrylic behind an office front desk.",
+      "thumb": null,
+      "tags": ["brand", "logo", "office", "reception", "interior", "wall"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "brushed white metal",
+      "refs_required": 1,
+      "ref_labels": ["Reception"],
+      "examples": {
+        "wall": "a warm white plaster wall",
+        "desk": "a pale oak front desk with a small plant"
+      },
+      "options": [
+        {
+          "slot": "wall",
+          "label": "Wall",
+          "choices": [
+            {"label": "White plaster", "value": "a warm white plaster wall", "surface": "light"},
+            {"label": "Pale concrete", "value": "a smooth pale concrete wall", "surface": "light"},
+            {"label": "Walnut slats", "value": "a dark walnut slatted wall", "surface": "dark"},
+            {"label": "Deep green", "value": "a deep forest green painted wall", "surface": "dark"}
+          ]
+        }
+      ],
+      "preview_prompt": "A modern office reception with [desk] in front of [wall] carrying a large round logo and the word {brand} in {colours}, soft even light.",
+      "scene": {
+        "prompt_scaffold": "A calm modern office reception, [desk] in the foreground and [wall] behind it. The wall above the desk is completely empty, no logo, no letters and no art. Soft even light, interior photography, straight verticals.",
+        "aspect": "16:9",
+        "negative": "text, letters, logo, artwork, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Mount {logo} from picture 2 on [wall] above the desk in picture 1, as raised letters standing a few centimetres off the wall, with soft shadows behind them. {logo_colours} Centre it and follow the wall's perspective. Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-flyer",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Flyer A5",
+      "description": "A printed A5 flyer with your name, tagline, offer and phone or website, then your logo on top.",
+      "thumb": null,
+      "tags": ["brand", "logo", "flyer", "print", "leaflet", "offer"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white",
+      "refs_required": 1,
+      "ref_labels": ["Flyer"],
+      "examples": {
+        "offer": "20% OFF YOUR FIRST DEEP CLEAN",
+        "contact": "0300 123 4567",
+        "photo": "a bright, spotless living room"
+      },
+      "preview_prompt": "An A5 flyer lying on a wooden table: a photo of [photo] at the top, the headline \"[offer]\" in bold type, \"{brand}\" and \"[contact]\" at the bottom, a round logo in the corner, {colours} accents.",
+      "scene": {
+        "prompt_scaffold": "A printed A5 flyer lying flat on a light wooden table, seen from above. The top half is a photo of [photo]. Below it, the bold headline \"[offer]\", then \"{brand}\"{tagline_clause}, and \"[contact]\" in clear type along the bottom. The design uses {colours}. The top-left corner of the flyer is an empty white square, left blank for a logo.",
+        "aspect": "3:4",
+        "model": "qwen_image_2512"
+      },
+      "defaults": {
+        "instruction_scaffold": "Place {logo} from picture 2 in the empty white square at the top-left corner of the flyer in picture 1, filling most of the square. {logo_colours} Print it flat on the paper with the same light and grain. Keep all the text, the photo and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-social-square",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Social post (square)",
+      "description": "A square feed post with your offer and contact in clear type, then your logo in the corner.",
+      "thumb": null,
+      "tags": ["brand", "logo", "social", "instagram", "post", "square"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white",
+      "refs_required": 1,
+      "ref_labels": ["Post"],
+      "examples": {
+        "headline": "SPRING CLEAN SPECIAL",
+        "contact": "www.example.com",
+        "photo": "a gleaming kitchen with sunlight on the worktops"
+      },
+      "preview_prompt": "A square social media post: a photo of [photo], the headline \"[headline]\" in bold type, \"[contact]\" at the bottom, a round logo for {brand} in the corner, {colours} accents.",
+      "scene": {
+        "prompt_scaffold": "A square social media post design. A full-bleed photo of [photo], with a clean colour band across the bottom in {colours}. On it, the bold headline \"[headline]\" and below it \"[contact]\" in clear sans-serif type. The top-right corner is left as an empty white circle for a logo.",
+        "aspect": "1:1",
+        "model": "qwen_image_2512"
+      },
+      "defaults": {
+        "instruction_scaffold": "Place {logo} from picture 2 inside the empty white circle at the top-right corner of the post in picture 1, centred and filling most of the circle. {logo_colours} Keep all the text, the photo and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-social-story",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Social story (9:16)",
+      "description": "A tall story or reel cover with your name, tagline and a call to action, logo at the top.",
+      "thumb": null,
+      "tags": ["brand", "logo", "social", "story", "reel", "vertical"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white",
+      "refs_required": 1,
+      "ref_labels": ["Story"],
+      "examples": {
+        "headline": "BOOK YOUR CLEAN TODAY",
+        "contact": "Call 0300 123 4567",
+        "photo": "a sunlit bedroom with freshly made white bedding"
+      },
+      "preview_prompt": "A vertical phone story design: a photo of [photo], the headline \"[headline]\" in bold type, \"[contact]\" in a rounded button, a round {brand} logo at the top, {colours} accents.",
+      "scene": {
+        "prompt_scaffold": "A vertical 9:16 phone story design. A photo of [photo] fills the frame. In the lower third, the bold headline \"[headline]\", then \"{brand}\"{tagline_clause}, and a rounded button reading \"[contact]\", in {colours}. Near the top centre there is an empty white circle, left blank for a logo.",
+        "aspect": "9:16",
+        "model": "qwen_image_2512"
+      },
+      "defaults": {
+        "instruction_scaffold": "Place {logo} from picture 2 inside the empty white circle near the top of the story in picture 1, centred and filling most of the circle. {logo_colours} Keep all the text, the photo and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-business-card",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Business card mockup",
+      "description": "A stack of business cards with your logo printed or foiled on the front.",
+      "thumb": null,
+      "tags": ["brand", "logo", "business card", "print", "stationery", "mockup"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white foil",
+      "refs_required": 1,
+      "ref_labels": ["Cards"],
+      "examples": {
+        "card": "thick crisp white card",
+        "surface": "a slate-grey linen desk mat"
+      },
+      "options": [
+        {
+          "slot": "card",
+          "label": "Card",
+          "choices": [
+            {"label": "White", "value": "thick crisp white card", "surface": "light"},
+            {"label": "Kraft", "value": "natural brown kraft card", "surface": "light"},
+            {"label": "Black", "value": "thick matte black card", "surface": "dark"},
+            {"label": "Navy", "value": "thick deep navy card", "surface": "dark"}
+          ]
+        }
+      ],
+      "preview_prompt": "Two business cards in [card] on [surface], one showing a round logo and the word {brand} in {colours}, soft studio light, shallow depth of field.",
+      "scene": {
+        "prompt_scaffold": "Two standard business cards in [card], one lying flat and one leaning on it, on [surface]. The front of both cards is completely blank, no text and no logo. Soft studio light from the left, shallow depth of field, stationery mockup photo.",
+        "aspect": "4:3",
+        "negative": "text, letters, logo, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Print {logo} from picture 2 centred on the front of both business cards in picture 1. {logo_colours} Follow each card's angle and perspective, with the card's own texture and light on the print. Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-billboard",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Billboard or bus shelter",
+      "description": "Your logo and colours on a roadside billboard or a lit bus-shelter poster.",
+      "thumb": null,
+      "tags": ["brand", "logo", "billboard", "outdoor", "advert", "poster"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white",
+      "refs_required": 1,
+      "ref_labels": ["Billboard"],
+      "examples": {
+        "board": "a large roadside billboard",
+        "place": "a busy ring road on a clear afternoon"
+      },
+      "options": [
+        {
+          "slot": "board",
+          "label": "Site",
+          "choices": [
+            {"label": "Roadside billboard", "value": "a large roadside billboard"},
+            {"label": "Bus shelter", "value": "a lit bus-shelter poster panel"},
+            {"label": "Building wrap", "value": "a tall poster on the side of a building"}
+          ]
+        }
+      ],
+      "preview_prompt": "[board] beside [place], showing an advert with a round logo and the word {brand} on a background in {colours}, realistic street photo.",
+      "scene": {
+        "prompt_scaffold": "[board] beside [place], photographed from street level. The poster area is a clean, completely blank white panel with no text and no image. Realistic outdoor photo, natural light, people and traffic softly in the background.",
+        "aspect": "16:9",
+        "negative": "text, letters, logo, advert, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Fill the blank poster panel of picture 1 with a clean advert {palette}: {logo} from picture 2 large in the centre. {logo_colours} Follow the panel's perspective exactly and keep its frame, lighting and reflections. Keep everything outside the panel in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-merch",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Merch",
+      "description": "Your logo printed on a mug, tote bag, cap or t-shirt.",
+      "thumb": null,
+      "tags": ["brand", "logo", "merch", "mug", "tote", "t-shirt"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white print",
+      "refs_required": 1,
+      "ref_labels": ["Item"],
+      "examples": {
+        "item": "ceramic mug",
+        "colour": "glossy white",
+        "setting": "a sunny kitchen table"
+      },
+      "options": [
+        {
+          "slot": "item",
+          "label": "Item",
+          "choices": [
+            {"label": "Mug", "value": "ceramic mug"},
+            {"label": "Tote bag", "value": "canvas tote bag"},
+            {"label": "Cap", "value": "baseball cap"},
+            {"label": "T-shirt", "value": "crew-neck t-shirt"}
+          ]
+        },
+        {
+          "slot": "colour",
+          "label": "Colour",
+          "choices": [
+            {"label": "White", "value": "glossy white", "surface": "light"},
+            {"label": "Natural", "value": "natural undyed", "surface": "light"},
+            {"label": "Black", "value": "matte black", "surface": "dark"},
+            {"label": "Navy", "value": "deep navy", "surface": "dark"}
+          ]
+        }
+      ],
+      "preview_prompt": "A [colour] [item] on [setting], printed with a round logo and the word {brand} in {colours}, product photo, soft daylight.",
+      "scene": {
+        "prompt_scaffold": "A [colour] [item] on [setting], product photo with soft daylight. The front of the [item] is completely plain, no print, no text and no logo.",
+        "aspect": "1:1",
+        "negative": "text, letters, logo, print, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Print {logo} from picture 2 on the front of the [item] in picture 1, centred and at a natural merch size. {logo_colours} Follow the curve and folds of the [item], with its own texture and light on the print. Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-equipment",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Branded equipment",
+      "description": "Your logo on the kit you work with: a vacuum, a cleaning trolley, a bucket, a toolbox.",
+      "thumb": null,
+      "tags": ["brand", "logo", "equipment", "vacuum", "trolley", "tools"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white print",
+      "refs_required": 1,
+      "ref_labels": ["Equipment"],
+      "examples": {
+        "equipment": "a white commercial cylinder vacuum cleaner",
+        "setting": "a bright office corridor"
+      },
+      "options": [
+        {
+          "slot": "equipment",
+          "label": "Equipment",
+          "choices": [
+            {"label": "Vacuum", "value": "a white commercial cylinder vacuum cleaner"},
+            {"label": "Cleaning trolley", "value": "a janitorial cleaning trolley with a white side panel"},
+            {"label": "Mop bucket", "value": "a white wheeled mop bucket"},
+            {"label": "Toolbox", "value": "a white hard-shell toolbox"}
+          ]
+        }
+      ],
+      "preview_prompt": "[equipment] in [setting], with a round logo and the word {brand} printed on its side in {colours}, crisp commercial photo.",
+      "scene": {
+        "prompt_scaffold": "[equipment] standing in [setting], seen from the side. Its main side panel is plain white, with no logo, no text and no stickers. Clean commercial photo, soft daylight, sharp detail.",
+        "aspect": "4:3",
+        "negative": "text, letters, logo, stickers, watermark"
+      },
+      "defaults": {
+        "instruction_scaffold": "Print {logo} from picture 2 on the plain side panel of the equipment in picture 1, as a durable printed decal, centred and as large as the panel allows. {logo_colours} Follow the panel's curve and perspective, with its own plastic sheen on the print. Keep everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-before-after",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Before & after",
+      "description": "One room split in two: before and after the work, with your logo in a corner badge.",
+      "thumb": null,
+      "tags": ["brand", "logo", "before and after", "results", "cleaning", "renovation"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white",
+      "refs_required": 1,
+      "ref_labels": ["Before-and-after photo"],
+      "examples": {
+        "room": "a small kitchen with a hob and a tiled splashback",
+        "before": "greasy, cluttered and dull, with stains on the hob",
+        "after": "spotless and gleaming, worktops clear"
+      },
+      "preview_prompt": "A split image of [room]: the left half [before], the right half [after], a thin white dividing line, a small round {brand} logo badge in the bottom-right corner.",
+      "scene": {
+        "prompt_scaffold": "A split image of the same [room] from the same camera angle. The left half shows it [before]; the right half shows it [after]. A thin clean white vertical line divides the two halves. In the bottom-right corner there is a small empty white rounded badge, left blank for a logo. Realistic interior photo.",
+        "aspect": "16:9",
+        "negative": "text, letters, logo, watermark, two different rooms"
+      },
+      "defaults": {
+        "instruction_scaffold": "Place {logo} from picture 2 small and neat inside a white rounded badge in the bottom-right corner of picture 1, about a tenth of the picture's width. {logo_colours} If there is already an empty badge there, use it. Keep both halves of the picture, the dividing line and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-team-photo",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Team photo in uniform",
+      "description": "Your team in matching uniforms with the logo embroidered on every chest.",
+      "thumb": null,
+      "tags": ["brand", "logo", "team", "uniform", "staff", "about us"],
+      "brand_refs": ["logo"],
+      "surface": "dark",
+      "light_ink": "white thread",
+      "refs_required": 1,
+      "ref_labels": ["Team photo"],
+      "examples": {
+        "team": "four cleaning professionals, two women and two men",
+        "uniform": "deep navy polo shirts",
+        "place": "in front of a bright, freshly cleaned living room"
+      },
+      "options": [
+        {
+          "slot": "uniform",
+          "label": "Uniform",
+          "choices": [
+            {"label": "Navy polos", "value": "deep navy polo shirts", "surface": "dark"},
+            {"label": "Black tees", "value": "black crew-neck t-shirts", "surface": "dark"},
+            {"label": "White polos", "value": "crisp white polo shirts", "surface": "light"},
+            {"label": "Grey tunics", "value": "light grey work tunics", "surface": "light"}
+          ]
+        }
+      ],
+      "preview_prompt": "A friendly team photo of [team] in [uniform], standing [place], each shirt embroidered with a small {brand} logo on the left chest, natural light.",
+      "scene": {
+        "prompt_scaffold": "A friendly, natural team photo of [team], all wearing matching plain [uniform] with no logo and no patch, standing together [place], waist-up, everyone looking at the camera and smiling. Soft daylight, realistic skin, sharp faces.",
+        "aspect": "16:9",
+        "negative": "logo, patch, badge, text, letters, distorted hands, extra fingers"
+      },
+      "defaults": {
+        "instruction_scaffold": "Embroider {logo} from picture 2 on the left chest of every uniform in picture 1, small and identical on each person, stitched directly into the fabric. {logo_colours} No patches and no stickers: visible thread texture that follows each shirt's folds and light. Keep every face, pose, the background and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-website-hero",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Website hero banner",
+      "description": "A wide banner for the top of your website: headline, tagline and your logo over a photo.",
+      "thumb": null,
+      "tags": ["brand", "logo", "website", "banner", "hero", "landing page"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white",
+      "refs_required": 1,
+      "ref_labels": ["Banner"],
+      "examples": {
+        "headline": "A SPOTLESS HOME, EVERY TIME",
+        "photo": "a bright, tidy living room with sunlight on a pale sofa"
+      },
+      "preview_prompt": "A wide website hero banner: a photo of [photo] on the right, a calm panel on the left with the headline \"[headline]\" and a round {brand} logo above it, {colours} accents.",
+      "scene": {
+        "prompt_scaffold": "A wide website hero banner. The right two thirds show a photo of [photo]. The left third is a calm solid panel in {colours} with the bold headline \"[headline]\"{tagline_clause} in clean type. Above the headline there is an empty white rectangle, left blank for a logo.",
+        "aspect": "16:9",
+        "model": "qwen_image_2512"
+      },
+      "defaults": {
+        "instruction_scaffold": "Place {logo} from picture 2 inside the empty white rectangle above the headline in picture 1, centred and filling most of it. {logo_colours} Keep all the text, the photo and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
+      }
+    },
+    {
+      "id": "image-brand-door-hanger",
+      "category": "Brand & marketing",
+      "target": "image-brand",
+      "title": "Door hanger or leaflet",
+      "description": "A door hanger on a handle, or a leaflet through a letterbox, with your logo and contact.",
+      "thumb": null,
+      "tags": ["brand", "logo", "door hanger", "leaflet", "print", "mockup"],
+      "brand_refs": ["logo"],
+      "surface": "light",
+      "light_ink": "white",
+      "refs_required": 1,
+      "ref_labels": ["Door hanger or leaflet"],
+      "examples": {
+        "print": "a tall die-cut door hanger hooked over a brass door handle",
+        "door": "a glossy dark green front door",
+        "contact": "0300 123 4567"
+      },
+      "options": [
+        {
+          "slot": "print",
+          "label": "Format",
+          "choices": [
+            {"label": "Door hanger", "value": "a tall die-cut door hanger hooked over a brass door handle"},
+            {"label": "Leaflet", "value": "a folded leaflet half pushed through a brass letterbox"}
+          ]
+        }
+      ],
+      "preview_prompt": "Close-up of [print] on [door], the card printed with a round {brand} logo and \"[contact]\" in {colours}, soft daylight.",
+      "scene": {
+        "prompt_scaffold": "Close-up of [print] on [door]. The card is white, with \"[contact]\" in clear type near the bottom and a large empty white area at the top, left blank for a logo. Soft daylight, realistic print texture.",
+        "aspect": "3:4",
+        "model": "qwen_image_2512"
+      },
+      "defaults": {
+        "instruction_scaffold": "Print {logo} from picture 2 in the empty area at the top of the card in picture 1, centred and large. {logo_colours} Follow the card's angle and paper texture. Keep the text, the door and everything else in picture 1 exactly the same.",
+        "model": "qwen_image_edit_2511",
+        "count": 1
       }
     }
   ]

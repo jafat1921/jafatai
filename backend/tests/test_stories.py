@@ -486,7 +486,7 @@ def test_noncommercial_off_hides_and_refuses_omnivoice(client, monkeypatch):
     assert [e["id"] for e in client.get("/api/voices/engines").json()] == ["voxcpm", "chatterbox", "kokoro"]
     assert voices.default_engine() == "voxcpm"
     r = client.post("/api/audio/speak", json={"text": "Hello there", "engine": "omnivoice", "language": "en"})
-    assert r.status_code == 422 and "AUDIO_ALLOW_NONCOMMERCIAL" in r.json()["detail"]
+    assert r.status_code == 422 and r.json()["detail"] == "OmniVoice isn't available on this server right now."
     r = client.post("/api/audio/speak", json={"text": "Hello there", "engine": "auto", "language": "en"})
     assert r.status_code == 202 and r.json()["engine_resolved"] == "voxcpm"
     gallery = client.get("/api/voices/gallery").json()

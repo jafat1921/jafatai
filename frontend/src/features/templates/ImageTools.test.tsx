@@ -70,20 +70,22 @@ async function addPhoto(user: ReturnType<typeof userEvent.setup>, slot = 'Add ph
 }
 
 describe('image tool cards', () => {
-  it('hides a tool-only card the server cannot run and shows each tool licence', async () => {
+  it('hides a tool-only card the server cannot run and says which engine each tool uses', async () => {
     api([info(LAMA), info(CATVTON, false), info(DEPTH), info(ICLIGHT)])
     renderAt('/image/prompt-templates', routes)
     expect(await screen.findByRole('heading', { name: 'Depth map' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Virtual try-on (CatVTON)' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Runs on LaMa when installed · Apache-2.0/)).toBeInTheDocument()
-    expect(screen.getByText(/Runs on Depth Anything V2 Small · Apache-2.0/)).toBeInTheDocument()
+    expect(screen.getByText('Runs on LaMa when installed')).toBeInTheDocument()
+    expect(screen.getByText('Runs on Depth Anything V2 Small')).toBeInTheDocument()
+    expect(screen.queryByText(/Apache|licen/i)).not.toBeInTheDocument()
   })
 
-  it('offers the try-on card, labelled non-commercial, when CatVTON is installed', async () => {
+  it('offers the try-on card, with no licence label, when CatVTON is installed', async () => {
     api([info(LAMA), info(CATVTON), info(DEPTH), info(ICLIGHT)])
     renderAt('/image/prompt-templates', routes)
     expect(await screen.findByRole('heading', { name: 'Virtual try-on (CatVTON)' })).toBeInTheDocument()
-    expect(screen.getByText(/Runs on CatVTON · non-commercial licence/)).toBeInTheDocument()
+    expect(screen.getByText('Runs on CatVTON')).toBeInTheDocument()
+    expect(screen.queryByText(/commercial|licen/i)).not.toBeInTheDocument()
   })
 })
 
@@ -93,7 +95,8 @@ describe('Edit Image with a tool', () => {
     renderAt('/image/prompt-templates', routes)
     const user = await open('Remove an object')
     expect(await screen.findByText(/Runs on LaMa where you paint a mask/)).toBeInTheDocument()
-    expect(screen.getByText('LaMa licence: Apache-2.0 (LaMa big-lama)')).toBeInTheDocument()
+    expect(screen.getByText('Runs on LaMa')).toBeInTheDocument()
+    expect(screen.queryByText(/licen|Apache/i)).not.toBeInTheDocument()
 
     await addPhoto(user)
     expect(await screen.findByLabelText(/Mask: drag over the object/)).toBeInTheDocument()

@@ -88,10 +88,10 @@ def test_switch_off_hides_and_refuses_nc_image_models(client, monkeypatch):
 
     bad = client.post("/api/images/generate", json={"prompt": "a fox", "model": "anima"})
     assert bad.status_code == 422
-    assert "IMAGE_ALLOW_NONCOMMERCIAL" in bad.json()["detail"] and "AUDIO" not in bad.json()["detail"]
+    assert bad.json()["detail"] == "Anima isn't available on this server."
     with pytest.raises(Exception) as e:
         mc.get("flux2_klein_9b_edit", "edit")
-    assert "IMAGE_ALLOW_NONCOMMERCIAL" in str(e.value.detail)
+    assert "isn't available" in str(e.value.detail) and "licen" not in str(e.value.detail)
     # the names offered in the 'choose one of' list leave the hidden ones out too
     bad = client.post("/api/images/generate", json={"prompt": "a fox", "model": "nope"})
     assert "anima" not in bad.json()["detail"] and "illustrious_xl2" in bad.json()["detail"]

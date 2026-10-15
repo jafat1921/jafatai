@@ -200,16 +200,17 @@ def test_line_art_runs_the_tool_or_falls_back(client, photo, monkeypatch):
     monkeypatch.setattr(get_settings(), "image_allow_noncommercial", False)
     r = edit(client, source_ids=[photo["id"]], instruction=text, template_id="image-edit-line-art")
     assert r.status_code == 202 and r.json()["tool_resolved"] is None
-    assert "IMAGE_ALLOW_NONCOMMERCIAL" in r.json()["tool_fallback"]
+    assert "isn't available on this server" in r.json()["tool_fallback"]
+    assert "NONCOMMERCIAL" not in r.json()["tool_fallback"]
     p = gen_params(r.json()["items"][0])
     assert "image_tool" not in p and p["model"] == "qwen_image_edit_2511" and p["tool_fallback"]
     r = edit(client, source_ids=[photo["id"]], instruction=text, template_id="image-edit-line-art", engine="tool")
-    assert r.status_code == 422 and "switched off" in r.json()["detail"]
+    assert r.status_code == 422 and "isn't available" in r.json()["detail"]
 
 
 def test_tool_only_cards_refuse_instead_of_falling_back(client, photo, nc_off):
     r = edit(client, source_ids=[photo["id"], photo["id"]], instruction="x", template_id="image-edit-virtual-tryon")
-    assert r.status_code == 422 and "switched off" in r.json()["detail"]
+    assert r.status_code == 422 and "isn't available" in r.json()["detail"]
     r = edit(client, source_ids=[photo["id"]], instruction="x", tool="tryon")
     assert r.status_code == 422
     # depth needs no instruction at all

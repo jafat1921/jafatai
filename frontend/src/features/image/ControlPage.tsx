@@ -73,7 +73,7 @@ export function ControlPage() {
   const engineNote = status.isPending
     ? 'Checking whether the ControlNet is installed…'
     : ready
-      ? `Runs on ${net.engine}. Licence: ${net.licence}${typeInfo?.noncommercial ? `; ${typeInfo.detector}: non-commercial` : ''}.`
+      ? `Runs on ${net.engine}.`
       : `The ControlNet can't run here (${typeInfo?.reason ?? net?.reason ?? 'not reported'}), so Qwen-Image-Edit uses your picture as a guide instead. It follows it more loosely.`
 
   const slots = placeholdersIn(prompt)

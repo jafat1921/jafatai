@@ -1,12 +1,10 @@
 import { useEffect, useId } from 'react'
 import { AlertTriangle, AudioLines, Check, Heart, Pause, Play } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
-import { Tooltip } from '@/components/ui/tooltip'
 import { TileActions, type TileHandlers } from '@/components/generate/TileActions'
 import { useModelLabels } from '@/components/generate/useModelLabel'
 import type { TileSelect } from '@/components/generate/ResultTile'
 import { useTileState } from '@/hooks/useMedia'
-import { useModels } from '@/hooks/useModels'
 import { clock } from '@/lib/audio'
 import { FLAG_TEXT, minus } from '@/lib/audio-edit'
 import { mediaAlt } from '@/lib/media'
@@ -33,12 +31,10 @@ export function AudioTile({ item, handlers, ratio, select, className }: Props) {
   const { state, gen, progress, job } = useTileState(item)
   const fav = useIsFavourite(item.id)
   const label = useModelLabels()
-  const { models } = useModels('audio')
   const track = useTrack(item.id)
   const alt = mediaAlt(item)
   const usedId = modelUsedId(gen?.params, item.params, { model: item.model })
   const used = label(usedId)
-  const licence = models.find((m) => m.id === usedId)?.extra?.licence
   const src = item.media_url ?? gen?.media_url ?? null
   const wave = item.thumb_url ?? gen?.thumb_url ?? null
   const length = audioLength(item) ?? (track.duration || null)
@@ -169,21 +165,10 @@ export function AudioTile({ item, handlers, ratio, select, className }: Props) {
       </button>
       <div className="flex min-w-0 items-center gap-1.5 px-0.5 text-[11px] text-studio-muted">
         {used ? (
-          licence ? (
-            <Tooltip content={licence}>
-              {/* licensed names are shown whole, never truncated */}
-              <span tabIndex={0} className="shrink-0 rounded-[4px] border border-studio-border px-1 leading-4 text-studio-text">
-                <span className="sr-only">Made with </span>
-                {used}
-                <span className="sr-only">. {licence}</span>
-              </span>
-            </Tooltip>
-          ) : (
-            <span className="truncate" title={`Made with ${used}`}>
-              <span className="sr-only">Made with </span>
-              {used}
-            </span>
-          )
+          <span className="truncate" title={`Made with ${used}`}>
+            <span className="sr-only">Made with </span>
+            {used}
+          </span>
         ) : (
           <span className="truncate">{item.origin === 'upload' ? 'Upload' : ''}</span>
         )}

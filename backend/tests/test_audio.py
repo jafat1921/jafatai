@@ -145,7 +145,7 @@ def test_generate_errors_are_readable(client, db, monkeypatch):
 
     assert "not songs" in detail(kind="song", model="sa3_small_sfx")
     assert "up to 120 s" in detail(kind="music", model="sa3_small_music", duration_s=200)
-    assert "turned off" in detail(kind="song", model="minimax_music3")
+    assert detail(kind="song", model="minimax_music3") == "MiniMax-Music3 isn't available on this server."
     assert "choose one of: ace15_turbo, yue2, sa3_small_music" in detail(kind="song", model="zimage_turbo")
     assert detail(kind="song", prompt="   ") == "A prompt is required"
     assert gen(client, kind="song", duration_s=400).status_code == 422
@@ -178,7 +178,7 @@ def test_minimax_hidden_unless_allowed(client, monkeypatch):
     rows = {m["id"]: m for m in client.get("/api/models", params={"type": "audio"}).json()}
     mm = rows["minimax_music3"]
     assert mm["label"] == "MiniMax-Music3" and mm["extra"]["noncommercial"] is True
-    assert "MiniMax-Music3 Community Licence" in mm["description"] and mm["max_duration_s"] == 240
+    assert "Licence" not in mm["description"] and mm["max_duration_s"] == 240
     assert rows["ace15_turbo"]["extra"] == {"licence": "MIT licence: free for commercial use"}
     assert "Stability AI Community Licence" in rows["sa3_medium"]["extra"]["licence"]
     assert rows["sa3_medium"]["max_duration_s"] == 380 and rows["ace15_turbo"]["capabilities"] == [

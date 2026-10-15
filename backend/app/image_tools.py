@@ -88,7 +88,7 @@ def unavailable(tool: ImageTool) -> str | None:
     """Why the tool can't run: switched off, or the last /object_info says it isn't installed.
     None when fine or not known (a missing node then fails the job, like the models do)."""
     if not allowed(tool):
-        return f"{tool.engine} is switched off on this server (non-commercial licence; IMAGE_ALLOW_NONCOMMERCIAL)"
+        return f"{tool.engine} isn't available on this server"
     if get_settings().gen_driver == "mock":
         return None
     from app.models_catalog import _cached_info

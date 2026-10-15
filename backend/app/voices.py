@@ -162,8 +162,7 @@ def get_engine(engine_id: str) -> Engine:
         names = ", ".join(x.id for x in ENGINES.values() if allowed(x))
         raise VoiceError(f"Unknown speech engine '{engine_id}' (expected {names} or auto)")
     if not allowed(e):
-        raise VoiceError(f"{e.label} is turned off on this server: its weights are CC-BY-NC, which rules out "
-                         "commercial use (the owner can allow it with AUDIO_ALLOW_NONCOMMERCIAL)")
+        raise VoiceError(f"{e.label} isn't available on this server right now.")
     return e
 
 

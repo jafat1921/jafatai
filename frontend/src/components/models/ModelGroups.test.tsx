@@ -56,26 +56,26 @@ describe('ModelPicker groups (contract v32)', () => {
   it('shows the sections in order, with Auto on top and the section in each card description', () => {
     render(<Picker models={withAuto(IMAGE, 'image').models} />)
     const group = screen.getByRole('radiogroup', { name: 'Model' })
-    const headings = ['Fast', 'Photoreal', 'Text & design', 'Anime & illustration', 'Experimental / NC']
+    const headings = ['Fast', 'Photoreal', 'Text & design', 'Anime & illustration', 'Experimental']
     for (const h of headings) expect(within(group).getByText(h)).toBeInTheDocument()
+    expect(within(group).queryByText(/NC/)).not.toBeInTheDocument()
     const radios = within(group).getAllByRole('radio')
     expect(radios[0]).toHaveAccessibleName('Auto')
     expect(within(group).getByRole('radio', { name: 'RealVisXL V5.0, PHOTO' })).toHaveAccessibleDescription(/Photoreal/)
     expect(group.className).toMatch(/overflow-y-auto/)
   })
 
-  it('labels the licence, and says NC / terms in the name', () => {
+  it('keeps licences out of the cards, even for NC or capped weights', () => {
     render(<Picker models={IMAGE} />)
-    const anima = screen.getByRole('radio', { name: 'Anima, ANIME, non-commercial' })
-    expect(anima).toHaveAccessibleDescription(/CircleStone Labs Non-Commercial Licence/)
+    const anima = screen.getByRole('radio', { name: 'Anima, ANIME' })
     expect(anima).toHaveAccessibleDescription(/Best for anime, illustration/)
-    expect(within(anima).getByText('NC')).toBeInTheDocument()
-    const krea = screen.getByRole('radio', { name: 'Krea 2, 2K, licence terms apply' })
-    expect(within(krea).getByText('TERMS')).toBeInTheDocument()
-    // commercial weights: licence line, no pill
+    expect(anima).not.toHaveAccessibleDescription(/licen|commercial/i)
+    expect(within(anima).queryByText('NC')).not.toBeInTheDocument()
+    const krea = screen.getByRole('radio', { name: 'Krea 2, 2K' })
+    expect(within(krea).queryByText('TERMS')).not.toBeInTheDocument()
     const rv = screen.getByRole('radio', { name: 'RealVisXL V5.0, PHOTO' })
-    expect(rv).toHaveAccessibleDescription(/OpenRAIL\+\+/)
-    expect(within(rv).queryByText('NC')).not.toBeInTheDocument()
+    expect(rv).not.toHaveAccessibleDescription(/OpenRAIL/)
+    expect(screen.queryByText(/licen/i)).not.toBeInTheDocument()
   })
 
   it('marks guessed times as estimates', () => {
@@ -98,7 +98,7 @@ describe('ModelPicker groups (contract v32)', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('radio', { name: 'Qwen-Image 2512, TEXT' }))
     await user.keyboard('{ArrowDown}')
-    expect(screen.getByRole('radio', { name: 'Anima, ANIME, non-commercial' })).toHaveFocus()
+    expect(screen.getByRole('radio', { name: 'Anima, ANIME' })).toHaveFocus()
   })
 })
 

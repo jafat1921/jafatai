@@ -150,7 +150,7 @@ def tool_options(object_info: dict | None, *, driver: str, error: str | None = N
                 "default_variant": t.default_variant, "available": True, "reason": None}
         problems = []
         if not settings_allow(t):
-            problems.append("non-commercial licence; set PHOTO_ALLOW_NONCOMMERCIAL=true to use it")
+            problems.append("not available on this server")
         tpl = template_of(t)
         if tpl and driver != "mock":
             if object_info is None:
@@ -264,7 +264,7 @@ def build_restore(db: Session, source: Generation, tool_id: str, opts: dict) -> 
     if tool is None:
         raise RestoreError(f"Unknown tool '{tool_id}'")
     if not settings_allow(tool):
-        raise RestoreError(f"{tool.label} uses non-commercial weights and is switched off on this server")
+        raise RestoreError(f"{tool.label} isn't available on this server right now.")
     if tool.effect:
         raise RestoreError(f"{tool.label} runs as a quick effect")
 

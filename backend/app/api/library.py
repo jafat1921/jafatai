@@ -366,7 +366,7 @@ def edit_images(body: ImageEditIn, db: Session = Depends(get_db), cur: CurrentUs
     if body.template_id and (template is None or template.get("target") != "image-edit"):
         raise HTTPException(422, f"'{body.template_id}' isn't an Edit Image template")
     if template is not None and not it.template_visible(template):
-        raise HTTPException(422, f"“{template['title']}” is switched off on this server (IMAGE_ALLOW_NONCOMMERCIAL)")
+        raise HTTPException(422, f"“{template['title']}” isn't available on this server.")
     into = generate_into(db, cur.workspace_id, body.folder_id, "image")
     sources = [_edit_source(db, cur.workspace_id, sid) for sid in body.source_ids[:3]]
     tool, fallback = _pick_tool(db, body, template, sources)

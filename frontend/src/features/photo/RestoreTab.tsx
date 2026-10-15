@@ -294,7 +294,6 @@ function ToolRow({ tool, open, onToggle, busy, onApply }: RowProps) {
         <span className="min-w-0 flex-1">
           <span className={cn('block text-small font-medium', !tool.available && 'text-studio-muted')}>
             {tool.label}
-            {tool.noncommercial && <span className="ml-1.5 text-[11px] font-normal text-studio-muted">non-commercial</span>}
           </span>
           <span className="block text-[12px] text-studio-muted">{tool.hint}</span>
         </span>
@@ -302,7 +301,6 @@ function ToolRow({ tool, open, onToggle, busy, onApply }: RowProps) {
       {open && (
         <div id={panelId} className="flex flex-col gap-2 px-2 pb-2.5 pt-1">
           {!tool.available && <p className="text-[12px] text-studio-danger" role="note">Not available: {tool.reason}</p>}
-          {tool.licence && <p className="text-[12px] text-studio-muted">Licence: {tool.licence}</p>}
           {tool.variants.length > 1 && (
             <div role="radiogroup" aria-label={`${tool.label} option`} className="flex flex-wrap gap-1.5">
               {tool.variants.map((v) => (

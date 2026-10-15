@@ -200,13 +200,13 @@ describe('Audio Studio', { timeout: 15_000 }, () => {
     expect(screen.getByRole('textbox', { name: 'Lyrics' })).toHaveValue('')
   })
 
-  it('MiniMax is only offered when the catalog lists it, under its full name and licence', async () => {
+  it('MiniMax is only offered when the catalog lists it, under its full name, with no licence text', async () => {
     api()
     const first = renderAt('/audio/song', routes, seedCatalog)
     const user = userEvent.setup()
     let models = await openChip(user, 'Model')
     expect(within(models).queryByRole('radio', { name: /MiniMax/ })).not.toBeInTheDocument()
-    expect(within(models).getByRole('radio', { name: 'ACE-Step 1.5' })).toHaveAccessibleDescription(/Apache-2\.0/)
+    expect(within(models).getByRole('radio', { name: 'ACE-Step 1.5' })).not.toHaveAccessibleDescription(/Apache/)
     // music models don't belong on the Song page
     expect(within(models).queryByRole('radio', { name: /Stable Audio/ })).not.toBeInTheDocument()
     first.unmount()
@@ -214,7 +214,7 @@ describe('Audio Studio', { timeout: 15_000 }, () => {
     renderAt('/audio/song', routes, (qc) => seedCatalog(qc, { ...CATALOG, audio: [...CATALOG.audio, MINIMAX] }))
     models = await openChip(user, 'Model')
     const mm = within(models).getByRole('radio', { name: 'MiniMax-Music3' })
-    expect(mm).toHaveAccessibleDescription(/Non-commercial use only/)
+    expect(mm).not.toHaveAccessibleDescription(/commercial|licen/i)
   })
 
   it('Music: a long Medium loop with BPM', async () => {

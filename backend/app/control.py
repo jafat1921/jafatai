@@ -71,7 +71,7 @@ def _problems(template: str, info: dict) -> str | None:
 def unavailable(c: ControlType, as_is: bool) -> str | None:
     """Why the ControlNet can't run this request. None when fine or not known (no fresh /object_info)."""
     if not allowed(c):
-        return f"{c.detector} is switched off on this server (non-commercial licence; IMAGE_ALLOW_NONCOMMERCIAL)"
+        return f"{c.detector} isn't available on this server"
     if get_settings().gen_driver == "mock":
         return None
     from app.models_catalog import _cached_info

@@ -145,8 +145,7 @@ describe('Speak', { timeout: 15_000 }, () => {
     expect(chatterbox).toBeDisabled()
     expect(chatterbox).toHaveAccessibleDescription(/Chatterbox doesn't speak Urdu\. Use OmniVoice\./)
     expect(within(pop).getByRole('radio', { name: 'OmniVoice' })).toBeEnabled()
-    // licence is part of each engine's description
-    expect(within(pop).getByRole('radio', { name: 'OmniVoice' })).toHaveAccessibleDescription(/Apache-2\.0/)
+    expect(within(pop).getByRole('radio', { name: 'OmniVoice' })).not.toHaveAccessibleDescription(/Apache|licen/i)
   })
 
   it('warns that tags are stripped on an engine without them', async () => {

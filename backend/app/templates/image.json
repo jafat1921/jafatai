@@ -819,7 +819,7 @@
       "category": "Edit a photo",
       "target": "image-edit",
       "title": "Virtual try-on (CatVTON)",
-      "description": "A dedicated try-on model: keeps prints, logos and fabric closer than Outfit swap. Non-commercial weights, for testing only.",
+      "description": "A dedicated try-on model: keeps prints, logos and fabric closer than Outfit swap.",
       "thumb": null,
       "tags": ["try-on", "outfit", "clothing", "fashion", "catvton", "tool"],
       "refs_required": 2,

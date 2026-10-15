@@ -132,7 +132,7 @@ MODELS: dict[str, Model] = {m.id: m for m in (
           "illustrious_xl_t2i", extra={"i2i": "illustrious_xl_i2i"}, est_seconds=12, licence=OPENRAIL_M,
           group="anime", best_for=("anime", "manga", "characters")),
     Model("anima", "image", "Anima", "ANIME",
-          "2B anime model: clean line art and many styles. Weights non-commercial; images are yours to use.",
+          "2B anime model: clean line art and many styles.",
           ("t2i", "i2i"), "anima_t2i", extra={"i2i": "anima_i2i"},
           speeds=(
               Speed("turbo", "Turbo (8 steps)", 8, "Official turbo LoRA, cfg 1", lora=ANIMA_TURBO),
@@ -154,7 +154,7 @@ MODELS: dict[str, Model] = {m.id: m for m in (
           extra={"i2i": "flux2_klein9b_i2i"}, est_seconds=10, licence=FLUX_NC, noncommercial=True,
           group="experimental", best_for=("quick drafts", "detail")),
     Model("qwen_image_21", "image", "Qwen-Image 2.1", "TEXT",
-          "Newer Qwen-Image: sharper text and 2K detail. Research licence; 2512 stays the default.",
+          "Newer Qwen-Image: sharper text and 2K detail. 2512 stays the default.",
           ("t2i", "text_render"), "qwen_image21_t2i",
           speeds=(
               Speed("turbo", "Turbo (8 steps)", 8, "Turbo weights, cfg 1"),
@@ -205,8 +205,7 @@ MODELS: dict[str, Model] = {m.id: m for m in (
           ("song", "lyrics", "vocals", "timbre_ref"), "ace15_song", max_duration_s=240, est_seconds=5,
           default=True, licence="MIT licence: free for commercial use"),
     Model("minimax_music3", "audio", "MiniMax-Music3", None,
-          "Songs with vocals from a description and lyrics; may end a little before the length you ask for. "
-          "MiniMax-Music3 Community Licence (commercial use under US$20M revenue).",
+          "Songs with vocals from a description and lyrics; may end a little before the length you ask for.",
           ("song", "lyrics", "vocals"), "minimax_music3", max_duration_s=240, est_seconds=18,
           licence="MiniMax-Music3 Community Licence: commercial use only under US$20M annual revenue",
           noncommercial=True),
@@ -275,8 +274,7 @@ def get(model_id: str | None, type_: str) -> Model:
         return default_for(type_)
     m = MODELS.get(model_id)
     if m is not None and hidden(m):
-        raise HTTPException(422, f"{m.label} is turned off on this server: its licence limits commercial use "
-                                 f"(the owner can allow it with {nc_switch(m)})")
+        raise HTTPException(422, f"{m.label} isn't available on this server.")
     if m is None or m.type != type_:
         names = ", ".join(x.id for x in MODELS.values() if x.type == type_ and not hidden(x))
         what = "an image" if type_ == "image" else ("an edit" if type_ == "edit" else f"a {type_}")

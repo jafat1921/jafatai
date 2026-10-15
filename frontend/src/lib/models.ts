@@ -104,7 +104,7 @@ export const MODEL_GROUPS: { id: ModelGroup; label: string }[] = [
   { id: 'photo', label: 'Photoreal' },
   { id: 'text', label: 'Text & design' },
   { id: 'anime', label: 'Anime & illustration' },
-  { id: 'experimental', label: 'Experimental / NC' },
+  { id: 'experimental', label: 'Experimental' },
 ]
 
 /** Ungrouped models (Auto) first without a heading, then one section per group that has models. */
@@ -169,7 +169,6 @@ export function withAuto(models: ModelInfo[], type: ModelType): { models: ModelI
     description: AUTO_HINT[type],
     speeds: undefined,
     default_speed: undefined,
-    // the licence line belongs to the real model, not to Auto
     extra: undefined,
     ...(server ? { ...server, capabilities: server.capabilities?.length ? server.capabilities : base.capabilities } : {}),
     available: server ? server.available !== false : base.available,

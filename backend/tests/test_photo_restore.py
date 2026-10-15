@@ -74,7 +74,7 @@ def test_tools_list_groups_and_licence(client, monkeypatch):
     tools = {t["id"]: t for t in client.get("/api/photo/tools").json()["tools"]}
     assert {"repair", "scratches", "jpeg", "denoise", "deblur", "faces", "colourise", "deyellow", "polish", "fix",
             "stylise", "cutout", "select", "background", "heavy"} <= set(tools)
-    assert tools["heavy"]["available"] is False and "non-commercial" in tools["heavy"]["reason"]
+    assert tools["heavy"]["available"] is False and tools["heavy"]["reason"] == "not available on this server"
     assert "Non-commercial" in tools["heavy"]["licence"] and tools["denoise"]["licence"] is None
     assert [v["id"] for v in tools["colourise"]["variants"]] == ["natural", "vivid"]
     assert tools["deyellow"]["gpu"] is False and tools["faces"]["gpu"] is True
@@ -121,7 +121,7 @@ def test_restore_validation(client, monkeypatch):
     assert post({"tool": "teleport"}).status_code == 422
     assert post({"tool": "colourise", "variant": "neon"}).status_code == 422
     assert "description" in post({"tool": "fix"}).json()["detail"]
-    assert "non-commercial" in post({"tool": "heavy"}).json()["detail"]
+    assert post({"tool": "heavy"}).json()["detail"] == "Heavy restore (SUPIR) isn't available on this server right now."
     assert "Remove the background first" in post({"tool": "background", "prompt": "a beach"}).json()["detail"]
     assert "Type what to select" in post({"tool": "select"}).json()["detail"]
     assert post({"tool": "denoise", "strength": 0}).status_code == 422

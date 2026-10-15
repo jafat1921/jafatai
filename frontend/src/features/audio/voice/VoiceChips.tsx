@@ -242,7 +242,7 @@ export function EngineChip({
                       ))}
                     </span>
                     <span className="text-[11px] leading-4 text-studio-faint">
-                      {engine!.languages.length} language{engine!.languages.length === 1 ? '' : 's'} · {engine!.licence}
+                      {engine!.languages.length} language{engine!.languages.length === 1 ? '' : 's'}
                     </span>
                   </>
                 )}

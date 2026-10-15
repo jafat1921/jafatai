@@ -175,13 +175,13 @@ function Card({ t, onStart, starting }: { t: Template; onStart: () => void; star
         )}
         {t.control && (
           <p className="text-[12px] text-studio-muted">
-            Runs on Z-Image Turbo + Fun ControlNet when installed, else the edit model · {t.control.noncommercial ? 'non-commercial licence' : 'Apache-2.0'}
+            Runs on Z-Image Turbo + Fun ControlNet when installed, else the edit model
           </p>
         )}
         {t.tool && (
           <p className="text-[12px] text-studio-muted">
             Runs on {t.tool.engine}
-            {t.tool.fallback ? ' when installed' : ''} · {t.tool.noncommercial ? 'non-commercial licence' : t.tool.licence}
+            {t.tool.fallback ? ' when installed' : ''}
           </p>
         )}
         <p className="mt-auto font-mono text-[12px] text-studio-muted">{meta(t)}</p>

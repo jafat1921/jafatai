@@ -37,15 +37,6 @@ export function CapabilityChips({ model, id }: { model: ModelInfo; id?: string }
   )
 }
 
-// NC / revenue-capped weights get a pill beside the badge; the licence line under the card says the rest
-function licenceTag(m: ModelInfo): { short: string; spoken: string; tone: string } | null {
-  // image / edit rows only (contract v32): audio cards already spell their licence out in the name line
-  const kind = m.extra?.licence_kind
-  if (kind === 'noncommercial') return { short: 'NC', spoken: 'non-commercial', tone: 'border-studio-warning/60 text-studio-warning' }
-  if (kind === 'conditional') return { short: 'TERMS', spoken: 'licence terms apply', tone: 'border-studio-border-strong text-studio-muted' }
-  return null
-}
-
 function whyBlocked(m: ModelInfo, blockedBy?: (m: ModelInfo) => string | null): string | null {
   if (m.available) return blockedBy?.(m) ?? null
   if (m.installed === false) return m.reason ? `Not installed on the server (${m.reason})` : 'Not installed on the server yet.'
@@ -65,7 +56,7 @@ interface Props {
 
 /**
  * Radio cards: arrow keys move between models and skip the ones that can't be used. Image models come in
- * sections (Fast, Photoreal, Text & design, Anime & illustration, Experimental / NC) inside one scroll area;
+ * sections (Fast, Photoreal, Text & design, Anime & illustration, Experimental) inside one scroll area;
  * the section name is part of each card's description, since a radiogroup can't own headings.
  */
 export function ModelPicker({ label, models, value, onChange, blockedBy, highlighted, className }: Props) {
@@ -111,10 +102,8 @@ export function ModelPicker({ label, models, value, onChange, blockedBy, highlig
 
 function ModelCard({ m, ids, groupId, reason, ring }: { m: ModelInfo; ids: string; groupId: string | null; reason: string | null; ring: boolean }) {
   const est = m.est_seconds ? `about ${secondsText(m.est_seconds)} each${m.estimate_source === 'measured' ? '' : ' (est.)'}` : null
-  const licence = m.extra?.licence
-  const tag = licenceTag(m)
-  const name = [m.label, m.badge, tag?.spoken].filter(Boolean).join(', ')
-  const described = [`${ids}-d`, `${ids}-c`, licence && `${ids}-l`, reason && `${ids}-r`, groupId].filter(Boolean).join(' ')
+  const name = [m.label, m.badge].filter(Boolean).join(', ')
+  const described = [`${ids}-d`, `${ids}-c`, reason && `${ids}-r`, groupId].filter(Boolean).join(' ')
   return (
     <RadioGroup.Item
       value={m.id}
@@ -133,14 +122,8 @@ function ModelCard({ m, ids, groupId, reason, ring }: { m: ModelInfo; ids: strin
         <span aria-hidden className="flex size-4 shrink-0 items-center justify-center rounded-full border border-studio-border-strong bg-studio-panel">
           <RadioGroup.Indicator className="size-2 rounded-full bg-studio-accent" />
         </span>
-        {/* licensed names (MiniMax-Music3) must show in full, so they wrap instead of truncating */}
-        <span className={cn('min-w-0 flex-1 text-body font-medium text-studio-text', licence ? 'break-words' : 'truncate')}>{m.label}</span>
+        <span className="min-w-0 flex-1 truncate text-body font-medium text-studio-text">{m.label}</span>
         {m.badge && <ModelBadge badge={m.badge} />}
-        {tag && (
-          <span aria-hidden title={licence} className={cn('rounded-[4px] border px-1.5 font-mono text-[11px] font-medium leading-[18px] tracking-wide', tag.tone)}>
-            {tag.short}
-          </span>
-        )}
       </span>
       <span id={`${ids}-d`} className="text-small text-studio-muted">
         {m.description}
@@ -148,11 +131,6 @@ function ModelCard({ m, ids, groupId, reason, ring }: { m: ModelInfo; ids: strin
         {m.best_for?.length ? <span className="block">Best for {m.best_for.join(', ')}</span> : null}
       </span>
       <CapabilityChips model={m} id={`${ids}-c`} />
-      {licence && (
-        <span id={`${ids}-l`} className="text-[12px] leading-4 text-studio-muted">
-          {licence}
-        </span>
-      )}
       {reason && (
         <span id={`${ids}-r`} className="flex items-start gap-1 text-small text-studio-warning">
           <Lock aria-hidden className="mt-0.5 size-3 shrink-0" />

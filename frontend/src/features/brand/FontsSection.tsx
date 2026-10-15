@@ -59,7 +59,7 @@ export function FontsSection({ fonts, urls, onChange }: { fonts: string[]; urls:
   return (
     <EditorSection
       title={`Fonts (${fonts.length}/${MAX_FONTS})`}
-      hint="TTF or OTF files you're licensed to use. They set the type on end cards, lower thirds and the logo reveal. For Urdu, the font must include Urdu letters."
+      hint="TTF or OTF files. They set the type on end cards, lower thirds and the logo reveal. For Urdu, the font must include Urdu letters."
     >
       <div className="flex flex-col gap-1">
         <label htmlFor={`${uid}-sample`} className="text-small font-medium">

@@ -284,7 +284,7 @@ def test_control_falls_back_to_qwen_edit(client, photo, monkeypatch):
 def test_control_switch_and_tools_listing(client, photo, monkeypatch):
     monkeypatch.setattr(get_settings(), "image_allow_noncommercial", False)
     r = client.post("/api/images/control", json={"source_id": photo["id"], "control": "hed", "prompt": "x"})
-    assert r.status_code == 202 and "IMAGE_ALLOW_NONCOMMERCIAL" in r.json()["tool_fallback"]
+    assert r.status_code == 202 and "isn't available on this server" in r.json()["tool_fallback"]
     block = client.get("/api/images/tools").json()["control"]
     assert block["available"] and {t["id"] for t in block["types"]} == {"depth", "canny", "pose", "scribble"}
     assert block["strength"] == {"min": 0.65, "max": 1.0, "default": 0.8}

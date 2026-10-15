@@ -21,7 +21,7 @@ interface Props {
   onLight: (v: LightFrom) => void
 }
 
-/** Which engine an edit template runs on (a dedicated tool or the edit model), with the weights' licence. */
+/** Which engine an edit template runs on: a dedicated tool or the edit model. */
 export function ToolChoice({ tool, info, useTool, onUseTool, light, onLight }: Props) {
   const uid = useId()
   const ready = !!info?.available
@@ -38,9 +38,7 @@ export function ToolChoice({ tool, info, useTool, onUseTool, light, onLight }: P
       <p className="text-small" role="status">
         {status}
       </p>
-      <p className="text-[12px] text-studio-muted">
-        {tool.engine} licence: {tool.licence}
-      </p>
+      <p className="text-[12px] text-studio-muted">Runs on {tool.engine}</p>
       {ready && tool.fallback && (
         <fieldset className="flex flex-wrap items-center gap-3">
           <legend className="sr-only">Engine</legend>

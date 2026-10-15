@@ -13,7 +13,8 @@ from app.worker import process_one
 from tests.test_api_tokens import _mint, _user, flags, login  # noqa: F401  (fixtures)
 
 ACCEPT = {"Accept": "application/json, text/event-stream"}
-READ_TOOLS = {"list_projects", "get_job", "wait_for_job", "search_library", "get_media", "list_voices"}
+READ_TOOLS = {"list_projects", "get_job", "wait_for_job", "search_library", "get_media", "list_voices",
+              "get_poetry_short"}
 
 
 class Mcp:
@@ -249,3 +250,14 @@ def test_tampered_or_foreign_links_are_refused(anon, finished):
     other = file_links._serializer().dumps({"g": finished.id, "w": "someone-else"})
     assert anon.get(f"/api/files/{other}").status_code == 404
     assert file_links.read("garbage") is None
+
+
+def test_poetry_short_tools(client, anon):
+    m = Mcp(anon, _mint(client, ["read", "generate"])["token"])
+    made = m.call_json("make_poetry_short", topic="the rain at dusk", language="ur", length_s=45, vocal="male")
+    assert made["short_id"] and made["job_id"]
+    got = m.call_json("get_poetry_short", short_id=made["short_id"])
+    assert [s["key"] for s in got["stages"]][0] == "poem" and got["video"] is None
+    # made over MCP, so it shows in the app's list
+    assert made["short_id"] in [s["id"] for s in client.get("/api/poetry").json()]
+    assert m.call("make_poetry_short", language="ur")["isError"]

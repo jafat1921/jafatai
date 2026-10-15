@@ -495,6 +495,50 @@ def make_ad_campaign(
         return {"campaign_id": out["id"], "title": out["title"], **_job(db.get(Job, out["job"]["id"])),
                 "next": "When the job is done, search_library for the ads (tag 'ad')"}
 
+
+@tool("generate", title="Make a Poetry Short")
+def make_poetry_short(
+    ctx: Context,
+    topic: Annotated[str, Field(max_length=500, description="What the poem is about (or give poem)")] = "",
+    poem: Annotated[str, Field(max_length=4000, description="Your own poem, used word for word")] = "",
+    language: Annotated[str, Field(pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$")] = "ur",
+    title: Annotated[str, Field(max_length=200)] = "",
+    mood: Annotated[str, Field(max_length=200)] = "",
+    style: Annotated[str, Field(max_length=300, description="Music style tags for the singer")] = "",
+    vocal: Literal["female", "male"] = "female",
+    length_s: Annotated[float, Field(ge=30, le=90)] = 60,
+    character: Annotated[str, Field(max_length=500, description="Short description of the person on screen")] = "",
+    character_id: str | None = None,
+    setting: Annotated[str, Field(max_length=600)] = "",
+    aspect: Literal["9:16", "16:9", "1:1"] = "9:16",
+    quality: Literal["draft", "final"] = "draft",
+) -> dict:
+    """A poem sung by ACE-Step, timed line by line and cut to slow cinematic scenes with the verses burned in.
+    Runs straight through (no review stops); takes 15-30 minutes. Follow it with get_poetry_short."""
+    from app.api.poetry import CreateIn, create_short
+
+    with acting(ctx, "generate") as (db, cur):
+        out = create_short(CreateIn(topic=topic, poem=poem, language=language, title=title, mood=mood, style=style,
+                                    vocal=vocal, length_s=length_s, character=character, character_id=character_id,
+                                    setting=setting, aspect=aspect, quality=quality, review=False), db=db, cur=cur)
+        return {"short_id": out["id"], "title": out["title"], "job_id": (out["job"] or {}).get("id"),
+                "next": "get_poetry_short until status is done, then get_media on video.media_id"}
+
+
+@tool("read", title="Get a Poetry Short")
+def get_poetry_short(ctx: Context, short_id: str) -> dict:
+    """Where a Poetry Short is: each stage's status, the poem, and the finished video once rendered."""
+    from app.api.poetry import get_short
+
+    with acting(ctx, "read") as (db, cur):
+        s = jsonable_encoder(get_short(short_id, db=db, cur=cur))
+        o = s.get("outputs") or {}
+        return {"short_id": s["id"], "title": s["title"], "status": s["status"], "stage": s["stage"],
+                "stages": [{k: st.get(k) for k in ("key", "status", "detail")} for st in s["stages"]],
+                "poem": s["poem"]["lyrics"],
+                "video": {k: o.get(k) for k in ("media_id", "duration_s", "width", "height")} if o else None,
+                **({"job": _job(db.get(Job, s["job"]["id"]))} if s.get("job") else {})}
+
 # ---------------------------------------------------------------- jobs
 
 @tool("read", title="Get a job")

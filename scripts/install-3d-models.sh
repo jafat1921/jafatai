@@ -3,6 +3,7 @@
 #
 #   ./scripts/install-3d-models.sh                  # check ComfyUI, download the models, restart, check the nodes
 #   ./scripts/install-3d-models.sh --update-comfy   # also bring ComfyUI core up to date first (needs >= 0.34)
+#   ./scripts/install-3d-models.sh --multiview      # also Pixal3D multi-view (four pictures in, ~5.6 GB more)
 #   ./scripts/install-3d-models.sh --dry-run        # show what it would do
 #
 # Models (all from Comfy-Org's repackaged repos, none gated):
@@ -12,13 +13,15 @@
 #   DINOv3 ViT-L (Meta, DINOv3 License: commercial use allowed, no ITAR/military end uses)
 #                                          clip_vision/dino_v3_L_naf_fp32.safetensors
 #   BiRefNet (MIT, background removal)    background_removal/birefnet.safetensors
+#   MoGe-2 (Microsoft, MIT)               geometry_estimation/moge_2_vitl_normal_fp16.safetensors (camera FOV for Pixal3D)
+#   --multiview: Pixal3D multi-view (MIT)  diffusion_models/pixal3d_multiview_int8_convrot.safetensors
 # The ComfyUI integration drops nvdiffrast/nvdiffrec, the non-commercial parts of the original TRELLIS pipeline.
 #
 # Safe to re-run: files with the right size are skipped and partial downloads resume.
 # Env: COMFY_ROOT, COMFY_VENV, COMFY_URL (default http://127.0.0.1:8188), HF_TOKEN (optional, raises rate limits).
 set -euo pipefail
 
-DRY=0 RESTART=1 UPDATE=0
+DRY=0 RESTART=1 UPDATE=0 MULTIVIEW=0
 COMFY_URL="${COMFY_URL:-http://127.0.0.1:8188}"
 NEED_MAJOR=0 NEED_MINOR=34
 
@@ -27,7 +30,8 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY=1 ;;
     --no-restart) RESTART=0 ;;
     --update-comfy) UPDATE=1 ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    --multiview) MULTIVIEW=1 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
   shift
@@ -102,7 +106,9 @@ FILES=(
   "Comfy-Org/TRELLIS.2|vae/trellis_2_texture_vae_bf16.safetensors|vae"
   "Comfy-Org/Pixal3D|clip_vision/dino_v3_L_naf_fp32.safetensors|clip_vision"
   "Comfy-Org/BiRefNet|background_removal/birefnet.safetensors|background_removal"
+  "Comfy-Org/MoGe|geometry_estimation/moge_2_vitl_normal_fp16.safetensors|geometry_estimation"
 )
+(( MULTIVIEW )) && FILES+=("Comfy-Org/Pixal3D|diffusion_models/pixal3d_multiview_int8_convrot.safetensors|diffusion_models")
 AUTH=()
 [[ -n "${HF_TOKEN:-}" ]] && AUTH=(-H "Authorization: Bearer $HF_TOKEN")
 

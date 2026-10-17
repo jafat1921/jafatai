@@ -309,7 +309,9 @@ def narrate(ctx, p: dict, out: Path, work: Path) -> dict:
     for i, page in enumerate(pages):
         n = len(page["lines"])
         files = [Path(s["out"]) for s in segs[k:k + n]]
-        gaps = [gap_line] * (n - 1) + [0.0]
+        # a line's pause_after is silence after its audio: outside its end time, inside the page (v28d)
+        gaps = [(gap_line if j < n - 1 else 0.0) + float(ln.get("pause_after") or 0.0)
+                for j, ln in enumerate(page["lines"])]
         t, times = 0.0, []
         for ln, d, g in zip(rows[k:k + n], durs[k:k + n], gaps):
             # a marked line comes back marked, so the video's captions carry the aerab too
@@ -451,6 +453,34 @@ def finished_audio(db: Session, workspace_id: str, job_id: str) -> Job:
     return a
 
 
+def pages_track(res: dict, keys: list[str], gap: float) -> dict:
+    """The narration as if the book were only `keys`, in that order: each page's own file then gap_page,
+    the same shape as a story_audio result so plan_video reads it unchanged (audio_from "pages")."""
+    by_key = {p["key"]: p for p in res["pages"]}
+    t, spans = 0.0, []
+    for k in keys:
+        end = t + by_key[k]["duration"] + gap
+        spans.append({"key": k, "start": round(t, 3), "end": round(end, 3)})
+        t = end
+    return {"pages": [by_key[k] for k in keys], "full": {"duration": round(t, 3), "pages": spans}}
+
+
+def pages_audio(p: dict, src: Path, keys: list[str], work: Path, tick=None) -> Path:
+    """The video's soundtrack from the kept pages' own files with gap_page after each, and the narration's
+    bed looped under it at the narration's level when there is one."""
+    voice = work / "pages.wav"
+    dl._render_timeline([src / f"{k}.mp3" for k in keys], [float(p.get("gap_page") or 0.0)] * len(keys), voice,
+                        tick=tick)
+    if not p.get("bed"):
+        return voice
+    bed = get_settings().data_dir / p["bed"]
+    if not bed.is_file():
+        raise StoryError("The narration's music bed is gone from the Library; make the video with use_music false")
+    dst = work / "pages_music.mp3"
+    mix_music(voice, bed, dst, work, p.get("music_level") or "soft", tick=tick)
+    return dst
+
+
 def plan_video(res: dict, title_s: float, end_s: float, max_seconds: float | None) -> dict:
     """Which pages play and where everything sits: a Short keeps whole pages from the start while the
     title card, those pages and the end card still fit in max_seconds."""
@@ -502,6 +532,8 @@ def queue_video(db: Session, cur, req: dict) -> Job:
     known = {p["key"] for p in res["pages"]}
     pics: dict[str, str] = {}
     videos: list[str] = []
+    effects = {pg["key"]: pg["effect"] for pg in req["pages"] if pg.get("effect")}
+    bare = [pg["key"] for pg in req["pages"] if pg.get("captions") is False]
     for pg in req["pages"]:
         if pg["key"] not in known:
             raise HTTPException(422, f"Page '{pg['key']}' isn't in the story audio job")
@@ -511,6 +543,22 @@ def queue_video(db: Session, cur, req: dict) -> Job:
         if video:
             videos.append(pg["key"])
     title, end = req.get("title_card"), req.get("end_card")
+    ap = a.payload or {}
+    gap = float((ap.get("request") or {}).get("gap_page", 1.2))
+    bed = None
+    if req.get("audio_from") == "pages":
+        folder = story_dir(a.workspace_id, a.id)
+        files = {p["key"]: p["file"] for p in res["pages"]}
+        gone = [pg["key"] for pg in req["pages"] if not (folder / files[pg["key"]]).is_file()]
+        if gone:
+            raise HTTPException(422, f"Page '{gone[0]}' has no audio of its own in the story audio job any more")
+        res = pages_track(res, [pg["key"] for pg in req["pages"]], gap)
+        if req["use_music"]:
+            g = db.get(Generation, ap.get("music_generation_id") or "")
+            path = generation_file(g) if g is not None else None
+            if path is None or not path.is_file():
+                raise HTTPException(422, "That narration's music bed is gone; set use_music to false")
+            bed = g.file_path
     plan = plan_video(res, float(title["seconds"]) if title else 0.0, float(end["seconds"]) if end else 0.0,
                       req.get("max_seconds"))
     missing = [s["key"] for s in plan["segments"] if s["kind"] == "page" and s["key"] not in pics]
@@ -528,7 +576,10 @@ def queue_video(db: Session, cur, req: dict) -> Job:
     job = Job(workspace_id=cur.workspace_id, type=VIDEO_JOB, message="Waiting for a worker · Story video",
               payload={"audio_job": a.id, "audio_file": "full_music.mp3" if req["use_music"] else "full.mp3",
                        "aspect": aspect, "pictures": pics, "videos": videos, "title_card": title, "end_card": end,
-                       "captions": req["captions"], "language": (a.payload or {}).get("language"), "plan": plan,
+                       "captions": req["captions"], "effects": effects, "bare_pages": bare,
+                       "audio_from": req.get("audio_from") or "full", "gap_page": gap, "bed": bed,
+                       "music_level": ((ap.get("request") or {}).get("music") or {}).get("level"),
+                       "language": (a.payload or {}).get("language"), "plan": plan,
                        "name": f"story_{aspect.replace(':', 'x')}",
                        "created_by": {"user_id": cur.id, "flow": "story_video"}})
     db.add(job)
@@ -609,6 +660,16 @@ def chapter_rows(plan: dict) -> list[dict]:
             for i, c in enumerate(ch)]
 
 
+def burned_cues(plan: dict, bare) -> list[dict]:
+    """The captions to burn: every cue except those on a page sent with captions false."""
+    bare = set(bare or ())
+    if not bare:
+        return plan["cues"]
+    secs = {s["key"]: s["seconds"] for s in plan["segments"] if s["kind"] == "page"}
+    skip = [(c["start"], c["start"] + secs[c["key"]]) for c in plan["chapters"] if c["key"] in bare]
+    return [c for c in plan["cues"] if not any(a - 1e-6 <= c["start"] < b for a, b in skip)]
+
+
 def handle_video(ctx) -> dict:
     job = ctx.job
     p = job.payload or {}
@@ -628,8 +689,13 @@ def handle_video(ctx) -> dict:
     preview = out / f"{name}_preview.mp4"
     segs = plan["segments"]
     videos = set(p.get("videos") or [])
+    effects = p.get("effects") or {}
     t0 = time.monotonic()
     try:
+        if p.get("audio_from") == "pages":
+            ctx.progress(0.02, "Joining the pages' audio")
+            audio = pages_audio(p, audio.parent, [s["key"] for s in segs if s["kind"] == "page"], work,
+                                tick=lambda: ctx.progress(0.02, "Joining the pages' audio"))
         clips, durs = [], []
         for i, s in enumerate(segs):
             msg = f"Drawing part {i + 1} of {len(segs)}"
@@ -640,8 +706,10 @@ def handle_video(ctx) -> dict:
             tick = lambda i=i, msg=msg: ctx.progress(0.03 + 0.62 * i / len(segs), msg)  # noqa: E731
             clips.append(c)
             durs.append(frames / FPS)
+            effect = effects.get(s["key"]) if s["kind"] == "page" else None
             if s["kind"] == "page" and s["key"] in videos:
-                video_clip(get_settings().data_dir / p["pictures"][s["key"]], c, frames, aspect, tick=tick)
+                video_clip(get_settings().data_dir / p["pictures"][s["key"]], c, frames, aspect, tick=tick,
+                           effect=effect, lead=i == 0)
                 continue
             if s["kind"] == "page":
                 img = picture_frame(_open(p["pictures"][s["key"]]), aspect)
@@ -655,11 +723,11 @@ def handle_video(ctx) -> dict:
                 img = end_frame(aspect, (p.get("end_card") or {}).get("text") or "The End", language)
             still = work / f"s{i:04d}.png"
             img.save(still)
-            clip(still, c, frames, aspect, zoom=s["kind"] != "end", tick=tick)
+            clip(still, c, frames, aspect, zoom=s["kind"] != "end", tick=tick, effect=effect, lead=i == 0)
             still.unlink(missing_ok=True)
         ctx.progress(0.7, "Joining the pages")
         joined = work / "joined.mp4"
-        cues = plan["cues"] if p.get("captions") else []
+        cues = burned_cues(plan, p.get("bare_pages")) if p.get("captions") else []
         mt.join(clips, durs, audio, plan, joined, "16" if cues else "20",
                 tick=lambda: ctx.progress(0.75, "Joining the pages"))
         burned = mt.finish(joined, work, dst, aspect=aspect, language=language, cues=cues,

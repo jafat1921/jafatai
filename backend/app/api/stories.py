@@ -39,6 +39,8 @@ class StoryLine(BaseModel):
     speaker: str = Field(min_length=1, max_length=60)
     text: str = Field(min_length=1, max_length=1000)
     emotion: Literal["happy", "sad", "excited", "scared", "angry", "whisper", "calm"] | None = None
+    pause_after: float = Field(0, ge=0, le=10, description="Seconds of silence after this line (v28d); the "
+                                                           "line's end time leaves it out, its page's span keeps it")
 
 
 class StoryPage(BaseModel):
@@ -92,6 +94,9 @@ class StoryPicture(BaseModel):
     key: str = Key
     media_id: str = Field(min_length=1, max_length=64,
                           description="A finished Library picture or video (its item id); a clip is fitted to the page")
+    captions: bool = Field(True, description="False: no caption box on this page (the .srt still has its lines)")
+    effect: Literal["welcome", "pop", "reveal", "fade"] | None = Field(
+        None, description="How the page comes in; none is the usual slow zoom (v28d)")
 
 
 class TitleCard(BaseModel):
@@ -109,6 +114,9 @@ class StoryVideoIn(BaseModel):
     audio_job: str = Field(min_length=1, max_length=64)
     aspect: Literal["16:9", "9:16"] = "16:9"
     use_music: bool = True
+    audio_from: Literal["full", "pages"] = Field(
+        "full", description="pages: the sent pages' own audio joined in the order sent, gap_page between, the "
+                            "bed laid under the new track (v28d)")
     pages: list[StoryPicture] = Field(min_length=1, max_length=200)
     title_card: TitleCard | None = None
     end_card: EndCard | None = None

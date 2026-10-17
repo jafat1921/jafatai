@@ -12,6 +12,7 @@ from PIL import Image
 from app import audio_analysis as aa
 from app import audio_edit as ae
 from app import brand_render as br
+from app import montage as mt
 from app import stories, venv_runner, voice_gallery, voices
 from app.config import get_settings
 from app.db import SessionLocal
@@ -496,6 +497,210 @@ def test_video_page_must_be_a_picture_or_video(client, monkeypatch, tmp_path):
     assert r.status_code == 422 and "picture or video" in r.json()["detail"]
     body["pages"][0]["media_id"] = "nope"
     assert client.post("/api/stories/video", json=body).status_code == 422
+
+
+# ---------------------------------------------------------------- pauses, bare pages, effects (v28d)
+
+def test_pause_after_is_a_gap_after_the_line(client, monkeypatch):
+    base = narrate(client, monkeypatch)["result"]
+    book = [{"key": "p1", "lines": [{**BOOK["pages"][0]["lines"][0], "pause_after": 1.5},
+                                    {**BOOK["pages"][0]["lines"][1], "pause_after": 0.8}]},
+            BOOK["pages"][1]]
+    res = narrate(client, monkeypatch, pages=book)["result"]
+    a, b = base["pages"][0]["lines"], res["pages"][0]["lines"]
+    # the first line ends where it did; the next one starts 1.5 s later and keeps its length
+    assert b[0]["end"] == pytest.approx(a[0]["end"], abs=0.02)
+    assert b[1]["start"] == pytest.approx(a[1]["start"] + 1.5, abs=0.03)
+    assert b[1]["end"] - b[1]["start"] == pytest.approx(a[1]["end"] - a[1]["start"], abs=0.02)
+    # the last line's pause stays on its page: the page file, its span and everything after move by 2.3 s
+    assert res["pages"][0]["duration"] == pytest.approx(base["pages"][0]["duration"] + 2.3, abs=0.05)
+    s0, s1 = res["full"]["pages"]
+    assert s0["end"] == pytest.approx(base["full"]["pages"][0]["end"] + 2.3, abs=0.05) and s1["start"] == s0["end"]
+    assert res["full"]["duration"] == pytest.approx(base["full"]["duration"] + 2.3, abs=0.05)
+    assert res["pages"][1]["lines"] == base["pages"][1]["lines"]
+    plan = stories.plan_video(res, 0.0, 0.0, None)
+    assert plan["cues"][2]["start"] == pytest.approx(s1["start"], abs=0.001)
+
+
+@pytest.mark.parametrize("pause, ok", [(0, True), (10, True), (-0.1, False), (10.5, False)])
+def test_pause_after_validation(client, pause, ok):
+    pages = [{"key": "p1", "lines": [{"speaker": "narrator", "text": "Hi", "pause_after": pause}]}]
+    r = client.post("/api/stories/audio", json={**BOOK, "pages": pages})
+    assert r.status_code == (202 if ok else 422), r.text
+    if not ok:
+        assert "pause_after" in str(r.json()["detail"])
+
+
+KEYS = ["intro", "title", "p1", "p2", "end", "lesson", "q1", "a1", "q5", "a5"]
+
+
+def test_any_page_keys_kept_in_the_callers_order(client, monkeypatch):
+    pages = [{"key": k, "lines": [{"speaker": "narrator", "text": f"Page {k}."}]} for k in KEYS]
+    res = narrate(client, monkeypatch, pages=pages)["result"]
+    assert [p["key"] for p in res["pages"]] == KEYS and [s["key"] for s in res["full"]["pages"]] == KEYS
+    assert [p["file"] for p in res["pages"]][:2] == ["intro.mp3", "title.mp3"]
+    plan = stories.plan_video(res, 0.0, 0.0, None)
+    assert [c["key"] for c in plan["chapters"]] == KEYS
+
+
+def test_bare_pages_drop_only_their_captions():
+    res = {"pages": [{"key": k, "lines": [{"start": 0.0, "end": 1.0, "text": k}, {"start": 1.5, "end": 2.0,
+                                                                                    "text": k + "!"}]}
+                     for k in ("intro", "p1", "q1")],
+           "full": {"duration": 9.0, "pages": [{"key": "intro", "start": 0.0, "end": 3.0},
+                                               {"key": "p1", "start": 3.0, "end": 6.0},
+                                               {"key": "q1", "start": 6.0, "end": 9.0}]}}
+    plan = stories.plan_video(res, 2.0, 0.0, None)
+    assert stories.burned_cues(plan, []) == plan["cues"]
+    kept = stories.burned_cues(plan, ["p1"])
+    assert [c["text"] for c in kept] == ["intro", "intro!", "q1", "q1!"]
+    assert stories.burned_cues(plan, ["intro", "p1", "q1"]) == []
+
+
+def test_effect_filters():
+    plain = mt.still_filter(90, "16:9")
+    assert "zoompan=z='1+0.06*on/89'" in plain and "pad=" not in plain and "fade=" not in plain
+    welcome = mt.still_filter(90, "16:9", effect="welcome")
+    # grows in over the first 18 frames from 0.85 (z = 1 on the padded still), then the usual zoom
+    assert welcome.startswith("pad=") and "0x1f1a14" in welcome
+    assert "if(lt(on,18),(0.85+0.15*(1+2.70158*pow(on/18-1,3)+1.70158*pow(on/18-1,2)))" in welcome
+    assert "(1+0.06*(on-18)/71)" in welcome
+    pop = mt.still_filter(90, "16:9", effect="pop")
+    assert "if(lt(on,12),(0.9+0.1*(" in pop and pop.count("pow(") == 2 and ",1)'" in pop  # then holds
+    reveal = mt.still_filter(90, "16:9", effect="reveal")
+    assert "zoompan=z='1'" in reveal and "fade=t=in:st=0:d=0.5:color=white" in reveal
+    fade = mt.still_filter(90, "16:9", effect="fade")
+    assert "zoompan=z='1'" in fade and "fade=" not in fade  # the cross-fade from the page before is it
+    assert "fade=t=in:st=0:d=0.4," in mt.still_filter(90, "16:9", effect="fade", lead=True)
+    # a clip already moves: welcome and pop add nothing, reveal still comes in from white
+    assert mt.clip_fade("welcome") == mt.clip_fade("pop") == mt.clip_fade(None) == ""
+    assert "color=white" in mt.clip_fade("reveal")
+
+
+def test_welcome_peaks_a_touch_over_and_settles():
+    # the easeOutBack the welcome expression evaluates, frame by frame
+    s = [0.85 + 0.15 * (1 + 2.70158 * (u - 1) ** 3 + 1.70158 * (u - 1) ** 2) for u in (n / 18 for n in range(19))]
+    assert s[0] == pytest.approx(0.85) and s[-1] == pytest.approx(1.0) and 1.0 < max(s) < 1.03
+
+
+@needs_ffmpeg
+def test_video_with_effects_and_a_bare_page(client, monkeypatch, tmp_path):
+    pages = [{"key": k, "lines": [{"speaker": "narrator", "text": f"Page {k}."}]}
+             for k in ("intro", "title", "p1", "q1", "a1")]
+    out = narrate(client, monkeypatch, pages=pages)
+    still = pictures(client, 1)[0]
+    clip = upload_clip(client, tmp_path, 1.0)
+    graphs = []
+    real = mt.ff
+
+    def spy(args, tick=None):
+        if "-vf" in args:
+            graphs.append(args[args.index("-vf") + 1])
+        return real(args, tick)
+    monkeypatch.setattr(mt, "ff", spy)
+    r = client.post("/api/stories/video", json={
+        "audio_job": out["id"], "aspect": "16:9", "use_music": False,
+        "pages": [{"key": "intro", "media_id": clip, "effect": "welcome"},
+                  {"key": "title", "media_id": still, "effect": "welcome", "captions": False},
+                  {"key": "p1", "media_id": still, "effect": "pop"},
+                  {"key": "q1", "media_id": still, "effect": "reveal"},
+                  {"key": "a1", "media_id": still, "effect": "fade"}]})
+    assert r.status_code == 202, r.text
+    run_all()
+    j = done_job(r.json()["job"]["id"])
+    assert j.status == "done", j.error
+    assert j.payload["effects"]["intro"] == "welcome" and j.payload["bare_pages"] == ["title"]
+    assert [c["key"] for c in j.result["chapters"]] == ["intro", "title", "p1", "q1", "a1"]
+    assert j.result["duration"] == pytest.approx(out["result"]["full"]["duration"], abs=0.15)
+    # the clip (first part) got no extra effect; the stills got theirs
+    assert graphs[0].startswith("setpts=") and "pad=w=" not in graphs[0] and "fade=" not in graphs[0]
+    assert graphs[1].startswith("pad=") and "lt(on,18)" in graphs[1] and "lt(on,12)" in graphs[2]
+    assert "color=white" in graphs[3] and "zoompan=z='1'" in graphs[4]
+    srt = (stories.story_dir(j.workspace_id, j.id) / j.result["srt"]).read_text(encoding="utf-8")
+    assert "Page title." in srt  # only the burned captions skip the bare page
+
+
+TRAILER = [{"key": "intro", "lines": [{"speaker": "narrator", "text": "Once upon a time."}]},
+           {"key": "p1", "lines": [{"speaker": "narrator", "text": "Pip woke up."}]},
+           {"key": "p2", "lines": [{"speaker": "narrator", "text": "Pip ran outside.", "pause_after": 0.7},
+                                   {"speaker": "Pip", "text": "Snow!"}]},
+           {"key": "cta", "lines": [{"speaker": "narrator", "text": "Read the whole book."}]}]
+
+
+def test_pages_track_joins_the_sent_pages_in_order():
+    res = {"pages": [{"key": k, "duration": d, "lines": [{"start": 0.0, "end": 1.0, "text": k},
+                                                         {"start": 2.0, "end": 2.5, "text": k + "!"}]}
+                     for k, d in (("intro", 3.0), ("p1", 4.0), ("p2", 5.0), ("cta", 2.0))],
+           "full": {"duration": 18.8, "pages": []}}
+    track = stories.pages_track(res, ["p2", "intro", "cta"], 1.2)
+    assert [p["key"] for p in track["pages"]] == ["p2", "intro", "cta"]
+    assert track["full"]["pages"] == [{"key": "p2", "start": 0.0, "end": 6.2},
+                                      {"key": "intro", "start": 6.2, "end": 10.4},
+                                      {"key": "cta", "start": 10.4, "end": 13.6}]
+    assert track["full"]["duration"] == 13.6
+    plan = stories.plan_video(track, 0.0, 0.0, None)
+    assert plan["chapters"] == [{"key": "p2", "start": 0.0}, {"key": "intro", "start": 6.2},
+                                {"key": "cta", "start": 10.4}]
+    # each page's own line times, moved to its new start
+    assert plan["cues"][2] == {"start": 6.2, "end": 7.2, "text": "intro"} and plan["cues"][3]["start"] == 8.2
+    # max_seconds still keeps whole pages: p2 and intro fit in 12 s with a 1 s end card, cta doesn't
+    short = stories.plan_video(track, 0.0, 1.0, 12.0)
+    assert [c["key"] for c in short["chapters"]] == ["p2", "intro"] and short["trimmed"] and short["total"] == 11.4
+
+
+@needs_ffmpeg
+def test_video_audio_from_pages_with_the_bed(client, monkeypatch):
+    out = narrate(client, monkeypatch, pages=TRAILER, music={"prompt": "lullaby", "model": "sa3", "level": "soft"})
+    res = out["result"]
+    by = {p["key"]: p for p in res["pages"]}
+    ids = pictures(client, 2)
+    r = client.post("/api/stories/video", json={
+        "audio_job": out["id"], "aspect": "9:16", "use_music": True, "audio_from": "pages",
+        "pages": [{"key": "p2", "media_id": ids[0]}, {"key": "intro", "media_id": ids[1]},
+                  {"key": "cta", "media_id": ids[0]}]})
+    assert r.status_code == 202, r.text
+    run_all()
+    j = done_job(r.json()["job"]["id"])
+    assert j.status == "done", j.error
+    plan, gap = j.payload["plan"], 1.2
+    want = [by["p2"]["duration"] + gap, by["intro"]["duration"] + gap, by["cta"]["duration"] + gap]
+    assert [s["key"] for s in plan["segments"]] == ["p2", "intro", "cta"]
+    assert [s["seconds"] for s in plan["segments"]] == pytest.approx(want, abs=0.002)
+    starts = [c["start"] for c in j.result["chapters"]]
+    assert [c["key"] for c in j.result["chapters"]] == ["p2", "intro", "cta"]
+    assert starts == pytest.approx([0.0, want[0], want[0] + want[1]], abs=0.002)
+    assert j.result["duration"] == pytest.approx(sum(want), abs=0.15)
+    # p2's second line keeps its pause; intro's line moved to intro's new start
+    assert plan["cues"][1]["start"] == pytest.approx(by["p2"]["lines"][1]["start"], abs=0.002)
+    assert plan["cues"][2]["start"] == pytest.approx(want[0], abs=0.002)
+    srt = (stories.story_dir(j.workspace_id, j.id) / j.result["srt"]).read_text(encoding="utf-8")
+    assert "Pip woke up." not in srt and srt.index("Snow!") < srt.index("Once upon a time.")
+    assert br.video_info(stories.story_dir(j.workspace_id, j.id) / j.result["file"]).has_audio
+
+
+def test_audio_from_pages_needs_each_page_audio(client, monkeypatch):
+    out = narrate(client, monkeypatch, pages=TRAILER)
+    ids = pictures(client, 1)
+
+    def post(keys, **over):
+        return client.post("/api/stories/video", json={"audio_job": out["id"], "use_music": False,
+                                                       "audio_from": "pages",
+                                                       "pages": [{"key": k, "media_id": ids[0]} for k in keys], **over})
+    r = post(["intro", "q9"])
+    assert r.status_code == 422 and "q9" in r.json()["detail"]
+    with SessionLocal() as db:
+        ws = db.get(Job, out["id"]).workspace_id
+    (stories.story_dir(ws, out["id"]) / "cta.mp3").unlink()
+    r = post(["intro", "cta"])
+    assert r.status_code == 422 and "cta" in r.json()["detail"]
+    assert post(["intro"], use_music=True).status_code == 422  # no bed in this one
+    # "full" (and leaving it out) is the old behaviour: every page of the book, on full.mp3's clock
+    assert post(["intro"], audio_from="full").status_code == 422  # p1, p2, cta have no picture
+    r = post(["intro", "p1", "p2", "cta"], audio_from="full")
+    assert r.status_code == 202
+    j = done_job(r.json()["job"]["id"])
+    assert j.payload["audio_from"] == "full" and j.payload["bed"] is None
+    assert j.payload["plan"] == stories.plan_video(out["result"], 0.0, 0.0, None)
 
 
 # ---------------------------------------------------------------- downloads

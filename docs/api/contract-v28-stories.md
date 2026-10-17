@@ -328,3 +328,86 @@ aerab tests use.
 - The marking pass now aligns the LLM's letters with the writer's and keeps the marks wherever they agree, so a line is no longer spoken bare because the model swapped one letter (ي for ی, a dropped ZWNJ, an added tatweel). Under 80% agreement the line is still spoken as written. The spoken letters are always the writer's own.
 - Long lines go to the LLM sentence by sentence, about 700 characters a call, so a book is more, shorter calls than "40 lines a call" above; the text comes back with its spacing exactly as sent.
 - For marking prose yourself, `POST /api/text/aerab` now answers within about 45 s with `complete` / `remaining_chars` (and `coverage`), and `POST /api/text/aerab/jobs` marks a whole book as a job (poll `GET /api/jobs/{id}`; `result` has the `TextAerabOut` fields). Answer (a) above stands otherwise.
+
+## Addendum (v28d): pauses, bare pages, page effects
+
+Four optional request fields; a request without them behaves exactly as before, and old jobs re-render the
+same.
+
+### `pause_after` on `POST /api/stories/audio`
+
+`pages[].lines[].pause_after`: seconds of silence after that line, `0`–`10` (default `0`; outside the range is
+a 422 naming `pause_after`). It goes after the line's audio and before whatever follows it: the next line's
+`gap_line`, or, on a page's last line, the page's `gap_page`.
+
+- `pages[].lines[].end` is still the end of the spoken audio; the pause is **not** inside it. The next line on
+  the page starts `gap_line + pause_after` after it.
+- The pause belongs to its page: a last-line pause is in the page file, so `pages[].duration` grows by it,
+  and `full.pages[].end` (and so the next page's `start`) move by it. `full.pages` spans still include
+  `gap_page` as well.
+- Everything later shifts with it: later line times are page-relative (unchanged by a pause on another page),
+  `full.duration` grows by the sum of all pauses, and in the story video the page's span, chapter starts,
+  burned captions and the `.srt` all follow the new spans. A caption ends with its line's audio, so it is
+  off screen during the pause.
+
+### `captions` on a video page
+
+`pages[].captions`: default `true`. `false`: that page has no caption box burned in; the rest of the video is
+unchanged. The `.srt` keeps the page's lines (it is the full transcript, as with `captions: false` on the
+whole video). The top-level `captions: false` still turns them off everywhere.
+
+### `effect` on a video page
+
+`pages[].effect`: `null` (default, the usual slow zoom 1.00 → 1.06), or
+
+| `effect` | Still picture | Video clip |
+|---|---|---|
+| `welcome` | Grows from 0.85 to 1.0 over the first 0.6 s with a small overshoot (easeOutBack, peaks ≈ 1.015), then the usual slow zoom over the rest of the page | Nothing extra |
+| `pop` | Quick 0.9 → 1.0 over 0.4 s with a soft bounce (≈ 1.006), then holds still | Nothing extra |
+| `reveal` | Fades in from white over 0.5 s, then holds still | Fades in from white over 0.5 s |
+| `fade` | No zoom; comes in on the usual 0.4 s cross-fade (from black when it is the very first part) | Same |
+
+While a welcome or pop picture is smaller than the frame, the border is the Atelier ground colour. All of
+it is in the same one-pass ffmpeg graph per page (`zoompan` on the still padded by 1/0.85, plus `fade`), so a
+page costs about what it did. The 0.4 s cross-fades between parts are unchanged for every effect. The
+title and end cards keep their own looks.
+
+### `audio_from` on `POST /api/stories/video`
+
+`audio_from`: `"full"` (default) or `"pages"`.
+
+- `"full"`: unchanged. The video runs on `full.mp3` / `full_music.mp3`, every page of the book, in the book's
+  order.
+- `"pages"` (trailer-style Shorts: non-consecutive pages such as `intro`, `title`, `p3`, `p5`, `p8`, `cta`):
+  - The soundtrack is the sent pages' own files (`<key>.mp3`) joined **in the order sent**, each followed by
+    the narration's `gap_page`. Only the sent pages play; a book page with no entry is left out.
+  - Each page lasts its page `duration` + `gap_page` (a last-line `pause_after` is inside `duration`), so
+    the video runs Σ(duration + gap_page) plus any title and end card.
+  - Captions use each page's `lines[]` times moved to that page's new start (pauses kept); `chapters[].start`
+    and the `.srt` use the new starts.
+  - With `use_music: true` the narration's music bed (the same Library track) is looped with cross-faded
+    seams to the new length and laid under it the way `full_music.mp3` was made (same level, ducking, fades,
+    −16 LUFS). With `use_music: false` it is voice only.
+  - `max_seconds` still keeps whole pages from the start of the **sent** order.
+  - A sent page with no audio of its own (not in the audio job, or its file swept) is a **422** naming the
+    page. `use_music: true` with no bed (or the bed's Library file gone) is a 422.
+
+### Page keys
+
+Keys are any 1–60 of `A-Z a-z 0-9 _ -`, as before: `intro`, `title`, `p1`…`pN`, `end`, `lesson`,
+`q1`, `a1` … `q5`, `a5` all work. Nothing treats `p<n>` keys specially. The pages play in the order they
+were sent to `POST /api/stories/audio` with `audio_from: "full"` (the video request's `pages` order doesn't
+matter then) and in the video request's order with `"pages"`; the
+chapters are named after the keys, and any page, `intro` included, may be a video clip (v28a).
+
+### Tests
+
+`backend/tests/test_stories.py` (v28d): `pause_after` keeps `lines[].end` and moves the next line, the page
+duration, the page span, the next page and `full.duration` by the pauses; 0 and 10 accepted, −0.1 and 10.5 a
+422; `intro`…`a5` keys narrated and planned in the caller's order; `burned_cues` drops only a bare page's
+captions; the filter strings for each effect (and none on a clip for welcome/pop); a real 16:9 render with a
+welcome clip first, welcome, pop, reveal and fade stills and a bare page (graphs, chapters, duration, the
+`.srt` keeping the bare page's line). `audio_from: "pages"`: sent order kept, spans add up to the page
+durations plus `gap_page`, captions moved to the new starts with a pause kept, chapters, the `max_seconds`
+whole-page trim, a real 9:16 render over the bed, the 422 for a missing page or a swept page file, and
+`"full"` giving the same plan as before.

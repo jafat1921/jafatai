@@ -222,6 +222,10 @@ export const shellRoutes: RouteObject[] = [
     const { Studio3DPage } = await import('@/features/model3d/Studio3DPage')
     return <Studio3DPage />
   }),
+  page('3d/library', async () => {
+    const { LibraryPage } = await import('@/features/library/LibraryPage')
+    return <LibraryPage kind="model" />
+  }),
 
   { path: 'image', element: <Navigate to="/image/generate" replace /> },
   { path: 'video', element: <Navigate to="/video/quick" replace /> },

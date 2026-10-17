@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { api, onQuota } from '@/lib/api'
-import type { QuotaRefusal, Usage } from '@/lib/types'
+import type { FeatureKey, QuotaRefusal, Usage } from '@/lib/types'
 import { useToasts } from '@/stores/toasts'
 import { useMe } from './useAuth'
 import { qk } from './keys'
@@ -20,6 +20,13 @@ export function useUsage({ watch = false }: { watch?: boolean } = {}) {
     staleTime: 30_000,
     refetchInterval: watch ? 60_000 : false,
   })
+}
+
+// the shell keeps the usage fresh; until it has answered (or on an older server) a feature counts as on,
+// and the server still refuses what the package switches off
+export function useFeature(key: FeatureKey) {
+  const { data } = useUsage()
+  return data?.features?.[key] !== false
 }
 
 export const fmtMinutes = (n: number) => n.toLocaleString('en-GB', { maximumFractionDigits: n < 10 ? 1 : 0 })

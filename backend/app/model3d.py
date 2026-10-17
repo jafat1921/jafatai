@@ -8,7 +8,14 @@ pixal3d_multiview_to_3d. The engine and quality only change the graph's inputs.
 params["model3d"] holds source_id (the picture, or the front view), views {front, left, back, right} for the
 multi-view graph, and for a text start picture {generation_id, media_id, status}: the image the job waits
 for (run_in_job) before it can run.
+
+A turntable (part 3) is recorded in the browser and uploaded as an ordinary video item whose generation
+carries params.model3d_of; the model's own generation then holds turntable_id, thumb_from and thumb_v.
 """
+import hashlib
+import logging
+import subprocess
+import uuid
 from pathlib import Path
 
 from PIL import Image
@@ -23,6 +30,8 @@ DEFAULT_ENGINE = "pixal3d"
 VIEWS = ("front", "left", "back", "right")
 # working pictures made for a model (a text start) live with it, out of the Library grid (contract v37)
 PART_HOME = "3d"
+
+log = logging.getLogger("mixai.model3d")
 
 # Final is the official workflow's own settings; Draft trades detail for roughly half the time and VRAM
 QUALITY = {
@@ -137,3 +146,30 @@ def run_in_job(ctx, gen) -> None:
     job.result = None
     db.commit()
 
+
+
+# ---------------------------------------------------------------- turntables
+
+# browsers record WebM; H.264 in MP4 is what phones, socials and Safari play
+TURNTABLE_ENC = ["-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+                 "-r", "30", "-movflags", "+faststart"]
+
+
+def webm_to_mp4(got) -> bool:
+    """Swap a received WebM for an MP4 in place (path, type, name, size, hash). Keeps the WebM when ffmpeg
+    can't: a turntable that only plays in some browsers beats no turntable."""
+    from app import reel as rl
+
+    dst = got.path.with_name(f".turntable-{uuid.uuid4().hex}.mp4")
+    try:
+        rl.run_ff(["-i", str(got.path), *TURNTABLE_ENC, str(dst)], timeout=300)
+    except (rl.FFmpegError, OSError, subprocess.SubprocessError) as e:
+        dst.unlink(missing_ok=True)
+        log.warning("turntable stays WebM: %s", e)
+        return False
+    got.path.unlink(missing_ok=True)
+    got.path, got.media_type = dst, "video/mp4"
+    got.filename = f"{Path(got.filename or 'turntable').stem}.mp4"
+    data = dst.read_bytes()
+    got.size, got.sha256 = len(data), hashlib.sha256(data).hexdigest()
+    return True

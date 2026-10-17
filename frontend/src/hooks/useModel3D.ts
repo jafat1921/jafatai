@@ -18,3 +18,23 @@ export function useMake3D() {
     },
   })
 }
+
+// part 3: what the viewer records or snaps goes back to the Library
+export function useTurntable(mediaId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (video: Blob) => api.models3d.turntable(mediaId, video),
+    onSuccess: (res) => {
+      upsertMedia(qc, res.item)
+      upsertMedia(qc, res.model)
+    },
+  })
+}
+
+export function useModelThumbnail(mediaId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (picture: Blob) => api.models3d.thumbnail(mediaId, picture),
+    onSuccess: (model) => upsertMedia(qc, model),
+  })
+}

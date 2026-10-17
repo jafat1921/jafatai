@@ -115,6 +115,7 @@ import type {
   EstimateResult,
   Make3DRequest,
   Make3DResponse,
+  Turntable3DResult,
   PromptEnhanceRequest,
   PromptEnhanceResult,
   MediaKind,
@@ -925,6 +926,16 @@ export const api = {
   // contract v40: 3D Studio
   models3d: {
     make: (body: Make3DRequest) => post<Make3DResponse>('/3d/make', body),
+    turntable: async (id: string, video: Blob) => {
+      const form = new FormData()
+      form.append('file', video, video.type.includes('mp4') ? 'turntable.mp4' : 'turntable.webm')
+      return (await (await send(`/3d/${id}/turntable`, { method: 'POST', body: form })).json()) as Turntable3DResult
+    },
+    thumbnail: async (id: string, picture: Blob) => {
+      const form = new FormData()
+      form.append('file', picture, 'thumbnail.png')
+      return (await (await send(`/3d/${id}/thumbnail`, { method: 'POST', body: form })).json()) as MediaItem
+    },
   },
   jobs: {
     list: (q?: { status?: JobStatus; project_id?: string; via?: 'api' }) => get<Job[]>('/jobs', q),

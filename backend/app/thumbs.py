@@ -5,7 +5,8 @@ PNG per tile, and project renders were drawn as <video> (frame 0 of a fade-in is
 next to their file as <stem>.thumb<w>.webp. The worker makes them when a job finishes, uploads make
 them on the spot, and GET /api/media/thumb/{id} makes any that are missing, so older libraries fill
 themselves in as people browse. Audio gets one waveform PNG instead (<stem>.wave.png), whatever the width.
-A 3D model (contract v40) can't be drawn here, so its thumbs are made from the picture it was made from.
+A 3D model (contract v40) can't be drawn here, so its thumbs are made from the picture it was made from,
+until a turntable frame or a viewer snapshot replaces them (set_model_thumb).
 """
 import io
 import logging
@@ -54,12 +55,14 @@ def url_for(g, w: int = DEFAULT) -> str | None:
 
     if g is None or g.status not in READY_STATES or not g.file_path or not has_preview(g.media_type):
         return None
-    return f"/api/media/thumb/{g.id}?w={w}"
+    # a model's thumb can be replaced, and the route caches for a week: the version busts that
+    v = (g.params or {}).get("thumb_v") if (g.media_type or "").startswith("model/") else None
+    return f"/api/media/thumb/{g.id}?w={w}" + (f"&v={v}" if v else "")
 
 
-def _poster(src: Path) -> Image.Image | None:
+def _poster(src: Path, times: tuple[float, ...] = (POSTER_AT, 0.0)) -> Image.Image | None:
     ff = get_settings().ffmpeg_path()
-    for at in (POSTER_AT, 0.0):  # clips shorter than a second have no frame at 1 s
+    for at in times:  # clips shorter than a second have no frame at 1 s
         cmd = [ff, "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", f"{at:.2f}", "-i", str(src),
                "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"]
         try:
@@ -190,6 +193,16 @@ def model_thumbs(g) -> bool:
         log.warning("couldn't make a thumb for %s from %s", g.id, pic, exc_info=True)
         return False
     return True
+
+
+def first_frame(src: Path) -> Image.Image | None:
+    return _poster(src, (0.0,))
+
+
+def set_model_thumb(model: Path, im: Image.Image) -> None:
+    """Replace a GLB's thumbs with im (a turntable's first frame or a snapshot from the viewer)."""
+    for w in SIZES:
+        _save(_shrink(im.copy(), w), thumb_file(model, w))
 
 
 def on_job_finished(db, job) -> None:

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Chip } from '@/components/studio/chip'
 import { SwitchRow } from '@/components/studio/switch-row'
+import { Make3DLink } from '@/components/generate/Make3DLink'
 import { RefAdd, RefThumb } from '@/components/generate/RefSlot'
 import { useBrandKits } from '@/hooks/useBrandKits'
 import { useCreateAds } from '@/hooks/useAds'
@@ -170,7 +171,10 @@ export function AdBriefForm() {
         </span>
         <div className="flex flex-wrap items-start gap-2">
           {products.map((p, i) => (
-            <RefThumb key={p} id={p} label={`Product ${i + 1}`} onRemove={() => setProducts(products.filter((x) => x !== p))} />
+            <div key={p} className="flex flex-col items-center gap-0.5">
+              <RefThumb id={p} label={`Product ${i + 1}`} onRemove={() => setProducts(products.filter((x) => x !== p))} />
+              <Make3DLink start={{ picture: p }} ariaLabel={`Make 3D from product ${i + 1}`} newTab className="px-1.5" />
+            </div>
           ))}
           {products.length < MAX_PRODUCTS && (
             <RefAdd

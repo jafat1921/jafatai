@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Make3DLink } from '@/components/generate/Make3DLink'
 import { Input } from '@/components/ui/input'
 import { ImageSourceField } from '@/components/media/ImageSourceField'
 import { SourceDropZone } from '@/components/media/SourceDropZone'
@@ -62,10 +63,13 @@ function ProductRow({
             placeholder="e.g. matte black 330 ml can, gold ring pull"
           />
         </div>
-        <Button type="button" size="sm" variant="ghost" className="self-start" onClick={onRemove}>
-          <Trash2 aria-hidden />
-          Remove product
-        </Button>
+        <div className="flex flex-wrap gap-1">
+          <Make3DLink start={{ picture: p.media_id }} ariaLabel={`Make 3D from ${name}`} newTab />
+          <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
+            <Trash2 aria-hidden />
+            Remove product
+          </Button>
+        </div>
       </div>
     </li>
   )

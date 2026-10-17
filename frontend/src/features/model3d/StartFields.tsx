@@ -72,10 +72,13 @@ export function ViewSlots({ value, onChange }: { value: Record<View3D, string | 
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <p className="text-small text-studio-muted">Square pictures of one object at the same scale, on a plain or black background. Front and one more at least.</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* two across only when the column itself has room, whatever the window */}
+      <div className="@container min-w-0">
+        <div className="grid min-w-0 grid-cols-1 gap-3 @sm:grid-cols-2">
         {VIEWS.map((v) => (
           <ImageSourceField
             key={v.id}
+            compact
             label={v.label}
             required={v.id === 'front'}
             value={value[v.id]}
@@ -85,6 +88,7 @@ export function ViewSlots({ value, onChange }: { value: Record<View3D, string | 
             pickDescription={`Pick the ${v.label.toLowerCase()} view of the object.`}
           />
         ))}
+        </div>
       </div>
     </div>
   )

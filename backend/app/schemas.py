@@ -1695,3 +1695,9 @@ class Model3DOut(BaseModel):
     picture_job: JobOut | None = None
     # the views a multi-view model is made from, in front, left, back, right order
     views_used: list[str] | None = None
+
+
+class Turntable3DOut(BaseModel):
+    item: MediaItemOut  # the turntable video, a final output in the Library
+    model: MediaItemOut  # the model, with its new thumb_url when the turntable's first frame became it
+    transcoded: bool  # False when it stayed WebM because ffmpeg couldn't make the MP4

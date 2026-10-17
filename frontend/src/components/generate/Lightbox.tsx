@@ -11,6 +11,7 @@ import { seekAudio, togglePlay, usePlayer } from '@/features/audio/sharedAudio'
 import { clock } from '@/lib/audio'
 import { downloadUrl } from '@/lib/media'
 import { AudioDownloadButton } from './AudioDownloads'
+import { Make3DLink } from './Make3DLink'
 import type { MediaKind } from '@/lib/types'
 import { cn, timeAgo } from '@/lib/utils'
 import { announce } from '@/stores/ui'
@@ -279,6 +280,7 @@ function LightboxView({ entries, entry, index, onIndex, onClose, actions, refLab
                   Animate <Kbd>A</Kbd>
                 </Button>
               )}
+              {image && entry.src && entry.mediaId && <Make3DLink start={{ picture: entry.mediaId }} onClick={onClose} />}
               {canCompare && (
                 <Button type="button" size="sm" variant="ghost" aria-pressed={comparing} onClick={toggleCompare}>
                   <Columns2 aria-hidden />

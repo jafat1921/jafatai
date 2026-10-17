@@ -24,6 +24,8 @@ interface Props {
   pickDescription?: string
   // see-through logos read better on a checkerboard than in the darkroom
   checker?: boolean
+  // the small drop tile, for slots laid out in a grid
+  compact?: boolean
   className?: string
 }
 
@@ -41,6 +43,7 @@ export function ImageSourceField({
   globalPaste,
   pickDescription,
   checker,
+  compact,
   className,
 }: Props) {
   const uid = useId()
@@ -66,7 +69,7 @@ export function ImageSourceField({
   }
 
   return (
-    <div className={cn('flex flex-col gap-2', className)} role="group" aria-labelledby={`${uid}-label`}>
+    <div className={cn('flex min-w-0 flex-col gap-2', className)} role="group" aria-labelledby={`${uid}-label`}>
       <div className="flex items-baseline justify-between gap-2">
         <span id={`${uid}-label`} className="section-label">
           {label}
@@ -75,7 +78,7 @@ export function ImageSourceField({
       </div>
       {hint && <p className="-mt-1 text-small text-studio-muted">{hint}</p>}
       {filled ? (
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <figure
             className={cn(
               'relative w-48 max-w-full overflow-hidden rounded-[6px]',
@@ -117,6 +120,8 @@ export function ImageSourceField({
             onAdd={take}
             globalPaste={globalPaste}
             pickDescription={pickDescription}
+            compact={compact}
+            compactLine={`${label} picture`}
           />
           {replacing && (
             <Button type="button" size="sm" variant="ghost" className="self-start" onClick={() => setReplacing(false)}>

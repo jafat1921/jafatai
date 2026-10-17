@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, Clapperboard, Download, IdCard, ImageIcon, LayoutGrid, Mic, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
+import { Make3DLink } from '@/components/generate/Make3DLink'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorState } from '@/components/studio/states'
@@ -67,6 +68,7 @@ export function CharacterPage() {
               {films.length ? <>In {films.map((f) => f.title).join(', ')}</> : 'Not in a film yet. Cast them from a film’s Cast page.'}
             </p>
           </div>
+          {c.portrait && <Make3DLink start={{ character: c.id }} size="md" variant="secondary" ariaLabel={`Make 3D model of ${c.name}`} />}
           <Button asChild variant="secondary">
             <a href={api.characters.packUrl(c.id)} download>
               <Download aria-hidden />

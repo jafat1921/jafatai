@@ -1,7 +1,9 @@
-import { lazy, Suspense, useId, useState } from 'react'
+import { lazy, Suspense, useId, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { Box, Boxes, Eraser } from 'lucide-react'
+import { Box, Boxes, Eraser, Heart } from 'lucide-react'
 import { ImageSourceField } from '@/components/media/ImageSourceField'
+import { TILE_BTN } from '@/components/generate/TileActions'
+import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { SwitchRow } from '@/components/studio/switch-row'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,11 +18,14 @@ import { useGenEstimate } from '@/hooks/useGenEstimate'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { useMake3D } from '@/hooks/useModel3D'
 import { useModels } from '@/hooks/useModels'
-import { blocked3d, DEFAULT_FORM_3D, ENGINES, engineLock, isModelReady, local3dEstimate, make3dPayload, QUALITIES, sheetViews, STARTS, VIEWS, type Form3D } from '@/lib/model3d'
+import { blocked3d, ENGINES, engineLock, isModelReady, local3dEstimate, make3dPayload, QUALITIES, sheetViews, STARTS, startFromQuery, VIEWS, type Form3D } from '@/lib/model3d'
 import type { Engine3D, Job, MediaItem, Quality3D, Start3D } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { ModelMenu } from './ModelMenu'
+import type { ViewerAsk } from './ModelViewer'
 import { CharacterPick, TwoSteps, ViewSlots } from './StartFields'
+import { useModelActions, type ModelHandlers } from './useModelActions'
 
 // three.js only arrives with the first model on screen
 const ModelViewer = lazy(() => import('./ModelViewer').then((m) => ({ default: m.ModelViewer })))
@@ -30,14 +35,27 @@ const LIST = { kind: 'model' as const }
 export function Studio3DPage() {
   const uid = useId()
   const [params] = useSearchParams()
-  const [form, setForm] = useState<Form3D>(() => {
-    const character = params.get('character')
-    return { ...DEFAULT_FORM_3D, sourceId: params.get('image'), characterId: character, from: character ? 'character' : 'picture' }
-  })
+  const [form, setForm] = useState<Form3D>(() => startFromQuery(params))
   const set = <K extends keyof Form3D>(k: K, v: Form3D[K]) => setForm((f) => ({ ...f, [k]: v }))
   const [notes, setNotes] = useState<string[]>([])
   const [picked, setPicked] = useState<string | null>(null)
   const [steps, setSteps] = useState<{ picture: Job; model: Job } | null>(null)
+  const [ask, setAsk] = useState<ViewerAsk | null>(null)
+  const viewerBox = useRef<HTMLDivElement>(null)
+  const yours = useRef<HTMLHeadingElement>(null)
+  // a tile's turntable / thumbnail runs in the viewer, so the model opens there first
+  const openInViewer = (m: MediaItem, action?: ViewerAsk['action']) => {
+    setPicked(m.id)
+    if (action) setAsk({ n: Date.now(), action })
+    viewerBox.current?.scrollIntoView?.({ block: 'nearest' })
+  }
+  const actions = useModelActions({
+    open: (m) => openInViewer(m),
+    turntable: (m) => openInViewer(m, 'turntable'),
+    thumbnail: (m) => openInViewer(m, 'thumbnail'),
+    // the tile that had focus is gone; land on the list's heading rather than the top of the page
+    afterDelete: () => yours.current?.focus(),
+  })
 
   const make = useMake3D()
   const magic = useMagicPrompt(form.prompt, { kind: 'image' })
@@ -116,7 +134,8 @@ export function Studio3DPage() {
           </ToggleGroup>
         </fieldset>
 
-        <div className="grid gap-4 md:grid-cols-[auto_1fr]">
+        {/* the options keep their width; the start fields take the rest, and drop under below ~1100 px */}
+        <div className="grid min-w-0 gap-4 min-[1100px]:grid-cols-[minmax(0,1fr)_18rem]">
           {form.from === 'picture' && (
             <ImageSourceField
               label="Picture"
@@ -129,7 +148,7 @@ export function Studio3DPage() {
             />
           )}
           {form.from === 'text' && (
-            <div className="flex w-full min-w-0 flex-col gap-2 md:w-96">
+            <div className="flex w-full min-w-0 max-w-96 flex-col gap-2">
               <label htmlFor={`${uid}-p`} className="section-label">
                 Describe one object
               </label>
@@ -154,8 +173,8 @@ export function Studio3DPage() {
           )}
           {form.from === 'views' && <ViewSlots value={form.views} onChange={(v, id) => setForm((f) => ({ ...f, views: { ...f.views, [v]: id } }))} />}
 
-          <div className="flex min-w-0 flex-col gap-3">
-            <fieldset className="flex flex-col gap-1.5" aria-describedby={lock ? `${uid}-lock` : undefined}>
+          <div className="flex min-w-0 flex-col gap-3 min-[1100px]:w-72">
+            <fieldset className="flex min-w-0 flex-col gap-1.5" aria-describedby={lock ? `${uid}-lock` : undefined}>
               <legend className="section-label mb-1.5">Engine</legend>
               <ToggleGroup type="single" aria-label="Engine" value={engineId} onValueChange={(v) => v && set('engine', v as Engine3D)} className="flex w-full max-w-md">
                 {ENGINES.map((e) => {
@@ -231,9 +250,18 @@ export function Studio3DPage() {
 
       <ResultsHeading>Viewer</ResultsHeading>
       {shown?.media_url ? (
-        <Suspense fallback={<Skeleton className="aspect-[4/3] w-full rounded-[8px]" />}>
-          <ModelViewer key={shown.id} url={shown.media_url} title={shown.title || '3D model'} />
-        </Suspense>
+        <div ref={viewerBox} className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <p dir="auto" className="min-w-0 flex-1 truncate font-medium">
+              {shown.title || '3D model'}
+            </p>
+            <FavouriteButton item={shown} h={actions.handlers} />
+            <ModelMenu item={shown} h={actions.handlers} inViewer triggerClassName={cn(TILE_BTN, 'size-8')} />
+          </div>
+          <Suspense fallback={<Skeleton className="aspect-[4/3] w-full rounded-[8px]" />}>
+            <ModelViewer mediaId={shown.id} url={shown.media_url} title={shown.title || '3D model'} ask={ask} onAsked={() => setAsk(null)} />
+          </Suspense>
+        </div>
       ) : (
         <div className="rounded-[8px] border border-studio-border bg-studio-raised">
           <EmptyState icon={<Box />} title={items.length ? 'Your model is on its way' : 'No 3D models yet'}>
@@ -242,7 +270,10 @@ export function Studio3DPage() {
         </div>
       )}
 
-      <ResultsHeading>Your models</ResultsHeading>
+      <h2 ref={yours} tabIndex={-1} className="section-label -mb-3 focus-visible:outline-none">
+        Your models
+      </h2>
+      {actions.error && <ErrorState compact title="That didn’t work" error={actions.error} />}
       {results.isError ? (
         <ErrorState title="Couldn't load your models" error={results.error} onRetry={() => results.refetch()} />
       ) : results.isPending ? (
@@ -255,7 +286,7 @@ export function Studio3DPage() {
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 pb-8">
           {items.map((m) => (
             <li key={m.id}>
-              <ModelTile item={m} selected={m.id === shown?.id} onView={() => setPicked(m.id)} />
+              <ModelTile item={m} selected={m.id === shown?.id} onView={() => setPicked(m.id)} h={actions.handlers} />
             </li>
           ))}
         </ul>
@@ -267,37 +298,52 @@ export function Studio3DPage() {
           Show more
         </button>
       )}
+      {actions.host}
     </GeneratorPage>
   )
 }
 
-const STATUS: Record<string, string> = { queued: 'Waiting', generating: 'Making…', failed: 'Failed', cancelled: 'Cancelled' }
+function FavouriteButton({ item, h }: { item: MediaItem; h: ModelHandlers }) {
+  const on = h.isFavourite(item)
+  return (
+    <Button type="button" size="icon-sm" variant="ghost" aria-pressed={on} aria-label="Favourite" title={on ? 'Remove from favourites' : 'Favourite'} onClick={() => h.favourite(item)}>
+      <Heart aria-hidden className={cn(on && 'fill-current text-studio-accent')} />
+    </Button>
+  )
+}
 
-function ModelTile({ item, selected, onView }: { item: MediaItem; selected: boolean; onView: () => void }) {
+const STATUS: Record<string, string> = {
+  queued: 'Waiting',
+  generating: 'Making…',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+}
+
+function ModelTile({ item, selected, onView, h }: { item: MediaItem; selected: boolean; onView: () => void; h: ModelHandlers }) {
   const done = isModelReady(item)
   const label = STATUS[item.status ?? ''] ?? null
   return (
-    <button
-      type="button"
-      onClick={onView}
-      disabled={!done}
-      aria-pressed={done ? selected : undefined}
-      aria-label={`${item.title || '3D model'}${label ? `, ${label.toLowerCase()}` : ''}`}
-      className={cn(
-        'group flex w-full flex-col overflow-hidden rounded-[8px] border bg-studio-panel text-left shadow-card transition-colors',
-        selected ? 'border-studio-accent ring-2 ring-studio-accent/40' : 'border-studio-border-strong hover:border-studio-border-hover',
-        !done && 'cursor-default',
-      )}
-    >
-      <span className="relative flex aspect-square items-center justify-center bg-studio-raised">
-        {item.thumb_url ? (
-          <img src={item.thumb_url} alt="" loading="lazy" className="size-full object-contain p-2" />
-        ) : (
-          <Boxes aria-hidden className="size-7 text-studio-faint" />
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onView}
+        disabled={!done}
+        aria-pressed={done ? selected : undefined}
+        aria-label={`${item.title || '3D model'}${label ? `, ${label.toLowerCase()}` : ''}`}
+        className={cn(
+          'group flex w-full flex-col overflow-hidden rounded-[8px] border bg-studio-panel text-left shadow-card transition-colors',
+          selected ? 'border-studio-accent ring-2 ring-studio-accent/40' : 'border-studio-border-strong hover:border-studio-border-hover',
+          !done && 'cursor-default',
         )}
-        {label && <span className="absolute left-1.5 top-1.5 rounded-[4px] bg-studio-panel/90 px-1.5 text-small text-studio-muted">{label}</span>}
-      </span>
-      <span className="truncate px-2 py-1.5 text-small">{item.title || '3D model'}</span>
-    </button>
+      >
+        <span className="relative flex aspect-square items-center justify-center bg-studio-raised">
+          {item.thumb_url ? <img src={item.thumb_url} alt="" loading="lazy" className="size-full object-contain p-2" /> : <Boxes aria-hidden className="size-7 text-studio-faint" />}
+          {label && <span className="absolute left-1.5 top-1.5 rounded-[4px] bg-studio-panel/90 px-1.5 text-small text-studio-muted">{label}</span>}
+        </span>
+        <span className="truncate px-2 py-1.5 text-small">{item.title || '3D model'}</span>
+      </button>
+      {/* beside the tile's button, not in it: no button inside a button */}
+      <ModelMenu item={item} h={h} triggerClassName={cn(TILE_BTN, 'absolute right-1.5 top-1.5')} />
+    </div>
   )
 }

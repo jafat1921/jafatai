@@ -280,6 +280,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/image\/studio/, 'Photo Studio'],
   [/^\/assets/, 'Assets'],
   [/^\/characters/, 'Character Studio'],
+  [/^\/3d\/library$/, '3D library'],
   [/^\/3d(\/|$)/, '3D Studio'],
   [/^\/photos/, 'Photos'],
   [/^\/brand-kits/, 'Brand kits'],

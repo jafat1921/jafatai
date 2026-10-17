@@ -4,8 +4,8 @@ status: Active
 created: 2026-10-17
 extends: contract-v39 (packages)
 migration: none (MediaItem.kind and Generation.kind are plain strings)
-updated: 2026-10-17 (addendum: text, character and four-view starts)
-plan: docs/PLAN-m20-3d-studio.md (deliveries 1 and 2)
+updated: 2026-10-17 (addenda: text, character and four-view starts; turntable, thumbnail, Make 3D links)
+plan: docs/PLAN-m20-3d-studio.md (deliveries 1, 2 and 3)
 ---
 
 # Contract v40: 3D Studio
@@ -76,7 +76,7 @@ when the GPU last ran something else. Measured once three runs of an engine and 
 
 - `media_url` serves the GLB as `model/gltf-binary`.
 - `thumb_url` is cut from the source picture (`<stem>.thumb256.webp` / `.thumb512.webp` beside the GLB). A
-  turntable frame replaces it in part 3.
+  turntable frame or a viewer snapshot replaces it (§7).
 - OBJ, STL and USDZ are made in the browser from the GLB (three.js exporters); the server only stores the GLB.
 
 ## 3. The graph
@@ -246,3 +246,73 @@ The dock's **From** control has four choices: Picture | Text | Character | Four 
   `/3d?character=<id>` opens with that character picked.
 - **Four views:** four labelled slots. Front is required; Left, Back and Right are optional.
 - **Engine:** Four views, and a character with a turnaround, fix the engine to Pixal3D and say why.
+
+## 7. Addendum: turntable, thumbnail and Make 3D links (delivery 3)
+
+### `POST /api/3d/{media_id}/turntable` → 201
+
+`multipart/form-data` with one `file` part: the turntable the viewer recorded, WebM or MP4, at most 60 MB.
+
+- `media_id` must be a **finished** model in your studio: 404 for anyone else's id or an item that isn't a
+  model, 409 while the model is still being made. Viewers get 403.
+- Anything but WebM / MP4 is a 415 (sniffed from the bytes, as with every upload); over 60 MB is a 413.
+- A WebM is converted to H.264 MP4 (`yuv420p`, 30 fps, `+faststart`, no audio) so it plays on phones, in
+  Safari and on social sites. If ffmpeg can't, the WebM is kept and `transcoded` is `false`.
+- The video is a new Library item: kind `video`, origin `generated`, `home` null (a final output), titled
+  "<model title> · turntable". Its generation's `params.model3d_of` is the model's media id and
+  `created_by.flow` is `make_3d:turntable`. The model's generation records `params.turntable_id` (the newest) and
+  `params.turntables` (all of them, oldest first).
+- Its **first frame** becomes the model's thumbnail, unless one was set from the viewer (below).
+
+```json
+{"item": {MediaItem, "kind": "video", ...}, "model": {MediaItem, "kind": "model", "thumb_url": "...&v=..."},
+ "transcoded": true}
+```
+
+### `POST /api/3d/{media_id}/thumbnail` → 200
+
+`multipart/form-data`, one `file` part: a PNG, JPEG or WebP picture of the model (the viewer sends a square
+PNG of its current view), at most 10 MB. The same 404 / 409 / 403 rules apply; another type is a 415.
+The answer is the model with its new `thumb_url`.
+
+### Thumbs
+
+- Both sizes are rewritten beside the GLB. The model's generation records `params.thumb_from`
+  (`turntable` | `snapshot`) and `params.thumb_v`.
+- A model's `thumb_url` carries `&v=<thumb_v>` once its thumb has been replaced, because
+  `GET /api/media/thumb/{id}` is cached for a week.
+- A snapshot wins: a later turntable doesn't replace a thumb that was picked by hand.
+
+### Frontend
+
+- **Viewer:** "Make turntable" records one 360° turn over 6 s at 1080×1080 (`canvas.captureStream` +
+  `MediaRecorder`, VP9, else VP8, else plain WebM), with the chosen lighting and the plain-paper or checker
+  background. Progress shows as a progress bar, with Cancel. Without `MediaRecorder` it says so calmly. The
+  saved video is previewed (no autoplay under reduced motion) with a link to the video library.
+  "Use this view as thumbnail" sends a square snapshot of the current camera.
+- **Facing (fix):** Pixal3D and TRELLIS.2 put the picture's front on −Z, so the viewer's camera and lights now
+  start on that side (they started on +Z and showed the back). A **Front / Back** control turns a model the
+  other way round by 180° (per model). Exports bake world matrices, so a Back turn goes into the OBJ, STL and
+  USDZ and Front adds nothing. The turntable always starts from the front.
+- **Wireframe (fix):** drawn as a scene override material in one ink colour, so the downloads keep their
+  textures and a dense, textured mesh can't look unchanged. The switch shows what the viewer reports, is
+  applied once each model is drawn, and stays on across models. Lighting and background also stay.
+- **Make 3D links** open `/3d?from=picture&source=<media id>` or `/3d?character=<id>` (`?image=` still
+  works):
+  - the Lightbox, on Library pictures;
+  - a character's page, once it has a portrait;
+  - Ad Studio's product photo slots and a brand kit's products (in a new tab, so the form isn't lost).
+- They are hidden when `GET /api/account/usage` reports `features["3d"]: false`.
+- **Model actions:** each tile in "Your models", and the open model, has a "⋯" menu (and the open model a
+  favourite button). Every action uses an existing route:
+  - Download: GLB, plus OBJ, STL and USDZ made in the browser.
+  - Make turntable, and use a view as the thumbnail.
+  - Make again: `POST /3d/make` with the same start and settings. A text start reuses the picture it made.
+  - Try the other engine. Not offered for several views.
+  - Show the source picture: `/image/library?open=<id>`.
+  - Open in Library: the new `/3d/library?open=<id>` route.
+  - Favourite, Rename (`PATCH /media/{id}`) and Delete (`DELETE /media/{id}`, a hard delete with a confirm).
+  - Delete keeps the turntable videos unless "Also delete its turntable videos" is ticked. Deletes can't be
+    undone, so there's no undo toast.
+- **Layout:** the options column is 18rem from 1100 px and moves under the start fields below that. The four
+  view slots use the drop zone's `compact` tiles, two across only when their own column has room.

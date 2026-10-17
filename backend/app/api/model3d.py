@@ -1,9 +1,11 @@
 """3D Studio (contract v40): POST /3d/make turns a picture, a prompt, a character or a few views of one object
-into a textured GLB in the Library."""
-from fastapi import APIRouter, Depends, HTTPException
+into a textured GLB in the Library. The turntable and thumbnail routes take what the browser's viewer made."""
+from fastapi import APIRouter, Depends, HTTPException, Request
+from PIL import Image
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from app import brand, prompt_enhance
+from app import brand, prompt_enhance, thumbs, uploads
 from app import library as lib
 from app import model3d as m3
 from app import models_catalog as mc
@@ -11,9 +13,10 @@ from app.api.library import _edit_source, _new_image_item, generate_into
 from app.config import get_settings
 from app.db import get_db
 from app.models import Character, Generation, Job, MediaItem, new_id
-from app.schemas import Model3DIn, Model3DOut
+from app.openapi import multipart
+from app.schemas import MediaItemOut, Model3DIn, Model3DOut, Turntable3DOut
 from app.security import CurrentUser, get_current_user, require_editor
-from app.services import enqueue_generation, get_owned, job_out
+from app.services import READY_STATES, enqueue_generation, get_owned, job_out
 
 router = APIRouter(tags=["3d"])
 
@@ -177,3 +180,113 @@ def _queue_picture(db: Session, cur: CurrentUser, body: Model3DIn, prompt: str):
         params["brand"] = {**params["brand"], "auto": False}
     return _new_image_item(db, cur, lib.short_title(body.prompt or ""), prompt, params, body.seed, None,
                            m3.PART_HOME)
+
+
+# ---------------------------------------------------------------- turntable and thumbnail (part 3)
+
+TURNTABLE_MAX = 60 * uploads.MB
+SNAPSHOT_MAX = 10 * uploads.MB
+
+
+def _sniff_turntable(head: bytes) -> str | None:
+    t = uploads.sniff(head)
+    return t if t in ("video/webm", "video/mp4") else None
+
+
+def _sniff_snapshot(head: bytes) -> str | None:
+    t = uploads.sniff(head)
+    return t if t in ("image/png", "image/jpeg", "image/webp") else None
+
+
+TURNTABLE = uploads.Profile(_sniff_turntable, lambda _t: TURNTABLE_MAX,
+                            lambda _t: HTTPException(413, "A turntable can be at most 60 MB"),
+                            "a WebM or MP4 video up to 60 MB", TURNTABLE_MAX)
+SNAPSHOT = uploads.Profile(_sniff_snapshot, lambda _t: SNAPSHOT_MAX,
+                           lambda _t: HTTPException(413, "A thumbnail can be at most 10 MB"),
+                           "a PNG, JPEG or WebP picture up to 10 MB", SNAPSHOT_MAX)
+
+
+def _ready_model(db: Session, workspace_id: str, media_id: str) -> tuple[MediaItem, Generation]:
+    item = get_owned(db, MediaItem, media_id, workspace_id, "Model")
+    if item.kind != m3.MEDIA_KIND:
+        raise HTTPException(404, "Model not found")
+    g = db.get(Generation, item.generation_id) if item.generation_id else None
+    if g is None or g.status not in READY_STATES or not g.file_path:
+        raise HTTPException(409, "The model isn't finished yet")
+    return item, g
+
+
+def _thumb_from(db: Session, g: Generation, im: Image.Image, source: str) -> None:
+    thumbs.set_model_thumb(get_settings().data_dir / g.file_path, im)
+    g.params = {**(g.params or {}), "thumb_from": source, "thumb_v": new_id()[:8]}
+    db.commit()
+
+
+def _store_turntable(db: Session, cur: CurrentUser, model: MediaItem, mg: Generation, got: uploads.Received,
+                     folder, rel_folder: str) -> tuple[MediaItem, bool]:
+    from app.catalogue import importer
+
+    mp4 = got.media_type == "video/webm" and m3.webm_to_mp4(got)
+    got.title = f"{model.title or '3D model'} · turntable"
+    got.fields = {}
+    item, _ = importer.store(db, cur.workspace_id, cur.id, got, folder, rel_folder)
+    # made in the studio, not brought in: it belongs with the generated work
+    item.origin = "generated"
+    tg = db.get(Generation, item.generation_id)
+    tg.params = {**tg.params, "model3d_of": model.id,
+                 "created_by": {"user_id": cur.id, "flow": "make_3d:turntable"}}
+    # every turntable, so deleting the model can offer to take them with it
+    done = [t for t in (mg.params or {}).get("turntables") or [] if t != item.id]
+    mg.params = {**(mg.params or {}), "turntable_id": item.id, "turntables": [*done, item.id]}
+    db.commit()
+    # the first frame takes over from the source picture, unless someone picked a view by hand
+    if (mg.params or {}).get("thumb_from") != "snapshot":
+        im = thumbs.first_frame(get_settings().data_dir / tg.file_path)
+        if im is not None:
+            with im:
+                _thumb_from(db, mg, im, "turntable")
+    return item, mp4
+
+
+@router.post("/3d/{media_id}/turntable", response_model=Turntable3DOut, status_code=201,
+             openapi_extra=multipart(file_help="The turntable the viewer recorded: WebM or MP4, at most 60 MB"),
+             summary="Save a model's turntable",
+             description="Stores the video as a new Library item (kind `video`, a final output) linked to the "
+                         "model by `params.model3d_of`. A WebM is converted to H.264 MP4 when ffmpeg can. Its "
+                         "first frame becomes the model's thumbnail unless one was chosen from the viewer.")
+async def save_turntable(media_id: str, request: Request, db: Session = Depends(get_db),
+                         cur: CurrentUser = Depends(require_editor)):
+    model, mg = await run_in_threadpool(_ready_model, db, cur.workspace_id, media_id)
+    folder, rel_folder = lib.media_dir(cur.workspace_id)
+    got = await uploads.receive(request, folder, TURNTABLE)
+    try:
+        item, mp4 = await run_in_threadpool(_store_turntable, db, cur, model, mg, got, folder, rel_folder)
+    except BaseException:
+        got.path.unlink(missing_ok=True)
+        raise
+    out = await run_in_threadpool(lambda: (lib.item_out(db, item), lib.item_out(db, model)))
+    return Turntable3DOut(item=out[0], model=out[1], transcoded=mp4)
+
+
+@router.post("/3d/{media_id}/thumbnail", response_model=MediaItemOut,
+             openapi_extra=multipart(file_help="A snapshot of the viewer: PNG, JPEG or WebP, at most 10 MB"),
+             summary="Set a model's thumbnail",
+             description="Replaces the model's Library thumbnail with a picture of it, usually the viewer's "
+                         "current view. Answers with the model and its new `thumb_url`.")
+async def set_thumbnail(media_id: str, request: Request, db: Session = Depends(get_db),
+                        cur: CurrentUser = Depends(require_editor)):
+    model, mg = await run_in_threadpool(_ready_model, db, cur.workspace_id, media_id)
+    folder, _ = lib.media_dir(cur.workspace_id)
+    got = await uploads.receive(request, folder, SNAPSHOT)
+    try:
+        await run_in_threadpool(_snapshot, db, mg, got)
+    finally:
+        got.path.unlink(missing_ok=True)
+    return await run_in_threadpool(lib.item_out, db, model)
+
+
+def _snapshot(db: Session, mg: Generation, got: uploads.Received) -> None:
+    uploads.probe_image(got.path, got.media_type)
+    with Image.open(got.path) as im:
+        im.load()
+        _thumb_from(db, mg, im, "snapshot")

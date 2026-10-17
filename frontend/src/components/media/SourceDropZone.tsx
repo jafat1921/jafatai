@@ -23,6 +23,9 @@ interface Props {
   pickDescription?: string
   // listen for Ctrl+V anywhere on the page, not only while the zone has focus
   globalPaste?: boolean
+  // a small square-ish tile for slots in a grid: an icon, `compactLine`, and the buttons stacked beneath
+  compact?: boolean
+  compactLine?: string
   className?: string
 }
 
@@ -40,6 +43,8 @@ export function SourceDropZone({
   pickTitle,
   pickDescription,
   globalPaste,
+  compact,
+  compactLine,
   className,
 }: Props) {
   const uid = useId()
@@ -97,27 +102,34 @@ export function SourceDropZone({
         }}
         className={cn(
           'flex flex-wrap items-center gap-2 rounded-[8px] border border-dashed border-studio-border-strong bg-studio-raised/70 p-2.5 transition-colors duration-150',
+          compact && 'min-h-36 min-w-0 flex-col justify-center text-center',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-studio-accent',
           over && 'border-studio-accent bg-studio-accent-soft',
         )}
       >
-        <Upload aria-hidden className="size-4 shrink-0 text-studio-accent" />
-        <div className="min-w-0 flex-1">
-          <p className="text-body font-medium">{font ? 'Drop a font file here' : `Drop${multiple ? ' images' : ' an image'} here, or paste with ${modKey}+V`}</p>
-          <p id={`${uid}-hint`} className="text-small text-studio-muted">
-            {hint}
+        <Upload aria-hidden className={cn('shrink-0 text-studio-accent', compact ? 'size-5' : 'size-4')} />
+        {/* basis: at phone width the buttons wrap under the words instead of crushing them */}
+        <div className={cn('min-w-0', compact ? 'w-full' : 'flex-1 basis-48')}>
+          <p className="text-body font-medium">
+            {compact ? (compactLine ?? label) : font ? 'Drop a font file here' : `Drop${multiple ? ' images' : ' an image'} here, or paste with ${modKey}+V`}
+          </p>
+          {/* compact keeps the drop / paste words for screen readers; the tile is too small to show them */}
+          <p id={`${uid}-hint`} className={cn('text-small text-studio-muted', compact && 'sr-only')}>
+            {compact ? `Drop or paste an image (${modKey}+V). ${hint}` : hint}
           </p>
         </div>
-        <Button type="button" variant="secondary" size="sm" onClick={() => input.current?.click()}>
-          <Upload aria-hidden />
-          Upload
-        </Button>
-        {!font && pickMax > 0 && (
-          <Button type="button" variant="secondary" size="sm" onClick={() => setPicking(true)}>
-            <ImagePlus aria-hidden />
-            Pick from Library
+        <div className={cn(compact ? 'flex flex-wrap justify-center gap-1.5' : 'contents')}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => input.current?.click()}>
+            <Upload aria-hidden />
+            Upload
           </Button>
-        )}
+          {!font && pickMax > 0 && (
+            <Button type="button" variant="secondary" size="sm" onClick={() => setPicking(true)} aria-label={compact ? `Pick ${(compactLine ?? label).toLowerCase()} from Library` : undefined}>
+              <ImagePlus aria-hidden />
+              {compact ? 'Pick' : 'Pick from Library'}
+            </Button>
+          )}
+        </div>
         <input
           ref={input}
           type="file"

@@ -119,6 +119,76 @@ export function local3dEstimate(engine: ModelInfo | undefined, id: Engine3D, qua
   return spread(final * QUALITY_FACTOR[quality], engine?.estimate_source === 'measured' ? 'measured' : 'rough')
 }
 
+export type Start3DLink = { picture: string } | { character: string }
+
+// the query Studio3DPage reads (startFromQuery) to open with the picture or character already picked
+export function make3dHref(start: Start3DLink) {
+  if ('character' in start) return `/3d?character=${encodeURIComponent(start.character)}`
+  return `/3d?from=picture&source=${encodeURIComponent(start.picture)}`
+}
+
+/** The form a /3d link opens with: ?character=<id>, or ?source=<media id> (?image= from part 1). */
+export function startFromQuery(params: URLSearchParams): Form3D {
+  const character = params.get('character')
+  if (character) return { ...DEFAULT_FORM_3D, from: 'character', characterId: character }
+  return { ...DEFAULT_FORM_3D, from: 'picture', sourceId: params.get('source') ?? params.get('image') }
+}
+
+// ---------------------------------------------------------------- a made model's record (params.model3d)
+
+interface Record3D {
+  engine?: Engine3D
+  quality?: Quality3D
+  remove_background?: boolean
+  start?: Start3D
+  source_id?: string
+  source_media_id?: string | null
+  character_id?: string
+  views?: Partial<Record<View3D, string>>
+  view_media?: Partial<Record<View3D, string>>
+}
+
+const recordOf = (m: MediaItem) => ((m.params?.model3d ?? null) as Record3D | null)
+
+/** The picture behind a model (the front view for several), as a Library item id. */
+export const sourcePictureOf = (m: MediaItem) => {
+  const r = recordOf(m)
+  return r?.source_media_id ?? r?.view_media?.front ?? null
+}
+
+export const turntablesOf = (m: MediaItem) => ((m.params?.turntables as string[] | undefined) ?? []).filter(Boolean)
+
+/** The other engine to try, or null when several views fix it to Pixal3D. */
+export function otherEngine(m: MediaItem): Engine3D | null {
+  const r = recordOf(m)
+  if (!r || r.views) return null
+  return r.engine === 'trellis2' ? 'pixal3d' : 'trellis2'
+}
+
+/** "Make again": the same start and settings; a text start reuses the picture it made, not a new one. */
+export function remakePayload(m: MediaItem, engine?: Engine3D): Make3DRequest | null {
+  const r = recordOf(m)
+  if (!r) return null
+  const common = { engine: engine ?? r.engine ?? 'pixal3d', quality: r.quality ?? 'final', remove_background: r.remove_background ?? true, title: m.title || undefined }
+  if (r.start === 'character' && r.character_id) return { character_id: r.character_id, ...common }
+  if (r.views) {
+    const vm = r.view_media ?? {}
+    if (!vm.front || Object.keys(vm).length < 2) return null
+    return { views: { ...vm, front: vm.front }, ...common, engine: 'pixal3d' }
+  }
+  const source = r.source_media_id ?? r.source_id
+  return source ? { source_id: source, ...common } : null
+}
+
+export function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export const isModelReady = (m: MediaItem) => (m.status ?? 'ready') === 'ready' || m.status === 'approved'
 
 // "Teapot · 3D" -> "teapot-3d"; a file name that survives every OS

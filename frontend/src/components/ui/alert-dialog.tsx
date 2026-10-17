@@ -11,6 +11,8 @@ interface ConfirmDialogProps {
   confirmLabel: string
   onConfirm: () => void
   tone?: 'primary' | 'danger'
+  // extra controls under the description, e.g. a checkbox
+  children?: React.ReactNode
 }
 
 export function ConfirmDialog({
@@ -21,6 +23,7 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   tone = 'primary',
+  children,
 }: ConfirmDialogProps) {
   return (
     <AlertPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -31,6 +34,7 @@ export function ConfirmDialog({
           <AlertPrimitive.Description className="mt-2 text-body text-studio-muted">
             {description}
           </AlertPrimitive.Description>
+          {children}
           <div className="mt-5 flex justify-end gap-2">
             <AlertPrimitive.Cancel className={buttonVariants({ variant: 'secondary' })}>Cancel</AlertPrimitive.Cancel>
             <AlertPrimitive.Action className={buttonVariants({ variant: tone })} onClick={onConfirm}>

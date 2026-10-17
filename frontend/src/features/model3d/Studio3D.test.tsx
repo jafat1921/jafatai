@@ -8,10 +8,13 @@ import { Studio3DPage } from './Studio3DPage'
 
 // jsdom has no WebGL: the three.js half is replaced by a recorder
 const fakeModel = { name: 'scene' }
+let wireOn = false
 const viewer = {
   load: vi.fn(async () => {}),
   setLighting: vi.fn(),
-  setWireframe: vi.fn(),
+  setWireframe: vi.fn((on: boolean) => void (wireOn = on)),
+  wireframe: vi.fn(() => wireOn),
+  setFacing: vi.fn(),
   rotate: vi.fn(),
   zoom: vi.fn(),
   reset: vi.fn(),
@@ -25,6 +28,7 @@ vi.mock('./exporters', () => ({ exportModel: (...a: unknown[]) => exportModel(..
 
 beforeEach(() => {
   vi.clearAllMocks()
+  wireOn = false
   URL.createObjectURL = vi.fn(() => 'blob:x')
   URL.revokeObjectURL = vi.fn()
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
@@ -124,6 +128,57 @@ describe('3D Studio page', () => {
     await waitFor(() => expect(viewer.load).toHaveBeenLastCalledWith('/api/media/workspaces/w1/media/m2.glb'))
     expect(viewer.dispose).toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Lamp · 3D' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('the wireframe switch shows what is drawn, from load and across models', async () => {
+    api([glb('m1'), glb('m2', { title: 'Lamp · 3D' })])
+    renderAt('/3d', route, seedCatalog)
+    const user = userEvent.setup()
+    const wire = await screen.findByRole('switch', { name: 'Wireframe' })
+    // Off by default, and the viewer is told so once the model is drawn
+    await waitFor(() => expect(viewer.setWireframe).toHaveBeenCalledWith(false))
+    expect(wire).toHaveAttribute('aria-checked', 'false')
+    expect(viewer.wireframe()).toBe(false)
+
+    await user.click(wire)
+    expect(wire).toHaveAttribute('aria-checked', 'true')
+    expect(viewer.wireframe()).toBe(true)
+
+    // the next model opens in a fresh viewer: it's drawn as wire too, and the switch still says so
+    viewer.setWireframe.mockClear()
+    wireOn = false
+    await user.click(screen.getByRole('button', { name: 'Lamp · 3D' }))
+    await waitFor(() => expect(viewer.load).toHaveBeenLastCalledWith('/api/media/workspaces/w1/media/m2.glb'))
+    await waitFor(() => expect(viewer.setWireframe).toHaveBeenLastCalledWith(true))
+    expect(screen.getByRole('switch', { name: 'Wireframe' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('turns a model round with Front / Back, per model', async () => {
+    api([glb('m1'), glb('m2', { title: 'Lamp · 3D' })])
+    renderAt('/3d', route, seedCatalog)
+    const user = userEvent.setup()
+    await waitFor(() => expect(viewer.setFacing).toHaveBeenCalledWith('front'))
+    await user.click(screen.getByRole('radio', { name: 'Back' }))
+    await waitFor(() => expect(viewer.setFacing).toHaveBeenLastCalledWith('back'))
+    expect(screen.getByRole('radio', { name: 'Back' })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('button', { name: 'Lamp · 3D' }))
+    await waitFor(() => expect(viewer.load).toHaveBeenLastCalledWith('/api/media/workspaces/w1/media/m2.glb'))
+    await waitFor(() => expect(viewer.setFacing).toHaveBeenLastCalledWith('front'))
+    expect(screen.getByRole('radio', { name: 'Front' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('four views use compact slots, and the options column can’t be squeezed off the side', async () => {
+    api()
+    renderAt('/3d', route, seedCatalog)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('radio', { name: 'Four views' }))
+    expect(screen.getByText('Front picture')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pick front picture from Library' })).toBeInTheDocument()
+    expect(screen.queryByText(/Drop an image here/)).not.toBeInTheDocument()
+    // jsdom has no layout; the classes are what keep it in place (checked by eye at 1920 to 375 px)
+    const engine = screen.getByRole('group', { name: 'Engine' }).closest('fieldset')!.parentElement!
+    expect(engine).toHaveClass('min-[1100px]:w-72')
+    expect(engine.parentElement).toHaveClass('min-w-0', 'min-[1100px]:grid-cols-[minmax(0,1fr)_18rem]')
   })
 
   it('says so when the model can’t be drawn', async () => {

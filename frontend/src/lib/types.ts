@@ -2043,3 +2043,11 @@ export interface Make3DResponse {
   picture_job?: Job | null
   views_used?: View3D[] | null
 }
+
+// POST /3d/{id}/turntable: the new video item and the model with its new thumb_url
+export interface Turntable3DResult {
+  item: MediaItem
+  model: MediaItem
+  // false when the server kept the WebM (its ffmpeg couldn't make the MP4)
+  transcoded: boolean
+}

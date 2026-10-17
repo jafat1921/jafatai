@@ -1,5 +1,6 @@
 """Grid thumbnails, the /upscales list and deleting an upscaled version (P5)."""
 import io
+from datetime import timedelta
 
 from PIL import Image
 
@@ -135,7 +136,10 @@ def test_upscales_list_covers_image_video_running_and_failed(client, project, fi
     with SessionLocal() as db:
         j = db.get(Job, failing["id"])
         j.status, j.error = "failed", "ComfyUI ran out of memory"
-        db.get(Generation, j.generation_id).status = "failed"
+        fg = db.get(Generation, j.generation_id)
+        fg.status = "failed"
+        # queued and failing can share a clock tick; ids are uuid4, so the tiebreak wouldn't follow insert order
+        fg.created_at += timedelta(seconds=1)
         db.commit()
     rid = _source(project["id"], film)
     video = client.post(f"/api/generations/{rid}/upscale", json={"engine": "quick", "target": "1080p"}).json()

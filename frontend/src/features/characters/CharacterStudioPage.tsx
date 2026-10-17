@@ -102,7 +102,7 @@ export function CharacterStudioPage() {
   const rows = list.data ?? []
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-label="Character Studio">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-label="Character Studio">
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 md:px-8">
         <header className="flex flex-wrap items-center gap-3">
           <UsersRound aria-hidden className="size-5 text-studio-accent-hover" />

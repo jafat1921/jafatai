@@ -25,7 +25,7 @@ export function ImageReferencesPage() {
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : addSources(p, [id]).ids))
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="refs-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="refs-title">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-8">
         <header className="flex flex-col gap-2">
           <h1 id="refs-title" className="flex items-center gap-2 font-display text-title font-semibold">

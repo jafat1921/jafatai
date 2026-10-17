@@ -30,7 +30,7 @@ export function StemsPage() {
   const row = uploads.rows[uploads.rows.length - 1]
 
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="stems-title" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="stems-title" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
         <header>
           <h1 id="stems-title" className="font-display text-title font-semibold">

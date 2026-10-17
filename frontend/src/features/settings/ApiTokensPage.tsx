@@ -284,7 +284,7 @@ export function ApiTokensPage() {
   if (!me?.api_access) return <Navigate to="/settings" replace />
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="tokens-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="tokens-title">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 md:px-8">
         <div>
           <Link to="/settings" className="inline-flex items-center gap-1 text-small text-studio-muted hover:text-studio-text">

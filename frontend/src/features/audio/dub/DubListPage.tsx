@@ -26,7 +26,7 @@ export function DubListPage() {
   const name = (code: string) => languageName(code, engines)
 
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="dub-title" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="dub-title" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 md:px-8">
         <header>
           <h1 id="dub-title" className="font-display text-title font-semibold">

@@ -64,7 +64,7 @@ export function HomePage() {
   const loading = dash.isPending
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="home-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="home-title">
       <div className="mx-auto flex max-w-7xl flex-col gap-7 px-4 py-6 md:px-8">
         <h1 id="home-title" className="sr-only">
           Home

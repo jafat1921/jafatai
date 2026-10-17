@@ -194,7 +194,7 @@ export function BrandKitEditorPage() {
   const { kitId } = useParams()
   const kit = useBrandKit(kitId)
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-label="Brand kit editor">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-label="Brand kit editor">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-10 md:px-8">
         {kit.isPending ? (
           <div className="flex flex-col gap-4 pt-6">

@@ -11,7 +11,7 @@ const STATUS: Record<string, string> = { running: 'Working', review: 'Needs your
 export function PoetryListPage() {
   const list = usePoetryList()
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="poetry-h" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="poetry-h" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex flex-col gap-2">
           <h1 id="poetry-h" className="font-display text-[22px] font-semibold">

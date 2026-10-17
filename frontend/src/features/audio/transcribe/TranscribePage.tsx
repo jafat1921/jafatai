@@ -30,7 +30,7 @@ export function TranscribePage() {
   const show = (id: string) => setParams({ t: id })
 
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="tx-title" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="tx-title" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
         <header>
           <h1 id="tx-title" className="font-display text-title font-semibold">

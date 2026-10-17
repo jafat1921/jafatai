@@ -152,7 +152,7 @@ function DubWorkspace({ dub }: { dub: Dub }) {
   const bulk = (fn: (id: string) => SegmentEdit) => edit(picked.map((s) => fn(s.id)), () => announce(`${picked.length} lines changed.`))
 
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="dub-ws-title" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="dub-ws-title" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 md:px-6">
         <header className="flex flex-wrap items-center gap-2">
           <Link to="/audio/dub" aria-label="All dubs" className="rounded-[4px] p-1 text-studio-muted hover:bg-studio-panel-hover hover:text-studio-text">

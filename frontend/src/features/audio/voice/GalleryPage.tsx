@@ -37,7 +37,7 @@ export function GalleryPage() {
   const pick = (name: GalleryFacetName, value: string) => setFilters((f) => ({ ...f, [name]: f[name] === value ? undefined : value || undefined }))
 
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="gallery-title" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="gallery-title" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
         <header className="min-w-0">
           <h1 id="gallery-title" className="font-display text-title font-semibold">

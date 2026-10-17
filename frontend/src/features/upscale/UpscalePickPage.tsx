@@ -71,7 +71,7 @@ export function UpscalePickPage({ kind }: { kind: VisualKind }) {
   const Icon = kind === 'image' ? ImageUpscale : Maximize2
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="upscale-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="upscale-title">
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 md:px-8">
         <header className="flex flex-col gap-1">
           <h1 id="upscale-title" className="flex items-center gap-2 font-display text-title font-semibold">

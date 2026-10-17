@@ -199,7 +199,7 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
   )
 
   return (
-    <main data-f6-region tabIndex={-1} onKeyDown={onKeyDown} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby={`${uid}-title`}>
+    <main data-f6-region tabIndex={-1} onKeyDown={onKeyDown} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby={`${uid}-title`}>
       <TopBarActions>
         <Button asChild size="sm" variant="primary">
           <Link to={copy.create} onClick={() => here && setInto(kind, here.id)}>

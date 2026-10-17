@@ -22,7 +22,7 @@ export function PhotoStudioPickPage() {
   const open = (m: MediaItem) => navigate(`/image/studio/${m.generation_id}${looks ? '?tab=looks' : ''}`)
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="studio-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="studio-title">
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 md:px-8">
         <header className="flex flex-col gap-1">
           <h1 id="studio-title" className="flex items-center gap-2 font-display text-title font-semibold">

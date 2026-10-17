@@ -42,7 +42,7 @@ export function QueuePage() {
   const running = list.filter((j) => j.status === 'running').length
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="queue-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="queue-title">
       <TopBarActions>
         <Button size="sm" variant="secondary" onClick={() => jobs.refetch()} loading={jobs.isFetching}>
           <RotateCcw aria-hidden />

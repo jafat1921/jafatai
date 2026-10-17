@@ -65,7 +65,7 @@ function ReelReview() {
 // <768 px: review only — read the script, approve or reject generations. Editing needs a wider screen.
 export function ReviewWorkspace({ stage }: { stage: StageId }) {
   return (
-    <main data-f6-region tabIndex={-1} aria-label="Review" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-label="Review" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <p className="flex items-center gap-2 border-b border-studio-border bg-studio-panel px-4 py-2 text-small text-studio-muted">
         <Eye aria-hidden className="size-3.5 shrink-0" />
         Review mode. Editing needs a screen at least 768 px wide.

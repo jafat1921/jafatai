@@ -56,7 +56,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="projects-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="projects-title">
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>

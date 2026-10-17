@@ -49,7 +49,7 @@ export function CharacterPage() {
   const films = c.films ?? []
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-label={`Character: ${c.name}`}>
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-label={`Character: ${c.name}`}>
       <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
         <Link to="/characters" className="inline-flex items-center gap-1 self-start text-small text-studio-muted hover:text-studio-text">
           <ArrowLeft aria-hidden className="size-3.5" />

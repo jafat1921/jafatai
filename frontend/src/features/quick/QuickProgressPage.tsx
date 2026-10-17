@@ -32,7 +32,7 @@ export function QuickProgressPage() {
 
   const title = project.data?.title ?? 'Your video'
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="quick-title">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-labelledby="quick-title">
       <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
         <header className="flex flex-col gap-1">
           <Link to="/video/projects" className="self-start text-small text-studio-muted hover:text-studio-text">

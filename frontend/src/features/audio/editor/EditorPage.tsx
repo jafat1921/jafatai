@@ -317,7 +317,7 @@ function Editor({ item, version }: { item: MediaDetail; version: string | null }
       tabIndex={-1}
       aria-label={`Audio editor: ${title}`}
       onKeyDown={onKeyDown}
-      className="h-full overflow-y-auto focus-visible:outline-none lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:overflow-hidden"
+      className="relative h-full overflow-y-auto focus-visible:outline-none lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:overflow-hidden"
     >
       <div className="flex min-w-0 flex-col gap-3 p-3 md:p-4 lg:overflow-y-auto">
         <header className="flex flex-wrap items-center gap-2">

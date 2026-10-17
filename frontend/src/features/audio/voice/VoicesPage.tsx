@@ -65,7 +65,7 @@ export function VoicesPage() {
   }
 
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="voices-title" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="voices-title" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
         <header className="flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1">

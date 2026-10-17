@@ -63,7 +63,7 @@ export function BrandKitsPage() {
   const start = () => create.mutate(kits.length ? 'New brand' : 'My brand', { onSuccess: (k) => navigate(`/brand-kits/${k.id}`) })
 
   return (
-    <main data-f6-region tabIndex={-1} className="h-full overflow-y-auto focus-visible:outline-none" aria-label="Brand kits">
+    <main data-f6-region tabIndex={-1} className="relative h-full overflow-y-auto focus-visible:outline-none" aria-label="Brand kits">
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 md:px-8">
         <header className="flex flex-wrap items-center gap-3">
           <Stamp aria-hidden className="size-5 text-studio-accent-hover" />

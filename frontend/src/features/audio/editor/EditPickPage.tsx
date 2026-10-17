@@ -17,7 +17,7 @@ export function EditPickPage() {
   const items = flatItems(list.data).filter((m) => m.media_url)
 
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="edit-pick-title" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="edit-pick-title" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6 md:px-8">
         <header className="flex flex-col gap-1">
           <h1 id="edit-pick-title" className="font-display text-title font-semibold">

@@ -10,7 +10,7 @@ import { AdBriefForm } from './AdBriefForm'
 export function AdStudioPage() {
   const list = useAdList()
   return (
-    <main data-f6-region tabIndex={-1} aria-labelledby="ads-h" className="h-full overflow-y-auto focus-visible:outline-none">
+    <main data-f6-region tabIndex={-1} aria-labelledby="ads-h" className="relative h-full overflow-y-auto focus-visible:outline-none">
       <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex flex-col gap-2">
           <h1 id="ads-h" className="font-display text-[22px] font-semibold">

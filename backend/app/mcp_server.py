@@ -27,7 +27,7 @@ from starlette.responses import JSONResponse
 from app import file_links, thumbs
 from app import character_sheet as cs
 from app import library as lib
-from app.api import audio, characters, generations, jobs, library, podcast, projects, quick, stems, videos, voices
+from app.api import audio, characters, generations, jobs, library, model3d, podcast, projects, quick, stems, videos, voices
 from app.api import gallery as gallery_api
 from app.api import transcribe as transcribe_api
 from app.api.quick import QuickIn
@@ -41,8 +41,8 @@ from app.dub.schemas import TranscribeIn
 from app.models import Character, Generation, Job, Transcript
 from app.podcast.schemas import EpisodeIn, Format, Host
 from app.schemas import (AudioGenerateIn, CharacterCreate, CharacterPatch, GenerationCreate, ImageAspect, ImageEditIn,
-                         ImageGenerateIn, JobOut, MediaItemOut, SheetIn, SpeakDesignIn, SpeakIn, UpscaleIn, VideoAspect,
-                         VideoGenerateIn, _iso)
+                         ImageGenerateIn, JobOut, MediaItemOut, Model3DIn, SheetIn, SpeakDesignIn, SpeakIn, UpscaleIn,
+                         VideoAspect, VideoGenerateIn, _iso)
 from app.security import CurrentUser, bearer_token, resolve_token
 from app.services import READY_STATES, job_out
 from app.transcripts import TRANSCRIBE_JOB
@@ -230,6 +230,31 @@ def upscale(
     with acting(ctx, "generate") as (db, cur):
         j = generations.upscale_generation(id, UpscaleIn(engine=engine, target=target), db=db, cur=cur)
         return _job(j)
+
+
+@tool("generate", title="Make a 3D model")
+def make_3d_model(
+    ctx: Context,
+    image_id: Annotated[str, Field(description="A finished picture: media_id or generation_id. One object, whole "
+                                               "in frame, works best")],
+    engine: Annotated[Literal["pixal3d", "trellis2"], Field(description="pixal3d stays true to the picture; "
+                                                                        "trellis2 is the general model")] = "pixal3d",
+    quality: Annotated[Literal["draft", "final"], Field(description="draft is about half the time")] = "final",
+    remove_background: Annotated[bool, Field(description="Cut the subject out first (leave on unless the picture "
+                                                         "is already transparent)")] = True,
+    seed: Annotated[int | None, Field(ge=0, le=2**31 - 1)] = None,
+    part_of: Annotated[str | None, Field(max_length=80, description=PART_OF)] = None,
+) -> dict:
+    """Turn a picture into a textured 3D model (a GLB file). Takes several minutes; returns one job."""
+    with acting(ctx, "generate") as (db, cur):
+        out = model3d.make_3d(Model3DIn(source_id=image_id, engine=engine, quality=quality,
+                                        remove_background=remove_background, seed=seed, part_of=part_of),
+                              db=db, cur=cur)
+        res = {"items": [_item(out.item)], "jobs": [_job(out.job)], "model": out.model_resolved,
+               "next": "wait_for_job with the job_id; the finished job carries a download_url for the .glb"}
+        if out.background_note:
+            res["note"] = out.background_note
+        return res
 
 
 @tool("generate", title="Generate a video")
@@ -595,10 +620,10 @@ async def wait_for_job(
 def search_library(
     ctx: Context,
     query: Annotated[str | None, Field(max_length=200, description="Words in the title or prompt")] = None,
-    kind: Literal["image", "video", "audio"] | None = None,
+    kind: Literal["image", "video", "audio", "model"] | None = None,
     limit: Annotated[int, Field(ge=1, le=60)] = 20,
 ) -> dict:
-    """Find pictures, videos and audio in the Library, newest first."""
+    """Find pictures, videos, audio and 3D models in the Library, newest first."""
     with acting(ctx, "read") as (db, cur):
         page = library.list_media(kind=kind, origin=None, q=query, tag=None, project_id=None, include=None,
                                   folder_id=None, favourite=False, limit=limit, cursor=None, home=None,

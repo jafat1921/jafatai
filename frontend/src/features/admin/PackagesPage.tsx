@@ -27,6 +27,7 @@ const FEATURES: { key: FeatureKey; label: string }[] = [
   { key: 'podcast', label: 'Podcasts' },
   { key: 'dub', label: 'Dubbing' },
   { key: 'stories', label: 'Stories' },
+  { key: '3d', label: '3D Studio' },
   { key: 'api', label: 'API and MCP' },
 ]
 
@@ -36,6 +37,7 @@ const MODEL_TYPES: { type: ModelType; label: string }[] = [
   { type: 'video', label: 'Video' },
   { type: 'upscale', label: 'Upscale' },
   { type: 'audio', label: 'Audio' },
+  { type: 'model3d', label: '3D' },
 ]
 
 const BLANK: PackageInput = {

@@ -18,6 +18,7 @@ AREAS = [
     ("Voice", "Speech: text to speech, the voice library, voice design, transcripts and dubbing."),
     ("Podcast", "Podcast shows and episodes, rendering and the AI video podcast."),
     ("Photo", "Photo Studio develop, restore and background tools, looks and the photo catalogue."),
+    ("3D", "3D Studio: a picture to a textured 3D model (GLB). Results are Library items of kind model."),
     ("Library", "Uploads, the media library, folders, generations and their downloads, templates, models."),
     ("Jobs", "Everything slow runs as a job. Poll GET /api/jobs/{job_id} until it is done."),
 ]
@@ -28,7 +29,7 @@ TAG_AREA = {
     "voices": "Voice", "dialogue": "Voice", "dub": "Voice", "transcribe": "Voice", "stories": "Voice", "podcast": "Podcast",
     "photo": "Photo", "photos": "Photo", "looks": "Photo", "videos": "Video", "poetry": "Video", "ads": "Library", "jobs": "Jobs",
     "library": "Library", "media": "Library", "generations": "Library", "organise": "Library",
-    "mentions": "Library", "models": "Library", "brand": "Library", "prompts": "Library",
+    "mentions": "Library", "models": "Library", "brand": "Library", "prompts": "Library", "3d": "3D",
 }
 
 # path prefixes that beat the router's tag (library.py also serves the Image studio, audio.py the speak route)

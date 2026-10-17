@@ -23,6 +23,7 @@ FEATURES = {
     "podcast": "Podcasts",
     "dub": "Dubbing",
     "stories": "Stories",
+    "3d": "3D Studio",
     "api": "API and MCP",
 }
 # the fallback when the Free row is missing (a fresh test database before seeding, or one deleted by hand)

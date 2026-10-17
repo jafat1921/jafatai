@@ -4,8 +4,11 @@ import type { Character, MediaItem, MediaKind } from './types'
 
 const MB = 1024 * 1024
 
+// what can be uploaded; 3D models are made in the studio, not brought in (yet)
+export type UploadKind = Exclude<MediaKind, 'model'>
+
 // contract-v5: the server checks the bytes too; this just saves a pointless 2 GB upload
-export const UPLOAD_RULES: Record<MediaKind, { types: string[]; exts: string[]; maxBytes: number; label: string }> = {
+export const UPLOAD_RULES: Record<UploadKind, { types: string[]; exts: string[]; maxBytes: number; label: string }> = {
   image: { types: ['image/png', 'image/jpeg', 'image/webp'], exts: ['png', 'jpg', 'jpeg', 'webp'], maxBytes: 40 * MB, label: 'PNG, JPG or WebP up to 40 MB' },
   video: { types: ['video/mp4', 'video/quicktime', 'video/webm'], exts: ['mp4', 'mov', 'webm'], maxBytes: 2048 * MB, label: 'MP4, MOV or WebM up to 2 GB' },
   // contract-v14; .webm stays a video by name, audio/webm is told apart by its type
@@ -17,11 +20,11 @@ export const UPLOAD_RULES: Record<MediaKind, { types: string[]; exts: string[]; 
   },
 }
 
-export const acceptFor = (kinds: MediaKind[]) => kinds.flatMap((k) => [...UPLOAD_RULES[k].types, ...UPLOAD_RULES[k].exts.map((e) => `.${e}`)]).join(',')
+export const acceptFor = (kinds: UploadKind[]) => kinds.flatMap((k) => [...UPLOAD_RULES[k].types, ...UPLOAD_RULES[k].exts.map((e) => `.${e}`)]).join(',')
 
 const KINDS = ['image', 'video', 'audio'] as const
 
-export function kindOfFile(file: File): MediaKind | null {
+export function kindOfFile(file: File): UploadKind | null {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
   // the browser's type first: an .m4a is audio/mp4 and a voice note can be audio/webm
   return KINDS.find((k) => UPLOAD_RULES[k].types.includes(file.type)) ?? KINDS.find((k) => UPLOAD_RULES[k].exts.includes(ext)) ?? null
@@ -30,7 +33,7 @@ export function kindOfFile(file: File): MediaKind | null {
 const sizeText = (bytes: number) => (bytes >= 1024 * MB ? `${(bytes / 1024 / MB).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / MB))} MB`)
 
 /** Plain-language reason a file can't go up, or null when it looks fine. */
-export function checkFile(file: File, allowed: MediaKind[]): string | null {
+export function checkFile(file: File, allowed: UploadKind[]): string | null {
   const kind = kindOfFile(file)
   if (!kind || !allowed.includes(kind)) {
     return `“${file.name}” isn't a file type we can use. Try ${allowed.map((k) => UPLOAD_RULES[k].label).join(', or ')}.`

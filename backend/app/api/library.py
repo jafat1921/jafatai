@@ -57,7 +57,7 @@ def _owned_item(db: Session, media_id: str, workspace_id: str) -> MediaItem:
 
 @router.get("/media", response_model=MediaPage)
 def list_media(
-    kind: Literal["image", "video", "audio"] | None = None,
+    kind: Literal["image", "video", "audio", "model"] | None = None,
     origin: Literal["generated", "upload", "project"] | None = None,
     q: str | None = Query(None, max_length=200),
     tag: str | None = Query(None, max_length=40),

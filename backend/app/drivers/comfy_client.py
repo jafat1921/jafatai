@@ -28,6 +28,7 @@ DOWN_GRACE_S = 90.0
 LOST_MSG = ("ComfyUI no longer has this job: it most likely restarted or crashed "
             "(often out of GPU memory). Check the ComfyUI log, then retry the job.")
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".gif"}
+MODEL_EXT = {".glb", ".gltf", ".obj", ".fbx", ".stl", ".usdz", ".ply"}
 AUDIO_MIME = {".flac": "audio/flac", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
               ".opus": "audio/ogg", ".m4a": "audio/mp4"}
 
@@ -46,7 +47,7 @@ class ComfyOutput:
     filename: str
     subfolder: str
     type: str
-    kind: str  # image | video | audio
+    kind: str  # image | video | audio | model
 
     @property
     def query(self) -> dict:
@@ -75,6 +76,34 @@ def parse_outputs(entry: dict) -> list[ComfyOutput]:
                 else:
                     kind = "video" if key in ("videos", "gifs", "video") or ext in VIDEO_EXT else "image"
                 found.append(ComfyOutput(str(node_id), it["filename"], it.get("subfolder", ""), it.get("type", "output"), kind))
+        found += _model_files(str(node_id), out)
+    return found
+
+
+def _model_files(node_id: str, out: dict) -> list[ComfyOutput]:
+    """3D saves don't agree on a key: SaveGLB reports {"3d": [{filename, subfolder, type}]}, the Load3D
+    family {"result": ["3d/x_00001_.glb", camera, ...]} or the same path with an " [output]" suffix. Any key,
+    any of those shapes, as long as the file name has a 3D extension."""
+    found: list[ComfyOutput] = []
+    seen: set[tuple[str, str]] = set()
+    for key, items in out.items():
+        if key in ("images", "videos", "gifs", "video", "audio") or items is None:
+            continue
+        for it in items if isinstance(items, list) else [items]:
+            if isinstance(it, dict) and it.get("filename"):
+                name, sub, typ = it["filename"], it.get("subfolder", ""), it.get("type", "output")
+            elif isinstance(it, str):
+                path, typ = it, "output"
+                if path.endswith("]") and " [" in path:
+                    path, _, tag = path.rpartition(" [")
+                    typ = tag.rstrip("]")
+                sub, _, name = path.replace("\\", "/").rpartition("/")
+            else:
+                continue
+            if Path(name).suffix.lower() not in MODEL_EXT or typ == "temp" or (sub, name) in seen:
+                continue
+            seen.add((sub, name))
+            found.append(ComfyOutput(node_id, name, sub, typ, "model"))
     return found
 
 

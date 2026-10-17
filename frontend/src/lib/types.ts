@@ -63,7 +63,7 @@ export interface AdminUserPatch {
 // contract v39: packages, the GPU meter and the admin panel
 export type PackagePeriod = 'day' | 'week' | 'month' | 'year' | 'none'
 export type PackageKind = 'standard' | 'demo' | 'custom'
-export type FeatureKey = 'image' | 'video' | 'audio' | 'character' | 'ads' | 'poetry' | 'podcast' | 'dub' | 'stories' | 'api'
+export type FeatureKey = 'image' | 'video' | 'audio' | 'character' | 'ads' | 'poetry' | 'podcast' | 'dub' | 'stories' | '3d' | 'api'
 
 export interface Package {
   id: string
@@ -369,6 +369,8 @@ export type GenerationKind =
   | 'image'
   | 'video'
   | 'upload'
+  // contract v40: 3D Studio
+  | 'model3d'
   // contract-v14: Audio Studio
   | 'song'
   | 'music'
@@ -970,9 +972,10 @@ export interface QuickRecent {
 }
 
 // contract-v5-nav-image.md
-export type MediaKind = 'image' | 'video' | 'audio'
+// 'model' is a 3D Studio result, a GLB (contract v40)
+export type MediaKind = 'image' | 'video' | 'audio' | 'model'
 // what has pixels: upscaling, compare, looks
-export type VisualKind = Exclude<MediaKind, 'audio'>
+export type VisualKind = 'image' | 'video'
 export type MediaOrigin = 'generated' | 'upload' | 'project'
 
 export interface MediaItem {
@@ -1114,7 +1117,8 @@ export interface PromptEnhanceResult {
 }
 
 export interface EstimateQuery {
-  kind: 'image' | 'video' | 'take' | 'upscale' | 'audio'
+  // model3d: model is the engine and speed the quality (draft | final)
+  kind: 'image' | 'video' | 'take' | 'upscale' | 'audio' | 'model3d'
   model?: string
   speed?: string
   count?: number
@@ -1390,7 +1394,7 @@ export interface LlmCheck {
 }
 
 // contract-v6-models.md
-export type ModelType = 'image' | 'edit' | 'video' | 'upscale' | 'audio'
+export type ModelType = 'image' | 'edit' | 'video' | 'upscale' | 'audio' | 'model3d'
 export type ModelBadgeId = 'FAST' | 'BEST' | 'TEXT' | 'NEW' | 'HQ' | 'QUICK' | 'UPSCALE' | 'ANIME' | 'PHOTO' | '2K'
 // contract v32: picker sections for image models, in this order
 export type ModelGroup = 'fast' | 'photo' | 'text' | 'anime' | 'experimental'
@@ -1399,6 +1403,8 @@ export type ModelCapability =
   | 't2i' | 'edit' | 'refs' | 't2v' | 'i2v' | 'flf' | 'audio' | 'longtake' | 'text_render' | 'multi_angle' | 'i2i'
   // contract v14 (audio models)
   | 'song' | 'music' | 'sfx' | 'lyrics' | 'vocals' | 'instrumental' | 'timbre_ref' | 'long'
+  // contract v40
+  | 'image_to_3d'
 
 export interface ModelSpeed {
   id: string
@@ -1999,4 +2005,25 @@ export interface VPEstimate {
   high_s: number
   basis: string
   label: string
+}
+
+// contract-v40-3d-studio.md
+export type Engine3D = 'pixal3d' | 'trellis2'
+export type Quality3D = 'draft' | 'final'
+
+export interface Make3DRequest {
+  source_id: string
+  engine: Engine3D
+  quality: Quality3D
+  remove_background: boolean
+  seed?: number
+  title?: string
+  part_of?: string
+}
+
+export interface Make3DResponse {
+  item: MediaItem
+  job: Job
+  model_resolved: string
+  background_note?: string | null
 }

@@ -6,9 +6,10 @@ const KEY = 'mixai.generate-into'
 function load(): Record<MediaKind, string | null> {
   try {
     const v = JSON.parse(window.localStorage.getItem(KEY) ?? '{}')
-    return { image: typeof v.image === 'string' ? v.image : null, video: typeof v.video === 'string' ? v.video : null, audio: typeof v.audio === 'string' ? v.audio : null }
+    const pick = (k: MediaKind) => (typeof v[k] === 'string' ? (v[k] as string) : null)
+    return { image: pick('image'), video: pick('video'), audio: pick('audio'), model: pick('model') }
   } catch {
-    return { image: null, video: null, audio: null }
+    return { image: null, video: null, audio: null, model: null }
   }
 }
 

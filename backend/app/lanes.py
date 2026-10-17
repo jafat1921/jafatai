@@ -1,6 +1,6 @@
 """Job lanes: which GPU (ComfyUI instance) a job belongs on.
 
-image   -> stills, image edits and image upscales (COMFY_IMAGE_URLS)
+image   -> stills, image edits, image upscales and 3D models (COMFY_IMAGE_URLS)
 video   -> takes, long takes, renders, video upscales (COMFY_VIDEO_URLS)
 audio   -> songs, music, sound effects, speech and voice transcripts; served by both GPU workers, each on
            its own ComfyUI / GPU
@@ -19,6 +19,8 @@ IMAGE_KINDS = frozenset({"portrait", "sheet_view", "keyframe_start", "keyframe_e
                          "establishing", "image"})
 VIDEO_KINDS = frozenset({"take", "tile", "render", "video"})
 AUDIO_KINDS = frozenset({"song", "music", "sfx", "speech"})
+# 3D Studio (contract v40): Pixal3D / TRELLIS.2 run in the image GPU's ComfyUI
+MODEL_KINDS = frozenset({"model3d"})
 GPU_LANES = ("image", "video")
 # TODO: let an idle lane borrow the other GPU (a night of image batches leaves the video GPU unused)
 # job types that always run on the video GPU whatever their generation says (SeedVR2 / FlashVSR segments)
@@ -42,7 +44,7 @@ def lane_for(job_type: str, gen_kind: str | None = None) -> str:
     if job_type in AUDIO_JOB_TYPES:
         return "audio"
     if job_type == "generate":
-        if gen_kind in IMAGE_KINDS:
+        if gen_kind in IMAGE_KINDS or gen_kind in MODEL_KINDS:
             return "image"
         if gen_kind in VIDEO_KINDS:
             return "video"

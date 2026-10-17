@@ -439,6 +439,8 @@ def delete_item(db: Session, item: MediaItem) -> None:
 
 def _dims_of(g: Generation) -> tuple[int | None, int | None, float | None]:
     p = g.params or {}
+    if (g.media_type or "").startswith("model/"):
+        return None, None, None
     if (g.media_type or "").startswith("audio/"):
         from app import reel as rl
 

@@ -69,7 +69,7 @@ def test_catalog_shape_and_defaults(client):
     r = client.get("/api/models")
     assert r.status_code == 200
     rows = r.json()
-    assert {m["type"] for m in rows} == {"image", "edit", "video", "upscale", "audio"}
+    assert {m["type"] for m in rows} == {"image", "edit", "video", "upscale", "audio", "model3d"}
     for t in mc.TYPES:
         if t == "audio":  # one default per generation kind instead (song, music, sfx)
             continue

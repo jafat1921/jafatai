@@ -2,7 +2,8 @@ import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { BrandPurpose } from '@/lib/brand'
 import { checkBrandFile, checkFile, uploadBrandAsset, uploadMedia } from '@/lib/upload'
-import type { MediaItem, MediaKind } from '@/lib/types'
+import type { MediaItem } from '@/lib/types'
+import type { UploadKind } from '@/lib/upload'
 import { announce } from '@/stores/ui'
 import { upsertMedia } from './useMedia'
 
@@ -22,7 +23,7 @@ let seq = 0
  * Uploads files one request each, tracking progress per file. Rejected files never leave the browser.
  * With a brand `purpose` the file goes to the brand-kit endpoint, which also returns warnings.
  */
-export function useUploads(allowed: MediaKind[], onUploaded?: (item: MediaItem, warnings: string[]) => void, purpose?: BrandPurpose) {
+export function useUploads(allowed: UploadKind[], onUploaded?: (item: MediaItem, warnings: string[]) => void, purpose?: BrandPurpose) {
   const qc = useQueryClient()
   const [rows, setRows] = useState<UploadRow[]>([])
   const aborts = useRef(new Map<string, () => void>())

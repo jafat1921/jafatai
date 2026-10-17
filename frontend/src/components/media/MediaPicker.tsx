@@ -56,7 +56,7 @@ function PickerBody({ kind, max, title, description, taken = [], confirmLabel = 
         <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-studio-muted" />
         <Input type="search" placeholder={`Search ${kind}s`} aria-label={`Search ${kind}s`} value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
       </div>
-      <UploadZone compact kinds={[kind]} onUploaded={(m) => !full && setPicked((p) => (p.length < room ? [...p, m] : p))} />
+      {kind !== 'model' && <UploadZone compact kinds={[kind]} onUploaded={(m) => !full && setPicked((p) => (p.length < room ? [...p, m] : p))} />}
       <div className="max-h-[48vh] min-h-40 overflow-y-auto pr-1">
         {list.isPending ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">

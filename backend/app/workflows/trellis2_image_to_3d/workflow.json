@@ -1,0 +1,781 @@
+{
+  "3": {
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Sampler: structure"
+    },
+    "inputs": {
+      "seed": 56,
+      "steps": 12,
+      "cfg": 7.5,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "108",
+        0
+      ],
+      "positive": [
+        "314",
+        0
+      ],
+      "negative": [
+        "315",
+        0
+      ],
+      "latent_image": [
+        "87",
+        0
+      ]
+    }
+  },
+  "12": {
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Sampler: texture"
+    },
+    "inputs": {
+      "seed": 43,
+      "steps": 12,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "318",
+        0
+      ],
+      "positive": [
+        "98",
+        0
+      ],
+      "negative": [
+        "98",
+        1
+      ],
+      "latent_image": [
+        "98",
+        2
+      ]
+    }
+  },
+  "15": {
+    "class_type": "CLIPVisionLoader",
+    "_meta": {
+      "title": "Vision encoder"
+    },
+    "inputs": {
+      "clip_name": "dino_v3_L_naf_fp32.safetensors"
+    }
+  },
+  "18": {
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Sampler: shape"
+    },
+    "inputs": {
+      "seed": 42,
+      "steps": 20,
+      "cfg": 7.5,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "126",
+        0
+      ],
+      "positive": [
+        "91",
+        0
+      ],
+      "negative": [
+        "91",
+        1
+      ],
+      "latent_image": [
+        "91",
+        2
+      ]
+    }
+  },
+  "23": {
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Sampler: upsample"
+    },
+    "inputs": {
+      "seed": 42,
+      "steps": 12,
+      "cfg": 7.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "126",
+        0
+      ],
+      "positive": [
+        "94",
+        0
+      ],
+      "negative": [
+        "94",
+        1
+      ],
+      "latent_image": [
+        "94",
+        2
+      ]
+    }
+  },
+  "40": {
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Model TRELLIS.2"
+    },
+    "inputs": {
+      "unet_name": "trellis_2_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "55": {
+    "class_type": "LoadMoGeModel",
+    "_meta": {
+      "title": "MoGe model"
+    },
+    "inputs": {
+      "model_name": "moge_2_vitl_normal_fp16.safetensors"
+    }
+  },
+  "56": {
+    "class_type": "MoGeInference",
+    "_meta": {
+      "title": "MoGe"
+    },
+    "inputs": {
+      "resolution_level": 9,
+      "fov_x_degrees": 0,
+      "batch_size": 4,
+      "force_projection": true,
+      "apply_mask": true,
+      "moge_model": [
+        "55",
+        0
+      ],
+      "image": [
+        "312",
+        0
+      ],
+      "refine_steps": 3
+    }
+  },
+  "87": {
+    "class_type": "EmptyTrellis2LatentStructure",
+    "_meta": {
+      "title": "Empty structure"
+    },
+    "inputs": {
+      "batch_size": 1
+    }
+  },
+  "91": {
+    "class_type": "Trellis2ShapeStage",
+    "_meta": {
+      "title": "Shape stage"
+    },
+    "inputs": {
+      "positive": [
+        "314",
+        0
+      ],
+      "negative": [
+        "315",
+        0
+      ],
+      "voxel": [
+        "119",
+        0
+      ]
+    }
+  },
+  "92": {
+    "class_type": "VaeDecodeShapeTrellis",
+    "_meta": {
+      "title": "Decode shape"
+    },
+    "inputs": {
+      "samples": [
+        "23",
+        0
+      ],
+      "vae": [
+        "117",
+        0
+      ]
+    }
+  },
+  "93": {
+    "class_type": "VaeDecodeTextureTrellis",
+    "_meta": {
+      "title": "Decode texture"
+    },
+    "inputs": {
+      "samples": [
+        "12",
+        0
+      ],
+      "vae": [
+        "118",
+        0
+      ],
+      "shape_subdivides": [
+        "92",
+        1
+      ]
+    }
+  },
+  "94": {
+    "class_type": "Trellis2UpsampleStage",
+    "_meta": {
+      "title": "Upsample"
+    },
+    "inputs": {
+      "target_resolution": 1536,
+      "positive": [
+        "91",
+        0
+      ],
+      "negative": [
+        "91",
+        1
+      ],
+      "shape_latent": [
+        "18",
+        0
+      ],
+      "vae": [
+        "117",
+        0
+      ]
+    }
+  },
+  "98": {
+    "class_type": "Trellis2TextureStage",
+    "_meta": {
+      "title": "Texture stage"
+    },
+    "inputs": {
+      "positive": [
+        "94",
+        0
+      ],
+      "negative": [
+        "94",
+        1
+      ],
+      "shape_latent": [
+        "23",
+        0
+      ]
+    }
+  },
+  "108": {
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    },
+    "inputs": {
+      "shift": 5,
+      "model": [
+        "125",
+        0
+      ]
+    }
+  },
+  "117": {
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Shape VAE"
+    },
+    "inputs": {
+      "vae_name": "trellis_2_shape_vae_bf16.safetensors"
+    }
+  },
+  "118": {
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Texture VAE"
+    },
+    "inputs": {
+      "vae_name": "trellis_2_texture_vae_bf16.safetensors"
+    }
+  },
+  "119": {
+    "class_type": "VaeDecodeStructureTrellis2",
+    "_meta": {
+      "title": "Decode structure"
+    },
+    "inputs": {
+      "resolution": "32",
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "117",
+        0
+      ]
+    }
+  },
+  "122": {
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    },
+    "inputs": {
+      "image": "viking_wolf_rune_axe.png"
+    }
+  },
+  "125": {
+    "class_type": "RescaleCFG",
+    "_meta": {
+      "title": "RescaleCFG 125"
+    },
+    "inputs": {
+      "multiplier": 0.7,
+      "model": [
+        "199",
+        0
+      ]
+    }
+  },
+  "126": {
+    "class_type": "RescaleCFG",
+    "_meta": {
+      "title": "RescaleCFG 126"
+    },
+    "inputs": {
+      "multiplier": 0.5,
+      "model": [
+        "279",
+        0
+      ]
+    }
+  },
+  "147": {
+    "class_type": "BakeTextureFromVoxel",
+    "_meta": {
+      "title": "Bake texture"
+    },
+    "inputs": {
+      "texture_size": 4096,
+      "mesh": [
+        "196",
+        0
+      ],
+      "voxel_colors": [
+        "93",
+        0
+      ],
+      "reference_mesh": [
+        "92",
+        0
+      ]
+    }
+  },
+  "186": {
+    "class_type": "DecimateMesh",
+    "_meta": {
+      "title": "Decimate"
+    },
+    "inputs": {
+      "target_face_count": 700000,
+      "placement_mode": "midpoint",
+      "mesh": [
+        "241",
+        0
+      ]
+    }
+  },
+  "192": {
+    "class_type": "RemoveBackground",
+    "_meta": {
+      "title": "Remove background"
+    },
+    "inputs": {
+      "bg_removal_model": [
+        "193",
+        0
+      ],
+      "image": [
+        "122",
+        0
+      ]
+    }
+  },
+  "193": {
+    "class_type": "LoadBackgroundRemovalModel",
+    "_meta": {
+      "title": "Background model"
+    },
+    "inputs": {
+      "bg_removal_name": "birefnet.safetensors"
+    }
+  },
+  "196": {
+    "class_type": "UnwrapMesh",
+    "_meta": {
+      "title": "Unwrap"
+    },
+    "inputs": {
+      "segmenter": "pec",
+      "resolution": 4096,
+      "padding": 1,
+      "weld_distance": 0.0002,
+      "mesh": [
+        "238",
+        0
+      ]
+    }
+  },
+  "199": {
+    "class_type": "CFGOverride",
+    "_meta": {
+      "title": "CFGOverride 199"
+    },
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0.667,
+      "end_percent": 1,
+      "model": [
+        "318",
+        0
+      ]
+    }
+  },
+  "202": {
+    "class_type": "GetMeshInfo",
+    "_meta": {
+      "title": "Mesh info"
+    },
+    "inputs": {
+      "mesh": [
+        "92",
+        0
+      ]
+    }
+  },
+  "210": {
+    "class_type": "ApplyTextureToMesh",
+    "_meta": {
+      "title": "Apply textures"
+    },
+    "inputs": {
+      "mesh": [
+        "196",
+        0
+      ],
+      "base_color": [
+        "147",
+        0
+      ],
+      "metallic": [
+        "147",
+        1
+      ],
+      "roughness": [
+        "147",
+        2
+      ],
+      "occlusion": [
+        "233",
+        0
+      ],
+      "normal_map": [
+        "224",
+        0
+      ]
+    }
+  },
+  "224": {
+    "class_type": "BakeNormalMapFromMesh",
+    "_meta": {
+      "title": "Bake normals"
+    },
+    "inputs": {
+      "resolution": 2048,
+      "cage_distance": 0.05,
+      "ignore_backfaces": true,
+      "low_poly": [
+        "196",
+        0
+      ],
+      "high_poly": [
+        "241",
+        0
+      ]
+    }
+  },
+  "233": {
+    "class_type": "BakeAmbientOcclusion",
+    "_meta": {
+      "title": "Bake AO"
+    },
+    "inputs": {
+      "resolution": 1024,
+      "samples": 64,
+      "max_distance": 0.71,
+      "strength": 1,
+      "bias": 0.01,
+      "low_poly": [
+        "196",
+        0
+      ],
+      "high_poly": [
+        "241",
+        0
+      ]
+    }
+  },
+  "238": {
+    "class_type": "MeshSmoothNormals",
+    "_meta": {
+      "title": "Smooth normals"
+    },
+    "inputs": {
+      "crease_angle": 180,
+      "mesh": [
+        "186",
+        0
+      ]
+    }
+  },
+  "241": {
+    "class_type": "RemeshMesh",
+    "_meta": {
+      "title": "Remesh"
+    },
+    "inputs": {
+      "resolution": 768,
+      "sign_mode": "udf",
+      "sign_mode.qef": false,
+      "sign_mode.drop_inverted_components": false,
+      "sign_mode.drop_enclosed_components": false,
+      "band": 1,
+      "project_back": 0,
+      "fix_poles": false,
+      "smooth_iters": 20,
+      "drop_small_components": 0.01,
+      "precluster_max_verts": 20000000,
+      "mesh": [
+        "202",
+        0
+      ]
+    }
+  },
+  "242": {
+    "class_type": "MoGeGeometryToFOV",
+    "_meta": {
+      "title": "Field of view"
+    },
+    "inputs": {
+      "axis": "horizontal",
+      "unit": "degrees",
+      "moge_geometry": [
+        "56",
+        0
+      ]
+    }
+  },
+  "248": {
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch: Remove background"
+    },
+    "inputs": {
+      "switch": true,
+      "on_false": [
+        "122",
+        1
+      ],
+      "on_true": [
+        "192",
+        0
+      ]
+    }
+  },
+  "260": {
+    "class_type": "MeshSmoothNormals",
+    "_meta": {
+      "title": "Smooth final"
+    },
+    "inputs": {
+      "crease_angle": 180,
+      "mesh": [
+        "210",
+        0
+      ]
+    }
+  },
+  "279": {
+    "class_type": "CFGOverride",
+    "_meta": {
+      "title": "CFGOverride 279"
+    },
+    "inputs": {
+      "cfg": 1,
+      "start_percent": 0.769,
+      "end_percent": 1,
+      "model": [
+        "318",
+        0
+      ]
+    }
+  },
+  "285": {
+    "class_type": "MeshToFile3D",
+    "_meta": {
+      "title": "Mesh to GLB"
+    },
+    "inputs": {
+      "mesh": [
+        "260",
+        0
+      ]
+    }
+  },
+  "298": {
+    "class_type": "Pixal3DConditioning",
+    "_meta": {
+      "title": "Pixal3D conditioning"
+    },
+    "inputs": {
+      "camera_angle_x": [
+        "242",
+        0
+      ],
+      "clip_vision_model": [
+        "15",
+        0
+      ],
+      "image": [
+        "312",
+        0
+      ]
+    }
+  },
+  "299": {
+    "class_type": "Trellis2Conditioning",
+    "_meta": {
+      "title": "TRELLIS.2 conditioning"
+    },
+    "inputs": {
+      "clip_vision_model": [
+        "15",
+        0
+      ],
+      "image": [
+        "312",
+        0
+      ]
+    }
+  },
+  "312": {
+    "class_type": "ImageCropToMask",
+    "_meta": {
+      "title": "Crop to subject"
+    },
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "pad_factor": 1.1,
+      "grow_mask": 0,
+      "background": "#000000",
+      "images": [
+        "122",
+        0
+      ],
+      "masks": [
+        "248",
+        0
+      ]
+    }
+  },
+  "314": {
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch: positive"
+    },
+    "inputs": {
+      "switch": false,
+      "on_false": [
+        "298",
+        0
+      ],
+      "on_true": [
+        "299",
+        0
+      ]
+    }
+  },
+  "315": {
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch: negative"
+    },
+    "inputs": {
+      "switch": false,
+      "on_false": [
+        "298",
+        1
+      ],
+      "on_true": [
+        "299",
+        1
+      ]
+    }
+  },
+  "318": {
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "Switch: model"
+    },
+    "inputs": {
+      "switch": false,
+      "on_false": [
+        "319",
+        0
+      ],
+      "on_true": [
+        "40",
+        0
+      ]
+    }
+  },
+  "319": {
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Model Pixal3D"
+    },
+    "inputs": {
+      "unet_name": "pixal3d_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "322": {
+    "class_type": "Save3DAdvanced",
+    "_meta": {
+      "title": "Save 3D"
+    },
+    "inputs": {
+      "filename_prefix": "3d/ComfyUI",
+      "viewport_state": "",
+      "width": 1024,
+      "height": 1024,
+      "model_3d": [
+        "285",
+        0
+      ]
+    }
+  }
+}

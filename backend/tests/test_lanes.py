@@ -24,7 +24,7 @@ from tests.test_autopilot import brain, create, stages  # noqa: F401  (brain is 
 
 @pytest.mark.parametrize("kind,lane", [
     ("portrait", "image"), ("sheet_view", "image"), ("establishing", "image"), ("keyframe_start", "image"),
-    ("keyframe_end", "image"), ("keyframe_mid", "image"), ("image", "image"),
+    ("keyframe_end", "image"), ("keyframe_mid", "image"), ("image", "image"), ("model3d", "image"),
     ("take", "video"), ("video", "video"), ("render", "video"), ("tile", "video"),
     ("song", "audio"), ("music", "audio"), ("sfx", "audio"), ("speech", "audio"),
     ("scene_text", "general"), (None, "general"),

@@ -99,6 +99,8 @@ def _coerce(name: str, spec: dict, value: Any) -> Any:
         raise TemplateError(f"input '{name}' must be a number, got {value!r}") from None
     if kind in ("str", "image"):
         return str(value)
+    if kind == "bool":
+        return value if isinstance(value, bool) else str(value).lower() in ("1", "true", "yes", "on")
     return value
 
 
@@ -198,6 +200,15 @@ def build(name: str, inputs: dict, loras: list[tuple[str, float]] | None = None)
             resolved[key] = images
             continue
 
+        if "switch" in spec:
+            # ComfySwitchNode resolved here rather than on the server: the unused branch is cut off and
+            # pruned, so its weights never load
+            on = bool(spec.get("default") if value is None else value)
+            for title in spec["switch"]:
+                bypass[title] = {0: "on_true" if on else "on_false"}
+            resolved[key] = on
+            continue
+
         if "if_set" in spec:
             # a switch that removes part of the graph (ltx23_ia2v's single_stage drops the second pass)
             on = bool(spec.get("default") if value is None else value)
@@ -227,6 +238,9 @@ def build(name: str, inputs: dict, loras: list[tuple[str, float]] | None = None)
     if drop or bypass:
         remove_nodes(graph, list(dict.fromkeys(drop + list(bypass))), bypass)
 
+    if tpl.manifest.get("prune"):
+        graph = prune(graph, [spec["node"] for spec in tpl.manifest.get("outputs", {}).values()])
+
     if loras:
         point = tpl.manifest.get("lora")
         if not point:
@@ -236,6 +250,19 @@ def build(name: str, inputs: dict, loras: list[tuple[str, float]] | None = None)
 
     _check_links(graph)
     return graph, resolved
+
+
+def prune(graph: dict, output_titles: Iterable[str]) -> dict:
+    """Only the nodes the outputs depend on (a resolved switch leaves the other branch hanging)."""
+    stack = [find_node(graph, t) for t in output_titles]
+    keep: set[str] = set()
+    while stack:
+        nid = stack.pop()
+        if nid in keep:
+            continue
+        keep.add(nid)
+        stack += [v[0] for v in graph[nid]["inputs"].values() if _is_link(v) and v[0] in graph]
+    return {nid: node for nid, node in graph.items() if nid in keep}
 
 
 def output_titles(name: str) -> dict[str, dict]:
@@ -268,6 +295,8 @@ def check_template(name: str, object_info: dict) -> dict:
         for spec in tpl.manifest["inputs"].values()
         for t, f in spec.get("targets", []) + spec.get("slots", [])
     }
+    # switch nodes never reach ComfyUI (build() resolves them)
+    switches = {t for spec in tpl.manifest["inputs"].values() for t in spec.get("switch", [])}
     missing_nodes: set[str] = set()
     missing_models: set[str] = set()
     invalid: list[str] = []
@@ -275,6 +304,8 @@ def check_template(name: str, object_info: dict) -> dict:
     for nid, node in tpl.graph.items():
         cls = node["class_type"]
         title = node.get("_meta", {}).get("title", nid)
+        if title in switches:
+            continue
         info = object_info.get(cls)
         if title in feature_of:
             feature_problems[feature_of[title]] += _node_problems(title, node, info, runtime)

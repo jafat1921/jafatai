@@ -5,6 +5,7 @@ PNG per tile, and project renders were drawn as <video> (frame 0 of a fade-in is
 next to their file as <stem>.thumb<w>.webp. The worker makes them when a job finishes, uploads make
 them on the spot, and GET /api/media/thumb/{id} makes any that are missing, so older libraries fill
 themselves in as people browse. Audio gets one waveform PNG instead (<stem>.wave.png), whatever the width.
+A 3D model (contract v40) can't be drawn here, so its thumbs are made from the picture it was made from.
 """
 import io
 import logging
@@ -44,7 +45,7 @@ def thumb_file(src: Path, w: int) -> Path:
 
 def has_preview(media_type: str | None) -> bool:
     mt = media_type or ""
-    return mt.startswith(("image/", "video/", "audio/"))
+    return mt.startswith(("image/", "video/", "audio/", "model/"))
 
 
 def url_for(g, w: int = DEFAULT) -> str | None:
@@ -126,6 +127,8 @@ def ensure(src: Path, media_type: str | None, w: int = DEFAULT) -> Path | None:
     dest = thumb_file(src, w)
     if dest.is_file():
         return dest
+    if (media_type or "").startswith("model/"):
+        return None  # only model_thumbs() can make these: it knows the source picture
     try:
         # the small one comes from the big one when that already exists: far cheaper than a 4K decode
         base = thumb_file(src, DEFAULT)
@@ -157,7 +160,36 @@ def for_generation(g) -> bool:
 
     if g is None or g.status not in READY_STATES or not g.file_path or not has_preview(g.media_type):
         return False
+    if (g.media_type or "").startswith("model/"):
+        return model_thumbs(g)
     return ensure_all(get_settings().data_dir / g.file_path, g.media_type)
+
+
+def model_thumbs(g) -> bool:
+    """Thumbs beside a GLB, cut from its source picture (a turntable frame replaces them later)."""
+    from app.db import SessionLocal
+    from app.models import Generation
+
+    root = get_settings().data_dir
+    model = root / g.file_path
+    if all(thumb_file(model, w).is_file() for w in SIZES):
+        return True
+    source_id = ((g.params or {}).get("model3d") or {}).get("source_id")
+    with SessionLocal() as db:
+        src = db.get(Generation, source_id) if source_id else None
+        rel = src.file_path if src is not None and src.workspace_id == g.workspace_id else None
+    pic = root / rel if rel else None
+    if pic is None or not pic.is_file():
+        return False
+    try:
+        for w in SIZES:
+            with Image.open(pic) as im:
+                im.draft("RGB", (w, w))
+                _save(_shrink(im, w), thumb_file(model, w))
+    except (OSError, ValueError, Image.DecompressionBombError):
+        log.warning("couldn't make a thumb for %s from %s", g.id, pic, exc_info=True)
+        return False
+    return True
 
 
 def on_job_finished(db, job) -> None:
@@ -185,6 +217,11 @@ def backfill(db, workspace_id: str | None = None, log_to=print) -> tuple[int, in
         if not has_preview(g.media_type):
             continue
         src = root / g.file_path
+        if (g.media_type or "").startswith("model/"):
+            if all(thumb_file(src, w).is_file() for w in SIZES):
+                continue
+            made, failed = (made + 1, failed) if model_thumbs(g) else (made, failed + 1)
+            continue
         if (g.media_type or "").startswith("audio/"):
             if wave_file(src).is_file():
                 continue

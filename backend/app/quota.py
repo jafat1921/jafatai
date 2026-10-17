@@ -12,7 +12,7 @@ from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from app import packages as pk
-from app.lanes import AUDIO_KINDS, IMAGE_KINDS, VIDEO_KINDS
+from app.lanes import AUDIO_KINDS, IMAGE_KINDS, MODEL_KINDS, VIDEO_KINDS
 from app.models import Generation, Job, Package, Subscription, UsageLedger, User, utcnow
 
 # Session.info keys set by security.bind_session
@@ -201,6 +201,8 @@ def features_of(db: Session, job: Job) -> set[str]:
             out.add("video")
         elif gen.kind in AUDIO_KINDS:
             out.add("audio")
+        elif gen.kind in MODEL_KINDS:
+            out.add("3d")
     elif job.lane in ("image", "video", "audio"):
         out.add(job.lane)
     return out

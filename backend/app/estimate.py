@@ -28,7 +28,9 @@ LOAD_S = {"zimage_turbo": 15, "flux2_klein": 12, "qwen_image_2512": 35, "qwen_im
           "qwen_image_21": 40, "chroma1_hd": 30, "wan22_still": 60,
           "ltx23_distilled": 45, "ltx23_hq": 60, "wan22_t2v": 60,
           # audio: guesses until the GPU box has run some (warm rates are the catalog's est_seconds / 30)
-          "ace15_turbo": 8, "sa3_small_music": 5, "sa3_small_sfx": 5, "sa3_medium": 10, "minimax_music3": 20}
+          "ace15_turbo": 8, "sa3_small_music": 5, "sa3_small_sfx": 5, "sa3_medium": 10, "minimax_music3": 20,
+          # 3D: the engine plus two VAEs, DINOv3, BiRefNet (and MoGe for Pixal3D)
+          "pixal3d": 45, "trellis2": 40}
 AUDIO_DEFAULT_S = 30.0
 UPSCALE_TEMPLATES = {
     "video": {"seedvr2": "upscale_seedvr2", "best": "upscale_seedvr2", "flashvsr": "upscale_flashvsr",
@@ -42,7 +44,7 @@ UPSCALE_TEMPLATES = {
 def _template_models() -> dict[str, str]:
     out = {}
     for m in mc.MODELS.values():
-        if m.type == "upscale":
+        if m.type in ("upscale", "model3d"):  # the 3D engines share a graph; sample() reads params.model3d
             continue
         out[m.template] = m.id
         for tpl in m.extra.values():
@@ -82,6 +84,11 @@ def _size(p: dict) -> tuple[int, int] | None:
 def sample(params: dict | None, job_gpu: float | None) -> tuple[str, float, float] | None:
     """(key, megapixels, GPU seconds per unit) for one finished generation, or None."""
     p = params or {}
+    rec = p.get("model3d")
+    if isinstance(rec, dict):
+        gpu = (p.get("comfy") or {}).get("gpu_seconds") or job_gpu
+        engine = rec.get("engine")
+        return (f"{engine}:{rec.get('quality') or 'final'}", 0.0, float(gpu)) if gpu and engine in mc.MODELS else None
     up = p.get("upscale") or {}
     if up.get("template"):
         size = (up.get("width"), up.get("height"))
@@ -172,6 +179,19 @@ def _plan(kind: str, model: str | None, speed: str | None, duration_s: float | N
         key = f"upscale:{tpl}"
         return {"key": key, "load_key": key, "model": tpl, "w": w, "h": h, "rough": rough, "load": load,
                 "video": family == "video"}
+
+    if kind == "model3d":
+        from app import model3d
+
+        m = mc.MODELS.get(model or "") if model else mc.default_for("model3d")
+        if m is None or m.type != "model3d":
+            raise HTTPException(422, f"'{model}' isn't a 3D engine")
+        quality = speed or "final"
+        if quality not in model3d.QUALITY:
+            raise HTTPException(422, "quality is draft or final")
+        return {"key": f"{m.id}:{quality}", "load_key": m.id, "model": m.id, "w": 0, "h": 0,
+                "rough": (m.est_seconds or 300) * model3d.QUALITY_FACTOR[quality], "load": LOAD_S.get(m.id, 40),
+                "video": False}
 
     if kind == "audio":
         m = mc.MODELS.get(model or "") if model and model != mc.AUTO else mc.audio_default("song")

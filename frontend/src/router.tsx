@@ -217,6 +217,12 @@ export const shellRoutes: RouteObject[] = [
     return <CharacterPage />
   }),
 
+  // contract v40: 3D Studio
+  page('3d', async () => {
+    const { Studio3DPage } = await import('@/features/model3d/Studio3DPage')
+    return <Studio3DPage />
+  }),
+
   { path: 'image', element: <Navigate to="/image/generate" replace /> },
   { path: 'video', element: <Navigate to="/video/quick" replace /> },
 

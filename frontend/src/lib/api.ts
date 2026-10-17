@@ -113,6 +113,8 @@ import type {
   Img2ImgRequest,
   EstimateQuery,
   EstimateResult,
+  Make3DRequest,
+  Make3DResponse,
   PromptEnhanceRequest,
   PromptEnhanceResult,
   MediaKind,
@@ -920,6 +922,10 @@ export const api = {
     enhance: (body: PromptEnhanceRequest) => post<PromptEnhanceResult>('/prompts/enhance', body),
   },
   estimate: (q: EstimateQuery) => get<EstimateResult>('/estimate', { ...q }),
+  // contract v40: 3D Studio
+  models3d: {
+    make: (body: Make3DRequest) => post<Make3DResponse>('/3d/make', body),
+  },
   jobs: {
     list: (q?: { status?: JobStatus; project_id?: string; via?: 'api' }) => get<Job[]>('/jobs', q),
     cancel: (id: string) => post<Job>(`/jobs/${id}/cancel`),

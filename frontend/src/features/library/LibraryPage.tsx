@@ -1,6 +1,6 @@
 import { useDeferredValue, useId, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { ChevronRight, Download, Film, Heart, Images, Layers, Loader2, Music, Search, Wand2 } from 'lucide-react'
+import { Box, ChevronRight, Download, Film, Heart, Images, Layers, Loader2, Music, Search, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ApiMadeChip } from '@/components/studio/api-made-chip'
@@ -70,6 +70,17 @@ const COPY: Record<MediaKind, { noun: string; root: string; title: string; label
     blurb: 'Songs, score and sound effects you made or uploaded.',
     empty: 'Make a song, a cue or a sound effect, or upload a WAV, MP3 or FLAC.',
     icon: <Music />,
+  },
+  model: {
+    noun: '3D models',
+    root: 'All 3D models',
+    title: '3D library',
+    label: '3D models',
+    create: '/3d',
+    createLabel: 'Make a 3D model',
+    blurb: 'Every model you made in the 3D Studio.',
+    empty: 'Turn a picture into a 3D model in the 3D Studio, and it lands here.',
+    icon: <Box />,
   },
 }
 
@@ -311,7 +322,7 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
             onApply={applySaved}
           />
 
-          <UploadZone compact kinds={[kind]} />
+          {kind !== 'model' && <UploadZone compact kinds={[kind]} />}
 
           {(notice || zipJob) && (
             <div role="status" className="flex flex-wrap items-center gap-2 rounded-[6px] border border-studio-border bg-studio-raised px-3 py-2 text-small">

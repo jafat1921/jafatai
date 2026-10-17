@@ -4,6 +4,7 @@ import {
   Captions,
   Languages,
   Aperture,
+  Box,
   Boxes,
   Brush,
   Clapperboard,
@@ -79,7 +80,7 @@ export interface MenuSection {
   modelsNote?: string
 }
 
-export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | 'audio' | 'upscale' | 'queue' | 'settings' | 'admin'
+export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | '3d' | 'audio' | 'upscale' | 'queue' | 'settings' | 'admin'
 
 export interface RailItem {
   id: RailId
@@ -189,6 +190,8 @@ export const RAIL_ITEMS: RailItem[] = [
   { id: 'audio', label: 'Audio', icon: Music, to: '/audio/song', menu: AUDIO_MENU },
   // contract-v25: a studio of its own, not a menu under Video
   { id: 'characters', label: 'Characters', icon: UsersRound, to: '/characters' },
+  // contract v40: picture to 3D model, a studio of its own
+  { id: '3d', label: '3D', icon: Box, to: '/3d' },
   { id: 'upscale', label: 'Upscale', icon: ImageUpscale, to: '/image/upscale', menu: UPSCALE_MENU },
   { id: 'queue', label: 'Queue', icon: ListOrdered, to: '/queue' },
 ]
@@ -247,6 +250,7 @@ export function activeRail(pathname: string): RailId | null {
   if (p.startsWith('/video') || p.startsWith('/projects') || p === '/create' || p.startsWith('/quick')) return 'video'
   if (p.startsWith('/audio')) return 'audio'
   if (p.startsWith('/characters')) return 'characters'
+  if (p === '/3d' || p.startsWith('/3d/')) return '3d'
   if (p.startsWith('/assets')) return 'assets'
   if (p.startsWith('/photos')) return 'photos'
   if (p.startsWith('/brand-kits')) return 'brand'
@@ -276,6 +280,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/image\/studio/, 'Photo Studio'],
   [/^\/assets/, 'Assets'],
   [/^\/characters/, 'Character Studio'],
+  [/^\/3d(\/|$)/, '3D Studio'],
   [/^\/photos/, 'Photos'],
   [/^\/brand-kits/, 'Brand kits'],
   [/^\/image\/img2img/, 'Image to image'],

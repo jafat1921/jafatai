@@ -996,7 +996,9 @@
       "qwen_image_2.1_int8_convrot.safetensors",
       "ernie-image-turbo.safetensors",
       "z_image_bf16.safetensors",
-      "Chroma1-HD-fp8mixed.safetensors"
+      "Chroma1-HD-fp8mixed.safetensors",
+      "pixal3d_int8_convrot.safetensors",
+      "trellis_2_int8_convrot.safetensors"
      ]
     ],
     "weight_dtype": [
@@ -1187,7 +1189,9 @@
       "ace_1.5_vae.safetensors",
       "minimax_music3_dav.safetensors",
       "qwen_image_2.1_vae_bf16.safetensors",
-      "flux2-vae-ernie.safetensors"
+      "flux2-vae-ernie.safetensors",
+      "trellis_2_shape_vae_bf16.safetensors",
+      "trellis_2_texture_vae_bf16.safetensors"
      ]
     ]
    }
@@ -4770,8 +4774,20 @@
      "COMFY_AUTOGROW_V3",
      {
       "template": {
-       "input": {"required": {"image": ["IMAGE", {}]}},
-       "names": ["image_1", "image_2", "image_3", "image_4"],
+       "input": {
+        "required": {
+         "image": [
+          "IMAGE",
+          {}
+         ]
+        }
+       },
+       "names": [
+        "image_1",
+        "image_2",
+        "image_3",
+        "image_4"
+       ],
        "min": 0
       }
      }
@@ -4821,5 +4837,2006 @@
   "output": [
    "MODEL"
   ]
+ },
+ "ApplyTextureToMesh": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ],
+    "base_color": [
+     "IMAGE",
+     {}
+    ]
+   },
+   "optional": {
+    "metallic": [
+     "IMAGE",
+     {}
+    ],
+    "roughness": [
+     "IMAGE",
+     {}
+    ],
+    "occlusion": [
+     "IMAGE",
+     {}
+    ],
+    "normal_map": [
+     "IMAGE",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh",
+    "base_color"
+   ],
+   "optional": [
+    "metallic",
+    "roughness",
+    "occlusion",
+    "normal_map"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MESH"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "mesh"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "ApplyTextureToMesh",
+  "display_name": "Apply Texture to Mesh",
+  "description": "Attaches baked texture IMAGEs to a mesh's UV layout for SaveGLB. Feed the SAME mesh you baked",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/texturing",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "BakeAmbientOcclusion": {
+  "input": {
+   "required": {
+    "low_poly": [
+     "MESH",
+     {}
+    ],
+    "high_poly": [
+     "MESH",
+     {}
+    ],
+    "resolution": [
+     "INT",
+     {
+      "default": 1024,
+      "min": 64,
+      "max": 8192,
+      "step": 64
+     }
+    ],
+    "samples": [
+     "INT",
+     {
+      "tooltip": "Rays per texel. More = smoother, slower. Raise if grainy.",
+      "default": 64,
+      "min": 4,
+      "max": 1024,
+      "step": 4
+     }
+    ],
+    "max_distance": [
+     "FLOAT",
+     {
+      "tooltip": "Ray length, as a fraction of the bounding box diagonal. Smaller = tighter, more local occlusion.",
+      "default": 0.5,
+      "min": 0.01,
+      "max": 2.0,
+      "step": 0.01
+     }
+    ],
+    "strength": [
+     "FLOAT",
+     {
+      "tooltip": "Scales the occlusion. >1 darkens, <1 lightens.",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05
+     }
+    ],
+    "bias": [
+     "FLOAT",
+     {
+      "tooltip": "Ray origin lift off the surface, as a fraction of the bounding box diagonal. Raise if even surfaces show dark blotches/holes.",
+      "default": 0.01,
+      "min": 0.0001,
+      "max": 0.2,
+      "step": 0.0005
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "low_poly",
+    "high_poly",
+    "resolution",
+    "samples",
+    "max_distance",
+    "strength",
+    "bias"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "IMAGE"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "occlusion"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "BakeAmbientOcclusion",
+  "display_name": "Bake Ambient Occlusion",
+  "description": "Bakes an ambient-occlusion map from a high-poly mesh into a low-poly's UV layout (white = open, dark = crevices). Feed the UV-unwrapped low_poly and the high_poly it was decimated from. Outputs a grayscale image for Apply Texture To Mesh's occlusion input (packed into the ORM map / occlusionTexture).",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/texturing",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "BakeNormalMapFromMesh": {
+  "input": {
+   "required": {
+    "low_poly": [
+     "MESH",
+     {}
+    ],
+    "high_poly": [
+     "MESH",
+     {}
+    ],
+    "resolution": [
+     "INT",
+     {
+      "display_name": "resolution",
+      "default": 1024,
+      "min": 64,
+      "max": 8192,
+      "step": 64
+     }
+    ],
+    "cage_distance": [
+     "FLOAT",
+     {
+      "tooltip": "Surface search band, as a fraction of the bounding box diagonal. Raise for wrong/missing patches under heavy decimation; lower if it grabs across gaps.",
+      "default": 0.05,
+      "min": 0.001,
+      "max": 0.5,
+      "step": 0.001
+     }
+    ],
+    "ignore_backfaces": [
+     "BOOLEAN",
+     {
+      "tooltip": "Skip high-poly surfaces facing away from the texel, so crevices/enclosed spaces don't grab the opposite wall. Disable only if the high-poly winding is inconsistent.",
+      "default": true
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "low_poly",
+    "high_poly",
+    "resolution",
+    "cage_distance",
+    "ignore_backfaces"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "IMAGE"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "normal_map"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "BakeNormalMapFromMesh",
+  "display_name": "Bake Normal Map from Mesh",
+  "description": "Bakes a tangent-space normal map (glTF/OpenGL +Y) from a high-poly mesh into a low-poly's UV layout, capturing detail lost during decimation. Feed the UV-unwrapped low_poly and the high_poly it was decimated from. Outputs an image for Apply Texture To Mesh's normal_map input.",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/texturing",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "BakeTextureFromVoxel": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ],
+    "voxel_colors": [
+     "VOXEL",
+     {}
+    ],
+    "texture_size": [
+     "INT",
+     {
+      "display_name": "resolution",
+      "tooltip": "Square UV atlas resolution.",
+      "default": 2048,
+      "min": 64,
+      "max": 8192
+     }
+    ]
+   },
+   "optional": {
+    "reference_mesh": [
+     "MESH",
+     {
+      "tooltip": "Optional dense pre-decimation mesh; back-projects each texel onto its true surface before sampling, removing faceted baking on coarse meshes."
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh",
+    "voxel_colors",
+    "texture_size"
+   ],
+   "optional": [
+    "reference_mesh"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "IMAGE",
+   "IMAGE",
+   "IMAGE"
+  ],
+  "output_is_list": [
+   false,
+   false,
+   false
+  ],
+  "output_name": [
+   "base_color",
+   "metallic",
+   "roughness"
+  ],
+  "output_tooltips": [
+   null,
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "BakeTextureFromVoxel",
+  "display_name": "Bake Texture From Voxel",
+  "description": "Bakes PBR textures onto the mesh's existing UV layout (trilinear-sample the sparse voxel volume). Does NOT unwrap \u2014 connect a UV unwrap node upstream. Outputs base_color + metallic/roughness grayscale IMAGEs (black if no PBR); feed them to ApplyTextureToMesh (SAME mesh) for SaveGLB.",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/texturing",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "CLIPVisionLoader": {
+  "input": {
+   "required": {
+    "clip_name": [
+     [
+      "dino_v3_L_naf_fp32.safetensors"
+     ]
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "clip_name"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CLIP_VISION"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "CLIP_VISION"
+  ],
+  "name": "CLIPVisionLoader",
+  "display_name": "Load CLIP Vision",
+  "description": "",
+  "python_module": "nodes",
+  "category": "model/loaders",
+  "output_node": false,
+  "has_intermediate_output": false,
+  "search_aliases": []
+ },
+ "DecimateMesh": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ],
+    "target_face_count": [
+     "INT",
+     {
+      "tooltip": "Target max faces. 0 disables.",
+      "default": 200000,
+      "min": 0,
+      "max": 50000000
+     }
+    ],
+    "placement_mode": [
+     "COMFY_DYNAMICCOMBO_V3",
+     {
+      "display_name": "placement_mode",
+      "tooltip": "midpoint: cumesh-faithful (recommended). qem: QEM-optimal placement.",
+      "options": [
+       {
+        "key": "midpoint",
+        "inputs": {
+         "required": {}
+        }
+       },
+       {
+        "key": "qem",
+        "inputs": {
+         "required": {
+          "line_quadric_weight": [
+           "FLOAT",
+           {
+            "tooltip": "Per-edge line-quadric weight; preserves sharp ridges/valleys. 0 = off.",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 100.0,
+            "step": 0.1
+           }
+          ],
+          "feature_edge_quadric_weight": [
+           "FLOAT",
+           {
+            "tooltip": "Extra quadric weight on dihedral feature edges (creases). 0 = off.",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1000.0,
+            "step": 1.0
+           }
+          ],
+          "feature_edge_min_dihedral_deg": [
+           "FLOAT",
+           {
+            "tooltip": "Minimum dihedral angle (degree) to count an edge as a feature edge.",
+            "default": 30.0,
+            "min": 0.0,
+            "max": 180.0,
+            "step": 1.0
+           }
+          ],
+          "clamp_v_to_edge": [
+           "BOOLEAN",
+           {
+            "tooltip": "Project the QEM-optimal position onto the collapsed edge segment.",
+            "default": true
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "hidden": {
+    "unique_id": [
+     "UNIQUE_ID"
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh",
+    "target_face_count",
+    "placement_mode"
+   ],
+   "hidden": [
+    "unique_id"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MESH"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "mesh"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "DecimateMesh",
+  "display_name": "Decimate Mesh",
+  "description": "Simplifies a mesh to a target face count using QEM, on the active compute device. 'midpoint' is the cumesh-faithful preset (best quality, preserves thin features / hair); 'qem' places vertices at the QEM optimum with line/feature-edge controls. Output stays welded.",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/mesh",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "EmptyTrellis2LatentStructure": {
+  "input": {
+   "required": {
+    "batch_size": [
+     "INT",
+     {
+      "tooltip": "The number of latent images in the batch.",
+      "default": 1,
+      "min": 1,
+      "max": 4096
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "batch_size"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "LATENT"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "LATENT"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "EmptyTrellis2LatentStructure",
+  "display_name": "Empty Trellis2 Latent Structure",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/latent/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "GetMeshInfo": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ]
+   },
+   "hidden": {
+    "unique_id": [
+     "UNIQUE_ID"
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh"
+   ],
+   "hidden": [
+    "unique_id"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MESH",
+   "STRING"
+  ],
+  "output_is_list": [
+   false,
+   false
+  ],
+  "output_name": [
+   "mesh",
+   "info"
+  ],
+  "output_tooltips": [
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "GetMeshInfo",
+  "display_name": "Get Mesh Info",
+  "description": "",
+  "python_module": "comfy_extras.nodes_save_3d",
+  "category": "3d/mesh",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "LoadMoGeModel": {
+  "input": {
+   "required": {
+    "model_name": [
+     "COMBO",
+     {
+      "multiselect": false,
+      "options": [
+       "moge_2_vitl_normal_fp16.safetensors"
+      ]
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "model_name"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MOGE_MODEL"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "MOGE_MODEL"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "LoadMoGeModel",
+  "display_name": "Load MoGe Model",
+  "description": "Options filled in by hand: MoGe was installed after the 3D dump; confirm on the server",
+  "python_module": "comfy_extras.nodes_moge",
+  "category": "model/loaders",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "MeshSmoothNormals": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ],
+    "crease_angle": [
+     "FLOAT",
+     {
+      "tooltip": "Edges whose dihedral angle exceeds this value (degrees) stay hard (vertices are split). 180 = fully smooth; lower preserves sharp edges (e.g. ~30-60 for hard-surface).",
+      "default": 180.0,
+      "min": 0.0,
+      "max": 180.0,
+      "step": 1.0
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh",
+    "crease_angle"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MESH"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "mesh"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "MeshSmoothNormals",
+  "display_name": "Smooth Mesh Normals",
+  "description": "Compute smooth per-vertex normals and attach them to the mesh. Meshes without normals are shaded flat (per-face) by glTF viewers; this makes them shade smoothly. With crease_angle below 180, edges sharper than the threshold are kept hard by splitting vertices along them.",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/mesh",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "MeshToFile3D": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "FILE_3D_GLB"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "model_3d"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "MeshToFile3D",
+  "display_name": "Create 3D File (from Mesh)",
+  "description": "Serialize a mesh to a GLB File3D object for Save / Preview 3D nodes, carrying its UVs, colors, normals, texture, normal/occlusion/emissive maps and material. Supports one item per batch only.",
+  "python_module": "comfy_extras.nodes_save_3d",
+  "category": "3d",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "mesh to glb",
+   "mesh to file",
+   "export mesh"
+  ],
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "MoGeGeometryToFOV": {
+  "input": {
+   "required": {
+    "moge_geometry": [
+     "MOGE_GEOMETRY",
+     {}
+    ],
+    "axis": [
+     "COMBO",
+     {
+      "tooltip": "'vertical' (fov_y), 'horizontal' (fov_x), or 'diagonal'.",
+      "default": "vertical",
+      "multiselect": false,
+      "options": [
+       "vertical",
+       "horizontal",
+       "diagonal"
+      ]
+     }
+    ],
+    "unit": [
+     "COMBO",
+     {
+      "tooltip": "Output unit for the FOV.",
+      "default": "degrees",
+      "multiselect": false,
+      "options": [
+       "degrees",
+       "radians"
+      ]
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "moge_geometry",
+    "axis",
+    "unit"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "FLOAT",
+   "FLOAT"
+  ],
+  "output_is_list": [
+   false,
+   false
+  ],
+  "output_name": [
+   "fov",
+   "focal_pixels"
+  ],
+  "output_tooltips": [
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "MoGeGeometryToFOV",
+  "display_name": "Get FoV from MoGe Geometry",
+  "description": "Derive the field of view and focal length from MoGe intrinsics.",
+  "python_module": "comfy_extras.nodes_moge",
+  "category": "image/geometry estimation",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "moge",
+   "fov",
+   "geometry",
+   "intrinsics",
+   "field of view"
+  ],
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "MoGeInference": {
+  "input": {
+   "required": {
+    "moge_model": [
+     "MOGE_MODEL",
+     {}
+    ],
+    "image": [
+     "IMAGE",
+     {}
+    ],
+    "resolution_level": [
+     "INT",
+     {
+      "tooltip": "0 = fastest, 9 = most detail.",
+      "default": 9,
+      "min": 0,
+      "max": 9
+     }
+    ],
+    "fov_x_degrees": [
+     "FLOAT",
+     {
+      "tooltip": "Horizontal field of view of the source camera. Sets the focal length used to unproject the depth map into 3D. 0 = auto-recover from the predicted points.",
+      "advanced": true,
+      "default": 0.0,
+      "min": 0.0,
+      "max": 170.0,
+      "step": 0.1
+     }
+    ],
+    "batch_size": [
+     "INT",
+     {
+      "tooltip": "Images per inference call. Lower if you OOM on a long video / image set.",
+      "default": 4,
+      "min": 1,
+      "max": 64
+     }
+    ],
+    "force_projection": [
+     "BOOLEAN",
+     {
+      "advanced": true,
+      "default": true
+     }
+    ],
+    "apply_mask": [
+     "BOOLEAN",
+     {
+      "tooltip": "Set masked-out (sky / invalid) pixels to inf in points and depth so meshing culls them. Disable to keep the raw predicted geometry everywhere; the mask is still returned separately.",
+      "advanced": true,
+      "default": true
+     }
+    ],
+    "refine_steps": [
+     "INT",
+     {
+      "tooltip": "MoGe-3 only: sparse volumetric refinement passes over the predicted depth. More passes sharpen fine detail and edges at a roughly linear cost. 0 disables refinement. Ignored by MoGe-1 / MoGe-2.",
+      "advanced": true,
+      "default": 3,
+      "min": 0,
+      "max": 8
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "moge_model",
+    "image",
+    "resolution_level",
+    "fov_x_degrees",
+    "batch_size",
+    "force_projection",
+    "apply_mask",
+    "refine_steps"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MOGE_GEOMETRY"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "moge_geometry"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "MoGeInference",
+  "display_name": "Run MoGe Inference",
+  "description": "Run MoGe on a single image to estimate depth and geometry.",
+  "python_module": "comfy_extras.nodes_moge",
+  "category": "image/geometry estimation",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "moge",
+   "depth",
+   "geometry",
+   "depth estimation",
+   "geometry estimation"
+  ],
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "Pixal3DConditioning": {
+  "input": {
+   "required": {
+    "clip_vision_model": [
+     "CLIP_VISION",
+     {
+      "tooltip": "DINOv3 ViT-L/16 ClipVision."
+     }
+    ],
+    "image": [
+     "IMAGE",
+     {
+      "tooltip": "Preprocessed image from ImageCropToMask (pad_factor=1.1 for Pixal3D)."
+     }
+    ],
+    "camera_angle_x": [
+     "FLOAT",
+     {
+      "display_name": "fov",
+      "tooltip": "Horizontal FOV in degrees. Wire a MoGeGeometryToFOV (axis='horizontal', unit='degrees') for a per-image FoV (matches upstream default).",
+      "default": 49.13,
+      "min": 1.0,
+      "max": 170.0,
+      "step": 0.01
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "clip_vision_model",
+    "image",
+    "camera_angle_x"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING"
+  ],
+  "output_is_list": [
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative"
+  ],
+  "output_tooltips": [
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "Pixal3DConditioning",
+  "display_name": "Pixal3D Conditioning",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/conditioning/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "RemeshMesh": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ],
+    "resolution": [
+     "INT",
+     {
+      "tooltip": "Voxel grid resolution (output density). 256 ~ 100k faces, 512 ~ 1M. For an exact face count, follow with Decimate Mesh.",
+      "default": 512,
+      "min": 32,
+      "max": 2048
+     }
+    ],
+    "sign_mode": [
+     "COMFY_DYNAMICCOMBO_V3",
+     {
+      "display_name": "sign_mode",
+      "tooltip": "udf: robust to messy/non-manifold input. sdf: clean single surface with QEF (Quadratic Error Function) sharp-feature recovery, but needs consistent winding.",
+      "options": [
+       {
+        "key": "udf",
+        "inputs": {
+         "required": {
+          "qef": [
+           "BOOLEAN",
+           {
+            "tooltip": "QEF (Quadratic Error Function) dual-vertex placement for sharper edges.",
+            "advanced": true,
+            "default": false
+           }
+          ],
+          "drop_inverted_components": [
+           "BOOLEAN",
+           {
+            "tooltip": "Drop inward-normal (negative-volume) closed components \u2014 the UDF inner shell.",
+            "advanced": true,
+            "default": false
+           }
+          ],
+          "drop_enclosed_components": [
+           "BOOLEAN",
+           {
+            "tooltip": "Drop components inside the largest's bbox that fail a point-in-mesh raycast. Disable for legitimate nested parts.",
+            "advanced": true,
+            "default": false
+           }
+          ]
+         }
+        }
+       },
+       {
+        "key": "sdf",
+        "inputs": {
+         "required": {
+          "qef": [
+           "BOOLEAN",
+           {
+            "tooltip": "QEF (Quadratic Error Function) dual-vertex placement (recovers sharp features) vs edge-crossing centroid.",
+            "default": true
+           }
+          ],
+          "manifold": [
+           "BOOLEAN",
+           {
+            "tooltip": "Manifold Dual Contouring: 1-4 dual verts/voxel for multi-sheet cases. Slower.",
+            "default": false
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "band": [
+     "FLOAT",
+     {
+      "tooltip": "Narrow-band width in voxel units. In UDF mode also offsets the surface.",
+      "advanced": true,
+      "default": 1.0,
+      "min": 0.5,
+      "max": 4.0,
+      "step": 0.1
+     }
+    ],
+    "project_back": [
+     "FLOAT",
+     {
+      "tooltip": "Linearly interpolate vertices toward the original surface (0 = pure DC, 1 = snapped).",
+      "advanced": true,
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.05
+     }
+    ],
+    "fix_poles": [
+     "BOOLEAN",
+     {
+      "tooltip": "Collapse valence-3 vertex pairs (DC T-junction artifact).",
+      "advanced": true,
+      "default": false
+     }
+    ],
+    "smooth_iters": [
+     "INT",
+     {
+      "tooltip": "Taubin smoothing iterations (0 = off). 2-3 cleans DC staircase-like artifacts; higher over-smooth QEF edges.",
+      "default": 0,
+      "min": 0,
+      "max": 20
+     }
+    ],
+    "drop_small_components": [
+     "FLOAT",
+     {
+      "tooltip": "Drop components below this fraction of the largest's face count. 0 disables.",
+      "advanced": true,
+      "default": 0.01,
+      "min": 0.0,
+      "max": 0.5,
+      "step": 0.005
+     }
+    ],
+    "precluster_max_verts": [
+     "INT",
+     {
+      "tooltip": "Cap input vertex count before the field queries, inputs above this are cluster-decimated to it first. Prevents OOM on huge meshes.",
+      "advanced": true,
+      "default": 20000000,
+      "min": 0,
+      "max": 100000000
+     }
+    ]
+   },
+   "hidden": {
+    "unique_id": [
+     "UNIQUE_ID"
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh",
+    "resolution",
+    "sign_mode",
+    "band",
+    "project_back",
+    "fix_poles",
+    "smooth_iters",
+    "drop_small_components",
+    "precluster_max_verts"
+   ],
+   "hidden": [
+    "unique_id"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MESH"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "mesh"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "RemeshMesh",
+  "display_name": "Remesh Mesh (Narrow-Band DC)",
+  "description": "Re-extracts a uniformly tessellated mesh via a narrow-band distance field + Dual Contouring, on the active compute device. Normalizes messy / non-manifold / self-intersecting topology; run before Decimate Mesh to hit an exact face count. Output stays welded.",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/mesh",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "Save3DAdvanced": {
+  "input": {
+   "required": {
+    "model_3d": [
+     "FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_FBX,FILE_3D_OBJ,FILE_3D_STL,FILE_3D_USDZ,FILE_3D",
+     {
+      "tooltip": "3D model file from an upstream 3D node."
+     }
+    ],
+    "filename_prefix": [
+     "STRING",
+     {
+      "default": "3d/ComfyUI",
+      "multiline": false
+     }
+    ],
+    "viewport_state": [
+     "LOAD_3D",
+     {}
+    ],
+    "width": [
+     "INT",
+     {
+      "tooltip": "Render width of the viewport in pixels.",
+      "default": 1024,
+      "min": 1,
+      "max": 4096,
+      "step": 1
+     }
+    ],
+    "height": [
+     "INT",
+     {
+      "tooltip": "Render height of the viewport in pixels.",
+      "default": 1024,
+      "min": 1,
+      "max": 4096,
+      "step": 1
+     }
+    ]
+   },
+   "optional": {
+    "model_3d_info": [
+     "LOAD3D_MODEL_INFO",
+     {
+      "tooltip": "Placement of each model in the scene: position, rotation, and scale (Y-up world space).",
+      "advanced": true
+     }
+    ],
+    "camera_info": [
+     "LOAD3D_CAMERA",
+     {
+      "tooltip": "Viewport camera information: position, look-at target, zoom, and type.",
+      "advanced": true
+     }
+    ]
+   },
+   "hidden": {
+    "prompt": [
+     "PROMPT"
+    ],
+    "extra_pnginfo": [
+     "EXTRA_PNGINFO"
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "model_3d",
+    "filename_prefix",
+    "viewport_state",
+    "width",
+    "height"
+   ],
+   "optional": [
+    "model_3d_info",
+    "camera_info"
+   ],
+   "hidden": [
+    "prompt",
+    "extra_pnginfo"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "FILE_3D",
+   "LOAD3D_MODEL_INFO",
+   "LOAD3D_CAMERA",
+   "INT",
+   "INT"
+  ],
+  "output_is_list": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "output_name": [
+   "model_3d",
+   "model_3d_info",
+   "camera_info",
+   "width",
+   "height"
+  ],
+  "output_tooltips": [
+   "3D model file (glb/obj/stl/etc.) from an upstream 3D node.",
+   "Placement of each model in the scene: position, rotation, and scale (Y-up world space).",
+   "Viewport camera information: position, look-at target, zoom, and type.",
+   "Render width of the viewport in pixels.",
+   "Render height of the viewport in pixels."
+  ],
+  "output_matchtypes": null,
+  "name": "Save3DAdvanced",
+  "display_name": "Save 3D (Advanced)",
+  "description": "",
+  "python_module": "comfy_extras.nodes_save_3d",
+  "category": "3d",
+  "output_node": true,
+  "deprecated": false,
+  "experimental": true,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "save 3d",
+   "export 3d model",
+   "save mesh advanced"
+  ],
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "Trellis2Conditioning": {
+  "input": {
+   "required": {
+    "clip_vision_model": [
+     "CLIP_VISION",
+     {}
+    ],
+    "image": [
+     "IMAGE",
+     {
+      "tooltip": "Preprocessed image from ImageCropToMask (pad_factor=1.0 for TRELLIS.2)."
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "clip_vision_model",
+    "image"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING"
+  ],
+  "output_is_list": [
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative"
+  ],
+  "output_tooltips": [
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "Trellis2Conditioning",
+  "display_name": "Trellis2 Conditioning",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/conditioning/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "Trellis2ShapeStage": {
+  "input": {
+   "required": {
+    "positive": [
+     "CONDITIONING",
+     {}
+    ],
+    "negative": [
+     "CONDITIONING",
+     {}
+    ],
+    "voxel": [
+     "VOXEL",
+     {
+      "tooltip": "Dense structure voxel from VaeDecodeStructureTrellis2."
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "positive",
+    "negative",
+    "voxel"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ],
+  "output_is_list": [
+   false,
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative",
+   "LATENT"
+  ],
+  "output_tooltips": [
+   null,
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "Trellis2ShapeStage",
+  "display_name": "Trellis2 Shape Stage",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/conditioning/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "Trellis2TextureStage": {
+  "input": {
+   "required": {
+    "positive": [
+     "CONDITIONING",
+     {}
+    ],
+    "negative": [
+     "CONDITIONING",
+     {}
+    ],
+    "shape_latent": [
+     "LATENT",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "positive",
+    "negative",
+    "shape_latent"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ],
+  "output_is_list": [
+   false,
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative",
+   "LATENT"
+  ],
+  "output_tooltips": [
+   null,
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "Trellis2TextureStage",
+  "display_name": "Trellis2 Texture Stage",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/conditioning/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "Trellis2UpsampleStage": {
+  "input": {
+   "required": {
+    "positive": [
+     "CONDITIONING",
+     {}
+    ],
+    "negative": [
+     "CONDITIONING",
+     {}
+    ],
+    "shape_latent": [
+     "LATENT",
+     {
+      "tooltip": "The 512-resolution shape latent output from the first shape-stage KSampler."
+     }
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ],
+    "target_resolution": [
+     "INT",
+     {
+      "tooltip": "Voxel resolution of the upsampled shape. Higher = more detail, more VRAM.",
+      "default": 1024,
+      "min": 1024,
+      "max": 2048,
+      "step": 128
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "positive",
+    "negative",
+    "shape_latent",
+    "vae",
+    "target_resolution"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ],
+  "output_is_list": [
+   false,
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative",
+   "LATENT"
+  ],
+  "output_tooltips": [
+   null,
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "Trellis2UpsampleStage",
+  "display_name": "Trellis2 Upsample Stage",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/conditioning/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "UnwrapMesh": {
+  "input": {
+   "required": {
+    "mesh": [
+     "MESH",
+     {}
+    ],
+    "segmenter": [
+     "COMBO",
+     {
+      "tooltip": "pec: fast parallel-edge-collapse charting on GPU. adaptive: CPU, slower.",
+      "default": "pec",
+      "multiselect": false,
+      "options": [
+       "pec",
+       "adaptive"
+      ]
+     }
+    ],
+    "resolution": [
+     "INT",
+     {
+      "tooltip": "Target atlas resolution for texel-density auto-scale (0 = fit-to-content).",
+      "default": 1024,
+      "min": 0,
+      "max": 8192,
+      "step": 256
+     }
+    ],
+    "padding": [
+     "INT",
+     {
+      "tooltip": "Texel padding between charts.",
+      "default": 1,
+      "min": 0,
+      "max": 16
+     }
+    ],
+    "weld_distance": [
+     "FLOAT",
+     {
+      "tooltip": "Coincident-vert merge radius as a fraction of mesh extent (0 = auto). Raise to ~0.001 if you get per-triangle charts (unwelded input).",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.0001
+     }
+    ]
+   },
+   "hidden": {
+    "unique_id": [
+     "UNIQUE_ID"
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "mesh",
+    "segmenter",
+    "resolution",
+    "padding",
+    "weld_distance"
+   ],
+   "hidden": [
+    "unique_id"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MESH"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "mesh"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "UnwrapMesh",
+  "display_name": "Unwrap Mesh UVs",
+  "description": "Generates a UV atlas: segments the surface into charts, parameterizes each, packs into a [0,1] atlas. Vertices on chart seams are duplicated (one copy per chart, same position, own UV), so the output mesh has more vertices than the input. Run after Remesh/Decimate, before texture baking.",
+  "python_module": "comfy_extras.nodes_mesh_postprocess",
+  "category": "3d/texturing",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "VaeDecodeShapeTrellis": {
+  "input": {
+   "required": {
+    "samples": [
+     "LATENT",
+     {}
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "samples",
+    "vae"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MESH",
+   "SHAPE_SUBDIVIDES"
+  ],
+  "output_is_list": [
+   false,
+   false
+  ],
+  "output_name": [
+   "mesh",
+   "shape_subdivides"
+  ],
+  "output_tooltips": [
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "VaeDecodeShapeTrellis",
+  "display_name": "Trellis2 VAE Decode Shape",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/latent/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "VaeDecodeStructureTrellis2": {
+  "input": {
+   "required": {
+    "samples": [
+     "LATENT",
+     {}
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ],
+    "resolution": [
+     "COMBO",
+     {
+      "default": "32",
+      "multiselect": false,
+      "options": [
+       "32",
+       "64"
+      ]
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "samples",
+    "vae",
+    "resolution"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "VOXEL"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "voxel"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "VaeDecodeStructureTrellis2",
+  "display_name": "Trellis2 VAE Decode Structure",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/latent/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "VaeDecodeTextureTrellis": {
+  "input": {
+   "required": {
+    "samples": [
+     "LATENT",
+     {}
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ],
+    "shape_subdivides": [
+     "SHAPE_SUBDIVIDES",
+     {
+      "tooltip": "Shape information used to guide higher-detail reconstruction during decoding. Helps preserve structure consistency at higher resolutions."
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "samples",
+    "vae",
+    "shape_subdivides"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "VOXEL"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "voxel_colors"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "VaeDecodeTextureTrellis",
+  "display_name": "Trellis2 VAE Decode Texture",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/latent/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "ImageCropToMask": {
+  "input": {
+   "required": {
+    "images": [
+     "IMAGE",
+     {}
+    ],
+    "masks": [
+     "MASK",
+     {}
+    ],
+    "width": [
+     "INT",
+     {
+      "default": 1024,
+      "min": 64,
+      "max": 8192
+     }
+    ],
+    "height": [
+     "INT",
+     {
+      "default": 1024,
+      "min": 64,
+      "max": 8192
+     }
+    ],
+    "pad_factor": [
+     "FLOAT",
+     {
+      "default": 1.1,
+      "min": 1.0,
+      "max": 4.0,
+      "step": 0.01
+     }
+    ],
+    "grow_mask": [
+     "INT",
+     {
+      "default": 0,
+      "min": -512,
+      "max": 512
+     }
+    ],
+    "background": [
+     "STRING",
+     {
+      "default": "#000000"
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "images",
+    "masks",
+    "width",
+    "height",
+    "pad_factor",
+    "grow_mask",
+    "background"
+   ]
+  },
+  "output": [
+   "IMAGE"
+  ],
+  "output_name": [
+   "images"
+  ],
+  "name": "ImageCropToMask",
+  "output_node": false,
+  "description": "Not in the 3D /object_info dump: written from the template's widgets, confirm on the server"
+ },
+ "RescaleCFG": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {}
+    ],
+    "multiplier": [
+     "FLOAT",
+     {
+      "default": 0.7,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "model",
+    "multiplier"
+   ]
+  },
+  "output": [
+   "MODEL"
+  ],
+  "output_name": [
+   "MODEL"
+  ],
+  "name": "RescaleCFG",
+  "output_node": false,
+  "description": "Not in the 3D /object_info dump: written from the template's widgets, confirm on the server"
+ },
+ "CFGOverride": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {}
+    ],
+    "cfg": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.01
+     }
+    ],
+    "start_percent": [
+     "FLOAT",
+     {
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01
+     }
+    ],
+    "end_percent": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "model",
+    "cfg",
+    "start_percent",
+    "end_percent"
+   ]
+  },
+  "output": [
+   "MODEL"
+  ],
+  "output_name": [
+   "MODEL"
+  ],
+  "name": "CFGOverride",
+  "output_node": false,
+  "description": "Not in the 3D /object_info dump: written from the template's widgets, confirm on the server"
  }
 }

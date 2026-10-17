@@ -1387,7 +1387,7 @@ class DashboardOut(BaseModel):
 
 
 # polish P4: library organisation
-FolderKind = Literal["any", "image", "video", "audio"]
+FolderKind = Literal["any", "image", "video", "audio", "model"]
 
 
 class FolderIn(BaseModel):
@@ -1629,3 +1629,28 @@ class TestClipOut(BaseModel):
     panel: str | None = None
     job: JobOut | None = None
     speech_jobs: list[JobOut] = []
+
+
+# contract v40: 3D Studio
+class Model3DIn(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "source_id": "3f2a9c1e-0000-4000-8000-000000000000", "engine": "pixal3d", "quality": "draft"}]})
+
+    source_id: str = Field(description="A finished picture: a Library media id or a generation id")
+    engine: Literal["pixal3d", "trellis2"] = Field("pixal3d", description="pixal3d stays true to the picture; "
+                                                                          "trellis2 is the general model")
+    quality: Literal["draft", "final"] = Field("final", description="draft is about half the time, less detail")
+    remove_background: bool = Field(True, description="Cut the subject out first. Off only helps a picture that "
+                                                      "already has a transparent background")
+    seed: int | None = Field(None, ge=0, le=2**31 - 1)
+    title: str | None = Field(None, max_length=300)
+    folder_id: str | None = Field(None, description=_FOLDER)
+    part_of: str | None = Field(None, max_length=80, description=_PART_OF)
+
+
+class Model3DOut(BaseModel):
+    item: MediaItemOut
+    job: JobOut
+    model_resolved: str
+    # set when remove_background was asked off but the picture has nothing transparent to go by
+    background_note: str | None = None

@@ -50,7 +50,9 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "realvis_xl_t2i": 600.0, "realvis_xl_i2i": 600.0, "flux2_klein9b_t2i": 900.0,
             "flux2_klein9b_i2i": 900.0, "flux2_klein9b_edit": 900.0, "qwen_image21_t2i": 1800.0,
             "qwen_image21_full_t2i": 2400.0, "ernie_turbo_t2i": 1200.0, "zimage_base_t2i": 1200.0,
-            "zimage_base_i2i": 1200.0, "chroma1_hd_t2i": 1800.0, "wan22_still_t2i": 1800.0}
+            "zimage_base_i2i": 1200.0, "chroma1_hd_t2i": 1800.0, "wan22_still_t2i": 1800.0,
+            # contract v40: a Final model is four samplers plus remesh / bake at 4K; the first run loads ~9 GB
+            "trellis2_image_to_3d": 3600.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
 LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_extend", "ltx23_ia2v",
                  "ltx23_ia2v_extend"}
@@ -169,6 +171,9 @@ def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> 
     negative = params.get("negative") or params.get("negative_prompt") or ""
     ref_ids = _ids(params.get("reference_ids"))[:3]
     loras = _loras(params)
+
+    if kind == "model3d":
+        return model3d_plan(params.get("model3d") or {}, seed, lookup)
 
     if params.get("restore"):
         return restore_plan(params["restore"], seed, lookup)
@@ -554,6 +559,18 @@ def image_tool_plan(t: dict, seed: int, lookup) -> Plan:
     return Plan(template, inputs, images, [], "image", {**sources, "tool": t.get("tool")})
 
 
+def model3d_plan(rec: dict, seed: int, lookup) -> Plan:
+    """3D Studio (contract v40): one picture through Pixal3D or TRELLIS.2 to a GLB."""
+    from app import model3d
+
+    if not rec.get("source_id"):
+        raise ComfyError("A 3D model needs a source picture")
+    inputs = model3d.inputs_for(rec, seed)
+    sources = {"source_id": rec["source_id"], "engine": "trellis2" if inputs["trellis2"] else "pixal3d",
+               "quality": rec.get("quality") or "final"}
+    return Plan(model3d.TEMPLATE, inputs, {"image": lookup.generation_file(rec["source_id"])}, [], "model", sources)
+
+
 def control_plan(c: dict, prompt: str, negative: str, seed: int, lookup) -> Plan:
     """Depth / Sketch / Pose / Edge to image (app.control): Z-Image Turbo with the Fun ControlNet patch."""
     from app.control import TEMPLATES
@@ -734,6 +751,9 @@ class ComfyDriver:
 
         return engines.transcribe_many(paths, language, progress_cb, lane=self.lane)
 
+    def generate_model(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
+        return self._generate(prompt, params, seed, out_path, progress_cb)
+
     def generate_text(self, prompt, params, seed, out_path: Path, progress_cb: ProgressCallback) -> DriverResult:
         raise ComfyError("Text generations go to the LLM lane, not ComfyUI")
 
@@ -801,10 +821,12 @@ class ComfyDriver:
             meta.update(duration_s=round(resolved["num_frames"] / fps, 3), width=resolved["width"], height=resolved["height"])
         elif plan.media == "video":
             meta.update(width=resolved.get("width"), height=resolved.get("height"))
+        elif plan.media == "model":
+            meta.update(engine=plan.sources.get("engine"), quality=plan.sources.get("quality"))
         else:
             meta.update(width=resolved.get("width"), height=resolved.get("height"))
         progress_cb(1.0, "Done")
-        media_type = {"video": "video/mp4", "audio": "audio/flac"}.get(plan.media, "image/png")
+        media_type = {"video": "video/mp4", "audio": "audio/flac", "model": "model/gltf-binary"}.get(plan.media, "image/png")
         return DriverResult(out_path, media_type, meta, params_update={"comfy": record})
 
     @staticmethod

@@ -14,7 +14,7 @@ export interface SessionRow<S = unknown> {
 // a batch is created in one request, so its items land within seconds of each other
 const SAME_BATCH_MS = 2 * 60_000
 
-const NOUNS = { image: 'images', video: 'clips', audio: 'tracks' } as const
+const NOUNS = { image: 'images', video: 'clips', audio: 'tracks', model: 'models' } as const
 
 const promptOf = (m: MediaItem) => (m.prompt || m.title || '').trim()
 const ms = (iso: string) => new Date(iso).getTime() || 0

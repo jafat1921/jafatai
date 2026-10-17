@@ -13,7 +13,9 @@ from app.security import CurrentUser, get_current_user
 router = APIRouter(tags=["media"])
 
 AUDIO_TYPES = {".flac": "audio/flac", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
-               ".aac": "audio/aac", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".weba": "audio/webm"}
+               ".aac": "audio/aac", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".weba": "audio/webm",
+               # mimetypes has no entry for glTF on Windows or most Linux boxes
+               ".glb": "model/gltf-binary", ".gltf": "model/gltf+json"}
 
 
 def resolve_media_path(rel: str, workspace_id: str, data_dir: Path) -> Path | None:
@@ -43,6 +45,8 @@ def get_thumb(gen_id: str, w: int = Query(thumbs.DEFAULT), db: Session = Depends
     data_dir = get_settings().data_dir
     src = resolve_media_path(g.file_path, cur.workspace_id, data_dir)
     dest = thumbs.ensure(src, g.media_type, w) if src is not None else None
+    if dest is None and src is not None and (g.media_type or "").startswith("model/") and thumbs.model_thumbs(g):
+        dest = thumbs.ensure(src, g.media_type, w)
     if dest is None or not dest.resolve().is_relative_to(data_dir.resolve() / "workspaces" / cur.workspace_id):
         raise HTTPException(404, "No preview for this file")
     # a generation's file never changes, so neither does its thumb

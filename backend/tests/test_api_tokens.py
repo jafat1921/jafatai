@@ -301,8 +301,10 @@ def test_openapi_has_bearer_auth_areas_and_no_internal_routes(client):
     assert "/api/jobs/{job_id}" in paths
 
     tags = {t for p in paths.values() for op in p.values() for t in op["tags"]}
-    assert tags <= {"Image", "Video", "Film", "Characters", "Audio", "Voice", "Podcast", "Photo", "Library", "Jobs"}
+    assert tags <= {"Image", "Video", "Film", "Characters", "Audio", "Voice", "Podcast", "Photo", "3D", "Library",
+                    "Jobs"}
     assert paths["/api/images/generate"]["post"]["tags"] == ["Image"]
+    assert paths["/api/3d/make"]["post"]["tags"] == ["3D"]
     assert paths["/api/audio/speak"]["post"]["tags"] == ["Voice"]
     assert paths["/api/characters/{character_id}/sheet"]["post"]["tags"] == ["Characters"]
 

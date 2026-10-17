@@ -71,6 +71,11 @@ export const CATALOG: Record<ModelType, ModelInfo[]> = {
     m({ id: 'sa3_medium', type: 'audio', label: 'Stable Audio 3 Medium', capabilities: ['music', 'long'], max_duration_s: 380, extra: { licence: 'Stability AI Community License' } }),
     m({ id: 'sa3_small_sfx', type: 'audio', label: 'Stable Audio 3 Small SFX', capabilities: ['sfx'], max_duration_s: 120, default: true }),
   ],
+  // contract v40
+  model3d: [
+    m({ id: 'pixal3d', type: 'model3d', label: 'Pixal3D', capabilities: ['image_to_3d'], est_seconds: 300, default: true }),
+    m({ id: 'trellis2', type: 'model3d', label: 'TRELLIS.2', capabilities: ['image_to_3d'], est_seconds: 270 }),
+  ],
 }
 
 export const MINIMAX = m({

@@ -1,5 +1,7 @@
 """Placeholder driver so the whole review loop works on a laptop with no GPU."""
+import json
 import random
+import struct
 import subprocess
 import textwrap
 import time
@@ -64,6 +66,46 @@ def render_placeholder(prompt: str, params: dict, seed: int, out_path: Path) -> 
     return out_path
 
 
+def placeholder_glb(seed: int) -> bytes:
+    """A small coloured cube as a real binary glTF, so the 3D viewer and the exporters have something to open."""
+    rng = random.Random(seed)
+    # 24 vertices (4 per face) so each face keeps its own flat normal
+    faces = [((1, 0, 0), (0, 1, 0)), ((-1, 0, 0), (0, 1, 0)), ((0, 1, 0), (0, 0, 1)),
+             ((0, -1, 0), (0, 0, 1)), ((0, 0, 1), (0, 1, 0)), ((0, 0, -1), (0, 1, 0))]
+    pos, nrm, idx = [], [], []
+    for n, up in faces:
+        side = (up[1] * n[2] - up[2] * n[1], up[2] * n[0] - up[0] * n[2], up[0] * n[1] - up[1] * n[0])
+        base = len(pos)
+        for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            pos.append(tuple(0.5 * (n[i] + a * side[i] + b * up[i]) for i in range(3)))
+            nrm.append(n)
+        idx += [base, base + 1, base + 2, base, base + 2, base + 3]
+    blob = b"".join(struct.pack("<3f", *p) for p in pos) + b"".join(struct.pack("<3f", *v) for v in nrm)
+    blob += struct.pack(f"<{len(idx)}H", *idx)
+    blob += b"\0" * (-len(blob) % 4)
+    vec = 12 * len(pos)
+    colour = [round(rng.uniform(0.45, 0.8), 3), round(rng.uniform(0.3, 0.5), 3), round(rng.uniform(0.15, 0.3), 3), 1]
+    doc = {
+        "asset": {"version": "2.0", "generator": "mixai mock"},
+        "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0, "name": "Mock model"}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}]}],
+        "materials": [{"pbrMetallicRoughness": {"baseColorFactor": colour, "metallicFactor": 0.1,
+                                                "roughnessFactor": 0.7}}],
+        "buffers": [{"byteLength": len(blob)}],
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": vec, "target": 34962},
+                        {"buffer": 0, "byteOffset": vec, "byteLength": vec, "target": 34962},
+                        {"buffer": 0, "byteOffset": 2 * vec, "byteLength": 2 * len(idx), "target": 34963}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": len(pos), "type": "VEC3",
+                       "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5]},
+                      {"bufferView": 1, "componentType": 5126, "count": len(nrm), "type": "VEC3"},
+                      {"bufferView": 2, "componentType": 5123, "count": len(idx), "type": "SCALAR"}],
+    }
+    js = json.dumps(doc, separators=(",", ":")).encode()
+    js += b" " * (-len(js) % 4)
+    body = struct.pack("<I4s", len(js), b"JSON") + js + struct.pack("<I4s", len(blob), b"BIN\0") + blob
+    return struct.pack("<4sII", b"glTF", 2, 12 + len(body)) + body
+
+
 class MockDriver:
     name = "mock"
 
@@ -100,6 +142,15 @@ class MockDriver:
             # an image tool: the placeholder at the tool's working size, with the template the comfy driver would use
             meta["template"] = params["image_tool"]["template"]
         return DriverResult(out_path, "image/png", meta)
+
+    def generate_model(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
+        rec = params.get("model3d") or {}
+        self._tick(progress_cb, "Shaping")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(placeholder_glb(seed))
+        progress_cb(1.0, "Done")
+        return DriverResult(out_path, "model/gltf-binary", {"template": "trellis2_image_to_3d",
+                                                            "engine": rec.get("engine"), "quality": rec.get("quality")})
 
     def generate_video(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:
         if params.get("kind") == "upscale_segment":

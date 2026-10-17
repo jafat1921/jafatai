@@ -12,6 +12,7 @@ from app.api import files
 from app.api import stories
 from app.api import poetry
 from app.api import ads
+from app.api import model3d
 from app.api import admin
 from app.api import admin_panel
 from app.api import account
@@ -30,6 +31,7 @@ router.include_router(audio.text_router)
 router.include_router(stories.router)
 router.include_router(poetry.router)
 router.include_router(ads.router)
+router.include_router(model3d.router)
 router.include_router(tokens.router, include_in_schema=False)
 router.include_router(admin.router, include_in_schema=False)
 router.include_router(admin_panel.router, include_in_schema=False)

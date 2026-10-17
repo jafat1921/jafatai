@@ -20,7 +20,7 @@ export function mediaGeneration(item: MediaItem, version?: Generation): Generati
     id: item.generation_id,
     target_type: 'media',
     target_id: item.id,
-    kind: item.origin === 'upload' ? 'upload' : item.kind === 'audio' ? audioGenKind(item) : item.kind,
+    kind: item.origin === 'upload' ? 'upload' : item.kind === 'audio' ? audioGenKind(item) : item.kind === 'model' ? 'model3d' : item.kind,
     version: item.versions_count || 1,
     status: item.status ?? 'ready',
     prompt: item.prompt ?? '',
@@ -31,14 +31,14 @@ export function mediaGeneration(item: MediaItem, version?: Generation): Generati
     },
     seed: item.seed ?? null,
     media_url: item.media_url,
-    media_type: item.kind === 'video' ? 'video/mp4' : item.kind === 'audio' ? 'audio/flac' : 'image/png',
+    media_type: item.kind === 'video' ? 'video/mp4' : item.kind === 'audio' ? 'audio/flac' : item.kind === 'model' ? 'model/gltf-binary' : 'image/png',
     created_at: item.created_at,
   }
 }
 
 export const downloadUrl = (generationId: string) => `/api/generations/${generationId}/download`
 
-const KIND_NOUN = { image: 'Image', video: 'Video', audio: 'Audio' } as const
+const KIND_NOUN = { image: 'Image', video: 'Video', audio: 'Audio', model: '3D model' } as const
 
 export const mediaAlt = (item: Pick<MediaItem, 'title' | 'prompt' | 'kind'>) => item.title || item.prompt || KIND_NOUN[item.kind]
 

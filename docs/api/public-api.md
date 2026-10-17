@@ -116,6 +116,7 @@ for job, item in zip(batch["jobs"], batch["items"]):
 | Transcript | `POST /api/transcribe` | `job`, then `GET /api/transcripts/{transcript_id}` |
 | Character sheet | `POST /api/characters/{id}/sheet` | `GET /api/characters/{id}/sheet` shows the panels |
 | Upscale | `POST /api/generations/{id}/upscale` | one job |
+| 3D model | `POST /api/3d/make` | `job` and the `item` (kind `model`, a GLB) |
 
 A Library item's `media_url` (`/api/media/workspaces/…`) also downloads with the token.
 

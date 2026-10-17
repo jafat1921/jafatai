@@ -53,6 +53,8 @@ export const FALLBACK_MODELS: Record<ModelType, ModelInfo[]> = {
   ],
   // a server without /models?type=audio has no audio route either; the pages say so rather than guess
   audio: [],
+  // contract v40; the 3D Studio asks the server, so an older one simply has none
+  model3d: [],
 }
 
 // ?model= values from links made before the catalog existed (bookmarks, the old mega-menu)
@@ -150,6 +152,7 @@ const AUTO_HINT: Record<ModelType, string> = {
   video: 'Picks the video model that fits your length and pictures',
   upscale: 'Picks the upscaler for the source',
   audio: 'Picks the default model for this kind of sound',
+  model3d: 'Pixal3D, true to the picture',
 }
 
 /** Auto first and default. `serverAuto` says whether the server will resolve "auto" itself. */

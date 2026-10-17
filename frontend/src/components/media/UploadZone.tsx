@@ -3,12 +3,12 @@ import { AlertTriangle, Check, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useUploads } from '@/hooks/useUploads'
-import { acceptFor, UPLOAD_RULES } from '@/lib/upload'
-import type { MediaItem, MediaKind } from '@/lib/types'
+import { acceptFor, UPLOAD_RULES, type UploadKind } from '@/lib/upload'
+import type { MediaItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface Props {
-  kinds: MediaKind[]
+  kinds: UploadKind[]
   onUploaded?: (item: MediaItem) => void
   multiple?: boolean
   compact?: boolean

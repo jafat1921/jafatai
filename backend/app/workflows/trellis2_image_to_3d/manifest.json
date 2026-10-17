@@ -1,0 +1,52 @@
+{
+  "name": "trellis2_image_to_3d",
+  "family": "trellis2",
+  "description": "One picture to a textured GLB: BiRefNet cut-out and crop, DINOv3 conditioning (Pixal3D with a MoGe field of view, or TRELLIS.2), structure, shape, upsample and texture passes, then remesh, decimate, unwrap and bake (colour, metallic, roughness, AO, normals). Converted from the official 'Pixal3D & TRELLIS.2: Image to Model' workflow by scripts/comfy_ui_to_api.py; the engine and background switches are resolved at build time and the unused branch pruned.",
+  "source": {
+    "ui": "tests/fixtures/comfy_3d_pixal3d_trellis2_template.json",
+    "output": [322],
+    "titles": {
+      "122": "Load Image", "193": "Background model", "192": "Remove background",
+      "248": "Switch: Remove background", "312": "Crop to subject", "15": "Vision encoder", "55": "MoGe model",
+      "56": "MoGe", "242": "Field of view", "298": "Pixal3D conditioning", "299": "TRELLIS.2 conditioning",
+      "314": "Switch: positive", "315": "Switch: negative", "318": "Switch: model", "319": "Model Pixal3D",
+      "40": "Model TRELLIS.2", "117": "Shape VAE", "118": "Texture VAE", "87": "Empty structure",
+      "3": "Sampler: structure", "119": "Decode structure", "91": "Shape stage", "18": "Sampler: shape",
+      "94": "Upsample", "23": "Sampler: upsample", "98": "Texture stage", "12": "Sampler: texture",
+      "92": "Decode shape", "93": "Decode texture", "202": "Mesh info", "241": "Remesh", "186": "Decimate",
+      "238": "Smooth normals", "196": "Unwrap", "147": "Bake texture", "233": "Bake AO", "224": "Bake normals",
+      "210": "Apply textures", "260": "Smooth final", "285": "Mesh to GLB", "322": "Save 3D"
+    }
+  },
+  "inputs": {
+    "image": {"type": "image", "required": true, "targets": [["Load Image", "image"]]},
+    "trellis2": {"type": "bool", "default": false,
+                 "switch": ["Switch: model", "Switch: positive", "Switch: negative"]},
+    "remove_background": {"type": "bool", "default": true, "switch": ["Switch: Remove background"]},
+    "seed": {"type": "int", "default": 42, "targets": [["Sampler: structure", "seed"], ["Sampler: shape", "seed"],
+                                                       ["Sampler: upsample", "seed"], ["Sampler: texture", "seed"]]},
+    "pad_factor": {"type": "float", "default": 1.1, "targets": [["Crop to subject", "pad_factor"]]},
+    "upsample_resolution": {"type": "int", "default": 1536, "multiple_of": 128, "targets": [["Upsample", "target_resolution"]]},
+    "texture_size": {"type": "int", "default": 4096, "targets": [["Bake texture", "texture_size"], ["Unwrap", "resolution"]]},
+    "face_count": {"type": "int", "default": 700000, "targets": [["Decimate", "target_face_count"]]},
+    "ao_resolution": {"type": "int", "default": 1024, "targets": [["Bake AO", "resolution"]]},
+    "normal_resolution": {"type": "int", "default": 2048, "targets": [["Bake normals", "resolution"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/model3d", "targets": [["Save 3D", "filename_prefix"]]}
+  },
+  "outputs": {"model": {"node": "Save 3D", "kind": "model"}},
+  "prune": true,
+  "features": {
+    "pixal3d": ["Model Pixal3D", "Pixal3D conditioning", "MoGe model", "MoGe", "Field of view"],
+    "trellis2": ["Model TRELLIS.2", "TRELLIS.2 conditioning"]
+  },
+  "models": {
+    "diffusion_models": ["pixal3d_int8_convrot.safetensors", "trellis_2_int8_convrot.safetensors"],
+    "vae": ["trellis_2_shape_vae_bf16.safetensors", "trellis_2_texture_vae_bf16.safetensors"],
+    "clip_vision": ["dino_v3_L_naf_fp32.safetensors"],
+    "geometry_estimation": ["moge_2_vitl_normal_fp16.safetensors"],
+    "background_removal": ["birefnet.safetensors"]
+  },
+  "progress_weights": {"Sampler: structure": 6, "Sampler: shape": 10, "Sampler: upsample": 8, "Sampler: texture": 8,
+                       "Remesh": 4, "Bake texture": 4, "Bake AO": 3, "Bake normals": 3, "Unwrap": 2,
+                       "Decode shape": 2, "Decode texture": 2, "Model Pixal3D": 3, "Model TRELLIS.2": 3}
+}

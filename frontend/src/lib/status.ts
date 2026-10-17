@@ -98,6 +98,7 @@ const KIND_LABELS: Record<GenerationKind, string> = {
   scene_text: 'Scene draft',
   image: 'Image',
   video: 'Video',
+  model3d: '3D model',
   song: 'Song',
   music: 'Music',
   sfx: 'Sound effect',

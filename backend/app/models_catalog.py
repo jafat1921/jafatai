@@ -31,7 +31,7 @@ class Speed:
 @dataclass(frozen=True)
 class Model:
     id: str
-    type: str  # image | edit | video | upscale | audio
+    type: str  # image | edit | video | upscale | audio | model3d
     label: str
     badge: str | None
     description: str
@@ -54,6 +54,9 @@ class Model:
     terms: str | None = None
     group: str | None = None  # picker section for image models, see IMAGE_GROUPS
     best_for: tuple[str, ...] = ()
+    # a manifest "features" block this model needs on top of the shared graph (the 3D engines share one)
+    feature: str | None = None
+    vram_gb: float | None = None  # peak on the GPU box, for the admin's planning; not shown in the studio
 
     @property
     def licence_kind(self) -> str:
@@ -224,9 +227,17 @@ MODELS: dict[str, Model] = {m.id: m for m in (
     Model("sa3_small_sfx", "audio", "Stable Audio 3 Small SFX", "SFX",
           "Sound effects, one-shots and ambience up to 2 minutes.", ("sfx",), "sa3_sfx", max_duration_s=120,
           est_seconds=3, default=True, licence=SA3_LICENCE),
+
+    # contract v40: image to 3D. est_seconds is a Final run on the RTX 4000 Ada, guessed until the server times one
+    Model("pixal3d", "model3d", "Pixal3D", None, "True to the picture: keeps the shape and proportions you show it.",
+          ("image_to_3d",), "trellis2_image_to_3d", feature="pixal3d", est_seconds=300, default=True,
+          licence="MIT: free for commercial use", vram_gb=18, best_for=("products", "props", "your own photos")),
+    Model("trellis2", "model3d", "TRELLIS.2", None, "General image to 3D: clean shapes from any picture.",
+          ("image_to_3d",), "trellis2_image_to_3d", feature="trellis2", est_seconds=270,
+          licence="MIT: free for commercial use", vram_gb=16, best_for=("characters", "concept art")),
 )}
 
-TYPES = ("image", "edit", "video", "upscale", "audio")
+TYPES = ("image", "edit", "video", "upscale", "audio", "model3d")
 AUDIO_TEMPLATES = frozenset(m.template for m in MODELS.values() if m.type == "audio")
 # what a generation kind needs from an audio model, and how to say it in an error
 AUDIO_KIND_LABELS = {"song": "songs", "music": "music", "sfx": "sound effects"}
@@ -473,6 +484,10 @@ def availability(m: Model, info: dict | None, *, driver: str = "comfy", error: s
         feat = (res.get("features") or {}).get("smooth_motion")
         if feat and not feat["ok"]:
             out["smooth"] = "; ".join(feat["problems"][:3])
+    if m.feature:
+        feat = (res.get("features") or {}).get(m.feature)
+        if feat and not feat["ok"] and out["available"]:
+            out.update(available=False, installed=False, reason="; ".join(feat["problems"][:3]))
     return out
 
 
@@ -531,6 +546,11 @@ def measured_seconds(rows: list[dict]) -> dict[str, float]:
         if not gpu or not tpl:
             continue
         key = tpl + (f":{p['speed']}" if p.get("speed") else "")
+        if isinstance(p.get("model3d"), dict):
+            # one graph, two engines: the card shows a Final run of its own engine
+            if p["model3d"].get("quality") != "final":
+                continue
+            key = f"{tpl}:{p['model3d'].get('engine')}"
         per_second = tpl in ("ltx23_i2v", "ltx23_two_stage", "wan22_t2v") or tpl in AUDIO_TEMPLATES
         dur = p.get("duration_s") if per_second else None
         acc.setdefault(key, []).append(float(gpu) / float(dur) if dur else float(gpu))
@@ -542,6 +562,8 @@ def model_out(m: Model, av: dict, measured: dict[str, float] | None = None) -> d
     caps = [c for c in m.capabilities if c not in av["dropped"]]
     est, source = m.est_seconds, "rough"
     key = m.template + (f":{m.default_speed}" if m.default_speed else "")
+    if m.type == "model3d":
+        key = f"{m.template}:{m.id}"
     if key in measured:
         per = measured[key]
         est = per * {"video": 5.0, "audio": 30.0}.get(m.type, 1.0)  # a typical 5 s clip / per 30 s of audio
@@ -569,6 +591,10 @@ def model_out(m: Model, av: dict, measured: dict[str, float] | None = None) -> d
     if m.type == "audio":
         out["max_duration_s"] = m.max_duration_s
         out["extra"] = {"licence": m.licence, **({"noncommercial": True} if m.noncommercial else {})}
+    if m.type == "model3d":
+        out["installed"] = av.get("installed", True)
+        if m.best_for:
+            out["best_for"] = list(m.best_for)
     if m.type == "video":
         if m.max_duration_s is not None:
             out["max_duration_s"] = round(m.max_duration_s, 2)

@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session, aliased, sessionmaker
 from app.config import get_settings
 from app.db import SessionLocal
 from app.drivers import GenerationDriver, get_driver
-from app.lanes import AUDIO_KINDS, IMAGE_KINDS, LANES, VIDEO_KINDS, gpu_lane, parse_lanes
+from app.lanes import AUDIO_KINDS, IMAGE_KINDS, LANES, MODEL_KINDS, VIDEO_KINDS, gpu_lane, parse_lanes
 from app.models import ACTING_USER, VIA_API, Generation, Job, UsageLedger, WorkerHeartbeat, utcnow
 
 log = logging.getLogger("mixai.worker")
@@ -42,7 +42,7 @@ WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
 TEXT_KINDS = {"scene_text"}
 EXT = {"image/png": ".png", "video/mp4": ".mp4", "text/plain": ".txt", "audio/flac": ".flac", "audio/mpeg": ".mp3",
-       "audio/wav": ".wav", "audio/ogg": ".ogg", "audio/mp4": ".m4a"}
+       "audio/wav": ".wav", "audio/ogg": ".ogg", "audio/mp4": ".m4a", "model/gltf-binary": ".glb"}
 # same string as app.reel.ASSEMBLE_JOB (that module is imported at the bottom)
 SERIAL_PER_PROJECT = ("reel_assemble",)
 
@@ -316,6 +316,8 @@ def handle_generate(ctx: JobContext) -> dict:
         method, media_type = "generate_video", "video/mp4"
     elif gen.kind in AUDIO_KINDS:
         method, media_type = "generate_audio", "audio/flac"
+    elif gen.kind in MODEL_KINDS:
+        method, media_type = "generate_model", "model/gltf-binary"
     elif gen.kind in TEXT_KINDS:
         method, media_type = "generate_text", "text/plain"
     else:

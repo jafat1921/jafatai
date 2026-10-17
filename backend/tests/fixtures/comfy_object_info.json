@@ -998,7 +998,8 @@
       "z_image_bf16.safetensors",
       "Chroma1-HD-fp8mixed.safetensors",
       "pixal3d_int8_convrot.safetensors",
-      "trellis_2_int8_convrot.safetensors"
+      "trellis_2_int8_convrot.safetensors",
+      "pixal3d_multiview_int8_convrot.safetensors"
      ]
     ],
     "weight_dtype": [
@@ -1016,7 +1017,8 @@
   },
   "output": [
    "MODEL"
-  ]
+  ],
+  "description": "unet_name: pixal3d_multiview_int8_convrot.safetensors added by hand (install-3d-models.sh --multiview); confirm on the server"
  },
  "LoraLoaderModelOnly": {
   "input": {
@@ -6838,5 +6840,98 @@
   "name": "CFGOverride",
   "output_node": false,
   "description": "Not in the 3D /object_info dump: written from the template's widgets, confirm on the server"
+ },
+ "Pixal3DMultiViewConditioning": {
+  "input": {
+   "required": {
+    "clip_vision_model": [
+     "CLIP_VISION",
+     {
+      "tooltip": "DINOv3 ViT-L/16 ClipVision with bundled NAF weights."
+     }
+    ],
+    "fov": [
+     "FLOAT",
+     {
+      "tooltip": "Horizontal FOV in degrees of the views as framed: 20 for rig renders and most multi-view generators, or MoGeGeometryToFOV on one of the views for photos.",
+      "default": 20.0,
+      "min": 1.0,
+      "max": 170.0,
+      "step": 0.01,
+      "round": false
+     }
+    ]
+   },
+   "optional": {
+    "front": [
+     "IMAGE",
+     {
+      "tooltip": "Square view of the object's front side, with alpha or on a black background, framed like the rig: the object spans about 1/1.1 of the frame at its widest, the same scale in every view. The first connected view (front, left, back, right order) is the front the mesh is posed to."
+     }
+    ],
+    "left": [
+     "IMAGE",
+     {
+      "tooltip": "Square view of the object's left side, with alpha or on a black background, framed like the rig: the object spans about 1/1.1 of the frame at its widest, the same scale in every view. The first connected view (front, left, back, right order) is the front the mesh is posed to."
+     }
+    ],
+    "back": [
+     "IMAGE",
+     {
+      "tooltip": "Square view of the object's back side, with alpha or on a black background, framed like the rig: the object spans about 1/1.1 of the frame at its widest, the same scale in every view. The first connected view (front, left, back, right order) is the front the mesh is posed to."
+     }
+    ],
+    "right": [
+     "IMAGE",
+     {
+      "tooltip": "Square view of the object's right side, with alpha or on a black background, framed like the rig: the object spans about 1/1.1 of the frame at its widest, the same scale in every view. The first connected view (front, left, back, right order) is the front the mesh is posed to."
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "clip_vision_model",
+    "fov"
+   ],
+   "optional": [
+    "front",
+    "left",
+    "back",
+    "right"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING"
+  ],
+  "output_is_list": [
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative"
+  ],
+  "output_tooltips": [
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "Pixal3DMultiViewConditioning",
+  "display_name": "Pixal3D Multi-View Conditioning",
+  "description": "",
+  "python_module": "comfy_extras.nodes_trellis2",
+  "category": "model/conditioning/trellis",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
  }
 }

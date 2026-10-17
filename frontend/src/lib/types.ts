@@ -1404,7 +1404,7 @@ export type ModelCapability =
   // contract v14 (audio models)
   | 'song' | 'music' | 'sfx' | 'lyrics' | 'vocals' | 'instrumental' | 'timbre_ref' | 'long'
   // contract v40
-  | 'image_to_3d'
+  | 'image_to_3d' | 'multiview'
 
 export interface ModelSpeed {
   id: string
@@ -2011,11 +2011,20 @@ export interface VPEstimate {
 export type Engine3D = 'pixal3d' | 'trellis2'
 export type Quality3D = 'draft' | 'final'
 
-export interface Make3DRequest {
-  source_id: string
+export type View3D = 'front' | 'left' | 'back' | 'right'
+export type Start3D = 'picture' | 'text' | 'character' | 'views'
+
+/** Exactly one of source_id, prompt, character_id or views. */
+export interface Make3DRequest extends MagicFields {
+  source_id?: string
+  prompt?: string
+  character_id?: string
+  views?: Partial<Record<View3D, string>> & { front: string }
   engine: Engine3D
   quality: Quality3D
   remove_background: boolean
+  brand_kit_id?: string
+  image_model?: string
   seed?: number
   title?: string
   part_of?: string
@@ -2025,5 +2034,12 @@ export interface Make3DResponse {
   item: MediaItem
   job: Job
   model_resolved: string
+  start?: Start3D
   background_note?: string | null
+  // the start forced Pixal3D (several views) over the engine that was asked for
+  engine_note?: string | null
+  // a text start: the picture made first (a working part, home "3d")
+  picture?: MediaItem | null
+  picture_job?: Job | null
+  views_used?: View3D[] | null
 }

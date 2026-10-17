@@ -560,12 +560,20 @@ def image_tool_plan(t: dict, seed: int, lookup) -> Plan:
 
 
 def model3d_plan(rec: dict, seed: int, lookup) -> Plan:
-    """3D Studio (contract v40): one picture through Pixal3D or TRELLIS.2 to a GLB."""
+    """3D Studio (contract v40): one picture through Pixal3D or TRELLIS.2, or up to four views through
+    Pixal3D multi-view, to a GLB."""
     from app import model3d
 
+    inputs = model3d.inputs_for(rec, seed)
+    views = {v: rec["views"][v] for v in model3d.VIEWS if (rec.get("views") or {}).get(v)}
+    if views:
+        if "front" not in views:
+            raise ComfyError("A four-view model needs a front view")
+        sources = {"views": views, "engine": "pixal3d", "quality": rec.get("quality") or "final"}
+        return Plan(model3d.MULTIVIEW_TEMPLATE, inputs, {v: lookup.generation_file(g) for v, g in views.items()},
+                    [], "model", sources)
     if not rec.get("source_id"):
         raise ComfyError("A 3D model needs a source picture")
-    inputs = model3d.inputs_for(rec, seed)
     sources = {"source_id": rec["source_id"], "engine": "trellis2" if inputs["trellis2"] else "pixal3d",
                "quality": rec.get("quality") or "final"}
     return Plan(model3d.TEMPLATE, inputs, {"image": lookup.generation_file(rec["source_id"])}, [], "model", sources)

@@ -149,7 +149,9 @@ class MockDriver:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(placeholder_glb(seed))
         progress_cb(1.0, "Done")
-        return DriverResult(out_path, "model/gltf-binary", {"template": "trellis2_image_to_3d",
+        from app import model3d
+
+        return DriverResult(out_path, "model/gltf-binary", {"template": model3d.template_of(rec),
                                                             "engine": rec.get("engine"), "quality": rec.get("quality")})
 
     def generate_video(self, prompt, params, seed, out_path: Path, progress_cb) -> DriverResult:

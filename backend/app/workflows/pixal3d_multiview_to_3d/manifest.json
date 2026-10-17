@@ -1,0 +1,44 @@
+{
+  "name": "pixal3d_multiview_to_3d",
+  "family": "trellis2",
+  "description": "Two to four views of one object (front, left, back, right) to a textured GLB with Pixal3D multi-view. Each view gets its own BiRefNet cut-out and a square crop to the subject (pad 1.1, black background, as the node asks); the field of view is 20 degrees, or measured by MoGe on the front view for photos. The shape, upsample, texture and bake passes are the single-picture template's (trellis2_image_to_3d), with the Pixal3D branch kept and the multi-view weights loaded. Views that weren't given are dropped from the graph.",
+  "inputs": {
+    "front": {"type": "image", "required": true, "targets": [["Front picture", "image"]]},
+    "left": {"type": "image", "targets": [["Left picture", "image"]],
+             "if_missing": {"drop": ["Left picture", "Left cut-out", "Switch: Left background", "Left crop"]}},
+    "back": {"type": "image", "targets": [["Back picture", "image"]],
+             "if_missing": {"drop": ["Back picture", "Back cut-out", "Switch: Back background", "Back crop"]}},
+    "right": {"type": "image", "targets": [["Right picture", "image"]],
+              "if_missing": {"drop": ["Right picture", "Right cut-out", "Switch: Right background", "Right crop"]}},
+    "remove_background": {"type": "bool", "default": true,
+                          "switch": ["Switch: Front background", "Switch: Left background", "Switch: Back background",
+                                     "Switch: Right background"]},
+    "measure_fov": {"type": "bool", "default": false, "switch": ["Switch: fov"]},
+    "seed": {"type": "int", "default": 42, "targets": [["Sampler: structure", "seed"], ["Sampler: shape", "seed"],
+                                                       ["Sampler: upsample", "seed"], ["Sampler: texture", "seed"]]},
+    "pad_factor": {"type": "float", "default": 1.1,
+                   "targets": [["Front crop", "pad_factor"], ["Left crop", "pad_factor"], ["Back crop", "pad_factor"],
+                               ["Right crop", "pad_factor"]]},
+    "upsample_resolution": {"type": "int", "default": 1536, "multiple_of": 128, "targets": [["Upsample", "target_resolution"]]},
+    "texture_size": {"type": "int", "default": 4096, "targets": [["Bake texture", "texture_size"], ["Unwrap", "resolution"]]},
+    "face_count": {"type": "int", "default": 700000, "targets": [["Decimate", "target_face_count"]]},
+    "ao_resolution": {"type": "int", "default": 1024, "targets": [["Bake AO", "resolution"]]},
+    "normal_resolution": {"type": "int", "default": 2048, "targets": [["Bake normals", "resolution"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/model3d", "targets": [["Save 3D", "filename_prefix"]]}
+  },
+  "outputs": {"model": {"node": "Save 3D", "kind": "model"}},
+  "prune": true,
+  "features": {
+    "measure_fov": ["MoGe model", "MoGe", "Field of view"]
+  },
+  "models": {
+    "diffusion_models": ["pixal3d_multiview_int8_convrot.safetensors"],
+    "vae": ["trellis_2_shape_vae_bf16.safetensors", "trellis_2_texture_vae_bf16.safetensors"],
+    "clip_vision": ["dino_v3_L_naf_fp32.safetensors"],
+    "geometry_estimation": ["moge_2_vitl_normal_fp16.safetensors"],
+    "background_removal": ["birefnet.safetensors"]
+  },
+  "progress_weights": {"Sampler: structure": 6, "Sampler: shape": 10, "Sampler: upsample": 8, "Sampler: texture": 8,
+                       "Remesh": 4, "Bake texture": 4, "Bake AO": 3, "Bake normals": 3, "Unwrap": 2,
+                       "Decode shape": 2, "Decode texture": 2, "Model Pixal3D multi-view": 3}
+}

@@ -342,6 +342,12 @@ def handle_generate(ctx: JobContext) -> dict:
 
         shot_speech.run_in_job(ctx, gen)
 
+    if gen.kind in MODEL_KINDS:
+        # a text start waits for its picture (contract v40)
+        from app import model3d
+
+        model3d.run_in_job(ctx, gen)
+
     if get_settings().urdu_aerab and (gen.kind in VIDEO_KINDS or gen.kind in ("song", "speech")):
         _add_aerab(ctx, gen)
 

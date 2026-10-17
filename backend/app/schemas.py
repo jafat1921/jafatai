@@ -1632,11 +1632,28 @@ class TestClipOut(BaseModel):
 
 
 # contract v40: 3D Studio
-class Model3DIn(BaseModel):
-    model_config = ConfigDict(json_schema_extra={"examples": [{
-        "source_id": "3f2a9c1e-0000-4000-8000-000000000000", "engine": "pixal3d", "quality": "draft"}]})
+class Model3DViews(BaseModel):
+    front: str = Field(description="The front view: a Library media id or a generation id")
+    left: str | None = None
+    back: str | None = None
+    right: str | None = None
 
-    source_id: str = Field(description="A finished picture: a Library media id or a generation id")
+
+class Model3DIn(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"examples": [
+        {"source_id": "3f2a9c1e-0000-4000-8000-000000000000", "engine": "pixal3d", "quality": "draft"},
+        {"prompt": "A brass oil lamp with a glass chimney", "quality": "draft"},
+        {"views": {"front": "3f2a9c1e-0000-4000-8000-000000000000", "back": "8c1d2e3f-0000-4000-8000-000000000000"}},
+    ]})
+
+    # exactly one of these four says where the model starts from
+    source_id: str | None = Field(None, description="A finished picture: a Library media id or a generation id")
+    prompt: str | None = Field(None, max_length=2000, description="Describe one object; a picture of it is made "
+                                                                  "first, then the model")
+    character_id: str | None = Field(None, description="A character: its turnaround panels as views, else its "
+                                                       "full-body picture or portrait")
+    views: Model3DViews | None = Field(None, description="Two to four views of one object, same scale, square "
+                                                         "framing works best. Pixal3D only")
     engine: Literal["pixal3d", "trellis2"] = Field("pixal3d", description="pixal3d stays true to the picture; "
                                                                           "trellis2 is the general model")
     quality: Literal["draft", "final"] = Field("final", description="draft is about half the time, less detail")
@@ -1646,11 +1663,35 @@ class Model3DIn(BaseModel):
     title: str | None = Field(None, max_length=300)
     folder_id: str | None = Field(None, description=_FOLDER)
     part_of: str | None = Field(None, max_length=80, description=_PART_OF)
+    # a text start's picture
+    image_model: str | None = Field(None, max_length=60, description="The image model for a text start; empty "
+                                                                     "uses the default")
+    brand_kit_id: str | None = Field(None, description="A text start's picture takes the kit's palette and look")
+    magic_prompt: MagicMode | None = Field(None, description="A text start: let the local LLM expand the prompt "
+                                                             "first. Off unless asked")
+    prompt_enhanced: bool = Field(False, description="The prompt was already enhanced; skip that step")
+
+    @model_validator(mode="after")
+    def _one_start(self):
+        if self.prompt is not None and not self.prompt.strip():
+            self.prompt = None
+        given = [k for k in ("source_id", "prompt", "character_id", "views") if getattr(self, k)]
+        if len(given) != 1:
+            raise ValueError("Give exactly one of source_id, prompt, character_id or views")
+        return self
 
 
 class Model3DOut(BaseModel):
     item: MediaItemOut
     job: JobOut
     model_resolved: str
+    start: Literal["picture", "text", "character", "views"] = "picture"
     # set when remove_background was asked off but the picture has nothing transparent to go by
     background_note: str | None = None
+    # set when the start forced Pixal3D (several views) over the engine that was asked for
+    engine_note: str | None = None
+    # a text start: the picture being made first (a working part, home "3d") and its job
+    picture: MediaItemOut | None = None
+    picture_job: JobOut | None = None
+    # the views a multi-view model is made from, in front, left, back, right order
+    views_used: list[str] | None = None

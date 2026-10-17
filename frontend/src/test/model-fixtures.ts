@@ -73,7 +73,7 @@ export const CATALOG: Record<ModelType, ModelInfo[]> = {
   ],
   // contract v40
   model3d: [
-    m({ id: 'pixal3d', type: 'model3d', label: 'Pixal3D', capabilities: ['image_to_3d'], est_seconds: 300, default: true }),
+    m({ id: 'pixal3d', type: 'model3d', label: 'Pixal3D', capabilities: ['image_to_3d', 'multiview'], est_seconds: 300, default: true }),
     m({ id: 'trellis2', type: 'model3d', label: 'TRELLIS.2', capabilities: ['image_to_3d'], est_seconds: 270 }),
   ],
 }

@@ -230,7 +230,8 @@ MODELS: dict[str, Model] = {m.id: m for m in (
 
     # contract v40: image to 3D. est_seconds is a Final run on the RTX 4000 Ada, guessed until the server times one
     Model("pixal3d", "model3d", "Pixal3D", None, "True to the picture: keeps the shape and proportions you show it.",
-          ("image_to_3d",), "trellis2_image_to_3d", feature="pixal3d", est_seconds=300, default=True,
+          ("image_to_3d", "multiview"), "trellis2_image_to_3d", {"multiview": "pixal3d_multiview_to_3d"},
+          feature="pixal3d", est_seconds=300, default=True,
           licence="MIT: free for commercial use", vram_gb=18, best_for=("products", "props", "your own photos")),
     Model("trellis2", "model3d", "TRELLIS.2", None, "General image to 3D: clean shapes from any picture.",
           ("image_to_3d",), "trellis2_image_to_3d", feature="trellis2", est_seconds=270,

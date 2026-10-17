@@ -64,7 +64,7 @@ Tools a token can't use aren't listed for it. Anything slow returns job ids at o
 | `generate_image` | generate | Text to image (1-4 pictures). Optional `part_of` keeps the result out of the studio's lists (contract v37). |
 | `edit_image` | generate | Edit finished pictures with an instruction; extra pictures are references. |
 | `upscale` | generate | Upscale a picture (2x/4x/2k/4k) or a video (1080p/1440p/4k). |
-| `make_3d_model` | generate | A finished picture to a textured 3D model (GLB): `engine` pixal3d or trellis2, `quality` draft or final (contract v40). |
+| `make_3d_model` | generate | A textured 3D model (GLB) from one of `image_id`, `prompt` (a picture is made first), `character_id` or `view_ids` ({front, left, back, right}, front required, Pixal3D only): `engine` pixal3d or trellis2, `quality` draft or final (contract v40). |
 | `generate_video` | generate | Text or image to video; long durations render in chunks. Optional `part_of` (e.g. `story:<id>`) as for images. |
 | `make_song` / `make_music` / `make_sfx` | generate | Song with lyrics, instrumental music, a sound effect. |
 | `speak` | generate | Text to speech in a library voice, a gallery voice or a described one. |

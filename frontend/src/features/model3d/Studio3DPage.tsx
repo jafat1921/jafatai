@@ -5,17 +5,22 @@ import { ImageSourceField } from '@/components/media/ImageSourceField'
 import { EmptyState, ErrorState } from '@/components/studio/states'
 import { SwitchRow } from '@/components/studio/switch-row'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { GenerateButton } from '@/components/generate/GenerateButton'
 import { GeneratorPage, ResultsHeading } from '@/components/generate/GeneratorPage'
+import { MagicPromptBar } from '@/components/generate/MagicPromptBar'
+import { useMagicPrompt } from '@/components/generate/useMagicPrompt'
+import { useCharacterSheet } from '@/hooks/useCharacterStudio'
 import { useGenEstimate } from '@/hooks/useGenEstimate'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { useMake3D } from '@/hooks/useModel3D'
 import { useModels } from '@/hooks/useModels'
-import { blocked3d, DEFAULT_FORM_3D, ENGINES, isModelReady, local3dEstimate, make3dPayload, QUALITIES, type Form3D } from '@/lib/model3d'
-import type { Engine3D, MediaItem, Quality3D } from '@/lib/types'
+import { blocked3d, DEFAULT_FORM_3D, ENGINES, engineLock, isModelReady, local3dEstimate, make3dPayload, QUALITIES, sheetViews, STARTS, VIEWS, type Form3D } from '@/lib/model3d'
+import type { Engine3D, Job, MediaItem, Quality3D, Start3D } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
+import { CharacterPick, TwoSteps, ViewSlots } from './StartFields'
 
 // three.js only arrives with the first model on screen
 const ModelViewer = lazy(() => import('./ModelViewer').then((m) => ({ default: m.ModelViewer })))
@@ -25,37 +30,59 @@ const LIST = { kind: 'model' as const }
 export function Studio3DPage() {
   const uid = useId()
   const [params] = useSearchParams()
-  const [form, setForm] = useState<Form3D>({ ...DEFAULT_FORM_3D, sourceId: params.get('image') })
+  const [form, setForm] = useState<Form3D>(() => {
+    const character = params.get('character')
+    return { ...DEFAULT_FORM_3D, sourceId: params.get('image'), characterId: character, from: character ? 'character' : 'picture' }
+  })
   const set = <K extends keyof Form3D>(k: K, v: Form3D[K]) => setForm((f) => ({ ...f, [k]: v }))
-  const [note, setNote] = useState<string | null>(null)
+  const [notes, setNotes] = useState<string[]>([])
   const [picked, setPicked] = useState<string | null>(null)
+  const [steps, setSteps] = useState<{ picture: Job; model: Job } | null>(null)
 
   const make = useMake3D()
+  const magic = useMagicPrompt(form.prompt, { kind: 'image' })
+  const sheet = useCharacterSheet(form.from === 'character' ? (form.characterId ?? undefined) : undefined)
+  const characterViews = form.from === 'character' ? sheetViews(sheet.data) : []
+  const lock = engineLock(form, characterViews)
   const { models: engines } = useModels('model3d')
-  const engine = engines.find((m) => m.id === form.engine)
-  const estimate = useGenEstimate({ kind: 'model3d', model: form.engine, speed: form.quality }, local3dEstimate(engine, form.engine, form.quality))
+  const engineId: Engine3D = lock ? 'pixal3d' : form.engine
+  const engine = engines.find((m) => m.id === engineId)
+  const viewsWhy = engine && !engine.capabilities.includes('multiview') ? 'Pixal3D multi-view is not installed' : null
+  const estimate = useGenEstimate({ kind: 'model3d', model: engineId, speed: form.quality }, local3dEstimate(engine, engineId, form.quality))
   const results = useMediaList(LIST)
   const items = flatItems(results.data)
   const ready = items.filter(isModelReady)
   const shown = ready.find((m) => m.id === picked) ?? ready[0] ?? null
 
-  const why = blocked3d(form, engine)
+  const why = blocked3d(form, engine, viewsWhy)
   const quality = QUALITIES.find((q) => q.id === form.quality)
 
+  // the server's own default is off, so the dock says which way the toggle points
+  const textFields = () => {
+    const f = magic.fields()
+    return f.prompt_enhanced ? f : { ...f, magic_prompt: f.magic_prompt ?? magic.mode }
+  }
+
   const submit = () => {
-    const body = make3dPayload(form)
+    const body = make3dPayload(form, form.from === 'text' ? textFields() : undefined, !!lock)
     if (why || make.isPending || !body) return
     make.mutate(body, {
       onSuccess: (res) => {
-        setNote(res.background_note ?? null)
+        setNotes([res.background_note, res.engine_note].filter((n): n is string => !!n))
+        setSteps(res.picture_job ? { picture: res.picture_job, model: res.job } : null)
         setPicked(null)
-        announce('Making your 3D model. It appears below when it finishes.')
+        announce(res.picture_job ? 'Making the picture first, then your 3D model.' : 'Making your 3D model. It appears below when it finishes.')
       },
     })
   }
 
+  const targets =
+    form.from === 'views'
+      ? VIEWS.map((v) => ({ id: v.id, label: `${v.label} view`, hint: 'One side of the object', use: (m: MediaItem) => setForm((f) => ({ ...f, views: { ...f.views, [v.id]: m.id } })) }))
+      : [{ id: 'picture', label: 'Picture', hint: 'Turned into a 3D model', use: (m: MediaItem) => setForm((f) => ({ ...f, from: 'picture', sourceId: m.id })) }]
+
   return (
-    <GeneratorPage label="3D Studio" targets={[{ id: 'picture', label: 'Picture', hint: 'Turned into a 3D model', use: (m) => set('sourceId', m.id) }]}>
+    <GeneratorPage label="3D Studio" targets={targets}>
       <form
         aria-labelledby={`${uid}-title`}
         onSubmit={(e) => {
@@ -78,25 +105,69 @@ export function Studio3DPage() {
           <p className="text-small text-studio-muted max-lg:hidden">One object, whole in frame, on a plain background works best.</p>
         </div>
 
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="section-label mb-1.5">From</legend>
+          <ToggleGroup type="single" aria-label="From" value={form.from} onValueChange={(v) => v && set('from', v as Start3D)} className="flex w-full max-w-lg">
+            {STARTS.map((s) => (
+              <ToggleGroupItem key={s.id} value={s.id} className="flex-1">
+                {s.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </fieldset>
+
         <div className="grid gap-4 md:grid-cols-[auto_1fr]">
-          <ImageSourceField
-            label="Picture"
-            required
-            value={form.sourceId}
-            onChange={(id) => set('sourceId', id)}
-            aspectClass="aspect-square"
-            removeLabel="Remove the picture"
-            pickDescription="Pick the picture to turn into a 3D model."
-          />
+          {form.from === 'picture' && (
+            <ImageSourceField
+              label="Picture"
+              required
+              value={form.sourceId}
+              onChange={(id) => set('sourceId', id)}
+              aspectClass="aspect-square"
+              removeLabel="Remove the picture"
+              pickDescription="Pick the picture to turn into a 3D model."
+            />
+          )}
+          {form.from === 'text' && (
+            <div className="flex w-full min-w-0 flex-col gap-2 md:w-96">
+              <label htmlFor={`${uid}-p`} className="section-label">
+                Describe one object
+              </label>
+              <Textarea
+                id={`${uid}-p`}
+                dir="auto"
+                rows={3}
+                maxLength={2000}
+                value={form.prompt}
+                onChange={(e) => set('prompt', e.target.value)}
+                placeholder="A brass oil lamp with a glass chimney"
+                aria-describedby={`${uid}-ph`}
+              />
+              <p id={`${uid}-ph`} className="text-small text-studio-muted">
+                A picture of it is made first, on a plain background, then the model.
+              </p>
+              <MagicPromptBar magic={magic} canPreview={form.prompt.trim().length >= 3} />
+            </div>
+          )}
+          {form.from === 'character' && (
+            <CharacterPick value={form.characterId} onChange={(id) => set('characterId', id)} views={characterViews} sheetLoading={sheet.isPending && !!form.characterId} />
+          )}
+          {form.from === 'views' && <ViewSlots value={form.views} onChange={(v, id) => setForm((f) => ({ ...f, views: { ...f.views, [v]: id } }))} />}
 
           <div className="flex min-w-0 flex-col gap-3">
-            <fieldset className="flex flex-col gap-1.5">
+            <fieldset className="flex flex-col gap-1.5" aria-describedby={lock ? `${uid}-lock` : undefined}>
               <legend className="section-label mb-1.5">Engine</legend>
-              <ToggleGroup type="single" aria-label="Engine" value={form.engine} onValueChange={(v) => v && set('engine', v as Engine3D)} className="flex w-full max-w-md">
+              <ToggleGroup type="single" aria-label="Engine" value={engineId} onValueChange={(v) => v && set('engine', v as Engine3D)} className="flex w-full max-w-md">
                 {ENGINES.map((e) => {
                   const info = engines.find((m) => m.id === e.id)
                   return (
-                    <ToggleGroupItem key={e.id} value={e.id} disabled={info ? !info.available : false} aria-label={`${e.label}, ${e.hint.toLowerCase()}`} className="h-auto py-1.5">
+                    <ToggleGroupItem
+                      key={e.id}
+                      value={e.id}
+                      disabled={(info ? !info.available : false) || (!!lock && e.id !== 'pixal3d')}
+                      aria-label={`${e.label}, ${e.hint.toLowerCase()}`}
+                      className="h-auto py-1.5"
+                    >
                       <span className="flex flex-col items-center leading-tight">
                         <span className="font-medium">{e.label}</span>
                         <span className="text-small opacity-80">{e.hint}</span>
@@ -105,6 +176,11 @@ export function Studio3DPage() {
                   )
                 })}
               </ToggleGroup>
+              {lock && (
+                <p id={`${uid}-lock`} className="text-small text-studio-muted">
+                  {lock}
+                </p>
+              )}
             </fieldset>
 
             <fieldset className="flex flex-col gap-1.5">
@@ -121,31 +197,34 @@ export function Studio3DPage() {
               </p>
             </fieldset>
 
-            <SwitchRow
-              id={`${uid}-bg`}
-              checked={form.removeBackground}
-              onChange={(v) => set('removeBackground', v)}
-              icon={<Eraser aria-hidden className="size-3.5" />}
-              title="Remove background"
-              hint="Cuts the object out first. Turn off only for a picture that is already see-through."
-              className="max-w-md"
-            />
+            {form.from !== 'text' && (
+              <SwitchRow
+                id={`${uid}-bg`}
+                checked={form.removeBackground}
+                onChange={(v) => set('removeBackground', v)}
+                icon={<Eraser aria-hidden className="size-3.5" />}
+                title="Remove background"
+                hint={`Cuts the object out first. Turn off only for ${form.from === 'views' ? 'views that are' : 'a picture that is'} already see-through.`}
+                className="max-w-md"
+              />
+            )}
           </div>
         </div>
 
         {make.isError && <ErrorState compact title="Couldn't start the model" error={make.error} />}
-        {note && (
-          <p role="status" className="text-small text-studio-warning">
-            {note}
+        {notes.map((n) => (
+          <p key={n} role="status" className="text-small text-studio-warning">
+            {n}
           </p>
-        )}
+        ))}
+        {steps && <TwoSteps pictureJob={steps.picture} modelJob={steps.model} />}
         <GenerateButton
           verb="Make 3D"
           what={`${quality?.label ?? 'Final'} model`}
           estimate={estimate}
           icon={<Box aria-hidden />}
           blocked={why}
-          note="You get a GLB, plus OBJ, STL and USDZ downloads."
+          note={form.from === 'text' ? 'A picture is made first, then the model. You get a GLB, plus OBJ, STL and USDZ downloads.' : 'You get a GLB, plus OBJ, STL and USDZ downloads.'}
           pending={make.isPending}
         />
       </form>

@@ -1,10 +1,11 @@
 ---
-title: "Contract v40: 3D Studio, part 1 (a picture to a textured 3D model)"
+title: "Contract v40: 3D Studio (a picture, a prompt, a character or four views to a textured 3D model)"
 status: Active
 created: 2026-10-17
 extends: contract-v39 (packages)
 migration: none (MediaItem.kind and Generation.kind are plain strings)
-plan: docs/PLAN-m20-3d-studio.md (delivery 1)
+updated: 2026-10-17 (addendum: text, character and four-view starts)
+plan: docs/PLAN-m20-3d-studio.md (deliveries 1 and 2)
 ---
 
 # Contract v40: 3D Studio
@@ -120,3 +121,128 @@ new item and its job; `wait_for_job` then gives a `download_url` for the `.glb`.
   - arrow keys turn the model, + and − zoom, 0 resets;
   - no damping under reduced motion.
 - **Downloads:** GLB (the original), plus OBJ, STL and USDZ.
+
+## 6. Addendum: text, character and four-view starts (delivery 2)
+
+`POST /api/3d/make` takes **exactly one** of four starts (422 otherwise). Everything in §2 still applies to
+the picture start, whose request and record are unchanged.
+
+```json
+{"source_id": "<picture>"}                                   // picture (part 1)
+{"prompt": "A brass oil lamp", "image_model": null, "brand_kit_id": null, "magic_prompt": null}
+{"character_id": "<character id>"}
+{"views": {"front": "<id>", "left": "<id>", "back": "<id>", "right": "<id>"}}
+```
+
+`engine`, `quality`, `remove_background`, `seed`, `title`, `folder_id` and `part_of` work as before.
+
+### Text
+
+- The prompt becomes `"<prompt>. Single object, centred, whole object in frame, plain light background, soft
+  studio lighting, product photo"`. The negative asks for no text, logos or extra objects.
+- A square picture is queued first on `image_model` (empty: the default image model). It is an ordinary image
+  generation, a **working part** with `MediaItem.home = "3d"` (contract v37), so it stays out of the Library grid
+  (`GET /api/media?home=3d` lists them).
+- `brand_kit_id` adds the kit's palette and look to that picture, but not its logo pass.
+- `magic_prompt` is **off unless asked** (`auto` / `on`, or `prompt_enhanced: true` for a reviewed prompt). An
+  enhanced prompt keeps the object brief: only the user's words are swapped.
+- The model's job waits for the picture: while it is queued or running, the job goes back to the queue
+  (`message` "Making the picture first"); when it is done the picture becomes `params.model3d.source_id`. If the
+  picture fails, the model's job fails and says why.
+- The background is always removed.
+- The answer adds `picture` (the image item) and `picture_job`.
+- Package gates and quota see the picture as its own image job: a package without Create Image, or without the
+  image model, refuses the request (403), and nothing is queued.
+
+### Character
+
+- The character must be in your studio (404 otherwise).
+- **Views:** when the sheet has a turnaround with a front and at least one more angle, the panels are the views:
+  - `turn_front` → front;
+  - `turn_side` → left;
+  - `turn_back` → back.
+  
+  Each is the approved panel, else the newest finished one. The side panel is never mirrored into a right view.
+- **Single picture:** otherwise the full-body hero, else the portrait, is used as one picture. With neither the
+  answer is 422.
+- The model is a final output (`home` null). It records the character in both `params.character_id` and
+  `params.model3d.character_id`, and is titled "<name> · 3D".
+
+### Four views
+
+- `front` plus at least one of `left`, `back` and `right`. Each must be a finished picture in your studio, and
+  each view needs its own picture (422 otherwise).
+- **Pixal3D only:**
+  - `engine: "trellis2"` is a 422 for four views;
+  - a character's turnaround runs on Pixal3D whatever was asked, and `engine_note` says so.
+- `remove_background: false` is kept only when every view is see-through. Otherwise `background_note` says the
+  backgrounds were removed.
+
+### The answer
+
+`Model3DOut` gains:
+
+| Field | Meaning |
+|---|---|
+| `start` | `picture`, `text`, `character` or `views` |
+| `engine_note` | Set when several views forced Pixal3D |
+| `picture`, `picture_job` | A text start's working picture and its job |
+| `views_used` | In order: `front`, `left`, `back`, `right` |
+
+### Record
+
+`params.model3d` adds:
+
+| Key | Holds |
+|---|---|
+| `start` | Any start but a picture |
+| `views` | `{view: generation id}` |
+| `view_media` | `{view: media id}` |
+| `measure_fov` | `true` for uploaded views, which are mostly photos: MoGe measures the front view. `false` for turnaround panels, which use 20°. |
+| `picture` | `{generation_id, media_id, status: pending\|done\|failed}` |
+| `character_id` | The character, for a character start |
+
+`source_id` is always the picture or the front view, so thumbs and the Make 3D lists keep working.
+
+### The four-view graph
+
+`backend/app/workflows/pixal3d_multiview_to_3d` is built from the single-picture template. It keeps the
+Pixal3D branch, puts `Pixal3DMultiViewConditioning` where `Pixal3DConditioning` was, and loads
+`pixal3d_multiview_int8_convrot.safetensors` (from `install-3d-models.sh --multiview`).
+
+- **Each view** gets its own LoadImage, BiRefNet cut-out, background switch and `ImageCropToMask`: 1024²,
+  pad 1.1, black background, as the node asks.
+- **Optional views:** a view that isn't given is dropped with its chain (`if_missing`), so the node only sees
+  the connected sockets.
+- **Field of view:** `fov` is 20, or MoGe's `MoGeGeometryToFOV` on the front crop when `measure_fov` is set.
+  The MoGe nodes are a template *feature*, so a missing MoGe only affects measured views.
+- **Shared settings:** quality, seed and the remaining passes are the same as the single-picture graph's.
+- **Catalogue:** `pixal3d` lists the capability `multiview` (template `pixal3d_multiview_to_3d`). It is
+  dropped from `GET /api/models?type=model3d` when the multi-view weights are missing, and
+  `GET /api/3d/options` reports it as `views: {ids, required, min, engine, available, reason}`.
+
+### MCP
+
+`make_3d_model` accepts exactly one of the following, plus `image_model` and `brand_kit_id` for a prompt:
+
+- `image_id`;
+- `prompt`;
+- `character_id`;
+- `view_ids` (`{"front": id, "back": id, ...}`).
+
+The answer adds:
+
+- `start`;
+- `picture` (with its `job_id`) for a prompt;
+- `views`;
+- `notes`.
+
+### Frontend
+
+The dock's **From** control has four choices: Picture | Text | Character | Four views.
+
+- **Text:** a prompt box with Magic prompt. Progress shows two steps, the picture and then the 3D model.
+- **Character:** a list of the studio's characters. It says whether the turnaround views will be used.
+  `/3d?character=<id>` opens with that character picked.
+- **Four views:** four labelled slots. Front is required; Left, Back and Right are optional.
+- **Engine:** Four views, and a character with a turnaround, fix the engine to Pixal3D and say why.

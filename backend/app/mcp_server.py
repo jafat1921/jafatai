@@ -18,7 +18,7 @@ from fastapi.encoders import jsonable_encoder
 from mcp.server.mcpserver import Context, Image, MCPServer, UserMessage
 from mcp.server.mcpserver.exceptions import ResourceError, ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.requests import Request
@@ -41,7 +41,7 @@ from app.dub.schemas import TranscribeIn
 from app.models import Character, Generation, Job, Transcript
 from app.podcast.schemas import EpisodeIn, Format, Host
 from app.schemas import (AudioGenerateIn, CharacterCreate, CharacterPatch, GenerationCreate, ImageAspect, ImageEditIn,
-                         ImageGenerateIn, JobOut, MediaItemOut, Model3DIn, SheetIn, SpeakDesignIn, SpeakIn, UpscaleIn,
+                         ImageGenerateIn, JobOut, MediaItemOut, Model3DIn, Model3DViews, SheetIn, SpeakDesignIn, SpeakIn, UpscaleIn,
                          VideoAspect, VideoGenerateIn, _iso)
 from app.security import CurrentUser, bearer_token, resolve_token
 from app.services import READY_STATES, job_out
@@ -235,25 +235,47 @@ def upscale(
 @tool("generate", title="Make a 3D model")
 def make_3d_model(
     ctx: Context,
-    image_id: Annotated[str, Field(description="A finished picture: media_id or generation_id. One object, whole "
-                                               "in frame, works best")],
+    image_id: Annotated[str | None, Field(description="Start from a finished picture: media_id or generation_id. "
+                                                      "One object, whole in frame, works best")] = None,
+    prompt: Annotated[str | None, Field(max_length=2000, description="Or describe one object: a picture of it is "
+                                                                     "made first, then the model")] = None,
+    character_id: Annotated[str | None, Field(description="Or a character: its turnaround panels as views, else "
+                                                          "its full-body picture or portrait")] = None,
+    view_ids: Annotated[dict[Literal["front", "left", "back", "right"], str] | None,
+                        Field(description="Or two to four views of one object, e.g. {\"front\": id, \"back\": id}. "
+                                          "front is required. Pixal3D only")] = None,
     engine: Annotated[Literal["pixal3d", "trellis2"], Field(description="pixal3d stays true to the picture; "
                                                                         "trellis2 is the general model")] = "pixal3d",
     quality: Annotated[Literal["draft", "final"], Field(description="draft is about half the time")] = "final",
     remove_background: Annotated[bool, Field(description="Cut the subject out first (leave on unless the picture "
                                                          "is already transparent)")] = True,
+    image_model: Annotated[str | None, Field(max_length=60, description="With prompt: the image model for the "
+                                                                        "picture; empty uses the default")] = None,
+    brand_kit_id: Annotated[str | None, Field(description="With prompt: the kit's palette and look")] = None,
     seed: Annotated[int | None, Field(ge=0, le=2**31 - 1)] = None,
     part_of: Annotated[str | None, Field(max_length=80, description=PART_OF)] = None,
 ) -> dict:
-    """Turn a picture into a textured 3D model (a GLB file). Takes several minutes; returns one job."""
+    """Make a textured 3D model (a GLB file) from a picture, a prompt, a character or a few views. Give exactly
+    one of image_id, prompt, character_id or view_ids. Takes several minutes; returns the model's job (and,
+    for a prompt, the picture's job that runs first)."""
+    try:
+        body = Model3DIn(source_id=image_id, prompt=prompt, character_id=character_id,
+                         views=Model3DViews(**view_ids) if view_ids else None, engine=engine, quality=quality,
+                         remove_background=remove_background, image_model=image_model, brand_kit_id=brand_kit_id,
+                         seed=seed, part_of=part_of)
+    except ValidationError as e:
+        raise ToolError("; ".join(x["msg"].removeprefix("Value error, ") for x in e.errors())) from None
     with acting(ctx, "generate") as (db, cur):
-        out = model3d.make_3d(Model3DIn(source_id=image_id, engine=engine, quality=quality,
-                                        remove_background=remove_background, seed=seed, part_of=part_of),
-                              db=db, cur=cur)
-        res = {"items": [_item(out.item)], "jobs": [_job(out.job)], "model": out.model_resolved,
-               "next": "wait_for_job with the job_id; the finished job carries a download_url for the .glb"}
-        if out.background_note:
-            res["note"] = out.background_note
+        out = model3d.make_3d(body, db=db, cur=cur)
+        res = {"items": [_item(out.item)], "jobs": [_job(out.job)], "model": out.model_resolved, "start": out.start,
+               "next": "wait_for_job with the model's job_id; the finished job carries a download_url for the .glb"}
+        if out.picture_job is not None:
+            res["picture"] = {**_item(out.picture), "job_id": out.picture_job.id}
+        if out.views_used:
+            res["views"] = out.views_used
+        for k in ("background_note", "engine_note"):
+            if getattr(out, k):
+                res.setdefault("notes", []).append(getattr(out, k))
         return res
 
 

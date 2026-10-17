@@ -519,6 +519,11 @@ from app.ads import style as ad_style  # noqa: E402
 # reading the brand's own adverts is LLM work on the general lane
 HANDLERS[ad_style.JOB] = ad_style.handle
 CPU_JOB_LEDGER[ad_style.JOB] = "brand"
+from app import model3d_logo  # noqa: E402
+
+# a logo's badge is numpy and Pillow; only its cut-out (an ordinary generate job) uses the image GPU
+HANDLERS[model3d_logo.JOB] = model3d_logo.handle
+CPU_JOB_LEDGER[model3d_logo.JOB] = "model3d"
 
 
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:

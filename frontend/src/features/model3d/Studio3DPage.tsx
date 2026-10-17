@@ -1,6 +1,6 @@
 import { lazy, Suspense, useId, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { Box, Boxes, Eraser, Heart } from 'lucide-react'
+import { Box, Boxes, Eraser, Heart, Rotate3d } from 'lucide-react'
 import { ImageSourceField } from '@/components/media/ImageSourceField'
 import { TILE_BTN } from '@/components/generate/TileActions'
 import { Button } from '@/components/ui/button'
@@ -18,13 +18,13 @@ import { useGenEstimate } from '@/hooks/useGenEstimate'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { useMake3D } from '@/hooks/useModel3D'
 import { useModels } from '@/hooks/useModels'
-import { blocked3d, ENGINES, engineLock, isModelReady, local3dEstimate, make3dPayload, QUALITIES, sheetViews, STARTS, startFromQuery, VIEWS, type Form3D } from '@/lib/model3d'
-import type { Engine3D, Job, MediaItem, Quality3D, Start3D } from '@/lib/types'
+import { betterBackOn, blocked3d, ENGINES, engineLock, isModelReady, local3dEstimate, logoEstimate, make3dPayload, offersBetterBack, QUALITIES, sheetViews, STARTS, startFromQuery, VIEWS, type Form3D } from '@/lib/model3d'
+import type { Engine3D, Make3DResponse, MediaItem, Quality3D, Start3D } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import { ModelMenu } from './ModelMenu'
 import type { ViewerAsk } from './ModelViewer'
-import { CharacterPick, TwoSteps, ViewSlots } from './StartFields'
+import { CharacterPick, LogoOptions, StepsFirst, ViewSlots, type MadeFirst } from './StartFields'
 import { useModelActions, type ModelHandlers } from './useModelActions'
 
 // three.js only arrives with the first model on screen
@@ -39,7 +39,7 @@ export function Studio3DPage() {
   const set = <K extends keyof Form3D>(k: K, v: Form3D[K]) => setForm((f) => ({ ...f, [k]: v }))
   const [notes, setNotes] = useState<string[]>([])
   const [picked, setPicked] = useState<string | null>(null)
-  const [steps, setSteps] = useState<{ picture: Job; model: Job } | null>(null)
+  const [steps, setSteps] = useState<{ parts: MadeFirst[]; model: Make3DResponse['job']; after: string } | null>(null)
   const [ask, setAsk] = useState<ViewerAsk | null>(null)
   const viewerBox = useRef<HTMLDivElement>(null)
   const yours = useRef<HTMLHeadingElement>(null)
@@ -61,18 +61,24 @@ export function Studio3DPage() {
   const magic = useMagicPrompt(form.prompt, { kind: 'image' })
   const sheet = useCharacterSheet(form.from === 'character' ? (form.characterId ?? undefined) : undefined)
   const characterViews = form.from === 'character' ? sheetViews(sheet.data) : []
+  const logo = form.from === 'logo'
+  const backOffered = offersBetterBack(form, characterViews)
+  const back = betterBackOn(form, characterViews)
   const lock = engineLock(form, characterViews)
   const { models: engines } = useModels('model3d')
   const engineId: Engine3D = lock ? 'pixal3d' : form.engine
   const engine = engines.find((m) => m.id === engineId)
   const viewsWhy = engine && !engine.capabilities.includes('multiview') ? 'Pixal3D multi-view is not installed' : null
-  const estimate = useGenEstimate({ kind: 'model3d', model: engineId, speed: form.quality }, local3dEstimate(engine, engineId, form.quality))
+  const estimate = useGenEstimate(
+    logo ? { kind: 'model3d', model: 'logo' } : { kind: 'model3d', model: engineId, speed: form.quality, ...(back ? { better_back: true } : {}) },
+    logo ? logoEstimate() : local3dEstimate(engine, engineId, form.quality, back),
+  )
   const results = useMediaList(LIST)
   const items = flatItems(results.data)
   const ready = items.filter(isModelReady)
   const shown = ready.find((m) => m.id === picked) ?? ready[0] ?? null
 
-  const why = blocked3d(form, engine, viewsWhy)
+  const why = blocked3d(form, logo ? undefined : engine, viewsWhy)
   const quality = QUALITIES.find((q) => q.id === form.quality)
 
   // the server's own default is off, so the dock says which way the toggle points
@@ -82,14 +88,15 @@ export function Studio3DPage() {
   }
 
   const submit = () => {
-    const body = make3dPayload(form, form.from === 'text' ? textFields() : undefined, !!lock)
+    const body = make3dPayload(form, form.from === 'text' ? textFields() : undefined, !!lock, characterViews)
     if (why || make.isPending || !body) return
     make.mutate(body, {
       onSuccess: (res) => {
-        setNotes([res.background_note, res.engine_note].filter((n): n is string => !!n))
-        setSteps(res.picture_job ? { picture: res.picture_job, model: res.job } : null)
+        setNotes([res.background_note, res.engine_note, res.better_back_note].filter((n): n is string => !!n))
+        const first = stepsOf(res)
+        setSteps(first)
         setPicked(null)
-        announce(res.picture_job ? 'Making the picture first, then your 3D model.' : 'Making your 3D model. It appears below when it finishes.')
+        announce(first ? `Making ${first.what} first, then your 3D model.` : 'Making your 3D model. It appears below when it finishes.')
       },
     })
   }
@@ -97,7 +104,9 @@ export function Studio3DPage() {
   const targets =
     form.from === 'views'
       ? VIEWS.map((v) => ({ id: v.id, label: `${v.label} view`, hint: 'One side of the object', use: (m: MediaItem) => setForm((f) => ({ ...f, views: { ...f.views, [v.id]: m.id } })) }))
-      : [{ id: 'picture', label: 'Picture', hint: 'Turned into a 3D model', use: (m: MediaItem) => setForm((f) => ({ ...f, from: 'picture', sourceId: m.id })) }]
+      : form.from === 'logo'
+        ? [{ id: 'logo', label: 'Logo', hint: 'Turned into a 3D badge', use: (m: MediaItem) => setForm((f) => ({ ...f, logoId: m.id })) }]
+        : [{ id: 'picture', label: 'Picture', hint: 'Turned into a 3D model', use: (m: MediaItem) => setForm((f) => ({ ...f, from: 'picture', sourceId: m.id })) }]
 
   return (
     <GeneratorPage label="3D Studio" targets={targets}>
@@ -126,8 +135,9 @@ export function Studio3DPage() {
         <fieldset className="flex flex-col gap-1.5">
           <legend className="section-label mb-1.5">From</legend>
           <ToggleGroup type="single" aria-label="From" value={form.from} onValueChange={(v) => v && set('from', v as Start3D)} className="flex w-full max-w-lg">
+            {/* five across a phone: a little less padding each so they fit */}
             {STARTS.map((s) => (
-              <ToggleGroupItem key={s.id} value={s.id} className="flex-1">
+              <ToggleGroupItem key={s.id} value={s.id} className="flex-1 px-2 sm:px-3">
                 {s.label}
               </ToggleGroupItem>
             ))}
@@ -172,49 +182,81 @@ export function Studio3DPage() {
             <CharacterPick value={form.characterId} onChange={(id) => set('characterId', id)} views={characterViews} sheetLoading={sheet.isPending && !!form.characterId} />
           )}
           {form.from === 'views' && <ViewSlots value={form.views} onChange={(v, id) => setForm((f) => ({ ...f, views: { ...f.views, [v]: id } }))} />}
+          {logo && (
+            <div className="flex min-w-0 flex-col gap-2">
+              <ImageSourceField
+                label="Logo"
+                required
+                value={form.logoId}
+                onChange={(id) => set('logoId', id)}
+                aspectClass="aspect-square"
+                removeLabel="Remove the logo"
+                pickDescription="Pick the logo, sign, icon or sticker to turn into a 3D badge."
+              />
+              <p className="max-w-96 text-small text-studio-muted">Crisp letters and edges — best for logos, signs, icons, stickers. A see-through PNG works best.</p>
+            </div>
+          )}
 
           <div className="flex min-w-0 flex-col gap-3 min-[1100px]:w-72">
-            <fieldset className="flex min-w-0 flex-col gap-1.5" aria-describedby={lock ? `${uid}-lock` : undefined}>
-              <legend className="section-label mb-1.5">Engine</legend>
-              <ToggleGroup type="single" aria-label="Engine" value={engineId} onValueChange={(v) => v && set('engine', v as Engine3D)} className="flex w-full max-w-md">
-                {ENGINES.map((e) => {
-                  const info = engines.find((m) => m.id === e.id)
-                  return (
-                    <ToggleGroupItem
-                      key={e.id}
-                      value={e.id}
-                      disabled={(info ? !info.available : false) || (!!lock && e.id !== 'pixal3d')}
-                      aria-label={`${e.label}, ${e.hint.toLowerCase()}`}
-                      className="h-auto py-1.5"
-                    >
-                      <span className="flex flex-col items-center leading-tight">
-                        <span className="font-medium">{e.label}</span>
-                        <span className="text-small opacity-80">{e.hint}</span>
-                      </span>
-                    </ToggleGroupItem>
-                  )
-                })}
-              </ToggleGroup>
-              {lock && (
-                <p id={`${uid}-lock`} className="text-small text-studio-muted">
-                  {lock}
-                </p>
-              )}
-            </fieldset>
+            {logo ? (
+              <LogoOptions value={form.logo} onChange={(v) => set('logo', v)} />
+            ) : (
+              <>
+                <fieldset className="flex min-w-0 flex-col gap-1.5" aria-describedby={lock ? `${uid}-lock` : undefined}>
+                  <legend className="section-label mb-1.5">Engine</legend>
+                  <ToggleGroup type="single" aria-label="Engine" value={engineId} onValueChange={(v) => v && set('engine', v as Engine3D)} className="flex w-full max-w-md">
+                    {ENGINES.map((e) => {
+                      const info = engines.find((m) => m.id === e.id)
+                      return (
+                        <ToggleGroupItem
+                          key={e.id}
+                          value={e.id}
+                          disabled={(info ? !info.available : false) || (!!lock && e.id !== 'pixal3d')}
+                          aria-label={`${e.label}, ${e.hint.toLowerCase()}`}
+                          className="h-auto py-1.5"
+                        >
+                          <span className="flex flex-col items-center leading-tight">
+                            <span className="font-medium">{e.label}</span>
+                            <span className="text-small opacity-80">{e.hint}</span>
+                          </span>
+                        </ToggleGroupItem>
+                      )
+                    })}
+                  </ToggleGroup>
+                  {lock && (
+                    <p id={`${uid}-lock`} className="text-small text-studio-muted">
+                      {lock}
+                    </p>
+                  )}
+                </fieldset>
 
-            <fieldset className="flex flex-col gap-1.5">
-              <legend className="section-label mb-1.5">Quality</legend>
-              <ToggleGroup type="single" aria-label="Quality" aria-describedby={`${uid}-q`} value={form.quality} onValueChange={(v) => v && set('quality', v as Quality3D)} className="w-full max-w-xs">
-                {QUALITIES.map((q) => (
-                  <ToggleGroupItem key={q.id} value={q.id}>
-                    {q.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-              <p id={`${uid}-q`} className="text-small text-studio-muted">
-                {quality?.hint}
-              </p>
-            </fieldset>
+                <fieldset className="flex flex-col gap-1.5">
+                  <legend className="section-label mb-1.5">Quality</legend>
+                  <ToggleGroup type="single" aria-label="Quality" aria-describedby={`${uid}-q`} value={form.quality} onValueChange={(v) => v && set('quality', v as Quality3D)} className="w-full max-w-xs">
+                    {QUALITIES.map((q) => (
+                      <ToggleGroupItem key={q.id} value={q.id}>
+                        {q.label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                  <p id={`${uid}-q`} className="text-small text-studio-muted">
+                    {quality?.hint}
+                  </p>
+                </fieldset>
+              </>
+            )}
+
+            {backOffered && (
+              <SwitchRow
+                id={`${uid}-back`}
+                checked={back}
+                onChange={(v) => setForm((f) => ({ ...f, betterBack: { ...f.betterBack, [f.from === 'picture' ? 'picture' : 'character']: v } }))}
+                icon={<Rotate3d aria-hidden className="size-3.5" />}
+                title="Better back"
+                hint={form.from === 'picture' ? 'Makes side and back views first, +1–2 min. Turn on for people and figures.' : 'Makes side and back views first, +1–2 min, so the back isn’t a copy of the front.'}
+                className="max-w-md"
+              />
+            )}
 
             {form.from !== 'text' && (
               <SwitchRow
@@ -223,7 +265,11 @@ export function Studio3DPage() {
                 onChange={(v) => set('removeBackground', v)}
                 icon={<Eraser aria-hidden className="size-3.5" />}
                 title="Remove background"
-                hint={`Cuts the object out first. Turn off only for ${form.from === 'views' ? 'views that are' : 'a picture that is'} already see-through.`}
+                hint={
+                  logo
+                    ? 'Cuts the logo out first. Turn off for a logo on a plain colour: that colour is taken away instead.'
+                    : `Cuts the object out first. Turn off only for ${form.from === 'views' ? 'views that are' : 'a picture that is'} already see-through.`
+                }
                 className="max-w-md"
               />
             )}
@@ -236,14 +282,14 @@ export function Studio3DPage() {
             {n}
           </p>
         ))}
-        {steps && <TwoSteps pictureJob={steps.picture} modelJob={steps.model} />}
+        {steps && <StepsFirst parts={steps.parts} modelJob={steps.model} after={steps.after} />}
         <GenerateButton
           verb="Make 3D"
-          what={`${quality?.label ?? 'Final'} model`}
+          what={logo ? 'badge' : `${quality?.label ?? 'Final'} model`}
           estimate={estimate}
           icon={<Box aria-hidden />}
           blocked={why}
-          note={form.from === 'text' ? 'A picture is made first, then the model. You get a GLB, plus OBJ, STL and USDZ downloads.' : 'You get a GLB, plus OBJ, STL and USDZ downloads.'}
+          note={noteFor(form.from, back)}
           pending={make.isPending}
         />
       </form>
@@ -301,6 +347,26 @@ export function Studio3DPage() {
       {actions.host}
     </GeneratorPage>
   )
+}
+
+const DOWNLOADS = 'You get a GLB, plus OBJ, STL and USDZ downloads.'
+
+function noteFor(from: Start3D, back: boolean) {
+  if (from === 'text') return `A picture is made first, then the model. ${DOWNLOADS}`
+  if (from === 'logo') return `Made in seconds, with the artwork on the front. ${DOWNLOADS}`
+  if (back) return `The side and back views are made first, then the model. ${DOWNLOADS}`
+  return DOWNLOADS
+}
+
+/** The jobs that run before the model, for the progress list; null when the model runs straight away. */
+function stepsOf(res: Make3DResponse): { parts: MadeFirst[]; model: Make3DResponse['job']; after: string; what: string } | null {
+  if (res.picture_job) return { parts: [{ label: 'Picture', job: res.picture_job }], model: res.job, after: 'After the picture', what: 'the picture' }
+  if (res.back_jobs?.length) {
+    const parts = res.back_jobs.map((job, i) => ({ label: i ? 'Back view' : 'Side view', job }))
+    return { parts, model: res.job, after: 'After the views', what: 'the side and back views' }
+  }
+  if (res.cutout_job) return { parts: [{ label: 'Cut-out', job: res.cutout_job }], model: res.job, after: 'After the cut-out', what: 'the cut-out' }
+  return null
 }
 
 function FavouriteButton({ item, h }: { item: MediaItem; h: ModelHandlers }) {

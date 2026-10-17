@@ -1,5 +1,5 @@
-"""3D Studio (contract v40): POST /3d/make turns a picture, a prompt, a character or a few views of one object
-into a textured GLB in the Library. The turntable and thumbnail routes take what the browser's viewer made."""
+"""3D Studio (contract v40): POST /3d/make turns a picture, a prompt, a character, a few views of one object or a
+logo into a textured GLB in the Library. The turntable and thumbnail routes take what the browser's viewer made."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from PIL import Image
 from sqlalchemy.orm import Session
@@ -8,21 +8,24 @@ from starlette.concurrency import run_in_threadpool
 from app import brand, prompt_enhance, thumbs, uploads
 from app import library as lib
 from app import model3d as m3
+from app import model3d_logo as ml
 from app import models_catalog as mc
 from app.api.library import _edit_source, _new_image_item, generate_into
 from app.config import get_settings
 from app.db import get_db
 from app.models import Character, Generation, Job, MediaItem, new_id
 from app.openapi import multipart
-from app.schemas import MediaItemOut, Model3DIn, Model3DOut, Turntable3DOut
+from app.schemas import MediaItemOut, Model3DIn, Model3DLogo, Model3DOut, Turntable3DOut
 from app.security import CurrentUser, get_current_user, require_editor
-from app.services import READY_STATES, enqueue_generation, get_owned, job_out
+from app.services import READY_STATES, enqueue_generation, get_owned, job_out, new_seed, next_version
 
 router = APIRouter(tags=["3d"])
 
 NO_ALPHA = "The picture has no transparent background, so the background was removed anyway."
 NO_ALPHA_VIEWS = "Not every view has a transparent background, so the backgrounds were removed anyway."
 VIEWS_PIXAL = "Several views only work with Pixal3D, so Pixal3D made this one."
+BACK_PIXAL = "Better back works with Pixal3D only, so Pixal3D made this one."
+BACK_BACKGROUND = "The side and back views are made on a plain background, so the backgrounds were removed."
 
 
 @router.get("/3d/options")
@@ -36,6 +39,10 @@ def options(cur: CurrentUser = Depends(get_current_user)):
         "default_quality": "final",
         "views": {"ids": list(m3.VIEWS), "required": ["front"], "min": 2, "engine": "pixal3d",
                   "available": why is None, "reason": why},
+        "better_back": {"available": why is None, "reason": why, "engine": "pixal3d"},
+        "logo": {"depths": list(ml.DEPTHS), "bevels": list(ml.BEVELS),
+                 "finishes": [{"id": f, "label": ml.FINISH_LABELS[f]} for f in ml.FINISHES],
+                 "backs": list(ml.BACKS), "defaults": dict(ml.DEFAULTS)},
     }
 
 
@@ -63,6 +70,8 @@ def _picked_views(db: Session, workspace_id: str, body: Model3DIn) -> dict[str, 
 def make_3d(body: Model3DIn, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
     ws = cur.workspace_id
     into = generate_into(db, ws, body.folder_id, m3.MEDIA_KIND)
+    if body.logo_id:
+        return _make_logo(db, cur, body, into)
     root = get_settings().data_dir
     rec: dict = {"quality": body.quality}
     extra: dict = {}
@@ -105,11 +114,28 @@ def make_3d(body: Model3DIn, db: Session = Depends(get_db), cur: CurrentUser = D
         rec.update(source_id=src.id, source_media_id=media_id)
         prompt = src.prompt or ""
 
+    # better back: on by default only where a character has no turnaround to use
+    want = body.better_back if body.better_back is not None else out["start"] == "character"
+    better = bool(want) and views is None and out["start"] in ("picture", "character")
+    edit = None
+    if better:
+        why = mc.capability_unavailable(mc.MODELS["pixal3d"], "multiview")
+        try:
+            edit = None if why else mc.choose(m3.BACK_EDIT_MODEL, "edit")
+        except HTTPException as e:
+            if e.status_code != 422:
+                raise
+            why = str(e.detail)
+        if why:
+            better = False
+            out["better_back_note"] = f"Better back isn't available right now ({why}), so the one picture was used."
+
     engine_id = body.engine
-    if views is not None:
+    if views is not None or better:
         if engine_id != "pixal3d":
-            out["engine_note"] = VIEWS_PIXAL
+            out["engine_note"] = VIEWS_PIXAL if views is not None else BACK_PIXAL
         engine_id = "pixal3d"
+    if views is not None:
         why = mc.capability_unavailable(mc.MODELS["pixal3d"], "multiview")
         if why:
             raise HTTPException(422, f"Pixal3D multi-view isn't available right now: {why}")
@@ -132,12 +158,22 @@ def make_3d(body: Model3DIn, db: Session = Depends(get_db), cur: CurrentUser = D
             out["background_note"] = NO_ALPHA
     # a text start's picture is made on a plain background, so it always needs cutting out
     rec = {"engine": engine.id, **rec, "remove_background": remove_bg or out["start"] == "text"}
+    if better:
+        if not body.remove_background:
+            out["background_note"] = BACK_BACKGROUND
+        # the views made from it have no alpha; a photo's field of view is measured, a character's is a render's
+        rec.update(remove_background=True, measure_fov=out["start"] == "picture")
 
     if out["start"] == "text":
         pic, pic_job = _queue_picture(db, cur, body, prompt)
         rec.update(picture={"generation_id": pic.generation_id, "media_id": pic.id, "status": "pending"},
                    source_media_id=pic.id)
         out.update(picture=pic, picture_job=pic_job)
+    if better:
+        made = _queue_back_views(db, cur, db.get(Generation, rec["source_id"]), title, *edit)
+        rec["better_back"] = {"status": "pending", "views": {v: {"generation_id": i.generation_id, "media_id": i.id}
+                                                             for v, (i, _) in made.items()}}
+        out.update(better_back=True, back_views=[i for i, _ in made.values()], back_jobs=[j for _, j in made.values()])
     if out["start"] != "picture":
         rec["start"] = out["start"]
 
@@ -157,7 +193,88 @@ def make_3d(body: Model3DIn, db: Session = Depends(get_db), cur: CurrentUser = D
     if out.get("picture") is not None:
         out["picture"] = lib.item_out(db, out["picture"])
         out["picture_job"] = job_out(out["picture_job"])
+    if out.get("back_views"):
+        out["back_views"] = [lib.item_out(db, i) for i in out["back_views"]]
+        out["back_jobs"] = [job_out(j) for j in out["back_jobs"]]
     return Model3DOut(item=lib.item_out(db, item), job=job_out(job), model_resolved=engine.id, **out)
+
+
+def _queue_back_views(db: Session, cur: CurrentUser, src: Generation, title: str, edit: mc.Model,
+                      chosen: dict) -> dict:
+    """Better back's side and back views: Character Studio's turnaround edit (Qwen edit plus the multiple-
+    angles LoRA, the comfy driver's sheet_view) of the one picture, kept as working parts of the 3D Studio."""
+    w, h = m3.back_view_size(src)
+    made = {}
+    for view, turn in m3.BACK_VIEWS:
+        params = {"view": turn, "reference_ids": [src.id], "source_id": src.id, "angles_lora": 1.0, "width": w,
+                  "height": h, "edit_model": edit.id, "model": edit.id, **chosen,
+                  "created_by": {"user_id": cur.id, "flow": "make_3d:better_back"}}
+        name = "side" if view == "left" else "back"
+        item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="image", origin="generated",
+                         title=f"{title} · {name} view"[:300], tags=[], width=w, height=h, home=m3.PART_HOME)
+        db.add(item)
+        db.flush()
+        g = enqueue_generation(db, workspace_id=cur.workspace_id, project_id=None, target_type="media",
+                               target_id=item.id, kind="sheet_view", prompt="", params=params)
+        item.generation_id = g.id
+        made[view] = (item, db.get(Job, g.job_id))
+    return made
+
+
+def _make_logo(db: Session, cur: CurrentUser, body: Model3DIn, into: str | None) -> Model3DOut:
+    """A logo, sign or sticker: traced and extruded on the CPU (app.model3d_logo). A picture without
+    transparency is cut out first on the image GPU, or keyed off its plain background when asked not to."""
+    ws = cur.workspace_id
+    media_id, src = _edit_source(db, ws, body.logo_id)
+    source_item = db.get(MediaItem, media_id) if media_id else None
+    title = (body.title or "").strip() or (f"{source_item.title} · 3D" if source_item and source_item.title
+                                           else "Logo · 3D")
+    if m3.has_transparency(get_settings().data_dir / src.file_path):
+        alpha = "own"
+    else:
+        alpha = "cutout" if body.remove_background else "key"
+    rec = {"start": "logo", "source_id": src.id, "source_media_id": media_id,
+           "logo": (body.logo or Model3DLogo()).model_dump(), "alpha": alpha}
+    out: dict = {"start": "logo"}
+    if alpha == "cutout":
+        cut, cut_job = _queue_cutout(db, cur, src, title)
+        rec["cutout"] = {"generation_id": cut.generation_id, "media_id": cut.id, "status": "pending"}
+        out.update(cutout=cut, cutout_job=cut_job)
+    item = MediaItem(id=new_id(), workspace_id=ws, kind=m3.MEDIA_KIND, origin="generated", title=title[:300],
+                     tags=[], folder_id=into, home=lib.home_of(body.part_of))
+    db.add(item)
+    db.flush()
+    g = Generation(workspace_id=ws, project_id=None, target_type="media", target_id=item.id, kind=m3.GEN_KIND,
+                   version=next_version(db, "media", item.id, m3.GEN_KIND), status="queued",
+                   prompt=(src.prompt or "")[:4000], seed=body.seed if body.seed is not None else new_seed(),
+                   params={"model3d": rec, "created_by": {"user_id": cur.id, "flow": "make_3d:logo"}})
+    db.add(g)
+    db.flush()
+    # the general lane: no GPU, so it doesn't queue behind the pictures
+    job = Job(workspace_id=ws, type=ml.JOB, generation_id=g.id, payload={"generation_id": g.id},
+              message="Waiting for a worker")
+    db.add(job)
+    db.flush()
+    g.job_id = job.id
+    item.generation_id = g.id
+    db.commit()
+    if out.get("cutout") is not None:
+        out["cutout"] = lib.item_out(db, out["cutout"])
+        out["cutout_job"] = job_out(out["cutout_job"])
+    return Model3DOut(item=lib.item_out(db, item), job=job_out(job), model_resolved="logo", **out)
+
+
+def _queue_cutout(db: Session, cur: CurrentUser, src: Generation, title: str):
+    from app.photo import restore
+
+    try:
+        params, _ = restore.build_restore(db, src, "cutout", {"edge": {"feather": 0.6, "shift": 0}})
+    except restore.RestoreError as e:
+        raise HTTPException(422, f"The logo can't be cut out here: {e}. Try a picture with a transparent "
+                                 "background.") from None
+    params["created_by"] = {"user_id": cur.id, "flow": "make_3d:logo"}
+    return _new_image_item(db, cur, f"{title} · cut-out"[:300], src.prompt or "Cut-out", params, None, None,
+                           m3.PART_HOME)
 
 
 def _queue_picture(db: Session, cur: CurrentUser, body: Model3DIn, prompt: str):

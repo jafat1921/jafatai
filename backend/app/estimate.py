@@ -32,6 +32,8 @@ LOAD_S = {"zimage_turbo": 15, "flux2_klein": 12, "qwen_image_2512": 35, "qwen_im
           # 3D: the engine plus two VAEs, DINOv3, BiRefNet (and MoGe for Pixal3D)
           "pixal3d": 45, "trellis2": 40}
 AUDIO_DEFAULT_S = 30.0
+LOGO_S = 8.0
+BACK_EDIT = "qwen_image_edit_2511"  # app.model3d.BACK_EDIT_MODEL
 UPSCALE_TEMPLATES = {
     "video": {"seedvr2": "upscale_seedvr2", "best": "upscale_seedvr2", "flashvsr": "upscale_flashvsr",
               "fast": "upscale_flashvsr", "esrgan": "upscale_esrgan", "quick": "upscale_esrgan"},
@@ -180,6 +182,11 @@ def _plan(kind: str, model: str | None, speed: str | None, duration_s: float | N
         return {"key": key, "load_key": key, "model": tpl, "w": w, "h": h, "rough": rough, "load": load,
                 "video": family == "video"}
 
+    if kind == "model3d" and model == "logo":
+        # numpy on the CPU: seconds, and no model to load (a cut-out, when one is needed, is extra)
+        return {"key": "model3d:logo", "load_key": "logo", "model": "logo", "w": 0, "h": 0, "rough": LOGO_S,
+                "load": 0, "video": False, "cpu": True}
+
     if kind == "model3d":
         from app import model3d
 
@@ -227,7 +234,7 @@ def _plan(kind: str, model: str | None, speed: str | None, duration_s: float | N
 
 def estimate(db: Session, workspace_id: str, *, kind: str, model: str | None = None, speed: str | None = None,
              count: int = 1, duration_s: float | None = None, width: int | None = None,
-             height: int | None = None) -> dict:
+             height: int | None = None, better_back: bool = False) -> dict:
     if kind in ("video", "take") and not duration_s:
         duration_s = 5.0
     if kind == "audio" and not duration_s:
@@ -253,7 +260,12 @@ def estimate(db: Session, workspace_id: str, *, kind: str, model: str | None = N
         low, high, basis = plan["rough"] * units * ROUGH_LOW, plan["rough"] * units * ROUGH_HIGH, "rough"
 
     load = 0.0
-    if last_model(db) != plan["load_key"]:
+    if last_model(db) != plan["load_key"] and not plan.get("cpu"):
+        load = float(plan["load"])
+    if better_back and kind == "model3d" and not plan.get("cpu"):
+        # two turnaround edits first (their own estimate, model load included), then the engine loads again
+        edits = estimate(db, workspace_id, kind="image", model=BACK_EDIT, count=2, width=768, height=1152)
+        low, high = low + edits["low_s"], high + edits["high_s"]
         load = float(plan["load"])
     return {"low_s": int(math.floor(low + load)), "high_s": int(math.ceil(high + load)), "basis": basis,
             "samples": len(vals), "model": plan["model"], "load_s": round(load), "units": round(units, 2)}

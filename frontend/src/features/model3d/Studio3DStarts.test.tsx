@@ -56,7 +56,10 @@ describe('3D Studio starts, the rules', () => {
       engine: 'pixal3d',
       quality: 'final',
       remove_background: true,
+      better_back: true,
     })
+    // a turnaround has its own views: no better back to ask for
+    expect(make3dPayload({ ...f, from: 'character', characterId: 'c1' }, undefined, true, ['front', 'back'])).not.toHaveProperty('better_back')
     expect(make3dPayload({ ...f, from: 'character', characterId: 'c1', engine: 'trellis2' })?.engine).toBe('trellis2')
     const views = { ...NO_VIEWS, front: 'a', right: 'd' }
     expect(make3dPayload({ ...f, from: 'views', views, engine: 'trellis2', removeBackground: false })).toEqual({
@@ -88,7 +91,8 @@ describe('3D Studio starts, the rules', () => {
     expect(sheetViews(undefined)).toEqual([])
     expect(engineLock({ ...DEFAULT_FORM_3D, from: 'views' }, [])).toMatch(/Pixal3D only/)
     expect(engineLock({ ...DEFAULT_FORM_3D, from: 'character' }, ['front', 'back'])).toMatch(/Pixal3D only/)
-    expect(engineLock({ ...DEFAULT_FORM_3D, from: 'character' }, [])).toBeNull()
+    expect(engineLock({ ...DEFAULT_FORM_3D, from: 'character' }, [])).toBe('Better back works with Pixal3D only.')
+    expect(engineLock({ ...DEFAULT_FORM_3D, from: 'character', betterBack: { picture: false, character: false } }, [])).toBeNull()
   })
 })
 
@@ -126,11 +130,13 @@ describe('3D Studio starts, the dock', () => {
     expect(screen.getByRole('radio', { name: 'TRELLIS.2, general' })).toBeDisabled()
     expect(screen.getByRole('radio', { name: /Pixal3D/ })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText('The turnaround views work with Pixal3D only.')).toBeInTheDocument()
+    // the turnaround brings its own back, so there's no switch for one
+    expect(screen.queryByRole('switch', { name: /Better back/ })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Make 3D/ }))
     await waitFor(() => expect(posted(calls)).toEqual({ character_id: 'c1', engine: 'pixal3d', quality: 'final', remove_background: true }))
   })
 
-  it('Character: without a turnaround the chosen engine goes as it is', async () => {
+  it('Character: without a turnaround Better back is on; turned off, the chosen engine goes as it is', async () => {
     const calls = api({ c2: sheet(['turn_front']) })
     renderAt('/3d?character=c2', route, seedCatalog)
     const user = userEvent.setup()
@@ -138,9 +144,16 @@ describe('3D Studio starts, the dock', () => {
     expect(await screen.findByRole('radio', { name: 'Character' })).toHaveAttribute('aria-checked', 'true')
     expect(await screen.findByText(/No turnaround on the sheet yet/)).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Idris' })).toBeChecked()
+    const back = screen.getByRole('switch', { name: /Better back/ })
+    expect(back).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'TRELLIS.2, general' })).toBeDisabled()
+    expect(screen.getByText('Better back works with Pixal3D only.')).toBeInTheDocument()
+    await waitFor(() => expect(calls.some((c) => c.path === '/estimate' && c.query.better_back === 'true')).toBe(true))
+
+    await user.click(back)
     await user.click(screen.getByRole('radio', { name: 'TRELLIS.2, general' }))
     await user.click(screen.getByRole('button', { name: /^Make 3D/ }))
-    await waitFor(() => expect(posted(calls)).toEqual({ character_id: 'c2', engine: 'trellis2', quality: 'final', remove_background: true }))
+    await waitFor(() => expect(posted(calls)).toEqual({ character_id: 'c2', engine: 'trellis2', quality: 'final', remove_background: true, better_back: false }))
   })
 
   it('Four views: four labelled slots, the front first, Pixal3D only', async () => {
@@ -155,5 +168,6 @@ describe('3D Studio starts, the dock', () => {
     expect(screen.getByRole('radio', { name: 'TRELLIS.2, general' })).toBeDisabled()
     expect(screen.getByText('Four views work with Pixal3D only.')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: /Remove background/ })).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: /Better back/ })).not.toBeInTheDocument()
   })
 })

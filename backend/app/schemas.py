@@ -1639,14 +1639,28 @@ class Model3DViews(BaseModel):
     right: str | None = None
 
 
+class Model3DLogo(BaseModel):
+    depth: Literal["thin", "medium", "thick"] = Field("medium", description="3, 6 or 12 % of the logo's width")
+    bevel: Literal["none", "soft", "round"] = Field("soft", description="The front and back edges: square, "
+                                                                        "chamfered or rounded")
+    finish: Literal["gold", "chrome", "steel", "colour"] = Field("gold", description="The sides (and a plain "
+                                                                                     "back): metal, or the "
+                                                                                     "logo's main colour")
+    back: Literal["mirror", "plain"] = Field("mirror", description="mirror shows the artwork through from the "
+                                                                   "front; plain gives the back the finish")
+
+
 class Model3DIn(BaseModel):
     model_config = ConfigDict(json_schema_extra={"examples": [
         {"source_id": "3f2a9c1e-0000-4000-8000-000000000000", "engine": "pixal3d", "quality": "draft"},
         {"prompt": "A brass oil lamp with a glass chimney", "quality": "draft"},
         {"views": {"front": "3f2a9c1e-0000-4000-8000-000000000000", "back": "8c1d2e3f-0000-4000-8000-000000000000"}},
+        {"source_id": "3f2a9c1e-0000-4000-8000-000000000000", "better_back": True},
+        {"logo_id": "3f2a9c1e-0000-4000-8000-000000000000", "logo": {"depth": "medium", "bevel": "round",
+                                                                     "finish": "gold", "back": "mirror"}},
     ]})
 
-    # exactly one of these four says where the model starts from
+    # exactly one of these five says where the model starts from
     source_id: str | None = Field(None, description="A finished picture: a Library media id or a generation id")
     prompt: str | None = Field(None, max_length=2000, description="Describe one object; a picture of it is made "
                                                                   "first, then the model")
@@ -1654,6 +1668,12 @@ class Model3DIn(BaseModel):
                                                        "full-body picture or portrait")
     views: Model3DViews | None = Field(None, description="Two to four views of one object, same scale, square "
                                                          "framing works best. Pixal3D only")
+    logo_id: str | None = Field(None, description="A logo, sign, icon or sticker: its outline is extruded on the "
+                                                  "CPU, the art goes on the front. engine and quality don't apply")
+    logo: Model3DLogo | None = Field(None, description="A logo's depth, bevel, finish and back")
+    better_back: bool | None = Field(None, description="Make side and back views of the picture first, then the "
+                                                       "model from all three (Pixal3D, +1-2 min). Empty: on for "
+                                                       "a character without a turnaround, off for a picture")
     engine: Literal["pixal3d", "trellis2"] = Field("pixal3d", description="pixal3d stays true to the picture; "
                                                                           "trellis2 is the general model")
     quality: Literal["draft", "final"] = Field("final", description="draft is about half the time, less detail")
@@ -1675,9 +1695,9 @@ class Model3DIn(BaseModel):
     def _one_start(self):
         if self.prompt is not None and not self.prompt.strip():
             self.prompt = None
-        given = [k for k in ("source_id", "prompt", "character_id", "views") if getattr(self, k)]
+        given = [k for k in ("source_id", "prompt", "character_id", "views", "logo_id") if getattr(self, k)]
         if len(given) != 1:
-            raise ValueError("Give exactly one of source_id, prompt, character_id or views")
+            raise ValueError("Give exactly one of source_id, prompt, character_id, views or logo_id")
         return self
 
 
@@ -1685,7 +1705,7 @@ class Model3DOut(BaseModel):
     item: MediaItemOut
     job: JobOut
     model_resolved: str
-    start: Literal["picture", "text", "character", "views"] = "picture"
+    start: Literal["picture", "text", "character", "views", "logo"] = "picture"
     # set when remove_background was asked off but the picture has nothing transparent to go by
     background_note: str | None = None
     # set when the start forced Pixal3D (several views) over the engine that was asked for
@@ -1695,6 +1715,15 @@ class Model3DOut(BaseModel):
     picture_job: JobOut | None = None
     # the views a multi-view model is made from, in front, left, back, right order
     views_used: list[str] | None = None
+    # better back: the side and back views being made first (working parts, home "3d") and their jobs
+    better_back: bool = False
+    # set when better back was asked for but couldn't be offered, so the one picture was used
+    better_back_note: str | None = None
+    back_views: list[MediaItemOut] | None = None
+    back_jobs: list[JobOut] | None = None
+    # a logo without transparency: the cut-out made first on the image GPU, and its job
+    cutout: MediaItemOut | None = None
+    cutout_job: JobOut | None = None
 
 
 class Turntable3DOut(BaseModel):

@@ -4,10 +4,11 @@ import { Check, Loader2, User } from 'lucide-react'
 import { ImageSourceField } from '@/components/media/ImageSourceField'
 import { ErrorState } from '@/components/studio/states'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useStudioCharacters } from '@/hooks/useCharacterStudio'
-import { useJob } from '@/hooks/useJobs'
-import { VIEWS } from '@/lib/model3d'
-import type { Job, View3D } from '@/lib/types'
+import { useJobs } from '@/hooks/useJobs'
+import { LOGO_BACKS, LOGO_BEVELS, LOGO_DEPTHS, LOGO_FINISHES, VIEWS } from '@/lib/model3d'
+import type { Job, Logo3D, View3D } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const VIEW_NAMES: Record<View3D, string> = { front: 'Front', left: 'Left side', back: 'Back', right: 'Right side' }
@@ -119,14 +120,62 @@ function Step({ n, label, job, waitingFor }: { n: number; label: string; job: Jo
   )
 }
 
-/** A text start runs in two steps: the picture, then the model made from it. */
-export function TwoSteps({ pictureJob, modelJob }: { pictureJob: Job; modelJob: Job }) {
-  const pic = useJob(pictureJob.id) ?? pictureJob
-  const model = useJob(modelJob.id) ?? modelJob
+export interface MadeFirst {
+  label: string
+  job: Job
+}
+
+/** What runs before the model (a text start's picture, better back's views, a logo's cut-out), then the model. */
+export function StepsFirst({ parts, modelJob, after }: { parts: MadeFirst[]; modelJob: Job; after: string }) {
+  const { data } = useJobs()
+  const live = (j: Job) => data?.find((x) => x.id === j.id) ?? j
+  const ready = parts.every((p) => live(p.job).status === 'done')
   return (
     <ol aria-label="Progress" className="flex flex-col gap-1.5 rounded-[6px] border border-studio-border bg-studio-raised p-2.5">
-      <Step n={1} label="Picture" job={pic} />
-      <Step n={2} label="3D model" job={model} waitingFor={pic.status === 'done' ? 'Waiting' : 'After the picture'} />
+      {parts.map((p, i) => (
+        <Step key={p.job.id} n={i + 1} label={p.label} job={live(p.job)} />
+      ))}
+      <Step n={parts.length + 1} label="3D model" job={live(modelJob)} waitingFor={ready ? 'Waiting' : after} />
     </ol>
+  )
+}
+
+function Segment<T extends string>({ label, help, value, options, onChange, grid }: { label: string; help: string; value: T; options: { id: T; label: string }[]; onChange: (v: T) => void; grid?: boolean }) {
+  const uid = useId()
+  return (
+    <fieldset className="flex min-w-0 flex-col gap-1.5">
+      <legend className="section-label mb-1.5">{label}</legend>
+      <ToggleGroup
+        type="single"
+        aria-label={label}
+        aria-describedby={`${uid}-h`}
+        value={value}
+        onValueChange={(v) => v && onChange(v as T)}
+        className={cn('w-full', grid ? 'grid grid-cols-2 gap-0.5' : 'flex')}
+      >
+        {options.map((o) => (
+          <ToggleGroupItem key={o.id} value={o.id} className="px-2">
+            {o.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      <p id={`${uid}-h`} className="text-small text-studio-muted">
+        {help}
+      </p>
+    </fieldset>
+  )
+}
+
+/** A logo badge's depth, bevel, sides and back. */
+export function LogoOptions({ value, onChange }: { value: Logo3D; onChange: (v: Logo3D) => void }) {
+  const set = <K extends keyof Logo3D>(k: K) => (v: Logo3D[K]) => onChange({ ...value, [k]: v })
+  const back = LOGO_BACKS.find((b) => b.id === value.back)
+  return (
+    <>
+      <Segment label="Depth" help="How thick the badge is, against the logo's width." value={value.depth} options={LOGO_DEPTHS} onChange={set('depth')} />
+      <Segment label="Bevel" help="The front and back edges: square, chamfered or rounded." value={value.bevel} options={LOGO_BEVELS} onChange={set('bevel')} />
+      <Segment label="Sides" help="The edges' finish. Logo colour takes the logo's main colour." value={value.finish} options={LOGO_FINISHES} onChange={set('finish')} grid />
+      <Segment label="Back" help={`${back?.hint ?? ''}.`} value={value.back} options={LOGO_BACKS} onChange={set('back')} />
+    </>
   )
 }

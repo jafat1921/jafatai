@@ -64,6 +64,8 @@ def test_every_registered_job_type_has_a_lane():
         "ad_style": "general",  # the vision model reads the brand's own adverts
         # long Urdu/Arabic prose marked in the background (contract v23b): LLM calls only
         "text_aerab": "general",
+        # 3D Studio's logo badge: traced and extruded with numpy; its cut-out is a generate job on the image lane
+        "model3d_logo": "general",
     }
     for t in worker.HANDLERS:
         if t.startswith("ai_"):

@@ -7,7 +7,9 @@ pixal3d_multiview_to_3d. The engine and quality only change the graph's inputs.
 
 params["model3d"] holds source_id (the picture, or the front view), views {front, left, back, right} for the
 multi-view graph, and for a text start picture {generation_id, media_id, status}: the image the job waits
-for (run_in_job) before it can run.
+for (run_in_job) before it can run. "Better back" (addendum A) makes a side and a back view of one picture
+first, with Character Studio's turnaround edit, and then runs the views graph: better_back {status, views
+{left, back: {generation_id, media_id}}}. A logo (addendum B) never reaches the GPU; app.model3d_logo.
 
 A turntable (part 3) is recorded in the browser and uploaded as an ordinary video item whose generation
 carries params.model3d_of; the model's own generation then holds turntable_id, thumb_from and thumb_v.
@@ -30,6 +32,10 @@ DEFAULT_ENGINE = "pixal3d"
 VIEWS = ("front", "left", "back", "right")
 # working pictures made for a model (a text start) live with it, out of the Library grid (contract v37)
 PART_HOME = "3d"
+# better back: Pixal3D's views, and the turnaround panel each is drawn like (app.character_panels.VIEW_PROMPTS)
+BACK_VIEWS = (("left", "side"), ("back", "back"))
+BACK_EDIT_MODEL = "qwen_image_edit_2511"  # the multiple-angles LoRA is Qwen-only
+BACK_FAILED = "The side and back views couldn't be made, so this model was made from the one picture."
 
 log = logging.getLogger("mixai.model3d")
 
@@ -107,35 +113,55 @@ def character_views(db, character_id: str):
 # ---------------------------------------------------------------- inside the job
 
 LIVE = ("queued", "generating")
+READY = ("ready", "approved")
 
 
 class PictureFailed(RuntimeError):
     pass
 
 
-def run_in_job(ctx, gen) -> None:
-    """A text start's pre-step (worker.handle_generate): back to the queue until the picture is made, then
-    the picture becomes the source. Raises JobDeferred while it is still on its way."""
+def wait_on(ctx, gens, message: str) -> None:
+    """Back to the queue (JobDeferred) while any of these generations is still being made."""
     from app import autopilot as ap
     from app import worker
-    from app.models import Generation, Job
+    from app.models import Job
 
-    rec = dict((gen.params or {}).get("model3d") or {})
-    pic = dict(rec.get("picture") or {})
-    if pic.get("status") != "pending":
+    live = [g for g in gens if g is not None and g.status in LIVE]
+    if not live:
         return
     db, job = ctx.db, ctx.job
-    src = db.get(Generation, pic.get("generation_id") or "")
-    if src is not None and src.status in LIVE:
-        child = db.get(Job, src.job_id) if src.job_id else None
+    ids = []
+    for g in live:
+        child = db.get(Job, g.job_id) if g.job_id else None
         if child is not None:
-            # worker.wake_parent puts this job back at normal priority once the picture is done
+            # worker.wake_parent puts this job back at normal priority once they are all done
             child.payload = {**(child.payload or {}), "parent_job_id": job.id}
-            job.result = {"waiting_on": [child.id]}
-        ctx.progress(0.0, "Making the picture first")
-        db.commit()
-        raise worker.JobDeferred("Making the picture first", priority=ap.WAIT_PRIORITY)
-    if src is None or src.status not in ("ready", "approved") or not src.file_path:
+            ids.append(child.id)
+    if ids:
+        job.result = {"waiting_on": ids}
+    ctx.progress(0.0, message)
+    db.commit()
+    raise worker.JobDeferred(message, priority=ap.WAIT_PRIORITY)
+
+
+def run_in_job(ctx, gen) -> None:
+    """The pre-steps (worker.handle_generate): a text start waits for its picture, which then becomes the
+    source; better back waits for its side and back views. Raises JobDeferred while they're on their way."""
+    rec = dict((gen.params or {}).get("model3d") or {})
+    if (rec.get("picture") or {}).get("status") == "pending":
+        _picture_step(ctx, gen, rec)
+    if (rec.get("better_back") or {}).get("status") == "pending":
+        _back_step(ctx, gen, rec)
+
+
+def _picture_step(ctx, gen, rec: dict) -> None:
+    from app.models import Generation, Job
+
+    pic = dict(rec["picture"])
+    db, job = ctx.db, ctx.job
+    src = db.get(Generation, pic.get("generation_id") or "")
+    wait_on(ctx, [src], "Making the picture first")
+    if src is None or src.status not in READY or not src.file_path:
         child = db.get(Job, src.job_id) if src is not None and src.job_id else None
         why = f" ({child.error})" if child is not None and child.error else ""
         gen.params = {**gen.params, "model3d": {**rec, "picture": {**pic, "status": "failed"}}}
@@ -145,6 +171,48 @@ def run_in_job(ctx, gen) -> None:
     gen.params = {**gen.params, "model3d": rec}
     job.result = None
     db.commit()
+
+
+def _back_step(ctx, gen, rec: dict) -> None:
+    """The views graph with the made views beside the original, or the one picture if none came out."""
+    from app.models import Generation
+
+    db, job = ctx.db, ctx.job
+    bb = dict(rec["better_back"])
+    parts = bb.get("views") or {}
+    gens = {v: db.get(Generation, p.get("generation_id") or "") for v, p in parts.items()}
+    wait_on(ctx, list(gens.values()), "Making the side and back views first")
+    ok = {v: g for v, g in gens.items() if g is not None and g.status in READY and g.file_path}
+    if ok:
+        views = {"front": rec["source_id"], **{v: ok[v].id for v, _ in BACK_VIEWS if v in ok}}
+        media = {"front": rec.get("source_media_id"), **{v: parts[v].get("media_id") for v in ok}}
+        rec.update(views=views, view_media={v: m for v, m in media.items() if m})
+        missing = [v for v, _ in BACK_VIEWS if v not in ok]
+        if missing:
+            name = "side" if missing[0] == "left" else "back"
+            rec["better_back_note"] = f"The {name} view couldn't be made, so the model used the others."
+        bb["status"] = "done"
+    else:
+        rec["better_back_note"] = BACK_FAILED
+        bb["status"] = "failed"
+    rec["better_back"] = bb
+    gen.params = {**gen.params, "model3d": rec}
+    job.result = None
+    db.commit()
+
+
+def back_view_size(src) -> tuple[int, int]:
+    # a person or figure is tall; anything squarer gets a square canvas to turn round in
+    w, h = (src.params or {}).get("width"), (src.params or {}).get("height")
+    if not (w and h):
+        try:
+            from app.config import get_settings
+
+            with Image.open(get_settings().data_dir / src.file_path) as im:
+                w, h = im.size
+        except (OSError, TypeError):
+            w = h = 1
+    return (768, 1152) if h >= w * 1.2 else (1024, 1024)
 
 
 

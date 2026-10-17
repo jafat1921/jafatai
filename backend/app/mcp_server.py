@@ -41,7 +41,8 @@ from app.dub.schemas import TranscribeIn
 from app.models import Character, Generation, Job, Transcript
 from app.podcast.schemas import EpisodeIn, Format, Host
 from app.schemas import (AudioGenerateIn, CharacterCreate, CharacterPatch, GenerationCreate, ImageAspect, ImageEditIn,
-                         ImageGenerateIn, JobOut, MediaItemOut, Model3DIn, Model3DViews, SheetIn, SpeakDesignIn, SpeakIn, UpscaleIn,
+                         ImageGenerateIn, JobOut, MediaItemOut, Model3DIn, Model3DLogo, Model3DViews, SheetIn,
+                         SpeakDesignIn, SpeakIn, UpscaleIn,
                          VideoAspect, VideoGenerateIn, _iso)
 from app.security import CurrentUser, bearer_token, resolve_token
 from app.services import READY_STATES, job_out
@@ -244,6 +245,9 @@ def make_3d_model(
     view_ids: Annotated[dict[Literal["front", "left", "back", "right"], str] | None,
                         Field(description="Or two to four views of one object, e.g. {\"front\": id, \"back\": id}. "
                                           "front is required. Pixal3D only")] = None,
+    logo_id: Annotated[str | None, Field(description="Or a logo, sign, icon or sticker picture: its outline is "
+                                                     "extruded into a badge in seconds, the art on the front. "
+                                                     "engine and quality don't apply")] = None,
     engine: Annotated[Literal["pixal3d", "trellis2"], Field(description="pixal3d stays true to the picture; "
                                                                         "trellis2 is the general model")] = "pixal3d",
     quality: Annotated[Literal["draft", "final"], Field(description="draft is about half the time")] = "final",
@@ -252,15 +256,28 @@ def make_3d_model(
     image_model: Annotated[str | None, Field(max_length=60, description="With prompt: the image model for the "
                                                                         "picture; empty uses the default")] = None,
     brand_kit_id: Annotated[str | None, Field(description="With prompt: the kit's palette and look")] = None,
+    better_back: Annotated[bool | None, Field(description="With image_id or character_id: make side and back "
+                                                          "views first so a person's back isn't a copy of the "
+                                                          "front (+1-2 min, Pixal3D). Empty: on for a character "
+                                                          "without a turnaround, off for a picture")] = None,
+    depth: Annotated[Literal["thin", "medium", "thick"], Field(description="With logo_id")] = "medium",
+    bevel: Annotated[Literal["none", "soft", "round"], Field(description="With logo_id: the edges")] = "soft",
+    finish: Annotated[Literal["gold", "chrome", "steel", "colour"],
+                      Field(description="With logo_id: the sides; colour is the logo's main colour")] = "gold",
+    back: Annotated[Literal["mirror", "plain"], Field(description="With logo_id: the art through to the back, or "
+                                                                  "the plain finish")] = "mirror",
     seed: Annotated[int | None, Field(ge=0, le=2**31 - 1)] = None,
     part_of: Annotated[str | None, Field(max_length=80, description=PART_OF)] = None,
 ) -> dict:
-    """Make a textured 3D model (a GLB file) from a picture, a prompt, a character or a few views. Give exactly
-    one of image_id, prompt, character_id or view_ids. Takes several minutes; returns the model's job (and,
-    for a prompt, the picture's job that runs first)."""
+    """Make a textured 3D model (a GLB file) from a picture, a prompt, a character, a few views or a logo. Give
+    exactly one of image_id, prompt, character_id, view_ids or logo_id. Takes several minutes (a logo takes
+    seconds); returns the model's job, plus the jobs that run first (a prompt's picture, better back's views,
+    a logo's cut-out)."""
     try:
         body = Model3DIn(source_id=image_id, prompt=prompt, character_id=character_id,
-                         views=Model3DViews(**view_ids) if view_ids else None, engine=engine, quality=quality,
+                         views=Model3DViews(**view_ids) if view_ids else None, logo_id=logo_id,
+                         logo=Model3DLogo(depth=depth, bevel=bevel, finish=finish, back=back) if logo_id else None,
+                         better_back=better_back, engine=engine, quality=quality,
                          remove_background=remove_background, image_model=image_model, brand_kit_id=brand_kit_id,
                          seed=seed, part_of=part_of)
     except ValidationError as e:
@@ -273,7 +290,11 @@ def make_3d_model(
             res["picture"] = {**_item(out.picture), "job_id": out.picture_job.id}
         if out.views_used:
             res["views"] = out.views_used
-        for k in ("background_note", "engine_note"):
+        if out.better_back:
+            res["better_back"] = [{**_item(i), "job_id": j.id} for i, j in zip(out.back_views, out.back_jobs)]
+        if out.cutout_job is not None:
+            res["cutout"] = {**_item(out.cutout), "job_id": out.cutout_job.id}
+        for k in ("background_note", "engine_note", "better_back_note"):
             if getattr(out, k):
                 res.setdefault("notes", []).append(getattr(out, k))
         return res

@@ -54,7 +54,8 @@ describe('3D Studio rules', () => {
   it('needs a picture, and sends exactly what the dock shows', () => {
     expect(blocked3d(DEFAULT_FORM_3D, undefined)).toBe('Add a picture first.')
     expect(make3dPayload(DEFAULT_FORM_3D)).toBeNull()
-    expect(make3dPayload({ ...DEFAULT_FORM_3D, sourceId: 's1' })).toEqual({ source_id: 's1', engine: 'pixal3d', quality: 'final', remove_background: true })
+    // the Better back switch shows for a picture, so its state goes too
+    expect(make3dPayload({ ...DEFAULT_FORM_3D, sourceId: 's1' })).toEqual({ source_id: 's1', engine: 'pixal3d', quality: 'final', remove_background: true, better_back: false })
     expect(fileStem('Teapot · 3D')).toBe('teapot-3d')
     expect(fileStem('···')).toBe('model')
   })
@@ -77,7 +78,7 @@ describe('3D Studio page', () => {
     await waitFor(() => expect(calls.some((c) => c.path === '/estimate' && c.query.model === 'trellis2' && c.query.speed === 'draft')).toBe(true))
     expect(calls.find((c) => c.path === '/estimate')?.query.kind).toBe('model3d')
     await user.click(screen.getByRole('button', { name: /^Make 3D · Draft model/ }))
-    await waitFor(() => expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ source_id: 's1', engine: 'trellis2', quality: 'draft', remove_background: false }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ source_id: 's1', engine: 'trellis2', quality: 'draft', remove_background: false, better_back: false }))
     expect(calls.find((c) => c.path === '/media' && c.query.kind === 'model')).toBeTruthy()
   })
 

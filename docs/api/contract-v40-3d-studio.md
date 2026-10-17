@@ -1,11 +1,12 @@
 ---
-title: "Contract v40: 3D Studio (a picture, a prompt, a character or four views to a textured 3D model)"
+title: "Contract v40: 3D Studio (a picture, a prompt, a character, four views or a logo to a textured 3D model)"
 status: Active
 created: 2026-10-17
 extends: contract-v39 (packages)
 migration: none (MediaItem.kind and Generation.kind are plain strings)
-updated: 2026-10-17 (addenda: text, character and four-view starts; turntable, thumbnail, Make 3D links)
-plan: docs/PLAN-m20-3d-studio.md (deliveries 1, 2 and 3)
+updated: 2026-10-17 (addenda: text, character and four-view starts; turntable, thumbnail, Make 3D links;
+  better back and the logo start)
+plan: docs/PLAN-m20-3d-studio.md (deliveries 1, 2 and 3, owner's addendum A and B)
 ---
 
 # Contract v40: 3D Studio
@@ -316,3 +317,153 @@ The answer is the model with its new `thumb_url`.
     undone, so there's no undo toast.
 - **Layout:** the options column is 18rem from 1100 px and moves under the start fields below that. The four
   view slots use the drop zone's `compact` tiles, two across only when their own column has room.
+
+## 8. Addendum: better back and the logo start (owner's addendum A and B)
+
+### Better back
+
+One photo of a person gives a good front, but the back comes out as a copy of the front. With **better back**
+the side and back are drawn first, then the model is made from all three views.
+
+```json
+{"source_id": "<picture>", "better_back": true}
+{"character_id": "<character id>"}            // on by default without a turnaround
+```
+
+- **`better_back`** (`true` | `false` | empty):
+  - Empty means **on** for a character with no turnaround and **off** for a picture.
+  - It is ignored for text starts, four views, a character that has a turnaround, and logos.
+- **Step 1, the views.** Two edits of the picture are queued on the image GPU. They use Character Studio's
+  turnaround edit: kind `sheet_view` with `view` `side` and then `back`, `qwen_image_edit_2511` and the
+  multiple-angles LoRA (`angles_lora: 1`), and the picture as `reference_ids`.
+  - Each edit is a working part (`MediaItem.home = "3d"`), titled "<title> · side view" / "· back view".
+  - The canvas is 768×1152 for a tall picture, and 1024² otherwise.
+- **Step 2, the model.** The model's job waits for both views (`message` "Making the side and back views
+  first", like a text start's picture). It then runs the four-view graph (§6) with:
+  - `front` = the original;
+  - `left` = the side view;
+  - `back` = the back view.
+- **Engine.** Pixal3D only. If another engine was asked for, `engine_note` says why it changed.
+- **Background.** Backgrounds are always removed (the views are drawn on grey). If `remove_background: false`
+  was asked for, `background_note` says so.
+- **Field of view.** `measure_fov` is `true` for a picture (a photo) and `false` for a character (a render).
+- **When views fail:**
+  - One view fails: the model uses the views that came out, and `params.model3d.better_back_note` says
+    which one is missing.
+  - Both fail: the model is made from the one picture (the single-picture template) with
+    `better_back_note` "The side and back views couldn't be made, so this model was made from the one
+    picture."
+- **When it can't run.** If the multi-view weights or the edit model aren't available, nothing extra is
+  queued. The model is made from the one picture, with the answer's `better_back_note`.
+- **Packages.** The views are image jobs on the edit model. A package without Create Image, or without
+  `qwen_image_edit_2511`, gets a 403 and nothing is queued.
+- **Estimate.** `GET /api/estimate?kind=model3d&model=pixal3d&speed=<q>&better_back=true` adds both edits,
+  with their model load, and the engine's load after them (+1–2 min).
+
+`params.model3d.better_back` is `{status: pending|done|failed, views: {left|back: {generation_id, media_id}}}`.
+Once the step runs, `views` and `view_media` are filled in as for four views.
+
+The answer adds:
+
+| Field | Meaning |
+|---|---|
+| `better_back` | `true` when the views were queued |
+| `back_views`, `back_jobs` | The side and back working parts and their jobs |
+| `better_back_note` | Set when better back was asked for but couldn't run |
+
+### The logo start
+
+For logos, signs, icons, stickers and lettering. It runs on the CPU (general lane), with no model and no
+GPU, and takes seconds.
+
+```json
+{"logo_id": "<picture>", "remove_background": true,
+ "logo": {"depth": "medium", "bevel": "soft", "finish": "gold", "back": "mirror"}}
+```
+
+`logo_id` is a fifth start, so exactly one of `source_id`, `prompt`, `character_id`, `views` and `logo_id`
+is given. `engine` and `quality` don't apply. `model_resolved` is `"logo"`.
+
+| Option | Values (default first) | What it does |
+|---|---|---|
+| `depth` | `medium`, `thin`, `thick` | 6 %, 3 % or 12 % of the logo's width |
+| `bevel` | `soft`, `none`, `round` | A chamfer, square edges, or a quarter-round in four steps |
+| `finish` | `gold`, `chrome`, `steel`, `colour` | The sides' material (`colour` is the logo's main colour) |
+| `back` | `mirror`, `plain` | The artwork shows through on the back, or the back takes the finish |
+
+**The shape's alpha** (`params.model3d.alpha`):
+
+- **`own`:** the picture is see-through already, so its alpha is used as it is.
+- **`cutout`:** the picture has no transparency and `remove_background` is on (the default).
+  - Photo Studio's BiRefNet cut-out (`photo_cutout_mask`) runs first on the image GPU, as a working part.
+  - The answer's `cutout` and `cutout_job` are that part and its job.
+  - The logo job waits ("Cutting the logo out first"). If the cut-out fails, the logo job fails and says why.
+- **`key`:** the picture has no transparency and `remove_background` is `false`. The plain colour around the
+  picture's edges is taken out on the CPU (for a logo on white).
+
+**What's made:**
+
+1. **Tracing.** The art is cropped to its alpha with a 1 % margin. Its alpha is traced at 1024 px on the long
+   side with marching squares at 0.5, holes included. The outline is simplified with Douglas-Peucker at
+   0.5 px. Specks under 12 px² are dropped.
+2. **Shapes.** Outlines and holes are paired by winding and containment. An island inside a hole is an
+   outline of its own.
+3. **Faces.** The flat faces are ear-clipped, with each hole bridged in.
+4. **Bevel.** The bevel is one width all round: soft is 0.3 × the depth, round is 0.45 × the depth, at most
+   3 % of the width. A thin stroke keeps half its face, because the bevel takes at most a quarter of a
+   stroke from each side. A curve tighter than the bevel folds into a sharp mitred corner. A shape whose
+   bevelled outline still tangles is made without a bevel, so the badge stays closed.
+5. **Facing.** The front faces −Z, where the viewer's camera starts, and reads the right way round from there.
+   The logo is 1 unit wide or tall at most, centred.
+6. **GLB.** One mesh in three primitives (front, back, sides), with an embedded PNG texture:
+   - **Front:** the material "Artwork" (metallic 0, roughness 0.55). The art is planar-mapped from the
+     original outline, so the whole artwork shows, squeezed a touch into the bevel.
+   - **Texture:** the cut-out art cropped to the logo, up to 4096 px. Its colours are spread out under the
+     soft edge.
+   - **Sides:** the finish:
+
+     | Finish | Base colour (linear) | Metallic | Roughness |
+     |---|---|---|---|
+     | Gold | 1.0, 0.766, 0.336 | 1 | 0.28 |
+     | Chrome | 0.62, 0.62, 0.64 | 1 | 0.08 |
+     | Brushed steel | 0.56, 0.57, 0.58 | 1 | 0.38 |
+     | Logo colour | the art's main colour | 0.15 | 0.45 |
+   - **Back:** "Artwork" for `mirror`, or the finish for `plain`.
+
+**The record.** A `model` item (kind `model3d`) like any other 3D result. Its job is type `model3d_logo` on the
+`general` lane, billed at 0 GPU seconds. The thumbnail is the logo picture.
+
+- `params.model3d` holds:
+  - `start: "logo"`;
+  - `source_id` and `source_media_id`;
+  - `logo` (the options);
+  - `alpha`;
+  - `cutout`;
+  - `mesh` after the job: `{outlines, holes, vertices, triangles, texture, size: {width, depth}, colour}`.
+- `GET /api/3d/options` adds `logo: {depths, bevels, finishes: [{id, label}], backs, defaults}` and
+  `better_back: {available, reason, engine}`.
+- `GET /api/estimate?kind=model3d&model=logo` is a few seconds with no model load.
+
+### MCP
+
+`make_3d_model` gains:
+
+- `logo_id`, with `depth`, `bevel`, `finish` and `back`;
+- `better_back` (with `image_id` or `character_id`).
+
+The answer adds:
+
+- `better_back`: the two views, each with its `job_id`;
+- `cutout`: a logo's cut-out, with its `job_id`;
+- `better_back_note`, among the `notes`.
+
+### Frontend
+
+- **From:** Picture | Text | Character | Four views | Logo.
+- **Better back:** a switch for Picture (off, with the hint "Turn on for people and figures") and for a
+  character without a turnaround (on). It's hidden for the other starts. Its hint says "Makes side and back
+  views first, +1–2 min". When it's on, the engine is fixed to Pixal3D, and progress shows the views and then
+  the 3D model.
+- **Logo:** a picture slot, then Depth, Bevel, Sides and Back segments, each with a short help line ("Crisp
+  letters and edges — best for logos, signs, icons, stickers"). Engine and quality are hidden. The estimate is
+  seconds.

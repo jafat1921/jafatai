@@ -331,7 +331,8 @@ def test_character_without_a_sheet_uses_its_best_picture(client, fast_driver):
     assert r.status_code == 422 and "portrait first" in r.json()["detail"]
 
     portrait = _panel(c["id"], "portrait")
-    out = client.post("/api/3d/make", json={"character_id": c["id"], "engine": "trellis2"}).json()
+    out = client.post("/api/3d/make", json={"character_id": c["id"], "engine": "trellis2",
+                                          "better_back": False}).json()
     assert out["views_used"] is None and out["model_resolved"] == "trellis2" and out["engine_note"] is None
     assert _rec(out["item"]["generation_id"])["model3d"]["source_id"] == portrait
 

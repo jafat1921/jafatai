@@ -1125,6 +1125,8 @@ export interface EstimateQuery {
   duration_s?: number
   width?: number
   height?: number
+  // model3d: add the side and back views made first
+  better_back?: boolean
 }
 
 export interface EstimateResult {
@@ -2012,16 +2014,28 @@ export type Engine3D = 'pixal3d' | 'trellis2'
 export type Quality3D = 'draft' | 'final'
 
 export type View3D = 'front' | 'left' | 'back' | 'right'
-export type Start3D = 'picture' | 'text' | 'character' | 'views'
+export type Start3D = 'picture' | 'text' | 'character' | 'views' | 'logo'
 
-/** Exactly one of source_id, prompt, character_id or views. */
+// a logo badge (contract v40 §8): extruded on the CPU, the art on the front
+export interface Logo3D {
+  depth: 'thin' | 'medium' | 'thick'
+  bevel: 'none' | 'soft' | 'round'
+  finish: 'gold' | 'chrome' | 'steel' | 'colour'
+  back: 'mirror' | 'plain'
+}
+
+/** Exactly one of source_id, prompt, character_id, views or logo_id. A logo has no engine or quality. */
 export interface Make3DRequest extends MagicFields {
   source_id?: string
   prompt?: string
   character_id?: string
   views?: Partial<Record<View3D, string>> & { front: string }
-  engine: Engine3D
-  quality: Quality3D
+  logo_id?: string
+  logo?: Logo3D
+  // side and back views made first, for people and figures (Pixal3D only)
+  better_back?: boolean
+  engine?: Engine3D
+  quality?: Quality3D
   remove_background: boolean
   brand_kit_id?: string
   image_model?: string
@@ -2042,6 +2056,13 @@ export interface Make3DResponse {
   picture?: MediaItem | null
   picture_job?: Job | null
   views_used?: View3D[] | null
+  better_back?: boolean
+  better_back_note?: string | null
+  back_views?: MediaItem[] | null
+  back_jobs?: Job[] | null
+  // a logo without transparency is cut out first
+  cutout?: MediaItem | null
+  cutout_job?: Job | null
 }
 
 // POST /3d/{id}/turntable: the new video item and the model with its new thumb_url

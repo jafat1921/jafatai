@@ -41,8 +41,10 @@ def estimate(kind: Literal["image", "video", "take", "upscale", "audio", "speech
              count: int = Query(1, ge=1, le=16),
              duration_s: float | None = Query(None, gt=0, le=1200), width: int | None = Query(None, ge=64, le=8192),
              height: int | None = Query(None, ge=64, le=8192), chars: int | None = Query(None, ge=0, le=20000),
+             better_back: bool = Query(False, description="model3d: add 3D Studio's side and back views, made "
+                                                          "first with the edit model"),
              db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     if kind == "speech":
         return est.speech_estimate(model=model, count=count, chars=chars, duration_s=duration_s)
     return est.estimate(db, cur.workspace_id, kind=kind, model=model, speed=speed, count=count,
-                        duration_s=duration_s, width=width, height=height)
+                        duration_s=duration_s, width=width, height=height, better_back=better_back)

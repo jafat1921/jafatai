@@ -139,3 +139,14 @@ with the stage timeline, a review banner, the step gate and approve-and-continue
 nudges (0.1 s), play from a line, tap to time while it plays. Scenes: keyframe/clip grid, edit the prompt,
 "New picture" / "New motion" per scene. Render: preview player, download, .srt, cut again. Poem and lines are
 `dir="auto"` with the Short's `lang`.
+
+## v33b: song length and broken keyframes
+
+- **Song length follows the poem.** The song model stops at the length it is given whether or not the lyrics
+  are finished, so a 12-line ghazal in 60 s lost its last lines and the subtitles ran ahead of the singer.
+  The song is now `max(length_s, 8 s intro + Σ(letters × 0.4 s + 1 s) + 6 s outro)` for slow styles (ghazal,
+  sufi, nazm, kalam, qawwali, ney …; 0.28 s a letter otherwise), capped at the model's limit and 150 s.
+  `length_s` still decides the poem's size: up to 75 s is verse + chorus (about 8 lines).
+- **Keyframes that won't open** (a file cut short when the server went down) are made again once on the next
+  run of the scenes stage, whatever their try count, instead of failing every retry.
+- MCP: `make_poetry_short`, `continue_poetry_short`, `get_poetry_short`.

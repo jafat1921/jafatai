@@ -323,3 +323,25 @@ def test_chapters_and_cues_follow_the_sections():
     assert [c["title"] for c in plan["chapters"]] == ["Verse 1", "Chorus", "Verse 2"]
     assert plan["chapters"][0]["start"] == 0 and plan["chapters"][1]["start"] == 7.0
     assert plan["cues"][0] == {"start": 3.0, "end": 4.5, "text": "l0"} and plan["total"] == 13.0
+
+
+def test_the_song_is_long_enough_to_sing_the_whole_poem():
+    from app.poetry import stages as pst
+
+    # eight ghazal lines don't fit in 60 s; the song model would stop mid-poem and the subtitles run ahead
+    lines = ["شمس ڈوبی ہے، شام بھی آئی ہے"] * 8
+    secs = pst.song_seconds(lines, "slow ghazal, harmonium", 60, 240)
+    assert 80 <= secs <= pst.SONG_MAX_S
+    assert pst.song_seconds(lines, "slow ghazal", 60, 70) == 70  # never over the model's limit
+    assert pst.song_seconds(["la la"], "upbeat pop", 45) == 45  # a short poem keeps the asked length
+    assert pst.sections_for(60) == ["verse", "chorus"]
+
+
+def test_a_truncated_keyframe_is_not_readable(tmp_path, monkeypatch):
+    from app.poetry import stages as pst
+
+    good, bad = tmp_path / "good.png", tmp_path / "bad.png"
+    good.write_bytes(png_bytes())
+    bad.write_bytes(png_bytes()[:40])
+    monkeypatch.setattr(pst, "generation_file", lambda g: g)
+    assert pst.readable(good) and not pst.readable(bad) and not pst.readable(tmp_path / "missing.png")

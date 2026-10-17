@@ -525,6 +525,15 @@ def make_poetry_short(
                 "next": "get_poetry_short until status is done, then get_media on video.media_id"}
 
 
+@tool("generate", title="Carry on a Poetry Short")
+def continue_poetry_short(ctx: Context, short_id: str) -> dict:
+    """Retry a failed stage of a Poetry Short (or approve the one under review) and run on from there."""
+    from app.api.poetry import continue_short
+
+    with acting(ctx, "generate") as (db, cur):
+        return {"short_id": short_id, **_job(continue_short(short_id, db=db, cur=cur))}
+
+
 @tool("read", title="Get a Poetry Short")
 def get_poetry_short(ctx: Context, short_id: str) -> dict:
     """Where a Poetry Short is: each stage's status, the poem, and the finished video once rendered."""

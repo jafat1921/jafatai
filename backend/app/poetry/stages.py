@@ -46,11 +46,39 @@ class Review:
 
 
 def sections_for(length_s: float) -> list[str]:
-    if length_s <= 40:
+    # sung poetry is slow: a 60 s ghazal holds about eight lines, not twelve (twelve got cut off mid-poem)
+    if length_s <= 75:
         return ["verse", "chorus"]
-    if length_s <= 70:
-        return ["verse", "chorus", "verse"]
-    return ["verse", "chorus", "verse", "chorus"]
+    return ["verse", "chorus", "verse"]
+
+
+SLOW_STYLES = ("ghazal", "sufi", "nazm", "kalam", "qawwali", "naat", "slow", "ballad", "lullaby", "ney", "classical")
+SONG_INTRO_S, SONG_OUTRO_S, LINE_GAP_S = 8.0, 6.0, 1.0
+SONG_MAX_S = 150.0
+
+
+def song_seconds(texts: list[str], style: str, asked: float, cap: float | None = None) -> float:
+    """Long enough to sing every line. The song model stops at the length it is given, lyrics or not, so a
+    poem longer than the song lost its last lines and the subtitles ran ahead of the singer."""
+    per_letter = 0.4 if any(w in (style or "").lower() for w in SLOW_STYLES) else 0.28
+    sung = sum(tm.weight(t) * per_letter + LINE_GAP_S for t in texts)
+    need = SONG_INTRO_S + sung + SONG_OUTRO_S
+    return float(round(min(cap or SONG_MAX_S, SONG_MAX_S, max(asked, need))))
+
+
+def readable(g: Generation) -> bool:
+    # a keyframe written while the server went down can be a truncated file that ComfyUI then can't load
+    from PIL import Image
+
+    p = generation_file(g)
+    if p is None or not p.is_file():
+        return False
+    try:
+        with Image.open(p) as im:
+            im.load()
+    except Exception:  # noqa: BLE001
+        return False
+    return True
 
 
 class Run:
@@ -217,7 +245,8 @@ class Run:
         tags = (ps.poem or {}).get("tags") or ""
         prompt = ", ".join(x for x in (tags, st.get("mood"), f"{st['vocal']} vocal") if x)
         m, chosen = mc.choose(svc.SONG_MODEL, "audio", prompt, kind="song")
-        secs = float(st["length_s"])
+        secs = song_seconds([ln["text"] for ln in ps.lines or []], " ".join((tags, st.get("style") or "")),
+                            float(st["length_s"]), m.max_duration_s)
         mc.check_audio(m, "song", secs)
         params = {"kind": "song", "model": m.id, "duration_s": secs, "user_prompt": prompt,
                   "lyrics": (ps.poem or {}).get("lyrics") or "", "language": ps.language, "vocal": st["vocal"],
@@ -313,8 +342,16 @@ class Run:
             if kf is not None and kf.status in svc.LIVE:
                 waits.append(kf.job_id)
                 continue
-            if kf is None or kf.status not in svc.FINISHED:
-                if kf is not None and sc.get("keyframe_tries", 0) >= svc.ATTEMPTS:
+            broken = kf is not None and kf.status in svc.FINISHED and not readable(kf)
+            if broken and not sc.get("remade_broken"):
+                # once, whatever the tries: a file lost to a crash isn't the model's fault
+                log.warning("poetry %s scene %s: keyframe %s won't open, making it again", ps.id, k + 1, kf.id)
+                sc.update(keyframe_tries=min(sc.get("keyframe_tries", 0), svc.ATTEMPTS - 1), remade_broken=True)
+            elif broken:
+                failed.append((k, kf))
+                continue
+            if kf is None or kf.status not in svc.FINISHED or broken:
+                if kf is not None and not broken and sc.get("keyframe_tries", 0) >= svc.ATTEMPTS:
                     failed.append((k, kf))
                     continue
                 prompt, params = sn.keyframe_request(db, ps, sc)

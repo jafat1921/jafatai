@@ -261,3 +261,5 @@ def test_poetry_short_tools(client, anon):
     # made over MCP, so it shows in the app's list
     assert made["short_id"] in [s["id"] for s in client.get("/api/poetry").json()]
     assert m.call("make_poetry_short", language="ur")["isError"]
+    busy = m.call("continue_poetry_short", short_id=made["short_id"])  # still running: nothing to carry on
+    assert busy["isError"] and "working" in busy["content"][0]["text"]

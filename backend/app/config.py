@@ -28,10 +28,23 @@ class Settings(BaseSettings):
     dev_login_prefill: bool = True
     admin_name: str = "Admin"
 
-    # token API (contract v27). Off: only the ADMIN_EMAIL owner sees the token page and the docs, everyone else
-    # gets 404. On: owners and editors mint tokens and any signed-in user can read the docs
+    # token API (contract v27). Off: only the admin (user.is_admin since v38) sees the token page and the docs,
+    # everyone else gets 404. On: owners and editors mint tokens and any signed-in user can read the docs
     public_api: bool = False
     api_docs: bool = True
+
+    # accounts (contract v38). open: anyone signs up; invite: only accounts an admin makes; closed: none
+    signup: str = "open"
+    email_verify: bool = True
+    # where links in emails point, and an origin the Origin check accepts; empty: the first CORS origin
+    public_url: str = ""
+    email_backend: str = "console"  # console | smtp
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_tls: str = "starttls"  # starttls | ssl | off
 
     database_url: str = "sqlite:///./data/mixai.db"
     data_dir: Path = Path("./data")
@@ -160,6 +173,17 @@ class Settings(BaseSettings):
 
     def all_comfy_urls(self) -> list[str]:
         return list(dict.fromkeys([*self.comfy_urls, *self.comfy_image_urls, *self.comfy_video_urls]))
+
+    @property
+    def public_base(self) -> str:
+        if self.public_url.strip():
+            return self.public_url.strip().rstrip("/")
+        return self.cors_origins[0] if self.cors_origins else f"http://{self.app_host}:{self.app_port}"
+
+    @property
+    def signup_mode(self) -> str:
+        mode = self.signup.strip().lower()
+        return mode if mode in ("open", "invite", "closed") else "closed"
 
     @property
     def is_prod(self) -> bool:

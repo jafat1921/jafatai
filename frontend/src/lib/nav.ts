@@ -28,6 +28,7 @@ import {
   Scissors,
   Maximize2,
   Settings,
+  ShieldUser,
   PenLine,
   Shuffle,
   Sparkles,
@@ -78,7 +79,7 @@ export interface MenuSection {
   modelsNote?: string
 }
 
-export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | 'audio' | 'upscale' | 'queue' | 'settings'
+export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | 'audio' | 'upscale' | 'queue' | 'settings' | 'admin'
 
 export interface RailItem {
   id: RailId
@@ -193,6 +194,8 @@ export const RAIL_ITEMS: RailItem[] = [
 ]
 
 export const SETTINGS_ITEM: RailItem = { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' }
+// contract v38: only rendered for admins
+export const ADMIN_ITEM: RailItem = { id: 'admin', label: 'Users', icon: ShieldUser, to: '/admin/users' }
 
 const TOOL_ROUTE: Partial<Record<ModelType, string>> = { image: '/image/generate', edit: '/image/edit', video: '/video/create', audio: '/audio/music' }
 
@@ -249,6 +252,7 @@ export function activeRail(pathname: string): RailId | null {
   if (p.startsWith('/brand-kits')) return 'brand'
   if (p.startsWith('/queue')) return 'queue'
   if (p.startsWith('/settings')) return 'settings'
+  if (p.startsWith('/admin')) return 'admin'
   return null
 }
 
@@ -293,7 +297,9 @@ const TITLES: [RegExp, string][] = [
   [/^\/audio\/transcribe/, 'Transcribe'],
   [/^\/audio\/dub/, 'Dub a video'],
   [/^\/queue/, 'Queue'],
+  [/^\/settings\/account/, 'Account'],
   [/^\/settings/, 'Settings'],
+  [/^\/admin\/users/, 'Users'],
 ]
 
 export const pageTitle = (pathname: string) => TITLES.find(([re]) => re.test(pathname.replace(/(.)\/+$/, '$1')))?.[1] ?? 'Mix AI Cinema Studio'

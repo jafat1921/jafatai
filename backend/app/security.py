@@ -7,12 +7,12 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 from fastapi import Depends, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from sqlalchemy import select, update
+from sqlalchemy import event, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.models import VIA_API, ApiToken, Membership, User, utcnow
+from app.models import ACTING_USER, VIA_API, ApiToken, Job, Membership, User, utcnow
 
 COOKIE_NAME = "mixai_session"
 SESSION_MAX_AGE = 14 * 24 * 3600
@@ -24,6 +24,9 @@ METHOD_SCOPE = {"GET": "read", "HEAD": "read", "OPTIONS": "read", "POST": "gener
                 "PATCH": "generate", "DELETE": "manage"}
 SESSION_ONLY = "session"
 TOUCH_EVERY = timedelta(minutes=1)
+# Session.info key: the request's user hasn't confirmed their email, so it can't queue work (contract v38)
+UNVERIFIED = "unverified"
+UNVERIFIED_MSG = "Confirm your email to start creating"
 
 _hasher = PasswordHasher()
 
@@ -33,6 +36,8 @@ def hash_password(pw: str) -> str:
 
 
 def verify_password(pw: str, hashed: str) -> bool:
+    if not hashed:
+        return False
     try:
         return _hasher.verify(hashed, pw)
     except (VerificationError, InvalidHashError):
@@ -43,16 +48,25 @@ def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(get_settings().app_secret, salt="mixai-session")
 
 
-def make_session_token(user_id: str) -> str:
-    return _serializer().dumps({"uid": user_id})
+def make_session_token(user_id: str, session_version: int = 0) -> str:
+    return _serializer().dumps({"uid": user_id, "sv": session_version})
 
 
-def read_session_token(token: str) -> str | None:
+def read_session(token: str) -> tuple[str, int] | None:
     try:
         data = _serializer().loads(token, max_age=SESSION_MAX_AGE)
     except (BadSignature, SignatureExpired):
         return None
-    return data.get("uid") if isinstance(data, dict) else None
+    if not isinstance(data, dict) or not data.get("uid"):
+        return None
+    # cookies from before contract v38 carry no "sv"; they match a user who never bumped it
+    sv = data.get("sv", 0)
+    return str(data["uid"]), sv if isinstance(sv, int) else -1
+
+
+def read_session_token(token: str) -> str | None:
+    found = read_session(token)
+    return found[0] if found else None
 
 
 @dataclass
@@ -124,13 +138,17 @@ def resolve_token(db: Session, raw: str) -> CurrentUser | None:
     if row.revoked_at is not None or (row.expires_at is not None and row.expires_at <= now):
         return None
     cur = load_current(db, row.user_id, row.workspace_id)
-    if cur is None:
+    # minted while allowed doesn't mean allowed now: PUBLIC_API off again, or an admin demoted. A viewer's token
+    # lives on read-only (check_scope / the MCP role rule), as before, so this is the gate and not the minting rule
+    if cur is None or not (get_settings().public_api or is_admin(cur)):
         return None
     if row.last_used_at is None or now - row.last_used_at >= TOUCH_EVERY:
         # once a minute is plenty for "last used", and keeps a busy script from writing on every call
         db.execute(update(ApiToken).where(ApiToken.id == row.id).values(last_used_at=now))
         db.commit()
-    return replace(cur, token_id=row.id, scopes=frozenset(row.scopes or ()), channel="api")
+    cur = replace(cur, token_id=row.id, scopes=frozenset(row.scopes or ()), channel="api")
+    bind_session(db, cur)
+    return cur
 
 
 def bearer_token(request: Request) -> str | None:
@@ -176,13 +194,44 @@ def authenticate(db: Session, request: Request) -> CurrentUser:
         # whatever this request creates is stamped via_api (models._stamp_via_api)
         db.info[VIA_API] = True
         return cur
-    token = request.cookies.get(COOKIE_NAME)
-    uid = read_session_token(token) if token else None
-    cur = load_current(db, uid) if uid else None
+    cur = session_user(db, request)
     if not cur:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not signed in")
     cur.via = request.query_params.get("via")
+    bind_session(db, cur)
     return cur
+
+
+def session_user(db: Session, request: Request) -> CurrentUser | None:
+    token = request.cookies.get(COOKIE_NAME)
+    found = read_session(token) if token else None
+    if not found:
+        return None
+    cur = load_current(db, found[0])
+    # a password change, reset or "sign out everywhere" bumps session_version and strands older cookies
+    if cur is None or (cur.user.session_version or 0) != found[1]:
+        return None
+    return cur
+
+
+def is_verified(user: User) -> bool:
+    return user.email_verified_at is not None or not get_settings().email_verify
+
+
+def bind_session(db: Session, cur: CurrentUser) -> None:
+    """Jobs this session queues carry the user (models._stamp_user); an unverified user can't queue any."""
+    db.info[ACTING_USER] = cur.user.id
+    if is_verified(cur.user):
+        db.info.pop(UNVERIFIED, None)
+    else:
+        db.info[UNVERIFIED] = True
+
+
+@event.listens_for(Session, "before_flush")
+def _gate_unverified(session, _ctx, _instances):
+    # every route, token call and MCP tool that starts work adds a Job, so one check here covers them all
+    if session.info.get(UNVERIFIED) and any(isinstance(o, Job) for o in session.new):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, UNVERIFIED_MSG)
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> CurrentUser:
@@ -198,7 +247,14 @@ def require_editor(cur: CurrentUser = Depends(get_current_user)) -> CurrentUser:
 # ---------------------------------------------------------------- who sees the API (PUBLIC_API, Update 4)
 
 def is_admin(cur: CurrentUser) -> bool:
-    return cur.role == "owner" and cur.user.email.lower() == get_settings().admin_email.strip().lower()
+    return bool(cur.user.is_admin)
+
+
+def require_admin(cur: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    # 404 rather than 403: admin routes aren't advertised to anyone else
+    if not is_admin(cur):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+    return cur
 
 
 def can_use_api(cur: CurrentUser) -> bool:

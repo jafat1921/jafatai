@@ -1,13 +1,19 @@
-"""Admin-only housekeeping (contract v34). Signed-in studio session only; hidden from the API docs."""
+"""Admin-only housekeeping (contract v34) and the users list (v38). Signed-in studio session only; hidden from
+the API docs."""
 from datetime import datetime, timezone
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app import accounts, mailer
 from app import visibility as vis
 from app.db import get_db
-from app.security import CurrentUser, get_current_user, is_admin, session_only
+from app.models import ApiToken, Job, Membership, UsageLedger, User, utcnow
+from app.schemas import AdminUserCreate, AdminUserOut, AdminUserPatch
+from app.security import CurrentUser, get_current_user, is_admin, require_admin, session_only
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -38,3 +44,128 @@ def mark_api(body: MarkApiIn, db: Session = Depends(get_db), cur: CurrentUser = 
                         apply=body.apply)
     except vis.MarkError as e:
         raise HTTPException(422, str(e)) from None
+
+
+# ---------------------------------------------------------------- users (contract v38, M17 step 1)
+
+def _day_start(now: datetime) -> datetime:
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _users_out(db: Session, users: list[User]) -> list[AdminUserOut]:
+    ids = [u.id for u in users]
+    if not ids:
+        return []
+    now = utcnow()
+    today, month = _day_start(now), _day_start(now).replace(day=1)
+
+    def gpu_since(since: datetime) -> dict[str, float]:
+        rows = db.execute(select(UsageLedger.user_id, func.coalesce(func.sum(UsageLedger.gpu_seconds), 0))
+                          .where(UsageLedger.user_id.in_(ids), UsageLedger.created_at >= since)
+                          .group_by(UsageLedger.user_id)).all()
+        return {uid: float(sec) / 60 for uid, sec in rows}
+
+    day, mon = gpu_since(today), gpu_since(month)
+    jobs = dict(db.execute(select(Job.user_id, func.count()).where(Job.user_id.in_(ids)).group_by(Job.user_id)).all())
+    tokens = dict(db.execute(select(ApiToken.user_id, func.count())
+                             .where(ApiToken.user_id.in_(ids), ApiToken.revoked_at.is_(None))
+                             .group_by(ApiToken.user_id)).all())
+    homes: dict[str, str] = {}
+    for uid, ws in db.execute(select(Membership.user_id, Membership.workspace_id)
+                              .where(Membership.user_id.in_(ids)).order_by(Membership.created_at)).all():
+        homes.setdefault(uid, ws)
+    return [AdminUserOut(id=u.id, email=u.email, display_name=u.display_name, is_admin=bool(u.is_admin),
+                         is_active=bool(u.is_active), verified=u.email_verified_at is not None,
+                         workspace_id=homes.get(u.id), created_at=u.created_at, last_login_at=u.last_login_at,
+                         gpu_min_today=round(day.get(u.id, 0.0), 1), gpu_min_month=round(mon.get(u.id, 0.0), 1),
+                         jobs=int(jobs.get(u.id, 0)), tokens=int(tokens.get(u.id, 0)))
+            for u in users]
+
+
+@router.get("/users", response_model=list[AdminUserOut])
+@session_only
+def list_users(q: str = "", status: str = Query("all", pattern="^(all|active|inactive|unverified|admin)$"),
+               limit: int = Query(200, ge=1, le=1000), db: Session = Depends(get_db), _=Depends(require_admin)):
+    query = select(User)
+    if q.strip():
+        like = f"%{q.strip().lower()}%"
+        query = query.where(or_(func.lower(User.email).like(like), func.lower(User.display_name).like(like)))
+    if status == "active":
+        query = query.where(User.is_active.is_(True))
+    elif status == "inactive":
+        query = query.where(User.is_active.is_(False))
+    elif status == "unverified":
+        query = query.where(User.email_verified_at.is_(None))
+    elif status == "admin":
+        query = query.where(User.is_admin.is_(True))
+    users = db.scalars(query.order_by(User.created_at.desc()).limit(limit)).all()
+    return _users_out(db, list(users))
+
+
+@router.post("/users", response_model=AdminUserOut, status_code=201)
+@session_only
+def create_user(body: AdminUserCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
+    """An account made by the admin (the way in while SIGNUP=invite); the invite email sets the password."""
+    if not accounts.looks_like_email(accounts.normalise_email(body.email)):
+        raise HTTPException(422, "That doesn't look like an email address")
+    try:
+        user = accounts.create_account(db, body.email, body.name, admin=body.admin)
+    except accounts.AccountError as e:
+        raise HTTPException(409 if isinstance(e, accounts.AccountExists) else 422, str(e)) from None
+    raw = accounts.issue_token(db, user, "invite")
+    db.commit()
+    mailer.deliver(mailer.invite_mail(user.email, user.display_name,
+                                      mailer.link(f"/reset-password?token={quote(raw)}&invite=1")))
+    return _users_out(db, [user])[0]
+
+
+@router.patch("/users/{user_id}", response_model=AdminUserOut)
+@session_only
+def patch_user(user_id: str, body: AdminUserPatch, db: Session = Depends(get_db),
+               cur: CurrentUser = Depends(require_admin)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "User not found")
+    own = user.id == cur.user.id
+    # the admin can't lock themselves out by accident; another admin has to do it
+    if own and (body.is_active is False or body.is_admin is False):
+        raise HTTPException(422, "You can't switch off or demote your own account")
+    if body.display_name is not None:
+        user.display_name = body.display_name.strip() or user.display_name
+    if body.is_admin is not None:
+        user.is_admin = body.is_admin
+    if body.verified is not None:
+        user.email_verified_at = (user.email_verified_at or utcnow()) if body.verified else None
+    if body.is_active is False and user.is_active:
+        accounts.deactivate(db, user)
+    elif body.is_active is True:
+        user.is_active = True
+    db.commit()
+    return _users_out(db, [user])[0]
+
+
+@router.post("/users/{user_id}/send-reset", status_code=202)
+@session_only
+def send_reset(user_id: str, db: Session = Depends(get_db), _=Depends(require_admin)):
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(404, "User not found")
+    raw = accounts.issue_token(db, user, "reset")
+    db.commit()
+    mailer.deliver(mailer.reset_mail(user.email, mailer.link(f"/reset-password?token={quote(raw)}")))
+    return {"detail": f"A reset link is on its way to {user.email}"}
+
+
+@router.post("/users/{user_id}/resend-verification", status_code=202)
+@session_only
+def resend_verification(user_id: str, db: Session = Depends(get_db), _=Depends(require_admin)):
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(404, "User not found")
+    if user.email_verified_at is not None:
+        raise HTTPException(422, "That email is already confirmed")
+    raw = accounts.issue_token(db, user, "verify")
+    db.commit()
+    mailer.deliver(mailer.verify_mail(user.email, user.display_name,
+                                      mailer.link(f"/api/auth/verify?token={raw}")))
+    return {"detail": f"A new confirmation link is on its way to {user.email}"}

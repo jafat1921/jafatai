@@ -15,6 +15,40 @@ export interface User {
   api_docs?: boolean
   // contract v34: the admin can list what was made through the API (Library and Queue)
   admin?: boolean
+  // contract v38: false until the emailed link is opened; such a user can look around but not start work
+  verified?: boolean
+}
+
+// contract v38
+export interface AuthConfig {
+  signup: 'open' | 'invite' | 'closed'
+  google: boolean
+  verify: boolean
+}
+
+export type AdminUserStatus = 'all' | 'active' | 'inactive' | 'unverified' | 'admin'
+
+export interface AdminUser {
+  id: string
+  email: string
+  display_name: string
+  is_admin: boolean
+  is_active: boolean
+  verified: boolean
+  workspace_id: string | null
+  created_at: string
+  last_login_at: string | null
+  gpu_min_today: number
+  gpu_min_month: number
+  jobs: number
+  tokens: number
+}
+
+export interface AdminUserPatch {
+  display_name?: string
+  is_active?: boolean
+  is_admin?: boolean
+  verified?: boolean
 }
 
 // contract v27
@@ -54,6 +88,8 @@ export interface SystemStatus {
   llm: { ok: boolean; url: string; models?: string[]; error?: string }
   driver: 'mock' | 'comfy'
   worker: { alive: boolean; last_heartbeat?: string }
+  // contract v38: everyone's, since the GPUs are shared
+  queue?: { queued: number; running: number }
 }
 
 export type AuthoringMode = 'ai_director' | 'scene_by_scene' | 'import' | 'quick'

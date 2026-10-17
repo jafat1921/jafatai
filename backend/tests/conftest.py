@@ -58,9 +58,10 @@ def fresh_db():
     get_settings().data_dir.mkdir(parents=True, exist_ok=True)
     with SessionLocal() as db:
         seed(db)
-    from app.api.auth import LOGIN_FAILURES
+    from app.api.auth import LIMITS
 
-    LOGIN_FAILURES.clear()
+    for window in LIMITS:
+        window.clear()
     yield
 
 

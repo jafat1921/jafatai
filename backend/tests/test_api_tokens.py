@@ -22,7 +22,8 @@ TOKEN_RE = re.compile(r"^mxa_[0-9a-f]{8}_[A-Za-z0-9_-]{40,}$")
 def _user(email: str, role: str) -> dict:
     with SessionLocal() as db:
         ws = db.scalars(select(Membership.workspace_id)).first()
-        u = User(email=email, display_name=email.split("@")[0], password_hash=hash_password("pw-other-1"))
+        u = User(email=email, display_name=email.split("@")[0], password_hash=hash_password("pw-other-1"),
+                 email_verified_at=utcnow())
         db.add(u)
         db.flush()
         db.add(Membership(user_id=u.id, workspace_id=ws, role=role))

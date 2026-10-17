@@ -66,6 +66,62 @@ class UserOut(Out):
     api_docs: bool = False
     # contract v34: the admin may list what was made through the API (?via=api) in the Library and Queue
     admin: bool = False
+    # contract v38: false until the email link is opened; such a user can look around but not queue work
+    verified: bool = True
+
+
+# accounts (contract v38)
+class SignupIn(BaseModel):
+    email: str = Field(max_length=320)
+    password: str = Field(max_length=256)
+    name: str = Field(default="", max_length=200)
+
+
+class EmailIn(BaseModel):
+    email: str = Field(default="", max_length=320)
+
+
+class ResetIn(BaseModel):
+    token: str = Field(max_length=200)
+    password: str = Field(max_length=256)
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(max_length=256)
+    new_password: str = Field(max_length=256)
+
+
+class ProfilePatch(BaseModel):
+    display_name: str = Field(min_length=1, max_length=200)
+
+
+class AdminUserOut(BaseModel):
+    id: str
+    email: str
+    display_name: str
+    is_admin: bool
+    is_active: bool
+    verified: bool
+    workspace_id: str | None
+    created_at: Utc
+    last_login_at: Utc | None
+    gpu_min_today: float
+    gpu_min_month: float
+    jobs: int
+    tokens: int
+
+
+class AdminUserPatch(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    is_active: bool | None = None
+    is_admin: bool | None = None
+    verified: bool | None = None
+
+
+class AdminUserCreate(BaseModel):
+    email: str = Field(max_length=320)
+    name: str = Field(default="", max_length=200)
+    admin: bool = False
 
 
 # API tokens (contract v27)

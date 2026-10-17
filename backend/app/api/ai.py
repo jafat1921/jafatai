@@ -22,7 +22,7 @@ from app.schemas import (
     SuggestionResult,
     WriteMissingIn,
 )
-from app.security import CurrentUser, get_current_user, require_editor
+from app.security import CurrentUser, get_current_user, require_admin, require_editor
 from app.services import character_out, get_owned, job_out
 from app.storyboard import location_out, shot_out
 
@@ -241,7 +241,7 @@ async def _ping(role: str, present: set[str]) -> dict:
 
 
 @router.get("/system/llm-check", include_in_schema=False)
-async def llm_check(ping: bool = True, _=Depends(get_current_user)):
+async def llm_check(ping: bool = True, _=Depends(require_admin)):
     s = get_settings()
     report: dict = {"url": server_root(), "reasoning_format": s.llm_reasoning_format, "roles": {}}
     try:

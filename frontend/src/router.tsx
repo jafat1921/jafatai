@@ -1,5 +1,7 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { SignUpPage } from '@/features/auth/SignUpPage'
+import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from '@/features/auth/PasswordPages'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { AppShell } from '@/components/shell/AppShell'
 import { ProjectsPage } from '@/features/projects/ProjectsPage'
@@ -238,6 +240,15 @@ export const shellRoutes: RouteObject[] = [
     const { SettingsPage } = await import('@/features/settings/SettingsPage')
     return <SettingsPage />
   }),
+  page('settings/account', async () => {
+    const { AccountPage } = await import('@/features/settings/AccountPage')
+    return <AccountPage />
+  }),
+  // contract v38: admin only; the page sends anyone else home and the server answers them 404
+  page('admin/users', async () => {
+    const { UsersPage } = await import('@/features/admin/UsersPage')
+    return <UsersPage />
+  }),
   // contract v27: admin only while PUBLIC_API is off (the page sends anyone else back to Settings)
   page('settings/api', async () => {
     const { ApiTokensPage } = await import('@/features/settings/ApiTokensPage')
@@ -262,6 +273,11 @@ export const shellRoutes: RouteObject[] = [
 
 const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
+  // contract v38: signed-out pages; the server's emails link to the last three
+  { path: '/signup', element: <SignUpPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
+  { path: '/verify-email', element: <VerifyEmailPage /> },
   {
     element: <RequireAuth />,
     children: [{ element: <AppShell />, children: shellRoutes }],

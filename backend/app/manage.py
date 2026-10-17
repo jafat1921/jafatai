@@ -1,6 +1,9 @@
 """Admin chores: uv run python -m app.manage <command>
 
-  reset-password <email>   set a new password (prompted, or MIXAI_NEW_PASSWORD env)
+  reset-password <email>   set a new password (prompted, or MIXAI_NEW_PASSWORD env); signs the user out
+                           everywhere
+  create-user --email E --name N [--admin] [--unverified]
+                           a new account with its own studio; password prompted, or MIXAI_NEW_PASSWORD env
   list-users
   thumbs                   make missing grid thumbnails for every finished image/video (optional;
                            the server also makes them on first view)
@@ -31,15 +34,42 @@ def reset_password(email: str) -> int:
             print(f"no user {email}")
             return 1
         user.password_hash = hash_password(pw)
+        user.session_version = (user.session_version or 0) + 1
         db.commit()
     print(f"password updated for {email}")
+    return 0
+
+
+def create_user(args: list[str]) -> int:
+    import argparse
+
+    from app import accounts
+
+    p = argparse.ArgumentParser(prog="create-user")
+    p.add_argument("--email", required=True)
+    p.add_argument("--name", default="")
+    p.add_argument("--admin", action="store_true")
+    # made by hand on the server, so the address is taken as confirmed unless asked otherwise
+    p.add_argument("--unverified", action="store_true")
+    a = p.parse_args(args)
+    pw = os.environ.get("MIXAI_NEW_PASSWORD") or getpass.getpass("Password: ")
+    with SessionLocal() as db:
+        try:
+            user = accounts.create_account(db, a.email, a.name, pw, verified=not a.unverified, admin=a.admin)
+        except accounts.AccountError as e:
+            print(e)
+            return 1
+        db.commit()
+        print(f"created {user.email}{' (admin)' if user.is_admin else ''}")
     return 0
 
 
 def list_users() -> int:
     with SessionLocal() as db:
         for u in db.scalars(select(User).order_by(User.email)):
-            print(u.email)
+            flags = [f for f, on in (("admin", u.is_admin), ("inactive", not u.is_active),
+                                     ("unverified", u.email_verified_at is None)) if on]
+            print(u.email + (f"  [{', '.join(flags)}]" if flags else ""))
     return 0
 
 
@@ -109,6 +139,8 @@ def voice_samples(args: list[str], run=None) -> int:
 def main(argv: list[str]) -> int:
     if len(argv) >= 2 and argv[0] == "reset-password":
         return reset_password(argv[1])
+    if argv[:1] == ["create-user"]:
+        return create_user(argv[1:])
     if argv[:1] == ["list-users"]:
         return list_users()
     if argv[:1] == ["thumbs"]:

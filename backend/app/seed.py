@@ -3,8 +3,9 @@ import logging
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.accounts import create_account
 from app.config import get_settings
-from app.models import Membership, User, Workspace
+from app.models import User
 from app.security import hash_password
 
 log = logging.getLogger(__name__)
@@ -17,15 +18,10 @@ def seed(db: Session) -> None:
     if db.scalar(select(func.count()).select_from(User)):
         return
     s = get_settings()
-    ws = Workspace(name="Default")
-    user = User(
-        email=s.admin_email.strip().lower(),
-        display_name=s.admin_name,
-        password_hash=hash_password(s.admin_password),
-    )
-    db.add_all([ws, user])
-    db.flush()
-    db.add(Membership(user_id=user.id, workspace_id=ws.id, role="owner"))
+    # the first account is the admin; its studio keeps the old "Default" name so upgrades look the same
+    user = create_account(db, s.admin_email, s.admin_name, verified=True, admin=True, workspace_name="Default")
+    # set directly: the length rule is for people choosing one, and .env may still hold a short default
+    user.password_hash = hash_password(s.admin_password)
     db.commit()
     log.info("seeded workspace and admin %s", user.email)
     if s.admin_password == "change-me":

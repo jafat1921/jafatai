@@ -16,12 +16,13 @@ export function useConnections() {
     failMsg ??
     (data
       ? data.comfy.ok
-        ? `${data.comfy.url}${data.comfy.version ? ` · v${data.comfy.version}` : ''}`
+        ? // contract v38: only the admin is told the internal URLs
+          [data.comfy.url || 'Connected', data.comfy.version && `v${data.comfy.version}`].filter(Boolean).join(' · ')
         : (data.comfy.error ?? 'Not reachable')
       : 'Checking…')
   const llmDetail =
     failMsg ??
-    (data ? (data.llm.ok ? `${data.llm.url} · ${data.llm.models?.length ?? 0} models` : (data.llm.error ?? 'Not reachable')) : 'Checking…')
+    (data ? (data.llm.ok ? [data.llm.url, `${data.llm.models?.length ?? 0} models`].filter(Boolean).join(' · ') : (data.llm.error ?? 'Not reachable')) : 'Checking…')
   const up = [comfy, llm].filter((s) => s === 'ok').length
   const overall: State = comfy === 'unknown' || llm === 'unknown' ? 'unknown' : up === 2 ? 'ok' : 'down'
   const label = overall === 'unknown' ? 'Checking' : up === 2 ? 'Online' : `${2 - up} offline`

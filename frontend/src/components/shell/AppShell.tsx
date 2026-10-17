@@ -12,6 +12,7 @@ import { QueueDrawer } from './QueueDrawer'
 import { Rail } from './Rail'
 import { BottomBar } from './BottomBar'
 import { Toaster } from './Toaster'
+import { VerifyBanner } from './VerifyBanner'
 
 function LiveAnnouncer() {
   const { text, n } = useUi((s) => s.announcement)
@@ -46,6 +47,7 @@ export function AppShell() {
         activationMode="manual"
         className="flex min-w-0 flex-1 flex-col"
       >
+        <VerifyBanner />
         <TopBar />
         <div className="min-h-0 flex-1">
           <Outlet />

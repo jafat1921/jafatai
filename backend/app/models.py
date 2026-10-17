@@ -48,16 +48,42 @@ class Workspace(Base):
     __tablename__ = "workspace"
     id: Mapped[str] = _id()
     name: Mapped[str] = mapped_column(String(200))
+    # no FK: adding one means rebuilding the table on SQLite (see Scene.location_id)
+    owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class User(Base):
     __tablename__ = "user"
+    __table_args__ = (Index("ix_user_handle", "handle", unique=True),
+                      Index("ix_user_google_sub", "google_sub", unique=True))
     id: Mapped[str] = _id()
     email: Mapped[str] = mapped_column(String(320), unique=True)
     display_name: Mapped[str] = mapped_column(String(200), default="")
+    # "" for an account with no password yet (an invite that hasn't been taken up)
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # slug for the public pages that come later
+    handle: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # in the session cookie; bumping it signs out every browser at once
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class EmailToken(Base):
+    """A link sent by email (verify, reset, invite). Only the sha256 of the secret is kept; used once."""
+    __tablename__ = "email_token"
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    purpose: Mapped[str] = mapped_column(String(10))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -310,6 +336,8 @@ class Job(Base):
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
     via_api: Mapped[bool] = _via()
+    # who asked for it; child jobs carry their root's user (_stamp_user)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     type: Mapped[str] = mapped_column(String(40))
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(20), default="queued")
@@ -340,6 +368,7 @@ class UsageLedger(Base):
     __tablename__ = "usage_ledger"
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("job.id", ondelete="SET NULL"), nullable=True)
     gpu_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     kind: Mapped[str] = mapped_column(String(40))
@@ -866,6 +895,8 @@ VIA_API_MODELS = (Project, Character, Generation, Job, MediaItem, Folder, Album,
                   PoetryShort, AdCampaign)
 # Session.info key: set for a token REST API request, and by the worker while it runs one of its jobs
 VIA_API = "via_api"
+# Session.info key: the user a request acts as (security.bind_session), or the user of the job the worker runs
+ACTING_USER = "acting_user"
 
 
 @event.listens_for(Session, "before_flush")
@@ -875,6 +906,16 @@ def _stamp_via_api(session, _ctx, _instances):
     for obj in session.new:
         if isinstance(obj, VIA_API_MODELS):
             obj.via_api = True
+
+
+@event.listens_for(Session, "before_flush")
+def _stamp_user(session, _ctx, _instances):
+    uid = session.info.get(ACTING_USER)
+    if not uid:
+        return
+    for obj in session.new:
+        if isinstance(obj, Job) and obj.user_id is None:
+            obj.user_id = uid
 
 
 @event.listens_for(Session, "before_flush")

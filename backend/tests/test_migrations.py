@@ -489,3 +489,39 @@ def test_0024_moves_the_old_social_line_into_socials(tmp_path):
     assert json.loads(con.execute("SELECT contact FROM brand_kit WHERE id = 'k1'").fetchone()[0])["social"] == "@ixperts.se"
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0027_confirms_everyone_and_makes_the_admin(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0026")
+    con = sqlite3.connect(db)
+    now = "2026-10-17 12:00:00"
+    con.execute("INSERT INTO workspace (id, name, created_at) VALUES ('w1', 'Default', ?)", (now,))
+    for uid, email, name in (("u1", "ADMIN@test.local", "Tester"), ("u2", "ed@test.local", "Tester")):
+        con.execute("INSERT INTO user (id, email, display_name, password_hash, is_active, created_at)"
+                    " VALUES (?, ?, ?, 'x', 1, ?)", (uid, email, name, now))
+    con.execute("INSERT INTO membership (id, user_id, workspace_id, role, created_at) VALUES ('m1', 'u1', 'w1', 'owner', ?)",
+                (now,))
+    con.execute("INSERT INTO membership (id, user_id, workspace_id, role, created_at) VALUES ('m2', 'u2', 'w1', 'editor', ?)",
+                (now,))
+    con.execute("INSERT INTO job (id, workspace_id, type, payload, status, priority, progress, message, attempts,"
+                " created_at, updated_at) VALUES ('j1', 'w1', 'generate', '{}', 'done', 0, 1, '', 1, ?, ?)", (now, now))
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "0027")
+    con = sqlite3.connect(db)
+    rows = con.execute("SELECT id, is_admin, email_verified_at, handle, session_version FROM user ORDER BY id").fetchall()
+    assert rows == [("u1", 1, now, "tester", 0), ("u2", 0, now, "tester-2", 0)]
+    assert con.execute("SELECT owner_user_id FROM workspace").fetchone() == ("u1",)
+    assert con.execute("SELECT user_id FROM job").fetchone() == ("u1",)
+    assert con.execute("SELECT count(*) FROM email_token").fetchone() == (0,)
+    assert con.execute("SELECT count(*) FROM membership").fetchone() == (2,)
+    con.close()
+
+    _alembic(db, "downgrade", "0026")
+    con = sqlite3.connect(db)
+    assert "is_admin" not in {r[1] for r in con.execute("PRAGMA table_info(user)")}
+    assert con.execute("SELECT count(*) FROM membership").fetchone() == (2,)
+    con.close()
+    _alembic(db, "upgrade", "head")

@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router'
 import { Clapperboard } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useConnections } from '@/hooks/useConnections'
-import { activeRail, RAIL_ITEMS, SETTINGS_ITEM, type MenuId, type RailId, type RailItem } from '@/lib/nav'
+import { useMe } from '@/hooks/useAuth'
+import { activeRail, ADMIN_ITEM, RAIL_ITEMS, SETTINGS_ITEM, type MenuId, type RailId, type RailItem } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 import { StatusDot } from './ConnectionStatus'
 import { JobsTray } from './JobsTray'
@@ -40,6 +41,7 @@ export function Rail() {
   const triggers = useRef(new Map<RailId, HTMLButtonElement>())
   const menu = useMegaMenu<RailId>(root)
   const conn = useConnections()
+  const { data: me } = useMe()
   const menus = useMenus()
   // set on pointerdown so the click handler knows mouse vs touch vs keyboard
   const [pointer, setPointer] = useState<string | null>(null)
@@ -152,6 +154,18 @@ export function Rail() {
       </ul>
 
       <div className="mt-auto flex flex-col items-center gap-1">
+        {me?.admin && (
+          <Link
+            to={ADMIN_ITEM.to}
+            aria-current={active === 'admin' ? 'page' : undefined}
+            aria-label={ADMIN_ITEM.label}
+            className={cn(ITEM, active === 'admin' && ACTIVE)}
+            onPointerEnter={() => menu.open && menu.hoverLeave()}
+          >
+            <Indicator on={active === 'admin'} />
+            <Face item={ADMIN_ITEM} />
+          </Link>
+        )}
         <Tooltip
           side="right"
           content={

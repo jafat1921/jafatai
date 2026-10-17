@@ -29,7 +29,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.drivers import GenerationDriver, get_driver
 from app.lanes import AUDIO_KINDS, IMAGE_KINDS, LANES, VIDEO_KINDS, gpu_lane, parse_lanes
-from app.models import VIA_API, Generation, Job, UsageLedger, WorkerHeartbeat, utcnow
+from app.models import ACTING_USER, VIA_API, Generation, Job, UsageLedger, WorkerHeartbeat, utcnow
 
 log = logging.getLogger("mixai.worker")
 
@@ -510,10 +510,12 @@ def run_job(db: Session, job: Job, driver_factory: Callable[[], GenerationDriver
     ctx = JobContext(db, job, factory, lanes)
     # an API job's results, child jobs and Library items are API rows too (contract v34)
     db.info[VIA_API] = bool(job.via_api)
+    db.info[ACTING_USER] = job.user_id
     try:
         _run(db, job, ctx)
     finally:
         db.info.pop(VIA_API, None)
+        db.info.pop(ACTING_USER, None)
 
 
 def _run(db: Session, job: Job, ctx: JobContext) -> None:
@@ -575,7 +577,7 @@ def _run(db: Session, job: Job, ctx: JobContext) -> None:
         job.result = result
         job.finished_at = utcnow()
         job.gpu_seconds = elapsed
-        db.add(UsageLedger(workspace_id=job.workspace_id, job_id=job.id, gpu_seconds=elapsed,
+        db.add(UsageLedger(workspace_id=job.workspace_id, user_id=job.user_id, job_id=job.id, gpu_seconds=elapsed,
                            kind=CPU_JOB_LEDGER.get(job.type, job.type)))
     db.commit()
     if job.status in ("done", "failed", "cancelled"):

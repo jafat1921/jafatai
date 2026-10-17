@@ -3,6 +3,8 @@ import type { GenerationKind, MediaQuery, ModelType, TargetType, TemplateType, V
 export const qk = {
   me: ['me'] as const,
   tokens: ['api-tokens'] as const,
+  authConfig: ['auth-config'] as const,
+  adminUsers: (q: string, status: string) => ['admin-users', q, status] as const,
   system: ['system-status'] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['projects', id] as const,

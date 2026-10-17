@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, isUnauthorized } from '@/lib/api'
-import type { User } from '@/lib/types'
+import type { AuthConfig, User } from '@/lib/types'
 import { qk } from './keys'
 
 // null = known logged out; undefined = still checking
@@ -37,4 +37,18 @@ export function useLogout() {
       qc.setQueryData(qk.me, null)
     },
   })
+}
+
+// contract v38: what the sign-in pages offer. A server without it (older) reads as sign-up closed
+export function useAuthConfig() {
+  return useQuery<AuthConfig>({
+    queryKey: qk.authConfig,
+    queryFn: () => api.auth.config().catch(() => ({ signup: 'closed', google: false, verify: true }) as AuthConfig),
+    staleTime: 10 * 60_000,
+  })
+}
+
+export function useSignedInAs() {
+  const qc = useQueryClient()
+  return (user: User) => qc.setQueryData(qk.me, user)
 }

@@ -11,7 +11,7 @@ from app.db import get_db
 from app.lanes import LANES
 from app.models import Generation, Job, WorkerHeartbeat, utcnow
 from app.schemas import _iso
-from app.security import CurrentUser, get_current_user
+from app.security import CurrentUser, get_current_user, is_admin, require_admin
 
 router = APIRouter(tags=["system"])
 
@@ -56,8 +56,19 @@ async def _probe_llm(client: httpx.AsyncClient, s: Settings) -> dict:
     return {"ok": True, "url": base, "models": models}
 
 
+def _public(probe: dict) -> dict:
+    """What a non-admin may see of a probe: up or down and the GPUs, never the internal URL or error text."""
+    out = {"ok": probe.get("ok", False), "url": ""}
+    for k in ("version", "devices", "models"):
+        if k in probe:
+            out[k] = probe[k]
+    if not out["ok"]:
+        out["error"] = "Not reachable"
+    return out
+
+
 @router.get("/system/status")
-async def system_status(db: Session = Depends(get_db), _=Depends(get_current_user)):
+async def system_status(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
     s = get_settings()
     urls = s.all_comfy_urls()
     async with httpx.AsyncClient(timeout=PROBE_TIMEOUT, verify=s.comfy_verify_tls) as comfy_client, \
@@ -79,17 +90,27 @@ async def system_status(db: Session = Depends(get_db), _=Depends(get_current_use
     if last:
         worker["last_heartbeat"] = _iso(last)
 
-    return {"comfy": comfy, "llm": llm, "driver": s.gen_driver, "worker": worker,
-            "lanes": _lanes(db, s, probes)}
+    counts = dict(db.execute(select(Job.status, func.count()).where(Job.status.in_(("queued", "running")))
+                             .group_by(Job.status)).all())
+    # everyone shares the GPUs, so the queue length is useful to all; whose jobs they are isn't
+    queue = {"queued": int(counts.get("queued", 0)), "running": int(counts.get("running", 0))}
+    admin = is_admin(cur)
+    lanes = _lanes(db, s, probes, None if admin else cur.workspace_id)
+    if not admin:
+        comfy, llm = _public(comfy), _public(llm)
+    return {"comfy": comfy, "llm": llm, "driver": s.gen_driver, "worker": worker, "queue": queue, "lanes": lanes}
 
 
-def _lanes(db: Session, s: Settings, probes: dict) -> dict:
-    """Per lane: is a worker serving it, what is it running, which ComfyUI it renders on."""
+def _lanes(db: Session, s: Settings, probes: dict, workspace_id: str | None = None) -> dict:
+    """workspace_id set: a non-admin's view, with only their own running jobs and no worker ids or URLs."""
     from app.worker import heartbeat_lanes
 
     cutoff = utcnow() - WORKER_ALIVE_WINDOW
     live = [hb for hb in db.scalars(select(WorkerHeartbeat)).all() if hb.last_seen >= cutoff]
-    running = db.scalars(select(Job).where(Job.status == "running").order_by(Job.started_at)).all()
+    q = select(Job).where(Job.status == "running")
+    if workspace_id:
+        q = q.where(Job.workspace_id == workspace_id)
+    running = db.scalars(q.order_by(Job.started_at)).all()
     out = {}
     for lane in LANES:
         mine = [hb for hb in live if lane in heartbeat_lanes(hb)]
@@ -110,12 +131,16 @@ def _lanes(db: Session, s: Settings, probes: dict) -> dict:
             entry["comfy"] = {"urls": lane_urls, "ok": bool(healthy), "url": (pick or {}).get("url", ""),
                               **({"devices": pick.get("devices", [])} if healthy else
                                  {"error": (pick or {}).get("error", "no ComfyUI URL for this lane")})}
+            if workspace_id:
+                entry["comfy"] = _public(entry["comfy"])
+        if workspace_id:
+            entry["worker"].pop("ids")
         out[lane] = entry
     return out
 
 
 @router.get("/system/comfy-check")
-async def comfy_check(_=Depends(get_current_user)):
+async def comfy_check(_=Depends(require_admin)):
     """Validate every workflow template against the live server's /object_info."""
     from app.drivers.comfy_client import pick_client
     from app.workflows import check_template, list_templates

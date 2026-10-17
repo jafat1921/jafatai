@@ -61,7 +61,11 @@ import type {
   UpscaleOptions,
   UpscaleRequest,
   User,
+  AdminUser,
+  AdminUserPatch,
+  AdminUserStatus,
   ApiToken,
+  AuthConfig,
   ApiTokenCreate,
   ApiTokenCreated,
   ComfyCheck,
@@ -329,8 +333,26 @@ export const api = {
     login: (email: string, password: string) => post<User>('/auth/login', { email, password }),
     logout: () => post<void>('/auth/logout'),
     me: () => get<User>('/auth/me'),
+    // contract v38
+    config: () => get<AuthConfig>('/auth/config'),
+    signup: (body: { email: string; password: string; name: string }) => post<{ detail: string }>('/auth/signup', body),
+    resendVerification: (email?: string) => post<{ detail: string }>('/auth/verify/resend', email ? { email } : {}),
+    forgot: (email: string) => post<{ detail: string }>('/auth/forgot', { email }),
+    reset: (token: string, password: string) => post<User>('/auth/reset', { token, password }),
+    changePassword: (current_password: string, new_password: string) =>
+      post<User>('/auth/password', { current_password, new_password }),
+    logoutEverywhere: () => post<void>('/auth/logout-everywhere'),
+    updateMe: (display_name: string) => patch<User>('/auth/me', { display_name }),
     // dev-only prefill; the server answers {enabled:false} anywhere but a local dev run
     devLogin: () => get<{ enabled: boolean; email?: string; password?: string }>('/auth/dev-login'),
+  },
+  // contract v38: admin only; everyone else gets 404
+  admin: {
+    users: (q = '', status: AdminUserStatus = 'all') => get<AdminUser[]>('/admin/users', { q, status }),
+    createUser: (body: { email: string; name: string; admin: boolean }) => post<AdminUser>('/admin/users', body),
+    patchUser: (id: string, body: AdminUserPatch) => patch<AdminUser>(`/admin/users/${id}`, body),
+    sendReset: (id: string) => post<{ detail: string }>(`/admin/users/${id}/send-reset`),
+    resendVerification: (id: string) => post<{ detail: string }>(`/admin/users/${id}/resend-verification`),
   },
   // contract v27: browser session only; the server refuses these with a token
   tokens: {

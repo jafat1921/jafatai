@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router'
-import { ChevronRight, KeyRound, LogOut } from 'lucide-react'
+import { ChevronRight, KeyRound, LogOut, UserCog } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useLogout, useMe } from '@/hooks/useAuth'
@@ -32,6 +32,11 @@ function AccountCard() {
           </span>
         </span>
       </label>
+      <Link to="/settings/account" className="flex items-center gap-3 self-start rounded-[6px] border border-studio-border-strong bg-studio-raised px-3 py-2 text-body font-medium hover:border-studio-border-hover hover:bg-studio-panel-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-studio-gold/50">
+        <UserCog aria-hidden className="size-4 text-studio-accent" />
+        Name, password and sign-ins
+        <ChevronRight aria-hidden className="size-4 text-studio-muted" />
+      </Link>
       <Button
         variant="secondary"
         className="self-start"
@@ -76,11 +81,12 @@ export function SettingsPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <ConnectionsCard />
           <AccountCard />
-          <LlmCard />
+          {/* the model and workflow checks reach into the GPU box; the server keeps them for the admin */}
+          {me?.admin && <LlmCard />}
           <UpscaleCard />
           {me?.api_access && <ApiCard />}
         </div>
-        <TemplatesCard />
+        {me?.admin && <TemplatesCard />}
         {/* TODO: studio defaults (takes per shot, draft/final) once the backend stores per-user preferences */}
       </div>
     </main>

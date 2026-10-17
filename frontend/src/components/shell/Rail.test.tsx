@@ -205,4 +205,22 @@ describe('rail', () => {
     expect(await within(rail()).findByRole('link', { name: 'Settings. ComfyUI connected, Ollama offline' })).toHaveAttribute('href', '/settings')
     expect(within(rail()).getByRole('button', { name: /Account menu/ })).toBeInTheDocument()
   })
+
+  it('shows Users to admins only', async () => {
+    renderRail('/admin/users')
+    await within(rail()).findByRole('link', { name: /^Settings\./ })
+    expect(within(rail()).queryByRole('link', { name: 'Users' })).toBeNull()
+    vi.unstubAllGlobals()
+    mockApi((_m, p) => {
+      if (p === '/system/status') return systemOk
+      if (p === '/auth/me') return { id: 'u', email: 'ada@studio.test', display_name: 'Ada', workspace_id: 'w1', role: 'owner', admin: true }
+    })
+    renderAt('/admin/users', [], (qc) => qc.setQueryData(qk.jobs, []), <Rail />)
+    const users = await screen.findByRole('link', { name: 'Users' })
+    expect(users).toHaveAttribute('href', '/admin/users')
+    expect(users).toHaveAttribute('aria-current', 'page')
+    expect(activeRail('/admin/users')).toBe('admin')
+    expect(pageTitle('/admin/users')).toBe('Users')
+    expect(pageTitle('/settings/account')).toBe('Account')
+  })
 })

@@ -12,6 +12,7 @@ from app.api import router as api_router
 from app.config import REPO_ROOT, get_settings
 from app.db import Base, SessionLocal, engine
 from app.openapi import build_schema, docs_router
+from app.origin import OriginCheck
 from app.seed import seed
 
 log = logging.getLogger("mixai")
@@ -50,6 +51,8 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Mix AI Cinema Studio", version="0.1.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.openapi = lambda: build_schema(app)
+    # added before CORS so CORS wraps it: a refused write still carries the CORS headers
+    app.add_middleware(OriginCheck, allowed=[s.public_base, *s.cors_origins])
     app.add_middleware(
         CORSMiddleware,
         allow_origins=s.cors_origins,

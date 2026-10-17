@@ -3,6 +3,7 @@ import { Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { Tooltip } from '@/components/ui/tooltip'
+import { useMe } from '@/hooks/useAuth'
 import { basisHint, estimateLabel } from '@/lib/estimate'
 import { modKey } from '@/lib/keyboard'
 import type { EstimateResult } from '@/lib/types'
@@ -23,8 +24,11 @@ interface Props {
 }
 
 /** The submit button that says what it will make and roughly how long it takes. */
-export function GenerateButton({ verb, what, estimate, icon, blocked, note, pending, className }: Props) {
+export function GenerateButton({ verb, what, estimate, icon, blocked: why, note, pending, className }: Props) {
   const uid = useId()
+  const { data: me } = useMe()
+  // contract v38: the server refuses new work until the email is confirmed, so say it here rather than fail later
+  const blocked = me?.verified === false ? 'Confirm your email to start creating. The link is in your inbox.' : why
   return (
     <div className={cn('flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5', className)}>
       <p id={`${uid}-why`} className="mr-auto min-w-0 text-small text-studio-muted" aria-live="polite">

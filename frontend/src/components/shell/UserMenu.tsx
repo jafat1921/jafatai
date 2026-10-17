@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router'
-import { LogOut, Palette, Settings, User as UserIcon } from 'lucide-react'
+import { LogOut, Palette, Settings, ShieldUser, User as UserIcon, UserCog } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -41,16 +41,26 @@ export function UserMenu({ rail }: { rail?: boolean }) {
       <DropdownMenuContent align="end" side={rail ? 'right' : 'bottom'}>
         <DropdownMenuLabel className="normal-case tracking-normal">
           <span className="block text-body text-studio-text">{name}</span>
-          {me && <span className="block text-small font-normal">{me.email} · {me.role}</span>}
+          {me && <span className="block text-small font-normal">{me.email} · {me.admin ? 'admin' : me.role}</span>}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem checked={quill} onCheckedChange={(v) => setQuill(v === true)}>
           Quill cursor
         </DropdownMenuCheckboxItem>
+        <DropdownMenuItem onSelect={() => navigate('/settings/account')}>
+          <UserCog aria-hidden />
+          Account
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigate('/settings')}>
           <Settings aria-hidden />
           Settings &amp; system check
         </DropdownMenuItem>
+        {me?.admin && (
+          <DropdownMenuItem onSelect={() => navigate('/admin/users')}>
+            <ShieldUser aria-hidden />
+            Users
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         {import.meta.env.DEV && (
           <DropdownMenuItem onSelect={() => navigate('/dev/ui')}>

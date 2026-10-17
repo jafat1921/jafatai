@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useMe } from '@/hooks/useAuth'
+import { fmtClock, fmtMinutes, isLow, remainingToday, useUsage } from '@/hooks/useUsage'
 import { basisHint, estimateLabel } from '@/lib/estimate'
 import { modKey } from '@/lib/keyboard'
 import type { EstimateResult } from '@/lib/types'
@@ -29,10 +30,28 @@ export function GenerateButton({ verb, what, estimate, icon, blocked: why, note,
   const { data: me } = useMe()
   // contract v38: the server refuses new work until the email is confirmed, so say it here rather than fail later
   const blocked = me?.verified === false ? 'Confirm your email to start creating. The link is in your inbox.' : why
+  // contract v39: say so when today's GPU minutes are nearly gone; the server's 429 has the final word
+  const { data: usage } = useUsage()
+  const left = isLow(usage) ? remainingToday(usage) : null
+  const low =
+    left == null ? null : left <= 0 ? `No GPU minutes left today. They come back at ${fmtClock(usage?.resets_at)}.` : `${fmtMinutes(left)} GPU min left today`
   return (
     <div className={cn('flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5', className)}>
       <p id={`${uid}-why`} className="mr-auto min-w-0 text-small text-studio-muted" aria-live="polite">
-        {blocked ?? note}
+        {blocked ??
+          (low ? (
+            <>
+              {note && (
+                <>
+                  {note}
+                  {' · '}
+                </>
+              )}
+              <span className="text-studio-warning">{low}</span>
+            </>
+          ) : (
+            note
+          ))}
       </p>
       {estimate && (
         <Tooltip content={basisHint(estimate)}>

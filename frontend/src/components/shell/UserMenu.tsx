@@ -9,7 +9,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Badge } from '@/components/ui/badge'
 import { useLogout, useMe } from '@/hooks/useAuth'
+import { useUsage } from '@/hooks/useUsage'
 import { useQuillCursor } from '@/lib/quill'
 
 export function UserMenu({ rail }: { rail?: boolean }) {
@@ -17,6 +19,8 @@ export function UserMenu({ rail }: { rail?: boolean }) {
   const logout = useLogout()
   const navigate = useNavigate()
   const [quill, setQuill] = useQuillCursor()
+  // the shell's one live copy of the meter; the Generate buttons read it from the cache
+  const { data: usage } = useUsage({ watch: true })
   const name = me?.display_name || me?.email || 'Account'
 
   return (
@@ -42,6 +46,11 @@ export function UserMenu({ rail }: { rail?: boolean }) {
         <DropdownMenuLabel className="normal-case tracking-normal">
           <span className="block text-body text-studio-text">{name}</span>
           {me && <span className="block text-small font-normal">{me.email} · {me.admin ? 'admin' : me.role}</span>}
+          {usage && (
+            <Badge tone={usage.unlimited ? 'accent' : 'neutral'} className="mt-1">
+              {usage.package.name}
+            </Badge>
+          )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem checked={quill} onCheckedChange={(v) => setQuill(v === true)}>
@@ -56,9 +65,9 @@ export function UserMenu({ rail }: { rail?: boolean }) {
           Settings &amp; system check
         </DropdownMenuItem>
         {me?.admin && (
-          <DropdownMenuItem onSelect={() => navigate('/admin/users')}>
+          <DropdownMenuItem onSelect={() => navigate('/admin')}>
             <ShieldUser aria-hidden />
-            Users
+            Admin
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

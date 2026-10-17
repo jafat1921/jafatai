@@ -12,7 +12,7 @@ import socket
 import sys
 import threading
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -22,7 +22,7 @@ from typing import Callable
 if __name__ == "__main__":
     sys.modules.setdefault("app.worker", sys.modules[__name__])
 
-from sqlalchemy import exists, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from app.config import get_settings
@@ -36,6 +36,8 @@ log = logging.getLogger("mixai.worker")
 MAX_ATTEMPTS = 3
 STALE_AFTER = timedelta(seconds=90)
 HEARTBEAT_EVERY = 5.0
+SWEEP_EVERY = 300.0
+NEVER = datetime(1970, 1, 1)
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
 TEXT_KINDS = {"scene_text"}
@@ -74,6 +76,23 @@ def _lane_filter(lanes) -> list:
     return [Job.lane.in_(tuple(lanes))]
 
 
+def _fair_order() -> list:
+    """Within a priority, the user with the fewest jobs running in the job's lane goes first, then whoever was
+    served longest ago there, so one person's batch of twenty doesn't hold up everyone else.
+
+    Priority stays first: a parent waiting on its children sits at WAIT_PRIORITY and must not jump ahead of
+    other people's work just because its owner has nothing running (it would defer and come straight back)."""
+    mine = aliased(Job)
+    running = (select(func.count()).select_from(mine)
+               .where(mine.user_id == Job.user_id, mine.lane == Job.lane, mine.status == "running")
+               .correlate(Job).scalar_subquery())
+    last = (select(func.max(mine.started_at))
+            .where(mine.user_id == Job.user_id, mine.lane == Job.lane)
+            .correlate(Job).scalar_subquery())
+    # never served sorts first whatever the database does with NULLs
+    return [Job.priority.desc(), running, func.coalesce(last, NEVER), Job.created_at]
+
+
 def claim_next(db: Session, gpu: str | None = None, lanes=None) -> Job | None:
     # stitches of one project share scene mezzanines, so they run one after another
     other = aliased(Job)
@@ -85,7 +104,7 @@ def claim_next(db: Session, gpu: str | None = None, lanes=None) -> Job | None:
             select(Job.id)
             .where(Job.status == "queued", or_(Job.type.not_in(SERIAL_PER_PROJECT), ~busy_project),
                    *_lane_filter(lanes))
-            .order_by(Job.priority.desc(), Job.created_at)
+            .order_by(*_fair_order())
             .limit(1)
         ).first()
         if job_id is None:
@@ -608,6 +627,20 @@ def process_one(
         db.close()
 
 
+def sweep_subscriptions() -> None:
+    # reads already treat a lapsed subscription as gone; this just makes the rows say so
+    from app.packages import expire_due
+
+    try:
+        with SessionLocal() as db:
+            n = expire_due(db)
+            db.commit()
+        if n:
+            log.info("%d subscription(s) ended", n)
+    except Exception:
+        log.exception("subscription sweep failed")
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m app.worker")
     ap.add_argument("--lanes", default="all",
@@ -648,7 +681,7 @@ def main(argv: list[str] | None = None) -> None:
             if lane != "general":
                 own = gpu_lane(lanes) if lane == "audio" else lane
                 log.info("%s lane -> ComfyUI %s", lane, ", ".join(s.comfy_urls_for(own)) or "(none set)")
-    last_beat = 0.0
+    last_beat = last_sweep = 0.0
     while not _stop.is_set():
         now = time.monotonic()
         if now - last_beat >= HEARTBEAT_EVERY:
@@ -656,6 +689,9 @@ def main(argv: list[str] | None = None) -> None:
                 beat(db, lanes)
                 recover_lanes(db, lanes)
             last_beat = now
+        if now - last_sweep >= SWEEP_EVERY:
+            sweep_subscriptions()
+            last_sweep = now
         try:
             worked = process_one(lanes=lanes)
         except Exception:

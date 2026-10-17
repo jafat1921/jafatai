@@ -42,6 +42,11 @@ export interface AdminUser {
   gpu_min_month: number
   jobs: number
   tokens: number
+  // contract v39: the package they're on now ("Unlimited" for admins)
+  package_id?: string | null
+  package_name?: string
+  subscription_ends_at?: string | null
+  gpu_min_day_limit?: number | null
 }
 
 export interface AdminUserPatch {
@@ -49,6 +54,183 @@ export interface AdminUserPatch {
   is_active?: boolean
   is_admin?: boolean
   verified?: boolean
+  // contract v39: null clears the override
+  limit_gpu_min_day?: number | null
+  limit_gpu_min_month?: number | null
+  limit_max_queued?: number | null
+}
+
+// contract v39: packages, the GPU meter and the admin panel
+export type PackagePeriod = 'day' | 'week' | 'month' | 'year' | 'none'
+export type PackageKind = 'standard' | 'demo' | 'custom'
+export type FeatureKey = 'image' | 'video' | 'audio' | 'character' | 'ads' | 'poetry' | 'podcast' | 'dub' | 'stories' | 'api'
+
+export interface Package {
+  id: string
+  slug: string | null
+  name: string
+  description: string
+  price_pkr: number
+  period: PackagePeriod
+  days: number | null
+  gpu_min_day: number | null
+  gpu_min_month: number | null
+  max_queued: number | null
+  private_items: boolean
+  models: string[] | null
+  features: Partial<Record<FeatureKey, boolean>>
+  kind: PackageKind
+  public: boolean
+  custom_for_user_id: string | null
+  active: boolean
+  sort: number
+  created_at: string
+  updated_at: string
+  subscribers: number
+}
+
+export type PackageInput = Pick<
+  Package,
+  'name' | 'description' | 'price_pkr' | 'period' | 'days' | 'gpu_min_day' | 'gpu_min_month' | 'max_queued' | 'private_items' | 'models' | 'features' | 'kind' | 'public' | 'sort'
+>
+
+export type SubscriptionStatus = 'active' | 'expired' | 'cancelled' | 'pending_payment'
+export type SubscriptionFilter = 'all' | 'active' | 'expiring' | 'expired' | 'cancelled' | 'pending_payment'
+
+export interface Subscription {
+  id: string
+  user_id: string
+  user_email: string
+  package_id: string
+  package_name: string
+  starts_at: string
+  ends_at: string | null
+  status: SubscriptionStatus
+  source: 'admin' | 'demo' | 'payment' | 'signup_default'
+  notes: string
+  granted_by: string | null
+  created_at: string
+}
+
+export interface UsageGrant {
+  id: string
+  user_id: string
+  gpu_min: number
+  reason: string
+  starts_at: string
+  expires_at: string | null
+  revoked_at: string | null
+  granted_by: string | null
+  created_at: string
+  live: boolean
+}
+
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
+
+export interface Payment {
+  id: string
+  user_id: string
+  user_email: string
+  subscription_id: string | null
+  package_id: string | null
+  package_name: string
+  gateway: string
+  amount_pkr: number
+  status: PaymentStatus
+  reference: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PaymentDetail extends Payment {
+  raw: Record<string, unknown> | null
+}
+
+export interface PaymentInput {
+  user_id: string
+  amount_pkr: number
+  package_id?: string | null
+  gateway?: string
+  reference?: string
+  status?: 'pending' | 'paid'
+  notes?: string
+}
+
+export interface Usage {
+  package: { id: string | null; name: string; kind: PackageKind | 'admin' }
+  unlimited: boolean
+  gpu_min_day: number | null
+  gpu_min_month: number | null
+  max_queued: number | null
+  grant_min: number
+  used_min_today: number
+  used_min_month: number
+  queued: number
+  resets_at: string
+  month_resets_at: string
+  subscription: { id: string; status: SubscriptionStatus; starts_at: string; ends_at: string | null; source: string } | null
+  features: Record<FeatureKey, boolean>
+  models: string[] | null
+}
+
+// the flat 429 body when a package's limit is reached
+export interface QuotaRefusal {
+  detail: string
+  reason: 'day' | 'month' | 'queued'
+  used_min: number
+  limit_min: number | null
+  resets_at: string | null
+  queued: number | null
+  max_queued: number | null
+}
+
+export interface AdminUserDetail {
+  user: AdminUser
+  usage: Usage
+  limits_override: { gpu_min_day: number | null; gpu_min_month: number | null; max_queued: number | null }
+  subscription: Subscription | null
+  subscriptions: Subscription[]
+  grants: UsageGrant[]
+  payments: Payment[]
+  recent_jobs: { id: string; type: string; status: string; lane: string; via_api: boolean; created_at: string; gpu_min: number; error: string | null }[]
+  had_demo: boolean
+}
+
+export interface AdminOverview {
+  users: { total: number; new_week: number; active_today: number }
+  subscriptions: { package_id: string; name: string; count: number }[]
+  payments_month: { count: number; paid_pkr: number; pending: number }
+  gpu_today: { user_id: string; email: string; display_name: string; gpu_min: number }[]
+  queue: { queued: number; running: number; lanes: Record<string, { queued: number; running: number }> }
+  workers: { live: number; stale: number; lanes: string[]; idle_lanes: string[] }
+}
+
+export interface UsageRow {
+  day: string
+  user_id: string | null
+  email: string
+  display_name: string
+  gpu_min: number
+  jobs: number
+}
+
+export interface UsageReport {
+  days: number
+  rows: UsageRow[]
+  top: Omit<UsageRow, 'day'>[]
+  total_min: number
+}
+
+export interface AuditRow {
+  id: string
+  actor_user_id: string | null
+  actor_email: string
+  action: string
+  target_type: string
+  target_id: string | null
+  detail: Record<string, unknown>
+  created_at: string
 }
 
 // contract v27

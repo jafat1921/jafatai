@@ -525,3 +525,36 @@ def test_0027_confirms_everyone_and_makes_the_admin(tmp_path):
     assert con.execute("SELECT count(*) FROM membership").fetchone() == (2,)
     con.close()
     _alembic(db, "upgrade", "head")
+
+
+def test_0028_seeds_packages_and_puts_everyone_but_admins_on_free(tmp_path):
+    db = tmp_path / "prod-copy.db"
+    _alembic(db, "upgrade", "0027")
+    con = sqlite3.connect(db)
+    now = "2026-10-17 12:00:00"
+    for uid, email, admin in (("u1", "admin@test.local", 1), ("u2", "ed@test.local", 0)):
+        con.execute("INSERT INTO user (id, email, display_name, password_hash, is_active, is_admin, session_version,"
+                    " created_at) VALUES (?, ?, 'x', 'x', 1, ?, 0, ?)", (uid, email, admin, now))
+    con.commit()
+    con.close()
+
+    _alembic(db, "upgrade", "0028")
+    con = sqlite3.connect(db)
+    pkgs = dict(con.execute("SELECT slug, gpu_min_day FROM package").fetchall())
+    assert pkgs == {"free": 30.0, "demo": 120.0, "pro": 240.0}
+    rows = con.execute("SELECT s.user_id, p.slug, s.status, s.source, s.ends_at FROM subscription s"
+                       " JOIN package p ON p.id = s.package_id").fetchall()
+    assert rows == [("u2", "free", "active", "signup_default", None)]
+    assert {"limit_gpu_min_day", "limit_max_queued"} <= {r[1] for r in con.execute("PRAGMA table_info(user)")}
+    for table in ("usage_grant", "payment", "admin_audit"):
+        assert con.execute(f"SELECT count(*) FROM {table}").fetchone() == (0,)
+    con.close()
+
+    _alembic(db, "downgrade", "0027")
+    con = sqlite3.connect(db)
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert not {"package", "subscription", "usage_grant", "payment", "admin_audit"} & tables
+    assert "limit_gpu_min_day" not in {r[1] for r in con.execute("PRAGMA table_info(user)")}
+    assert con.execute("SELECT count(*) FROM user").fetchone() == (2,)
+    con.close()
+    _alembic(db, "upgrade", "head")

@@ -12,6 +12,7 @@ import './index.css'
 import { ApiError, onUnauthorized } from '@/lib/api'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { qk } from '@/hooks/keys'
+import { wireQuota } from '@/hooks/useUsage'
 import { applyQuill, readQuillPref } from '@/lib/quill'
 import { router } from './router'
 
@@ -34,6 +35,8 @@ onUnauthorized(() => {
     queryClient.setQueryData(qk.me, null)
   }
 })
+
+wireQuota(queryClient)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

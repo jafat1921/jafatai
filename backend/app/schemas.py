@@ -109,6 +109,11 @@ class AdminUserOut(BaseModel):
     gpu_min_month: float
     jobs: int
     tokens: int
+    # contract v39: the package they're on now (Free when nothing is active); admins are unlimited
+    package_id: str | None = None
+    package_name: str = ""
+    subscription_ends_at: Utc | None = None
+    gpu_min_day_limit: float | None = None
 
 
 class AdminUserPatch(BaseModel):
@@ -116,6 +121,10 @@ class AdminUserPatch(BaseModel):
     is_active: bool | None = None
     is_admin: bool | None = None
     verified: bool | None = None
+    # contract v39: per-user limits over the package's; sending null clears one
+    limit_gpu_min_day: float | None = Field(default=None, ge=0, le=100_000)
+    limit_gpu_min_month: float | None = Field(default=None, ge=0, le=10_000_000)
+    limit_max_queued: int | None = Field(default=None, ge=0, le=1000)
 
 
 class AdminUserCreate(BaseModel):

@@ -195,7 +195,7 @@ export const RAIL_ITEMS: RailItem[] = [
 
 export const SETTINGS_ITEM: RailItem = { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' }
 // contract v38: only rendered for admins
-export const ADMIN_ITEM: RailItem = { id: 'admin', label: 'Users', icon: ShieldUser, to: '/admin/users' }
+export const ADMIN_ITEM: RailItem = { id: 'admin', label: 'Admin', icon: ShieldUser, to: '/admin' }
 
 const TOOL_ROUTE: Partial<Record<ModelType, string>> = { image: '/image/generate', edit: '/image/edit', video: '/video/create', audio: '/audio/music' }
 
@@ -300,6 +300,12 @@ const TITLES: [RegExp, string][] = [
   [/^\/settings\/account/, 'Account'],
   [/^\/settings/, 'Settings'],
   [/^\/admin\/users/, 'Users'],
+  [/^\/admin\/packages/, 'Packages'],
+  [/^\/admin\/subscriptions/, 'Subscriptions'],
+  [/^\/admin\/payments/, 'Payments'],
+  [/^\/admin\/usage/, 'GPU usage'],
+  [/^\/admin\/audit/, 'Audit log'],
+  [/^\/admin$/, 'Admin'],
 ]
 
 export const pageTitle = (pathname: string) => TITLES.find(([re]) => re.test(pathname.replace(/(.)\/+$/, '$1')))?.[1] ?? 'Mix AI Cinema Studio'

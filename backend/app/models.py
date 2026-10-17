@@ -72,6 +72,10 @@ class User(Base):
     handle: Mapped[str | None] = mapped_column(String(60), nullable=True)
     # in the session cookie; bumping it signs out every browser at once
     session_version: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # contract v39: the admin's per-user override of the package's limits; null keeps the package's value
+    limit_gpu_min_day: Mapped[float | None] = mapped_column(Float, nullable=True)
+    limit_gpu_min_month: Mapped[float | None] = mapped_column(Float, nullable=True)
+    limit_max_queued: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -332,7 +336,9 @@ class Generation(Base):
 
 class Job(Base):
     __tablename__ = "job"
-    __table_args__ = (Index("ix_job_status_created", "status", "created_at"),)
+    __table_args__ = (Index("ix_job_status_created", "status", "created_at"),
+                      # the fair queue's "who ran last in this lane" lookup (worker.claim_next)
+                      Index("ix_job_user_lane_started", "user_id", "lane", "started_at"))
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
     via_api: Mapped[bool] = _via()
@@ -888,6 +894,98 @@ class AdCampaign(Base):
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Package(Base):
+    """What a user may do (contract v39): GPU minutes, queue depth, models and studios. Null limit = no limit."""
+    __tablename__ = "package"
+    id: Mapped[str] = _id()
+    # free / demo / pro for the seeded ones; "free" is everyone's fallback
+    slug: Mapped[str | None] = mapped_column(String(60), nullable=True, unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(1000), default="", server_default="")
+    price_pkr: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    period: Mapped[str] = mapped_column(String(10), default="month", server_default="month")
+    # a demo's length, or how long an assignment lasts when the period is "none"
+    days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gpu_min_day: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gpu_min_month: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_queued: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    private_items: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    # null = every model
+    models: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # {feature: false} switches a studio off; anything not named stays on
+    features: Mapped[dict] = mapped_column(JSON, default=dict)
+    kind: Mapped[str] = mapped_column(String(10), default="standard", server_default="standard")
+    public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    custom_for_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    sort: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Subscription(Base):
+    __tablename__ = "subscription"
+    __table_args__ = (Index("ix_subscription_user_status", "user_id", "status"),)
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"))
+    package_id: Mapped[str] = mapped_column(String(36), ForeignKey("package.id"), index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    # active | expired | cancelled | pending_payment
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    # admin | demo | payment | signup_default
+    source: Mapped[str] = mapped_column(String(20), default="admin")
+    notes: Mapped[str] = mapped_column(String(1000), default="", server_default="")
+    granted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class UsageGrant(Base):
+    """Extra GPU minutes a day while it lasts, on top of the package."""
+    __tablename__ = "usage_grant"
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    gpu_min: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    starts_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    granted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Payment(Base):
+    """A payment row (contract v39). The gateway connection comes in M19; for now the admin records and marks them."""
+    __tablename__ = "payment"
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    subscription_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    package_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    gateway: Mapped[str] = mapped_column(String(40), default="manual", server_default="manual")
+    amount_pkr: Mapped[int] = mapped_column(Integer, default=0)
+    # pending | paid | failed | refunded
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    reference: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    notes: Mapped[str] = mapped_column(String(1000), default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class AdminAudit(Base):
+    __tablename__ = "admin_audit"
+    id: Mapped[str] = _id()
+    actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # kept as text so the row still reads right after the admin's account goes
+    actor_email: Mapped[str] = mapped_column(String(320), default="")
+    action: Mapped[str] = mapped_column(String(60), index=True)
+    target_type: Mapped[str] = mapped_column(String(20), default="")
+    target_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 VIA_API_MODELS = (Project, Character, Generation, Job, MediaItem, Folder, Album, BrandKit, Look, VoiceProfile,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useToasts, type Toast } from '@/stores/toasts'
@@ -31,7 +31,13 @@ function ToastCard({ toast }: { toast: Toast }) {
         failed ? 'border-studio-danger/60' : 'border-studio-gold/70',
       )}
     >
-      {failed ? <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-studio-danger" /> : <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0 text-studio-success" />}
+      {failed ? (
+        <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-studio-danger" />
+      ) : toast.tone === 'note' ? (
+        <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-studio-accent" />
+      ) : (
+        <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0 text-studio-success" />
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-body font-medium">{toast.title}</p>
         {toast.detail && <p className="text-small text-studio-muted">{toast.detail}</p>}
@@ -46,7 +52,7 @@ function ToastCard({ toast }: { toast: Toast }) {
             navigate(toast.to!)
           }}
         >
-          Open
+          {toast.action ?? 'Open'}
         </Button>
       )}
       <button type="button" onClick={() => dismiss(toast.id)} aria-label="Dismiss" className="rounded-[4px] p-1 text-studio-muted hover:bg-studio-panel-hover hover:text-studio-text">

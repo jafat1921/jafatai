@@ -8,6 +8,7 @@ from datetime import timedelta
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app import packages
 from app.models import ApiToken, EmailToken, Membership, User, Workspace, utcnow
 from app.security import hash_password
 
@@ -65,7 +66,7 @@ def unique_handle(db: Session, base: str) -> str:
 
 def create_account(db: Session, email: str, name: str = "", password: str | None = None, *,
                    verified: bool = False, admin: bool = False, workspace_name: str | None = None) -> User:
-    """User + their own workspace + an owner membership. Flushed, not committed: the caller commits."""
+    """User + their own workspace + an owner membership + the Free package. Flushed, not committed."""
     email = normalise_email(email)
     # loose on purpose: an existing ADMIN_EMAIL like admin@localhost must still seed. Sign-up checks harder
     if not re.fullmatch(r"[^@\s]+@[^@\s]+", email) or len(email) > 320:
@@ -84,6 +85,7 @@ def create_account(db: Session, email: str, name: str = "", password: str | None
     ws.owner_user_id = user.id
     db.add(Membership(user_id=user.id, workspace_id=ws.id, role="owner"))
     db.flush()
+    packages.give_free(db, user)
     return user
 
 

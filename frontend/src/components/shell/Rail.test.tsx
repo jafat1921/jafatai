@@ -206,21 +206,23 @@ describe('rail', () => {
     expect(within(rail()).getByRole('button', { name: /Account menu/ })).toBeInTheDocument()
   })
 
-  it('shows Users to admins only', async () => {
+  it('shows Admin to admins only', async () => {
     renderRail('/admin/users')
     await within(rail()).findByRole('link', { name: /^Settings\./ })
-    expect(within(rail()).queryByRole('link', { name: 'Users' })).toBeNull()
+    expect(within(rail()).queryByRole('link', { name: 'Admin' })).toBeNull()
     vi.unstubAllGlobals()
     mockApi((_m, p) => {
       if (p === '/system/status') return systemOk
       if (p === '/auth/me') return { id: 'u', email: 'ada@studio.test', display_name: 'Ada', workspace_id: 'w1', role: 'owner', admin: true }
     })
     renderAt('/admin/users', [], (qc) => qc.setQueryData(qk.jobs, []), <Rail />)
-    const users = await screen.findByRole('link', { name: 'Users' })
-    expect(users).toHaveAttribute('href', '/admin/users')
+    const users = await screen.findByRole('link', { name: 'Admin' })
+    expect(users).toHaveAttribute('href', '/admin')
     expect(users).toHaveAttribute('aria-current', 'page')
     expect(activeRail('/admin/users')).toBe('admin')
     expect(pageTitle('/admin/users')).toBe('Users')
+    expect(pageTitle('/admin')).toBe('Admin')
+    expect(pageTitle('/admin/packages')).toBe('Packages')
     expect(pageTitle('/settings/account')).toBe('Account')
   })
 })

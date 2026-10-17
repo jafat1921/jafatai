@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import inspect
 
 from app import models  # noqa: F401  (registers tables on Base.metadata)
@@ -13,6 +13,7 @@ from app.config import REPO_ROOT, get_settings
 from app.db import Base, SessionLocal, engine
 from app.openapi import build_schema, docs_router
 from app.origin import OriginCheck
+from app.quota import QuotaExceeded
 from app.seed import seed
 
 log = logging.getLogger("mixai")
@@ -60,6 +61,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(QuotaExceeded)
+    async def _over_quota(_request, exc: QuotaExceeded):
+        # flat, so the app can read used_min / limit_min / resets_at without digging into detail
+        return JSONResponse(exc.body, status_code=exc.status_code)
+
     app.include_router(docs_router)
     app.include_router(api_router)
     # MCP (Streamable HTTP) for Claude and other agents; an ASGI app of its own, so not in the OpenAPI spec

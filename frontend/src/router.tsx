@@ -244,11 +244,38 @@ export const shellRoutes: RouteObject[] = [
     const { AccountPage } = await import('@/features/settings/AccountPage')
     return <AccountPage />
   }),
-  // contract v38: admin only; the page sends anyone else home and the server answers them 404
-  page('admin/users', async () => {
-    const { UsersPage } = await import('@/features/admin/UsersPage')
-    return <UsersPage />
-  }),
+  // contract v38/v39: admin only; the section sends anyone else home and the server answers them 404
+  {
+    path: 'admin',
+    lazy: async () => ({ Component: (await import('@/features/admin/shared')).AdminLayout }),
+    children: [
+      { index: true, lazy: async () => ({ Component: (await import('@/features/admin/OverviewPage')).OverviewPage }) },
+      page('users', async () => {
+        const { UsersPage } = await import('@/features/admin/UsersPage')
+        return <UsersPage />
+      }),
+      page('packages', async () => {
+        const { PackagesPage } = await import('@/features/admin/PackagesPage')
+        return <PackagesPage />
+      }),
+      page('subscriptions', async () => {
+        const { SubscriptionsPage } = await import('@/features/admin/SubscriptionsPage')
+        return <SubscriptionsPage />
+      }),
+      page('payments', async () => {
+        const { PaymentsPage } = await import('@/features/admin/PaymentsPage')
+        return <PaymentsPage />
+      }),
+      page('usage', async () => {
+        const { UsagePage } = await import('@/features/admin/UsagePage')
+        return <UsagePage />
+      }),
+      page('audit', async () => {
+        const { AuditPage } = await import('@/features/admin/AuditPage')
+        return <AuditPage />
+      }),
+    ],
+  },
   // contract v27: admin only while PUBLIC_API is off (the page sends anyone else back to Settings)
   page('settings/api', async () => {
     const { ApiTokensPage } = await import('@/features/settings/ApiTokensPage')

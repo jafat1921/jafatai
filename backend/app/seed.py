@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.accounts import create_account
 from app.config import get_settings
 from app.models import User
+from app.packages import ensure_defaults as ensure_packages
 from app.security import hash_password
 
 log = logging.getLogger(__name__)
@@ -15,6 +16,8 @@ def seed(db: Session) -> None:
     from app.photo.looks import ensure_builtins
 
     ensure_builtins(db)
+    ensure_packages(db)
+    db.commit()
     if db.scalar(select(func.count()).select_from(User)):
         return
     s = get_settings()

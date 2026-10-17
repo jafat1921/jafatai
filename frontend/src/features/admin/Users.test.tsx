@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mockApi, renderAt } from '@/test/media-fixtures'
-import type { AdminUser, User } from '@/lib/types'
+import type { AdminUser, AdminUserDetail, Package, Usage, User } from '@/lib/types'
 import { UsersPage } from './UsersPage'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -78,6 +78,54 @@ describe('Admin: Users', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Send invite' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/users')?.body).toEqual({ email: 'dee@example.com', name: 'Dee', admin: false }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('shows the package and changes it, grants minutes, from the drawer', async () => {
+    const bea = row('bea', { package_name: 'Free', gpu_min_day_limit: 30, gpu_min_today: 12 })
+    const usage: Usage = {
+      package: { id: 'p-free', name: 'Free', kind: 'standard' }, unlimited: false, gpu_min_day: 30, gpu_min_month: null, max_queued: 2, grant_min: 0,
+      used_min_today: 12, used_min_month: 40, queued: 1, resets_at: '2026-10-18T00:00:00Z', month_resets_at: '2026-11-01T00:00:00Z',
+      subscription: null, features: {} as Usage['features'], models: null,
+    }
+    const detail: AdminUserDetail = {
+      user: bea, usage, limits_override: { gpu_min_day: null, gpu_min_month: null, max_queued: null }, subscription: null, subscriptions: [],
+      grants: [], payments: [], recent_jobs: [], had_demo: false,
+    }
+    const pro = { id: 'p-pro', name: 'Pro', price_pkr: 2999, custom_for_user_id: null } as Package
+    const { calls, user } = open(admin, [bea], (method, path) => {
+      if (method === 'GET' && path === '/admin/users/bea') return detail
+      if (path === '/admin/packages') return [{ id: 'p-free', name: 'Free', price_pkr: 0, custom_for_user_id: null }, pro]
+      if (method === 'POST' && path === '/admin/users/bea/subscription') return { id: 's1', package_name: 'Pro' }
+      if (method === 'POST' && path === '/admin/users/bea/grants') return { id: 'g1' }
+    })
+    const table = await screen.findByRole('table', { name: 'Users, 1 shown' })
+    expect(within(table).getByText('Free')).toBeInTheDocument()
+    expect(within(table).getByText('30 min a day')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Details for BEA' }))
+    const drawer = await screen.findByRole('dialog', { name: 'BEA' })
+    expect(await within(drawer).findByText(/12 of 30 min today/)).toBeInTheDocument()
+
+    await user.click(within(drawer).getByRole('button', { name: 'Change package' }))
+    const change = await screen.findByRole('dialog', { name: 'Change package' })
+    await user.selectOptions(within(change).getByLabelText('Package'), 'p-pro')
+    await user.type(within(change).getByLabelText('Ends'), '2026-12-31')
+    await user.click(within(change).getByRole('button', { name: 'Change package' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/admin/users/bea/subscription')).toBe(true))
+    const sent = calls.find((c) => c.path === '/admin/users/bea/subscription')!.body as { package_id: string; ends_at: string; starts_at: string | null }
+    expect(sent.package_id).toBe('p-pro')
+    expect(sent.starts_at).toBeNull()
+    expect(new Date(sent.ends_at).getDate()).toBe(31)
+
+    await user.click(within(drawer).getByRole('button', { name: 'Grant minutes' }))
+    const grant = await screen.findByRole('dialog', { name: 'Grant GPU minutes' })
+    await user.clear(within(grant).getByLabelText('Minutes a day'))
+    await user.type(within(grant).getByLabelText('Minutes a day'), '20')
+    await user.type(within(grant).getByLabelText('Reason'), 'Launch week')
+    await user.click(within(grant).getByRole('button', { name: 'Grant minutes' }))
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/users/bea/grants')?.body).toEqual({ gpu_min: 20, reason: 'Launch week', expires_at: null }),
+    )
   })
 
   it('sends anyone who is not an admin home', async () => {

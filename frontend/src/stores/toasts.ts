@@ -6,7 +6,10 @@ export interface Toast {
   title: string
   detail?: string
   to?: string
-  tone: 'done' | 'failed'
+  // the button's words when there's a `to`; "Open" by default
+  action?: string
+  // note: a calm heads-up, like a package limit reached (contract v39)
+  tone: 'done' | 'failed' | 'note'
 }
 
 interface ToastState {

@@ -62,8 +62,23 @@ import type {
   UpscaleRequest,
   User,
   AdminUser,
+  AdminUserDetail,
   AdminUserPatch,
   AdminUserStatus,
+  AdminOverview,
+  AuditRow,
+  Package,
+  PackageInput,
+  Payment,
+  PaymentDetail,
+  PaymentInput,
+  PaymentStatus,
+  QuotaRefusal,
+  Subscription,
+  SubscriptionFilter,
+  Usage,
+  UsageGrant,
+  UsageReport,
   ApiToken,
   AuthConfig,
   ApiTokenCreate,
@@ -159,6 +174,16 @@ export function onUnauthorized(handler: (() => void) | null) {
   unauthorizedHandler = handler
 }
 
+let quotaHandler: ((refusal: QuotaRefusal) => void) | null = null
+
+// contract v39: a 429 with the package numbers in it; wired once in main.tsx to show a calm toast
+export function onQuota(handler: ((refusal: QuotaRefusal) => void) | null) {
+  quotaHandler = handler
+}
+
+export const isQuotaRefusal = (body: unknown): body is QuotaRefusal =>
+  !!body && typeof body === 'object' && 'limit_min' in body && 'reason' in body
+
 // Login failing with 401 is a wrong password, not an expired session.
 const NO_REDIRECT_ON_401 = ['/auth/login']
 
@@ -219,6 +244,7 @@ export async function request<T>(method: string, path: string, body?: unknown, q
 
   if (!res.ok) {
     if (res.status === 401 && !NO_REDIRECT_ON_401.includes(path)) unauthorizedHandler?.()
+    if (res.status === 429 && isQuotaRefusal(parsed)) quotaHandler?.(parsed)
     throw new ApiError(res.status, messageFrom(res.status, parsed), parsed)
   }
   return parsed as T
@@ -348,11 +374,45 @@ export const api = {
   },
   // contract v38: admin only; everyone else gets 404
   admin: {
-    users: (q = '', status: AdminUserStatus = 'all') => get<AdminUser[]>('/admin/users', { q, status }),
+    users: (q = '', status: AdminUserStatus = 'all', packageId = '') =>
+      get<AdminUser[]>('/admin/users', { q, status, package_id: packageId }),
     createUser: (body: { email: string; name: string; admin: boolean }) => post<AdminUser>('/admin/users', body),
     patchUser: (id: string, body: AdminUserPatch) => patch<AdminUser>(`/admin/users/${id}`, body),
     sendReset: (id: string) => post<{ detail: string }>(`/admin/users/${id}/send-reset`),
     resendVerification: (id: string) => post<{ detail: string }>(`/admin/users/${id}/resend-verification`),
+    // contract v39: the admin panel
+    user: (id: string) => get<AdminUserDetail>(`/admin/users/${id}`),
+    assignPackage: (id: string, body: { package_id: string; starts_at?: string | null; ends_at?: string | null; notes?: string }) =>
+      post<Subscription>(`/admin/users/${id}/subscription`, body),
+    startDemo: (id: string, body: { package_id?: string | null; allow_repeat?: boolean } = {}) => post<Subscription>(`/admin/users/${id}/demo`, body),
+    grantMinutes: (id: string, body: { gpu_min: number; reason?: string; expires_at?: string | null }) =>
+      post<UsageGrant>(`/admin/users/${id}/grants`, body),
+    revokeGrant: (grantId: string) => post<UsageGrant>(`/admin/grants/${grantId}/revoke`),
+    customPackage: (id: string, body: Partial<PackageInput> & { name: string; ends_at?: string | null }) =>
+      post<Subscription>(`/admin/users/${id}/custom-package`, body),
+    overview: () => get<AdminOverview>('/admin/overview'),
+    packages: (archived = false) => get<Package[]>('/admin/packages', { archived }),
+    createPackage: (body: PackageInput) => post<Package>('/admin/packages', body),
+    patchPackage: (id: string, body: Partial<PackageInput> & { active?: boolean }) => patch<Package>(`/admin/packages/${id}`, body),
+    duplicatePackage: (id: string) => post<Package>(`/admin/packages/${id}/duplicate`),
+    archivePackage: (id: string) => post<Package>(`/admin/packages/${id}/archive`),
+    restorePackage: (id: string) => post<Package>(`/admin/packages/${id}/restore`),
+    subscriptions: (status: SubscriptionFilter = 'active', packageId = '') =>
+      get<Subscription[]>('/admin/subscriptions', { status, package_id: packageId }),
+    extendSubscription: (id: string, body: { days?: number; ends_at?: string }) => post<Subscription>(`/admin/subscriptions/${id}/extend`, body),
+    cancelSubscription: (id: string) => post<Subscription>(`/admin/subscriptions/${id}/cancel`),
+    payments: (status: PaymentStatus | 'all' = 'all', gateway = '') => get<Payment[]>('/admin/payments', { status, gateway }),
+    payment: (id: string) => get<PaymentDetail>(`/admin/payments/${id}`),
+    recordPayment: (body: PaymentInput) => post<PaymentDetail>('/admin/payments', body),
+    markPayment: (id: string, status: 'paid' | 'refunded' | 'failed', notes = '') =>
+      post<PaymentDetail>(`/admin/payments/${id}/mark`, { status, notes }),
+    usage: (days = 30, userId = '') => get<UsageReport>('/admin/usage', { days, user_id: userId }),
+    usageCsvUrl: (days = 30, userId = '') => `${API_BASE}/admin/usage.csv?days=${days}${userId ? `&user_id=${encodeURIComponent(userId)}` : ''}`,
+    audit: (action = '', q = '') => get<AuditRow[]>('/admin/audit', { action, q }),
+  },
+  // contract v39: your own package and GPU meter
+  account: {
+    usage: () => get<Usage>('/account/usage'),
   },
   // contract v27: browser session only; the server refuses these with a token
   tokens: {

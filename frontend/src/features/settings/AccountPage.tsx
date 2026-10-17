@@ -3,12 +3,14 @@ import { Link, useNavigate } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, KeyRound, LogOut, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { GpuMeter } from '@/components/studio/gpu-meter'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { qk } from '@/hooks/keys'
 import { useMe, useSignedInAs } from '@/hooks/useAuth'
+import { fmtMinutes, useUsage } from '@/hooks/useUsage'
 import { api } from '@/lib/api'
 import { MIN_PASSWORD, Notice, StrengthHint } from '@/features/auth/AuthLayout'
 import { Card } from './SystemChecks'
@@ -51,6 +53,54 @@ function ProfileCard() {
           Save name
         </Button>
       </form>
+    </Card>
+  )
+}
+
+const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+
+// contract v39: which package you're on and how much GPU time is left today
+function PackageCard() {
+  const usage = useUsage({ watch: true })
+  const u = usage.data
+  return (
+    <Card title="Package" actions={u && <Badge tone={u.unlimited ? 'accent' : 'neutral'}>{u.package.name}</Badge>}>
+      {usage.isError ? (
+        <Notice>{usage.error.message}</Notice>
+      ) : !u ? (
+        <p role="status" className="text-body text-studio-muted">
+          {usage.isPending ? 'Loading your package…' : 'No usage to show yet.'}
+        </p>
+      ) : (
+        <>
+          <GpuMeter usage={u} />
+          <dl className="grid grid-cols-[150px_1fr] gap-x-3 gap-y-1 text-body">
+            {u.gpu_min_month != null && (
+              <>
+                <dt className="text-studio-muted">This month</dt>
+                <dd className="tabular-nums">
+                  {fmtMinutes(u.used_min_month)} of {fmtMinutes(u.gpu_min_month)} min
+                </dd>
+              </>
+            )}
+            {u.max_queued != null && (
+              <>
+                <dt className="text-studio-muted">At once</dt>
+                <dd>
+                  {u.queued} of {u.max_queued} jobs on the way
+                </dd>
+              </>
+            )}
+            {u.subscription?.ends_at && (
+              <>
+                <dt className="text-studio-muted">Ends</dt>
+                <dd>{day(u.subscription.ends_at)}, then Free</dd>
+              </>
+            )}
+          </dl>
+          {!u.unlimited && <p className="text-small text-studio-muted">Minutes are counted while the GPUs work on your jobs. A job that has started always finishes.</p>}
+        </>
+      )}
     </Card>
   )
 }
@@ -182,9 +232,10 @@ export function AccountPage() {
           <h1 id="account-title" className="font-display text-title font-semibold">
             Account
           </h1>
-          <p className="text-body text-studio-muted">Your name, password and signed-in browsers.</p>
+          <p className="text-body text-studio-muted">Your name, package, password and signed-in browsers.</p>
         </div>
         <ProfileCard />
+        <PackageCard />
         <PasswordCard />
         <SessionsCard />
       </div>

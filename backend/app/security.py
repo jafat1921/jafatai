@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.models import ACTING_USER, VIA_API, ApiToken, Job, Membership, User, utcnow
+from app.quota import QUOTA_CHANNEL, QUOTA_USER
 
 COOKIE_NAME = "mixai_session"
 SESSION_MAX_AGE = 14 * 24 * 3600
@@ -219,8 +220,11 @@ def is_verified(user: User) -> bool:
 
 
 def bind_session(db: Session, cur: CurrentUser) -> None:
-    """Jobs this session queues carry the user (models._stamp_user); an unverified user can't queue any."""
+    """Jobs this session queues carry the user (models._stamp_user); an unverified user can't queue any, and
+    everyone else's new jobs go through their package's limits (app.quota)."""
     db.info[ACTING_USER] = cur.user.id
+    db.info[QUOTA_USER] = cur.user.id
+    db.info[QUOTA_CHANNEL] = "api" if cur.token_id else "app"
     if is_verified(cur.user):
         db.info.pop(UNVERIFIED, None)
     else:

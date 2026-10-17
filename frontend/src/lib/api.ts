@@ -116,6 +116,7 @@ import type {
   Make3DRequest,
   Make3DResponse,
   Turntable3DResult,
+  Shots3DResult,
   PromptEnhanceRequest,
   PromptEnhanceResult,
   MediaKind,
@@ -935,6 +936,12 @@ export const api = {
       const form = new FormData()
       form.append('file', picture, 'thumbnail.png')
       return (await (await send(`/3d/${id}/thumbnail`, { method: 'POST', body: form })).json()) as MediaItem
+    },
+    // each file is named after its angle (front.png), which is how the server tells them apart
+    shots: async (id: string, shots: { file: string; blob: Blob }[]) => {
+      const form = new FormData()
+      for (const s of shots) form.append('file', s.blob, s.file)
+      return (await (await send(`/3d/${id}/shots`, { method: 'POST', body: form })).json()) as Shots3DResult
     },
   },
   jobs: {

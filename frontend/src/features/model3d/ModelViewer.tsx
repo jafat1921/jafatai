@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useModelThumbnail, useTurntable } from '@/hooks/useModel3D'
+import { useFeature } from '@/hooks/useUsage'
 import { fileStem, saveBlob } from '@/lib/model3d'
 import type { MediaItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { announce } from '@/stores/ui'
 import type { ExportFormat } from './exporters'
+import { ProductShots } from './ProductShots'
 import { canRecord, TURNTABLE } from './turntable'
 import type { Backdrop, Facing, Lighting, Viewer } from './viewer3d'
 
@@ -34,7 +36,7 @@ const reducedMotion = () => typeof window.matchMedia === 'function' && window.ma
 /** A GLB on an orbit stage, with lighting, backdrop, wireframe and downloads. three.js loads on first view.
  * Given the model's mediaId it also records a turntable and sets the Library thumbnail. Lighting, backdrop and
  * wireframe stay as they are when the url changes to another model; the facing starts at Front for each. */
-export type ViewerAsk = { n: number; action: 'turntable' | 'thumbnail' }
+export type ViewerAsk = { n: number; action: 'turntable' | 'thumbnail' | 'shots' }
 
 interface Props {
   url: string
@@ -69,6 +71,14 @@ export function ModelViewer({ url, title, mediaId, ask, onAsked, className }: Pr
   const turntable = useTurntable(mediaId ?? '')
   const thumb = useModelThumbnail(mediaId ?? '')
   const stem = fileStem(title)
+  // product shots go to Ad Studio, so the package needs both studios
+  const on3d = useFeature('3d')
+  const onAds = useFeature('ads')
+  const shotsOn = on3d && onAds
+  const [shotsOpen, setShotsOpen] = useState(false)
+  // per url like the rest, so a render cut short by moving to another model doesn't leave the stage covered
+  const [shootingFor, setShootingFor] = useState<string | null>(null)
+  const shooting = shootingFor === url
 
   useEffect(() => {
     let gone = false
@@ -107,7 +117,7 @@ export function ModelViewer({ url, title, mediaId, ask, onAsked, className }: Pr
 
   const onKey = (e: React.KeyboardEvent) => {
     const v = viewer.current
-    if (!v || recording != null) return
+    if (!v || recording != null || shooting) return
     const moves: Record<string, () => void> = {
       ArrowLeft: () => v.rotate(-STEP, 0),
       ArrowRight: () => v.rotate(STEP, 0),
@@ -193,11 +203,12 @@ export function ModelViewer({ url, title, mediaId, ask, onAsked, className }: Pr
     })
   }
 
-  const still = state !== 'ready' || recording != null
+  const still = state !== 'ready' || recording != null || shooting
 
   const runAsk = useEffectEvent((a: ViewerAsk) => {
     onAsked?.()
-    void (a.action === 'turntable' ? makeTurntable() : takeThumbnail())
+    if (a.action === 'shots') setShotsOpen(true)
+    else void (a.action === 'turntable' ? makeTurntable() : takeThumbnail())
   })
   useEffect(() => {
     if (state !== 'ready' || !ask) return
@@ -256,6 +267,12 @@ export function ModelViewer({ url, title, mediaId, ask, onAsked, className }: Pr
               Cancel
             </Button>
           </div>
+        )}
+        {shooting && (
+          <p className="absolute inset-0 flex items-center justify-center gap-2 bg-studio-raised p-4 text-small text-studio-muted paper-fine">
+            <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+            Rendering the product shots…
+          </p>
         )}
       </div>
 
@@ -364,6 +381,18 @@ export function ModelViewer({ url, title, mediaId, ask, onAsked, className }: Pr
             </div>
           )}
         </div>
+      )}
+      {mediaId && shotsOn && (
+        <ProductShots
+          key={url}
+          viewer={() => viewer.current}
+          mediaId={mediaId}
+          title={title}
+          disabled={still}
+          open={shotsOpen}
+          onOpenChange={setShotsOpen}
+          onBusy={(busy) => setShootingFor(busy ? url : null)}
+        />
       )}
     </section>
   )

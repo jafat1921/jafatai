@@ -47,10 +47,11 @@ interface AddProps {
   taken?: string[]
   required?: boolean
   description?: string
+  includeHome?: string
 }
 
 /** An empty slot: opens a small upload / paste / pick panel. */
-export function RefAdd({ label, onAdd, multiple, max = 1, taken, required, description }: AddProps) {
+export function RefAdd({ label, onAdd, multiple, max = 1, taken, required, description, includeHome }: AddProps) {
   const [open, setOpen] = useState(false)
   return (
     <div className="flex flex-col items-center gap-1">
@@ -70,6 +71,7 @@ export function RefAdd({ label, onAdd, multiple, max = 1, taken, required, descr
             label={`Add ${label.toLowerCase()}`}
             pickTitle={`Pick ${label.toLowerCase()}`}
             pickDescription={description}
+            pickIncludeHome={includeHome}
             multiple={multiple}
             pickMax={max}
             taken={taken}

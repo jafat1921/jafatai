@@ -20,6 +20,8 @@ interface Props {
   // already chosen elsewhere; they count against `max`
   taken?: string[]
   confirmLabel?: string
+  // studio parts (contract v37) to offer besides the Library; pictures default to a character's sheets
+  includeHome?: string
   onConfirm: (items: MediaItem[]) => void
 }
 
@@ -31,12 +33,13 @@ export function MediaPicker(props: Props) {
   )
 }
 
-function PickerBody({ kind, max, title, description, taken = [], confirmLabel = 'Use selected', onConfirm, onOpenChange }: Props) {
+function PickerBody({ kind, max, title, description, taken = [], confirmLabel = 'Use selected', includeHome, onConfirm, onOpenChange }: Props) {
   const [q, setQ] = useState('')
   const query = useDeferredValue(q.trim())
   const [picked, setPicked] = useState<MediaItem[]>([])
   // pictures are picked as references or start frames, so a character's sheet is offered too
-  const list = useMediaList({ kind, include: 'project', ...(kind === 'image' ? { include_home: 'character' } : {}), ...(query ? { q: query } : {}) })
+  const home = includeHome ?? (kind === 'image' ? 'character' : '')
+  const list = useMediaList({ kind, include: 'project', ...(home ? { include_home: home } : {}), ...(query ? { q: query } : {}) })
   const items = flatItems(list.data).filter((m) => m.media_url || m.thumb_url)
   const room = Math.max(0, max - taken.length)
   const full = picked.length >= room

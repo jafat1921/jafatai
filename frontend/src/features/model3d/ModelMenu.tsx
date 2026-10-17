@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import { Box, Download, ExternalLink, Film, Heart, ImageIcon, Library, MoreHorizontal, Pencil, RefreshCw, Shuffle, Trash2 } from 'lucide-react'
+import { Box, Camera, Download, ExternalLink, Film, Heart, ImageIcon, Library, MoreHorizontal, Pencil, RefreshCw, Shuffle, Trash2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { downloadUrl, mediaAlt } from '@/lib/media'
 import { isModelReady, otherEngine, sourcePictureOf } from '@/lib/model3d'
@@ -60,6 +60,12 @@ export function ModelMenu({ item, h, inViewer, triggerClassName }: { item: Media
               <DropdownMenuItem onSelect={() => h.thumbnail!(item)}>
                 <ImageIcon aria-hidden />
                 {inViewer ? 'Use this view as thumbnail' : 'Use the front view as thumbnail'}
+              </DropdownMenuItem>
+            )}
+            {h.shots && (
+              <DropdownMenuItem onSelect={() => h.shots!(item)}>
+                <Camera aria-hidden />
+                Product shots for adverts
               </DropdownMenuItem>
             )}
           </>

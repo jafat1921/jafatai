@@ -1,5 +1,7 @@
 """3D Studio (contract v40): POST /3d/make turns a picture, a prompt, a character, a few views of one object or a
 logo into a textured GLB in the Library. The turntable and thumbnail routes take what the browser's viewer made."""
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from PIL import Image
 from sqlalchemy.orm import Session
@@ -15,7 +17,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.models import Character, Generation, Job, MediaItem, new_id
 from app.openapi import multipart
-from app.schemas import MediaItemOut, Model3DIn, Model3DLogo, Model3DOut, Turntable3DOut
+from app.schemas import MediaItemOut, Model3DIn, Model3DLogo, Model3DOut, Shots3DOut, Turntable3DOut
 from app.security import CurrentUser, get_current_user, require_editor
 from app.services import READY_STATES, enqueue_generation, get_owned, job_out, new_seed, next_version
 
@@ -407,3 +409,109 @@ def _snapshot(db: Session, mg: Generation, got: uploads.Received) -> None:
     with Image.open(got.path) as im:
         im.load()
         _thumb_from(db, mg, im, "snapshot")
+
+
+# ---------------------------------------------------------------- product shots for Ad Studio (part 4)
+
+SHOTS_MAX = 6
+SHOT_MAX = 15 * uploads.MB
+AD_HOME = "ad"
+# the viewer's angle ids, sent as each file's name (front.png); the words go in the title
+SHOT_ANGLES = {"front": "front", "left": "three-quarter left", "right": "three-quarter right", "side": "side",
+               "top": "from above", "back": "back"}
+
+
+def _needs_ads(db: Session, cur: CurrentUser) -> None:
+    from app import packages as pk
+    from app import quota
+    from app.models import User
+
+    lim = quota.limits_for(db, db.get(User, cur.id))
+    for f in ("3d", "ads"):
+        if not lim.allows(f):
+            name = lim.package.name if lim.package else "Your"
+            raise HTTPException(403, f"The {name} package doesn't include {pk.FEATURES[f]}")
+
+
+async def _read_shots(request: Request) -> list[tuple[str, bytes]]:
+    from starlette.datastructures import UploadFile
+
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) > SHOTS_MAX * SHOT_MAX + uploads.MB:
+        raise HTTPException(413, f"Send at most {SHOTS_MAX} pictures of up to 15 MB each")
+    form = await request.form(max_files=SHOTS_MAX + 1, max_fields=10)
+    shots: list[tuple[str, bytes]] = []
+    for _, v in form.multi_items():
+        if not isinstance(v, UploadFile):
+            continue
+        if len(shots) == SHOTS_MAX:
+            raise HTTPException(422, f"Send at most {SHOTS_MAX} angles")
+        angle = Path(v.filename or "").stem.lower()
+        if angle not in SHOT_ANGLES:
+            raise HTTPException(422, f"Name each file after its angle: {', '.join(SHOT_ANGLES)} (e.g. front.png)")
+        if angle in (a for a, _ in shots):
+            raise HTTPException(422, f"The {SHOT_ANGLES[angle]} angle was sent twice")
+        data = await v.read(SHOT_MAX + 1)
+        if len(data) > SHOT_MAX:
+            raise HTTPException(413, "A product shot can be at most 15 MB")
+        if not data:
+            raise HTTPException(422, f"The {SHOT_ANGLES[angle]} picture is empty")
+        if uploads.sniff(data[:uploads.SNIFF_BYTES]) != "image/png":
+            raise HTTPException(415, "Product shots are PNG pictures")
+        shots.append((angle, data))
+    if not shots:
+        raise HTTPException(422, "Attach the angles to keep as PNG files in fields named 'file'")
+    return shots
+
+
+def _store_shots(db: Session, cur: CurrentUser, model: MediaItem, shots: list[tuple[str, bytes]]) -> list[MediaItem]:
+    import hashlib
+
+    from app.catalogue import importer
+
+    folder, rel_folder = lib.media_dir(cur.workspace_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    got = []
+    try:
+        for angle, data in shots:
+            tmp = folder / f".shot-{new_id()}.part"
+            tmp.write_bytes(data)
+            got.append(uploads.Received(tmp, "image/png", len(data), f"{angle}.png",
+                                        f"{model.title or '3D model'} · {SHOT_ANGLES[angle]}"[:300],
+                                        hashlib.sha256(data).hexdigest(), {}))
+        # every one is checked before any is kept, so a bad sixth doesn't leave five behind
+        for r in got:
+            uploads.probe_image(r.path, r.media_type)
+        items = []
+        for (angle, _), r in zip(shots, got):
+            item, _ = importer.store(db, cur.workspace_id, cur.id, r, folder, rel_folder)
+            # rendered in the studio, and a working part of Ad Studio rather than a Library picture
+            item.origin = "generated"
+            item.home = AD_HOME
+            g = db.get(Generation, item.generation_id)
+            g.params = {**g.params, "model3d_of": model.id, "angle": angle,
+                        "created_by": {"user_id": cur.id, "flow": "make_3d:shots"}}
+            items.append(item)
+        db.commit()
+        return items
+    finally:
+        for r in got:
+            r.path.unlink(missing_ok=True)
+
+
+@router.post("/3d/{media_id}/shots", response_model=Shots3DOut, status_code=201,
+             openapi_extra=multipart(file_help="1–6 PNG renders, each at most 15 MB, named after the angle: "
+                                               "front, left, right, side, top or back (front.png)", many=True),
+             summary="Save product shots of a model for Ad Studio",
+             description="Stores the viewer's renders as pictures for Ad Studio's product photos: kind `image`, "
+                         "`home` \"ad\" (working parts, kept out of the general lists), titled "
+                         "\"<model title> · <angle>\" and linked to the model by `params.model3d_of`. Needs "
+                         "both the 3D Studio and Ad Studio in the package.")
+async def save_shots(media_id: str, request: Request, db: Session = Depends(get_db),
+                     cur: CurrentUser = Depends(require_editor)):
+    model, _ = await run_in_threadpool(_ready_model, db, cur.workspace_id, media_id)
+    await run_in_threadpool(_needs_ads, db, cur)
+    shots = await _read_shots(request)
+    items = await run_in_threadpool(_store_shots, db, cur, model, shots)
+    out = await run_in_threadpool(lambda: [lib.item_out(db, i) for i in items])
+    return Shots3DOut(items=out, ids=[i.id for i in out])

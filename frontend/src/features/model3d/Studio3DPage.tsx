@@ -18,6 +18,7 @@ import { useGenEstimate } from '@/hooks/useGenEstimate'
 import { flatItems, useMediaList } from '@/hooks/useMedia'
 import { useMake3D } from '@/hooks/useModel3D'
 import { useModels } from '@/hooks/useModels'
+import { useFeature } from '@/hooks/useUsage'
 import { betterBackOn, blocked3d, ENGINES, engineLock, isModelReady, local3dEstimate, logoEstimate, make3dPayload, offersBetterBack, QUALITIES, sheetViews, STARTS, startFromQuery, VIEWS, type Form3D } from '@/lib/model3d'
 import type { Engine3D, Make3DResponse, MediaItem, Quality3D, Start3D } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -49,10 +50,14 @@ export function Studio3DPage() {
     if (action) setAsk({ n: Date.now(), action })
     viewerBox.current?.scrollIntoView?.({ block: 'nearest' })
   }
+  const on3d = useFeature('3d')
+  const onAds = useFeature('ads')
+  const shotsOn = on3d && onAds
   const actions = useModelActions({
     open: (m) => openInViewer(m),
     turntable: (m) => openInViewer(m, 'turntable'),
     thumbnail: (m) => openInViewer(m, 'thumbnail'),
+    shots: shotsOn ? (m) => openInViewer(m, 'shots') : undefined,
     // the tile that had focus is gone; land on the list's heading rather than the top of the page
     afterDelete: () => yours.current?.focus(),
   })

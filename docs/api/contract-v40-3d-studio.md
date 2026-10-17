@@ -5,8 +5,8 @@ created: 2026-10-17
 extends: contract-v39 (packages)
 migration: none (MediaItem.kind and Generation.kind are plain strings)
 updated: 2026-10-17 (addenda: text, character and four-view starts; turntable, thumbnail, Make 3D links;
-  better back and the logo start)
-plan: docs/PLAN-m20-3d-studio.md (deliveries 1, 2 and 3, owner's addendum A and B)
+  better back and the logo start; Ad Studio product shots)
+plan: docs/PLAN-m20-3d-studio.md (deliveries 1, 2 and 3, owner's addendum A, B and C)
 ---
 
 # Contract v40: 3D Studio
@@ -467,3 +467,46 @@ The answer adds:
 - **Logo:** a picture slot, then Depth, Bevel, Sides and Back segments, each with a short help line ("Crisp
   letters and edges — best for logos, signs, icons, stickers"). Engine and quality are hidden. The estimate is
   seconds.
+
+## 9. Addendum: Ad Studio "Product from 3D" (delivery 4, owner's addendum C)
+
+### `POST /api/3d/{media_id}/shots` → 201
+
+`multipart/form-data` with 1–6 `file` parts: PNG renders of the model, each at most 15 MB. Each file is
+named after its angle: `front`, `left` (three-quarter left), `right` (three-quarter right), `side`, `top`
+(three-quarter from above) or `back`, e.g. `front.png`.
+
+- `media_id` must be a **finished** model in your studio: 404 for anyone else's id or an item that isn't a
+  model, 409 while it's still being made. Viewers get 403.
+- The package must include **both** the 3D Studio and Ad Studio: 403 "The <package> package doesn't include
+  Ad Studio" otherwise (no job is queued, so this is checked here rather than by the job gate).
+- 422 for no files, more than six, an unknown or repeated angle name, or an empty file. Anything but PNG
+  (sniffed from the bytes) is a 415, and so is a PNG that doesn't decode. Over 15 MB is a 413.
+- Every file is checked before any is kept, so one bad render saves none.
+- Each render is a new item: kind `image`, origin `generated`, **`home` `"ad"`** (an Ad Studio working part,
+  contract v37: out of the general lists, listed with `include_home=ad` or `home=ad`), titled
+  "<model title> · <angle words>" ("Teapot · 3D · three-quarter left"). Its generation's params carry
+  `model3d_of` (the model's id), `angle` and `created_by.flow` `make_3d:shots`.
+- They are ordinary pictures to the rest of the API, so `POST /api/ads` takes them in `product_media_ids`.
+
+```json
+{"items": [{MediaItem, "kind": "image", "home": "ad", ...}], "ids": ["…", "…"]}
+```
+
+### Frontend
+
+- **Viewer:** a "Product shots for adverts" panel under the turntable (also in the model's "⋯" menu, which
+  opens the model in the viewer first). It renders six angles in the browser: front, three-quarter left and
+  right, side, three-quarter from above and back, at 2048×2048.
+  - Every angle uses the same camera distance, fitted to the model's bounding sphere, and a neutral soft rig
+    whose key light follows the camera. The arrow keys' turns and the wireframe are set aside while it
+    renders; the Front / Back facing is kept.
+  - Background: White (default), Paper or Transparent (a see-through PNG). "Soft shadow" (on) puts a soft
+    contact shadow under the model; it's off for Transparent.
+  - The renders show as a strip of ticked previews (the back starts unticked). "Save N for Ad Studio" uploads
+    the ticked ones.
+  - "Use in Ad Studio" opens `/image/ads?products=<id>,<id>,<id>`. With more than three saved, the user ticks
+    which three go to the brief first (the first three are preselected).
+  - Shown only when `GET /api/account/usage` reports neither `features["3d"]` nor `features["ads"]` false.
+- **Ad Studio brief:** reads `?products=` (distinct ids, at most three) into the product photo slots. The
+  product slots' Library picker lists `include_home=character,ad`, so saved shots can be picked again later.

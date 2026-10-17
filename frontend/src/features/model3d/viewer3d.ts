@@ -3,6 +3,7 @@ import {
   ACESFilmicToneMapping,
   AmbientLight,
   Box3,
+  CanvasTexture,
   Color,
   DirectionalLight,
   Group,
@@ -12,8 +13,10 @@ import {
   MeshBasicMaterial,
   type Object3D,
   PerspectiveCamera,
+  PlaneGeometry,
   PMREMGenerator,
   Scene,
+  Sphere,
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
@@ -21,6 +24,7 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { fitDistance, SHOT_FILL, SHOT_SIZE, shotPosition, type Shot, type ShotOpts, type ShotSpec } from './shots'
 import { paintBackdrop, recordCanvas, TURNTABLE, type RecordOpts } from './turntable'
 
 export type Lighting = 'studio' | 'soft' | 'sunset'
@@ -43,6 +47,8 @@ export interface Viewer {
   turntable: (backdrop: Backdrop, opts?: RecordOpts) => Promise<Blob>
   // the current view, square and see-through, for the Library thumbnail
   snapshot: (size?: number) => Promise<Blob>
+  // product shots for Ad Studio: each angle framed alike, under a soft rig of its own, at 2048 square
+  shots: (angles: ShotSpec[], opts: ShotOpts) => Promise<Shot[]>
   dispose: () => void
 }
 
@@ -62,6 +68,8 @@ const RIGS: Record<Lighting, Rig> = {
   soft: { key: [0, 6, 2], keyColour: 0xffffff, keyStrength: 0.7, sky: 0xf6efe2, ground: 0xb9a888, fill: 0.45, env: 0.8 },
   sunset: { key: [-5, 1.2, 3], keyColour: 0xffa45c, keyStrength: 2.2, sky: 0xffc89a, ground: 0x3c2a1c, fill: 0.1, env: 0.25 },
 }
+// neutral, so the product keeps its own colours; the key follows the camera round (see shots)
+const PRODUCT: Rig = { key: [0, 0, 0], keyColour: 0xffffff, keyStrength: 1.1, sky: 0xffffff, ground: 0xd9d3c7, fill: 0.35, env: 0.9 }
 
 // Pixal3D and TRELLIS.2 put the picture's front on -Z, so the camera (and the lights) sit on that side
 export const FRONT_Z = -1
@@ -112,8 +120,8 @@ export function createViewer(host: HTMLElement, opts: { reducedMotion: boolean }
   let root: Object3D | null = null
   let home = { pos: camera.position.clone(), target: new Vector3() }
 
-  const lighting = (l: Lighting) => {
-    const r = RIGS[l]
+  let lit: Lighting = 'studio'
+  const rig = (r: Rig) => {
     key.position.set(...lightPosition(r.key))
     key.color.setHex(r.keyColour)
     key.intensity = r.keyStrength
@@ -122,6 +130,10 @@ export function createViewer(host: HTMLElement, opts: { reducedMotion: boolean }
     hemi.intensity = 0.5
     fill.intensity = r.fill
     scene.environmentIntensity = r.env
+  }
+  const lighting = (l: Lighting) => {
+    lit = l
+    rig(RIGS[l])
   }
   lighting('studio')
 
@@ -255,6 +267,62 @@ export function createViewer(host: HTMLElement, opts: { reducedMotion: boolean }
           }),
       )
     },
+    shots(angles, { background, shadow = true, size = SHOT_SIZE }) {
+      const obj = root
+      if (!obj) return Promise.reject(new Error('No model to photograph'))
+      const out = document.createElement('canvas')
+      out.width = out.height = size
+      const ctx = out.getContext('2d')
+      if (!ctx) return Promise.reject(new Error('No 2D canvas'))
+      const was = { pos: camera.position.clone(), target: controls.target.clone(), rot: obj.rotation.clone(), near: camera.near, far: camera.far, wire: scene.overrideMaterial }
+      return square(size, async () => {
+        // the arrow keys' turns and the wireframe are the viewer's, not the product's; the facing stays
+        obj.rotation.set(0, 0, 0)
+        scene.overrideMaterial = null
+        rig(PRODUCT)
+        holder.updateMatrixWorld(true)
+        const box = new Box3().setFromObject(holder)
+        const ball = box.getBoundingSphere(new Sphere())
+        // one distance for every angle, so the shots sit together in an ad set
+        const dist = fitDistance(ball.radius, camera.fov)
+        camera.near = dist / 100
+        camera.far = dist * 10
+        const floor = shadow && background !== 'transparent' ? contactShadow(box) : null
+        if (floor) scene.add(floor)
+        try {
+          const shots: Shot[] = []
+          for (const a of angles) {
+            camera.position.set(...shotPosition(a, dist, FRONT_Z)).add(ball.center)
+            camera.lookAt(ball.center)
+            camera.updateProjectionMatrix()
+            key.position.copy(camera.position).add(new Vector3(0, dist * 0.6, 0))
+            renderer.render(scene, camera)
+            ctx.clearRect(0, 0, size, size)
+            if (background !== 'transparent') {
+              ctx.fillStyle = SHOT_FILL[background]
+              ctx.fillRect(0, 0, size, size)
+            }
+            ctx.drawImage(renderer.domElement, 0, 0, size, size)
+            shots.push({ angle: a.id, blob: await pngOf(out) })
+          }
+          return shots
+        } finally {
+          if (floor) {
+            scene.remove(floor)
+            floor.geometry.dispose()
+            floor.material.map?.dispose()
+            floor.material.dispose()
+          }
+          obj.rotation.copy(was.rot)
+          scene.overrideMaterial = was.wire
+          camera.position.copy(was.pos)
+          controls.target.copy(was.target)
+          camera.near = was.near
+          camera.far = was.far
+          lighting(lit)
+        }
+      })
+    },
     dispose() {
       cancelAnimationFrame(frame)
       ro.disconnect()
@@ -271,4 +339,30 @@ export function createViewer(host: HTMLElement, opts: { reducedMotion: boolean }
       renderer.domElement.remove()
     },
   }
+}
+
+const pngOf = (canvas: HTMLCanvasElement) =>
+  new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No picture'))), 'image/png'))
+
+/** A soft dark ellipse just under the model: cheaper than shadow maps and kinder on a plain backdrop. */
+function contactShadow(box: Box3): Mesh<PlaneGeometry, MeshBasicMaterial> {
+  const c = document.createElement('canvas')
+  c.width = c.height = 128
+  const g = c.getContext('2d')
+  if (g) {
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64)
+    grad.addColorStop(0, 'rgba(40, 30, 20, 0.42)')
+    grad.addColorStop(0.55, 'rgba(40, 30, 20, 0.16)')
+    grad.addColorStop(1, 'rgba(40, 30, 20, 0)')
+    g.fillStyle = grad
+    g.fillRect(0, 0, 128, 128)
+  }
+  const size = box.getSize(new Vector3())
+  const map = new CanvasTexture(c)
+  map.colorSpace = SRGBColorSpace
+  const plane = new Mesh(new PlaneGeometry(size.x * 1.5 || 1, size.z * 1.5 || 1), new MeshBasicMaterial({ map, transparent: true, depthWrite: false, toneMapped: false }))
+  plane.rotation.x = -Math.PI / 2
+  // a hair below the base, so it never flickers through the model's underside
+  plane.position.set((box.min.x + box.max.x) / 2, box.min.y - Math.max(size.y, 1e-3) * 0.004, (box.min.z + box.max.z) / 2)
+  return plane
 }

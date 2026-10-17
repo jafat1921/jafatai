@@ -382,6 +382,18 @@ export const MASK_SHAPES: { id: MaskShape; label: string }[] = [
 ]
 export const MASK_LAYOUTS: AdStyle[] = ['arch_mask', 'circle_mask']
 export const MAX_QUOTES = 6
+export const MAX_PRODUCTS = 3
+
+// the 3D viewer's product shots open the brief with them already in the product slots
+export const adBriefHref = (ids: string[]) => `/image/ads?products=${ids.slice(0, MAX_PRODUCTS).map(encodeURIComponent).join(',')}`
+
+export function productsFromQuery(params: URLSearchParams): string[] {
+  const ids = (params.get('products') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^[\w-]{1,64}$/.test(s))
+  return [...new Set(ids)].slice(0, MAX_PRODUCTS)
+}
 
 export const FONT_PRESETS = [
   { id: 'modern', label: 'Modern' },

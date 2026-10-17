@@ -2072,3 +2072,9 @@ export interface Turntable3DResult {
   // false when the server kept the WebM (its ffmpeg couldn't make the MP4)
   transcoded: boolean
 }
+
+// POST /3d/{id}/shots: Ad Studio working parts (home "ad"), in the order sent
+export interface Shots3DResult {
+  items: MediaItem[]
+  ids: string[]
+}

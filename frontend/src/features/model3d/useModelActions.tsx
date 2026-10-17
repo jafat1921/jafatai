@@ -17,6 +17,8 @@ export interface ModelHandlers {
   open?: (m: MediaItem) => void
   turntable?: (m: MediaItem) => void
   thumbnail?: (m: MediaItem) => void
+  // Ad Studio product shots; only given when the package has both studios
+  shots?: (m: MediaItem) => void
   remake: (m: MediaItem, engine?: Engine3D) => void
   exportAs: (m: MediaItem, format: ExportFormat) => void
   favourite: (m: MediaItem) => void
@@ -30,7 +32,7 @@ export interface ModelHandlers {
  * The Library actions for 3D models, the same ones useMediaHost gives pictures (rename, delete with a confirm,
  * favourite), plus making it again and the browser-side downloads. Returns the handlers and the dialogs.
  */
-export function useModelActions({ open, turntable, thumbnail, afterDelete }: Pick<ModelHandlers, 'open' | 'turntable' | 'thumbnail'> & { afterDelete?: () => void }) {
+export function useModelActions({ open, turntable, thumbnail, shots, afterDelete }: Pick<ModelHandlers, 'open' | 'turntable' | 'thumbnail' | 'shots'> & { afterDelete?: () => void }) {
   const uid = useId()
   const qc = useQueryClient()
   const favs = useFavourites()
@@ -53,6 +55,7 @@ export function useModelActions({ open, turntable, thumbnail, afterDelete }: Pic
     open,
     turntable,
     thumbnail,
+    shots,
     remake: (m, engine) => {
       const body = remakePayload(m, engine)
       if (!body) return announce('This model can’t be made again from here. Start it again from the dock.')

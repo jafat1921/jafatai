@@ -21,6 +21,7 @@ interface Props {
   taken?: string[]
   pickTitle?: string
   pickDescription?: string
+  pickIncludeHome?: string
   // listen for Ctrl+V anywhere on the page, not only while the zone has focus
   globalPaste?: boolean
   // a small square-ish tile for slots in a grid: an icon, `compactLine`, and the buttons stacked beneath
@@ -42,6 +43,7 @@ export function SourceDropZone({
   taken,
   pickTitle,
   pickDescription,
+  pickIncludeHome,
   globalPaste,
   compact,
   compactLine,
@@ -194,6 +196,7 @@ export function SourceDropZone({
           taken={taken}
           title={pickTitle ?? `Pick for ${label.toLowerCase()}`}
           description={pickDescription}
+          includeHome={pickIncludeHome}
           onConfirm={(items) => onAdd(items, [])}
         />
       )}

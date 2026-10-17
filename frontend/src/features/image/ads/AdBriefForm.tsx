@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Megaphone, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,13 +11,12 @@ import { Make3DLink } from '@/components/generate/Make3DLink'
 import { RefAdd, RefThumb } from '@/components/generate/RefSlot'
 import { useBrandKits } from '@/hooks/useBrandKits'
 import { useCreateAds } from '@/hooks/useAds'
-import { AD_LANGUAGES, defaultFooter, FORMATS, IMAGE_MODELS, MAX_QUOTES, type AdCreate, type AdFormat, type AdQualityLevel, type FooterItems } from '@/lib/ads'
+import { AD_LANGUAGES, defaultFooter, FORMATS, IMAGE_MODELS, MAX_PRODUCTS, MAX_QUOTES, productsFromQuery, type AdCreate, type AdFormat, type AdQualityLevel, type FooterItems } from '@/lib/ads'
 import { announce } from '@/stores/ui'
 import { FooterPicker } from './FooterPicker'
 import { Segmented } from './Segmented'
 
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
-const MAX_PRODUCTS = 3
 const MAX_OFFERS = 6
 const NAMES: Record<string, string> = { website: 'website or booking link', socials: 'social accounts' }
 
@@ -36,6 +35,7 @@ export function AdBriefForm() {
   const uid = useId()
   const id = (s: string) => `${uid}-${s}`
   const nav = useNavigate()
+  const [query] = useSearchParams()
   const create = useCreateAds()
   const { kits } = useBrandKits()
   // null until the user picks: then the default kit (or the only one) is the starting point
@@ -57,7 +57,8 @@ export function AdBriefForm() {
   const [formats, setFormats] = useState<AdFormat[]>(['4:5'])
   const [offers, setOffers] = useState<string[]>([])
   const [offerLine, setOfferLine] = useState('')
-  const [products, setProducts] = useState<string[]>([])
+  // the 3D viewer's product shots arrive as ?products=a,b,c
+  const [products, setProducts] = useState<string[]>(() => productsFromQuery(query))
   // null: the kit's defaults, so switching kits starts from the new kit's own picks
   const [footer, setFooter] = useState<FooterItems | null>(null)
   const [quality, setQuality] = useState<AdQualityLevel>('final')
@@ -183,6 +184,8 @@ export function AdBriefForm() {
               max={MAX_PRODUCTS - products.length}
               taken={products}
               description="The real product is placed into each scene, label and shape kept."
+              // a 3D model's product shots are Ad Studio parts, re-picked from here
+              includeHome="character,ad"
               onAdd={(items) => setProducts([...products, ...items.map((m) => m.id)].slice(0, MAX_PRODUCTS))}
             />
           )}

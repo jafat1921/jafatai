@@ -38,3 +38,12 @@ export function useModelThumbnail(mediaId: string) {
     onSuccess: (model) => upsertMedia(qc, model),
   })
 }
+
+// part 4: renders of the model kept as Ad Studio product photos
+export function useProductShots(mediaId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shots: { file: string; blob: Blob }[]) => api.models3d.shots(mediaId, shots),
+    onSuccess: (res) => res.items.forEach((m) => upsertMedia(qc, m)),
+  })
+}

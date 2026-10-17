@@ -1730,3 +1730,9 @@ class Turntable3DOut(BaseModel):
     item: MediaItemOut  # the turntable video, a final output in the Library
     model: MediaItemOut  # the model, with its new thumb_url when the turntable's first frame became it
     transcoded: bool  # False when it stayed WebM because ffmpeg couldn't make the MP4
+
+
+class Shots3DOut(BaseModel):
+    # in the order they were sent; Ad Studio working parts (home "ad"), so only its pickers list them
+    items: list[MediaItemOut]
+    ids: list[str]

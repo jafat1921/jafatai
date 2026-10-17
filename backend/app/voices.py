@@ -376,7 +376,8 @@ def is_gallery(voice: VoiceProfile | None) -> bool:
 
 # ---------------------------------------------------------------- speaking
 
-def queue_speech(db: Session, cur, body, *, flow: str = "speak", seed: int | None = None) -> dict:
+def queue_speech(db: Session, cur, body, *, flow: str = "speak", seed: int | None = None,
+                 home: str | None = None) -> dict:
     """Validate a speak request and queue its takes. `body` is a SpeakIn (or the design preview's
     equivalent). Returns the SpeakOut fields; the caller commits."""
     from app.api.library import generate_into
@@ -438,10 +439,11 @@ def queue_speech(db: Session, cur, body, *, flow: str = "speak", seed: int | Non
             params[key] = getattr(body, key)
 
     title = (getattr(body, "title", None) or "").strip() or lib.short_title(spoken.replace("[", "").replace("]", ""))
+    home = home or lib.home_of(getattr(body, "part_of", None))
     items, jobs = [], []
     for i in range(body.count):
         item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="audio", origin="generated", title=title,
-                         tags=[], duration_s=body.duration_s, folder_id=into)
+                         tags=[], duration_s=body.duration_s, folder_id=into, home=home)
         db.add(item)
         db.flush()
         s = (base_seed + i) % 2**31 if base_seed is not None else None

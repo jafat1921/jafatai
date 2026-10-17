@@ -100,6 +100,9 @@ def test_font_upload_sniffs_and_validates(client):
 def test_logo_upload_rules(client):
     r = asset(client, "logo", "logo.png", png())
     assert r.status_code == 201 and r.json()["warnings"] == []
+    # a brand kit part (contract v37): not in the picture pickers
+    assert r.json()["item"]["home"] == "brand"
+    assert not client.get("/api/media", params={"kind": "image"}).json()["items"]
     r = asset(client, "logo", "flat.png", png(mode="RGB"))
     assert r.status_code == 201 and "transparent" in r.json()["warnings"][0]
     # JPEG logos are refused (no alpha, ever); product photos may be JPEG

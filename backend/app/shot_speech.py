@@ -447,7 +447,7 @@ def queue_test_clip(db: Session, cur, c: Character, text: str) -> dict:
          "max_s": TEST_CLIP_S[1], "lines": [{"character_id": c.id, "name": name, "voice_id": vid, "text": text}]}
     ensure_takes(db, cur.workspace_id, cur.id, d)
     item = MediaItem(workspace_id=cur.workspace_id, kind="video", origin="generated", title=f"{c.name} · test clip",
-                     tags=["test clip"])
+                     tags=["test clip"], home="character")
     db.add(item)
     db.flush()
     who = f"{c.name}, {c.description.strip()}" if c.description.strip() else c.name

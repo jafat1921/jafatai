@@ -222,6 +222,8 @@ def test_full_pipeline_stops_twice_for_review_then_mixes(client, tmp_path, fast_
     assert [s["speaker_id"] for s in d["segments"]] == ["spk1", "spk2", "spk2"]
     assert len(d["speakers"]) == 2 and all(s["sample_url"] for s in d["speakers"])
     with SessionLocal() as db:
+        samples = db.query(MediaItem).filter(MediaItem.title.like("%(voice sample)")).all()
+        assert len(samples) == 2 and {m.home for m in samples} == {"dub"}
         jobs = db.query(Job).filter(Job.type == "dub_stage").all()
         lanes = {j.payload["stage"]: j.lane for j in jobs}
     assert lanes == {"extract": "general", "separate": "audio", "transcribe": "audio", "speakers": "general"}

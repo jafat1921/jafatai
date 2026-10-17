@@ -149,6 +149,11 @@ def test_essential_sheet_queues_hero_first_then_turnaround(client, fast_driver):
     # it's a Library image too
     media = client.get(f"/api/media/{sheet['board']['media_id']}")
     assert media.status_code == 200 and "character sheet" in media.json()["tags"]
+    # ...a Character Studio part (contract v37): out of Create Image, still offered as a reference
+    assert media.json()["home"] == "character"
+    listed = lambda **q: {i["id"] for i in client.get("/api/media", params={"kind": "image", **q}).json()["items"]}  # noqa: E731
+    assert sheet["board"]["media_id"] not in listed(origin="generated")
+    assert sheet["board"]["media_id"] in listed(include="project", include_home="character")
 
 
 def test_single_panel_regenerate_and_per_panel_approval(client, fast_driver):

@@ -263,9 +263,10 @@ def test_test_clip(client, fast_driver):
         assert g.kind == "video" and g.params["lipsync"] and ss.TEST_CLIP_S[0] <= g.params["duration_s"] <= 10
     plan = plan_generation("video", g.prompt, g.params, 3, Lookup(Path(get_settings().data_dir)))
     assert plan.template == "ltx23_ia2v"
-    # the clip is in the Library, its spoken line isn't
-    ids = {i["id"] for i in client.get("/api/media", params={"kind": "video"}).json()["items"]}
+    # the clip is a Character Studio part (contract v37), its spoken line a hidden take
+    ids = {i["id"] for i in client.get("/api/media", params={"kind": "video", "home": "character"}).json()["items"]}
     assert out["item"]["id"] in ids and len(hidden_items(ss.clip_tag(c["id"]))) == 1
+    assert out["item"]["id"] not in {i["id"] for i in client.get("/api/media", params={"kind": "video"}).json()["items"]}
     assert not {i["id"] for i in client.get("/api/media", params={"kind": "audio"}).json()["items"]}
 
 

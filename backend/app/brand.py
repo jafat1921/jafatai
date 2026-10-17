@@ -195,7 +195,7 @@ def store_brand_upload(db: Session, workspace_id: str, user_id: str, got: upload
                                 "over a picture. A PNG with transparency looks better.")
         title = got.title or Path(got.filename).stem or purpose.title()
     item = MediaItem(id=new_id(), workspace_id=workspace_id, kind=kind, origin="upload", title=title[:300],
-                     tags=["brand", purpose], width=w, height=h)
+                     tags=["brand", purpose], width=w, height=h, home="brand")
     g = Generation(workspace_id=workspace_id, project_id=None, target_type="media", target_id=item.id, kind="upload",
                    version=1, status="ready", prompt="", params=params, seed=0,
                    file_path=f"{rel_folder}/{final.name}", media_type=media_type)

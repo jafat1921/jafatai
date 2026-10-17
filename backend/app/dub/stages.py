@@ -147,7 +147,7 @@ def _sample(ctx, dub: DubProject, spk: dict, segs: list[dict]) -> str | None:
     clip = root / "samples" / f"{spk['id']}.flac"
     engines.cut_clip(root / "vocals.wav", spans, clip)
     return library_audio(ctx.db, dub, clip, f"{dub.title} · {spk['label']} (voice sample)", "dub_sample",
-                         spk.get("sample_media_id"))[0]
+                         spk.get("sample_media_id"), home="dub")[0]
 
 
 def stage_speakers(ctx, dub: DubProject, run: dict) -> dict:
@@ -492,14 +492,14 @@ def voice_track(dub: DubProject, lang: str, dst: Path) -> None:
 
 
 def library_audio(db, dub: DubProject, src: Path, title: str, flow: str, media_id: str | None = None,
-                  lang: str | None = None) -> tuple[str, str]:
+                  lang: str | None = None, home: str | None = None) -> tuple[str, str]:
     """A finished file as a Library audio item, or as the next version of `media_id` when it still exists."""
     folder, rel_folder = lib.media_dir(dub.workspace_id)
     folder.mkdir(parents=True, exist_ok=True)
     item = db.get(MediaItem, media_id) if media_id else None
     if item is None or item.workspace_id != dub.workspace_id:
         item = MediaItem(id=new_id(), workspace_id=dub.workspace_id, kind="audio", origin="generated", title=title,
-                         tags=["dub"])
+                         tags=["dub"], home=home)
         db.add(item)
         db.flush()
     g = Generation(id=new_id(), workspace_id=dub.workspace_id, project_id=None, target_type="media",

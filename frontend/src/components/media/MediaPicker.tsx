@@ -35,7 +35,8 @@ function PickerBody({ kind, max, title, description, taken = [], confirmLabel = 
   const [q, setQ] = useState('')
   const query = useDeferredValue(q.trim())
   const [picked, setPicked] = useState<MediaItem[]>([])
-  const list = useMediaList({ kind, include: 'project', ...(query ? { q: query } : {}) })
+  // pictures are picked as references or start frames, so a character's sheet is offered too
+  const list = useMediaList({ kind, include: 'project', ...(kind === 'image' ? { include_home: 'character' } : {}), ...(query ? { q: query } : {}) })
   const items = flatItems(list.data).filter((m) => m.media_url || m.thumb_url)
   const room = Math.max(0, max - taken.length)
   const full = picked.length >= room

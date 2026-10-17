@@ -807,6 +807,8 @@ export interface MediaItem {
   duplicate?: boolean
   // contract v15: audio, once measured
   analysis?: AudioAnalysisBrief | null
+  // contract v37: the studio this is a working part of; null is a final output
+  home?: string | null
 }
 
 export interface MediaDetail extends MediaItem {
@@ -829,6 +831,9 @@ export interface MediaQuery {
   favourite?: 1
   // contract v34, admin only: just the items made through the API
   via?: 'api'
+  // contract v37: only this studio's parts ('any' = every part), or a comma list of studios added on top
+  home?: string
+  include_home?: string
   limit?: number
   cursor?: string
 }
@@ -1520,6 +1525,7 @@ export interface SpeakRequest {
   seed?: number
   title?: string
   folder_id?: string
+  part_of?: string
 }
 
 export interface SpeakResponse extends MediaBatch {

@@ -98,6 +98,7 @@ def test_pipeline_end_to_end_with_reviews(client, llm, monkeypatch):
         g = db.get(Generation, ps["song"]["generation"]["id"])
         assert g.kind == "song" and g.params["vocal"] == "female" and g.params["language"] == "ur"
         assert ZABAR in g.params["lyrics"] and db.get(MediaItem, ps["song"]["media_id"]).kind == "audio"
+        assert db.get(MediaItem, ps["song"]["media_id"]).home == "poetry"
 
     ps = go_on(client, ps)
     assert ps["review"] == "timing"

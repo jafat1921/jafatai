@@ -833,6 +833,8 @@ class MediaItemOut(BaseModel):
     analysis: dict[str, Any] | None = None
     # what made the current version (kind, engine, voice, text…), so pages can tell speech from songs
     params: dict[str, Any] | None = None
+    # contract v37: the studio this is a working part of (character, poetry, story:<id>...); None = a final output
+    home: str | None = None
 
 
 class UpscaleRowOut(BaseModel):
@@ -879,6 +881,8 @@ _SEED = "Fixed seed for repeatable results; with count > 1 each picture adds 1"
 _MODEL = "A catalog model id from GET /api/models, or auto. Empty uses the default for the kind"
 _MAGIC = "auto, on or off: let the local LLM expand a short prompt first. Empty uses the server default"
 _FOLDER = "A Library folder id the new items are filed in"
+_PART_OF = ("Mark the result as a working part of something bigger (e.g. story:<id>). It stays out of the "
+            "general lists; fetch it by id or with GET /api/media?home=<the same value>")
 
 
 class ImageGenerateIn(BaseModel):
@@ -903,6 +907,7 @@ class ImageGenerateIn(BaseModel):
     # the dock already ran /prompts/enhance; don't do it again
     prompt_enhanced: bool = Field(False, description="The prompt was already enhanced; skip that step")
     folder_id: str | None = Field(None, description=_FOLDER)  # polish P4 "Generate into…"
+    part_of: str | None = Field(None, max_length=80, description=_PART_OF)  # contract v37
 
 
 class ImageEditIn(BaseModel):
@@ -963,6 +968,7 @@ class VideoGenerateIn(BaseModel):
     # polish P2
     camera: Camera | None = Field(None, description="Shot size, angle and move, written into the motion prompt")
     folder_id: str | None = Field(None, description=_FOLDER)
+    part_of: str | None = Field(None, max_length=80, description=_PART_OF)
 
 
 class Img2ImgIn(BaseModel):
@@ -1508,6 +1514,7 @@ class SpeakIn(BaseModel):
     seed: int | None = Field(None, ge=0, le=2**31 - 1)
     title: str | None = Field(None, max_length=200)
     folder_id: str | None = None
+    part_of: str | None = Field(None, max_length=80, description=_PART_OF)
 
 
 class DesignPreviewIn(BaseModel):

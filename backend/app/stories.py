@@ -154,7 +154,7 @@ def _queue_music(db: Session, cur, music: dict) -> Generation:
         # ACE-Step with no lyrics is instrumental
         params.update(lyrics="", language="en", vocal="none", aerab=False)
     item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="audio", origin="generated",
-                     title=f"Story music · {lib.short_title(prompt)}", tags=["story"], duration_s=secs,
+                     title=f"Story music · {lib.short_title(prompt)}", tags=["story"], duration_s=secs, home="story",
                      folder_id=generate_into(db, cur.workspace_id, None, "audio"))
     db.add(item)
     db.flush()

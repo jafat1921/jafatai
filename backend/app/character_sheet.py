@@ -495,7 +495,8 @@ def queue_board(db: Session, c: Character, layout: str | None = None, *, replace
     item = db.get(MediaItem, board.get("media_id") or "")
     if item is None or item.workspace_id != c.workspace_id:
         item = MediaItem(id=new_id(), workspace_id=c.workspace_id, kind="image", origin="generated",
-                         title=f"{c.name} · character sheet"[:300], tags=["character sheet"], project_id=c.project_id)
+                         title=f"{c.name} · character sheet"[:300], tags=["character sheet"], project_id=c.project_id,
+                         home="character")
         db.add(item)
         db.flush()
     g = Generation(id=new_id(), workspace_id=c.workspace_id, project_id=None, target_type="media", target_id=item.id,

@@ -55,6 +55,12 @@ def short_title(text: str, words: int = 7) -> str:
     return (out + ("…" if len(parts) > words else "")) or "Untitled"
 
 
+def home_of(value: str | None) -> str | None:
+    """A caller's part_of label as stored on MediaItem.home (contract v37); blank means a final output."""
+    v = " ".join((value or "").split())[:120]
+    return v or None
+
+
 def clean_tags(tags: list[str]) -> list[str]:
     seen: list[str] = []
     for t in tags:
@@ -182,7 +188,7 @@ def items_out(db: Session, items: list[MediaItem]) -> list[MediaItemOut]:
             shutter_s=i.shutter_s, iso=i.iso, original_name=i.original_name, bytes=i.bytes,
             source_type=i.source_type, edited=counts.get(i.id, 1) > 1, album_ids=albums.get(i.id, []),
             analysis=audio_summary(g) if i.kind == "audio" else None,
-            params=public_params(g),
+            params=public_params(g), home=i.home,
         ))
     return out
 
@@ -301,8 +307,12 @@ def _project_rows(db: Session, workspace_id: str, *, kind: str | None, project_i
 def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origin: str | None = None,
                q: str | None = None, tag: str | None = None, project_id: str | None = None,
                include_project: bool = False, limit: int = 40, cursor: str | None = None,
-               scope: Scope | None = None, want: bool | None = None) -> tuple[list[MediaItemOut], str | None]:
-    """`want` is app.visibility.wanted(): False keeps API-made rows out of the studio's own Library."""
+               scope: Scope | None = None, want: bool | None = None, home: str | None = None,
+               include_home: list[str] | None = None) -> tuple[list[MediaItemOut], str | None]:
+    """`want` is app.visibility.wanted(): False keeps API-made rows out of the studio's own Library.
+
+    Working parts of a studio (home set, contract v37) are left out unless asked for: `home` lists only
+    that studio's parts ("any" for every part), `include_home` adds those studios' parts to the normal list."""
     limit = max(1, min(MAX_LIMIT, limit))
     after = parse_cursor(cursor)
     needle = (q or "").strip().lower()
@@ -317,6 +327,14 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
             stmt = stmt.where(MediaItem.kind.in_(("image", "video")))
         if origin:
             stmt = stmt.where(MediaItem.origin == origin)
+        if home == "any":
+            stmt = stmt.where(MediaItem.home.is_not(None))
+        elif home:
+            stmt = stmt.where(MediaItem.home == home)
+        elif include_home:
+            stmt = stmt.where(or_(MediaItem.home.is_(None), MediaItem.home.in_(include_home)))
+        else:
+            stmt = stmt.where(MediaItem.home.is_(None))
         if project_id:
             stmt = stmt.where(MediaItem.project_id == project_id)
         if scope is not None and scope.folder_id:
@@ -343,7 +361,7 @@ def list_media(db: Session, workspace_id: str, *, kind: str | None = None, origi
         merged += [(i.created_at, i.id, i) for i in db.scalars(stmt)]
 
     only = sorted(scope.gen_ids) if scope is not None and scope.gen_ids is not None else None
-    if (origin == "project" or (origin is None and include_project)) and not tag and only != []:
+    if (origin == "project" or (origin is None and include_project)) and not tag and only != [] and not home:
         for g, row in _project_rows(db, workspace_id, kind=kind, project_id=project_id, only_ids=only, want=want):
             if needle and needle not in f"{row.title} {row.project_title or ''}".lower():
                 continue

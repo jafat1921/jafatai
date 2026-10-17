@@ -109,7 +109,7 @@ function PreviewLine({ voice, name }: { voice: Voice; name: string }) {
   const run = () => {
     if (!text.trim()) return
     speak.mutate(
-      { text: text.trim(), voice_id: voice.id, engine: 'auto', language: voice.language, count: 1, title: `${name} · voice preview` },
+      { text: text.trim(), voice_id: voice.id, engine: 'auto', language: voice.language, count: 1, title: `${name} · voice preview`, part_of: 'character' },
       {
         onSuccess: (res) => {
           setItemId(res.items?.[0]?.id ?? null)

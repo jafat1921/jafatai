@@ -67,6 +67,10 @@ def list_media(
     favourite: bool = False,
     limit: int = Query(40, ge=1, le=lib.MAX_LIMIT),
     cursor: str | None = None,
+    home: str | None = Query(None, max_length=120, description="Only the working parts of this studio "
+                                                               "(contract v37); any = every studio's parts"),
+    include_home: str | None = Query(None, max_length=400, description="Comma list of studios whose parts are "
+                                                                       "listed too, e.g. character"),
     db: Session = Depends(get_db),
     cur: CurrentUser = Depends(get_current_user),
 ):
@@ -75,7 +79,8 @@ def list_media(
     sc = org.scope(db, cur.workspace_id, cur.id, folder_id, favourite)
     items, nxt = lib.list_media(db, cur.workspace_id, kind=kind, origin=origin, q=q, tag=tag, project_id=project_id,
                                 include_project="project" in (include or "").split(","), limit=limit, cursor=cursor,
-                                scope=sc, want=vis.wanted(cur))
+                                scope=sc, want=vis.wanted(cur), home=lib.home_of(home),
+                                include_home=[h for h in map(lib.home_of, (include_home or "").split(",")) if h])
     return MediaPage(items=org.annotate(db, cur.workspace_id, cur.id, items), next_cursor=nxt)
 
 
@@ -191,9 +196,10 @@ def regenerate_media(media_id: str, body: RegenerateIn, db: Session = Depends(ge
 # ---------------------------------------------------------------- image studio
 
 def _new_image_item(db: Session, cur: CurrentUser, title: str, prompt: str, params: dict, seed: int | None,
-                    folder_id: str | None = None):
+                    folder_id: str | None = None, home: str | None = None):
     item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="image", origin="generated", title=title,
-                     tags=[], width=params.get("width"), height=params.get("height"), folder_id=folder_id)
+                     tags=[], width=params.get("width"), height=params.get("height"), folder_id=folder_id,
+                     home=home)
     db.add(item)
     db.flush()
     g = enqueue_generation(db, workspace_id=cur.workspace_id, project_id=None, target_type="media",
@@ -265,7 +271,7 @@ def generate_images(body: ImageGenerateIn, db: Session = Depends(get_db), cur: C
             params["speed"] = speed.id
         seed = (body.seed + i) % 2**31 if body.seed is not None else None
         item, job = _new_image_item(db, cur, title, *brand.apply_to_request(
-            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed, into)
+            db, cur.workspace_id, body.brand_kit_id, prompt, params), seed, into, lib.home_of(body.part_of))
         items.append(item)
         jobs.append(job)
     db.commit()

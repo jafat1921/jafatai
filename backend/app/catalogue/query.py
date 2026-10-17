@@ -67,6 +67,9 @@ def scope_clauses(db: Session, workspace_id: str, f: Filter, *, skip: tuple[str,
         c.append(MediaItem.via_api == f.via_api)
     if f.origin:
         c.append(MediaItem.origin == f.origin)
+    if not f.album_id:
+        # studio working parts (contract v37) only show here once someone files them in an album
+        c.append(MediaItem.home.is_(None))
     if f.q.strip():
         like = f"%{f.q.strip().lower()}%"
         c.append(or_(func.lower(MediaItem.title).like(like), func.lower(MediaItem.caption).like(like),

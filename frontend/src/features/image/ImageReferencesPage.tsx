@@ -18,7 +18,8 @@ const USES = [
 export function ImageReferencesPage() {
   const navigate = useNavigate()
   const [picked, setPicked] = useState<string[]>([])
-  const list = useMediaList({ kind: 'image', include: 'project' })
+  // characters' sheets are Character Studio parts, but a face to keep is exactly what references are for
+  const list = useMediaList({ kind: 'image', include: 'project', include_home: 'character' })
   const items = flatItems(list.data).filter((m) => m.media_url || m.thumb_url)
   const full = picked.length >= MAX_EDIT_SOURCES
 

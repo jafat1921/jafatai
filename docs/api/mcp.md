@@ -61,10 +61,10 @@ Tools a token can't use aren't listed for it. Anything slow returns job ids at o
 
 | Tool | Scope | What it does |
 |---|---|---|
-| `generate_image` | generate | Text to image (1-4 pictures). |
+| `generate_image` | generate | Text to image (1-4 pictures). Optional `part_of` keeps the result out of the studio's lists (contract v37). |
 | `edit_image` | generate | Edit finished pictures with an instruction; extra pictures are references. |
 | `upscale` | generate | Upscale a picture (2x/4x/2k/4k) or a video (1080p/1440p/4k). |
-| `generate_video` | generate | Text or image to video; long durations render in chunks. |
+| `generate_video` | generate | Text or image to video; long durations render in chunks. Optional `part_of` (e.g. `story:<id>`) as for images. |
 | `make_song` / `make_music` / `make_sfx` | generate | Song with lyrics, instrumental music, a sound effect. |
 | `speak` | generate | Text to speech in a library voice, a gallery voice or a described one. |
 | `transcribe` | generate | Timed transcript of an audio or video item; the text arrives with the finished job. |

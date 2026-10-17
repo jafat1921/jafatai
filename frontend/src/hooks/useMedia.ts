@@ -23,7 +23,7 @@ export function libraryFilter(
   origin: OriginFilter,
   q: string,
   tag: string | null,
-  scope: { folderId?: string | null; favourite?: boolean; apiOnly?: boolean } = {},
+  scope: { folderId?: string | null; favourite?: boolean; apiOnly?: boolean; parts?: boolean } = {},
 ): MediaFilter {
   const f: MediaFilter = { kind }
   if (origin === 'all') f.include = 'project'
@@ -33,7 +33,15 @@ export function libraryFilter(
   if (scope.folderId) f.folder_id = scope.folderId
   if (scope.favourite) f.favourite = 1
   if (scope.apiOnly) f.via = 'api'
+  if (scope.parts) f.home = 'any'
   return f
+}
+
+// studio parts (contract v37) only land in a list that asked for their studio
+export function wantsHome(filter: MediaFilter, home: string | null | undefined) {
+  if (filter.home) return !!home && (filter.home === 'any' || filter.home === home)
+  if (!home) return true
+  return (filter.include_home ?? '').split(',').includes(home)
 }
 
 
@@ -68,6 +76,7 @@ export function useLiveMediaItem(id: string | null | undefined) {
 // would the server have put this item in that list? (text and tag searches are left to the server)
 function belongs(filter: MediaFilter, item: MediaItem) {
   if (filter.q || filter.tag || filter.favourite) return false
+  if (!wantsHome(filter, item.home)) return false
   if (filter.folder_id && filter.folder_id !== item.folder_id) return false
   if (filter.kind && filter.kind !== item.kind) return false
   if (filter.origin && filter.origin !== item.origin) return false

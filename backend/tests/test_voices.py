@@ -318,6 +318,7 @@ def test_design_preview_returns_its_seed(client, fast_driver):
     assert r.status_code == 202, r.text
     body = r.json()
     assert body["engine_resolved"] == "omnivoice" and isinstance(body["seed"], int) and len(body["items"]) == 1
+    assert body["items"][0]["home"] == "voice"
     with SessionLocal() as db:
         g = db.get(Generation, body["items"][0]["generation_id"])
         assert g.seed == body["seed"] and g.params["voice"]["design"]["seed"] == body["seed"]

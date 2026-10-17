@@ -172,6 +172,10 @@ def _job_report(db: Session, cur: CurrentUser, job_id: str, origin: str) -> dict
 
 # ---------------------------------------------------------------- generate
 
+# contract v37: a clip or picture made as one piece of something bigger stays out of the studio's lists
+PART_OF = ("What this is a piece of, e.g. story:<id>. It stays out of the studio's general lists; fetch it "
+           "by id with get_media")
+
 @tool("generate", title="Generate images")
 def generate_image(
     ctx: Context,
@@ -182,11 +186,13 @@ def generate_image(
     style: Annotated[str | None, Field(description="A style id, e.g. cinematic, anime, watercolor")] = None,
     seed: Annotated[int | None, Field(ge=0, le=2**31 - 1)] = None,
     model: Annotated[str | None, Field(max_length=60, description="A model id, or empty for the default")] = None,
+    part_of: Annotated[str | None, Field(max_length=80, description=PART_OF)] = None,
 ) -> dict:
     """Make pictures from a text prompt. Returns the new Library items and one job per picture."""
     with acting(ctx, "generate") as (db, cur):
         out = library.generate_images(ImageGenerateIn(prompt=prompt, aspect=aspect, count=count, negative=negative,
-                                                      style=style, seed=seed, model=model), db=db, cur=cur)
+                                                      style=style, seed=seed, model=model, part_of=part_of),
+                                      db=db, cur=cur)
         return _batch(out, model=out.model_resolved)
 
 
@@ -237,12 +243,13 @@ def generate_video(
     end_image_id: Annotated[str | None, Field(description="Last frame; needs image_id")] = None,
     quality: Annotated[Literal["standard", "hq"] | None, Field(description="hq is slower")] = None,
     seed: Annotated[int | None, Field(ge=0, le=2**31 - 1)] = None,
+    part_of: Annotated[str | None, Field(max_length=80, description=PART_OF)] = None,
 ) -> dict:
     """Make a video clip from a prompt, optionally starting from a picture. Takes minutes; returns one job."""
     with acting(ctx, "generate") as (db, cur):
         out = videos.generate_video(VideoGenerateIn(prompt=prompt, duration_s=duration_s, aspect=aspect,
                                                     image_id=image_id, end_image_id=end_image_id, quality=quality,
-                                                    seed=seed), db=db, cur=cur)
+                                                    seed=seed, part_of=part_of), db=db, cur=cur)
         return {"items": [_item(out)], "jobs": [_job(out.job)] if out.job else [], "model": out.model_resolved}
 
 
@@ -306,12 +313,13 @@ def speak(
                                                                                              "uses the voice's")]
     = None,
     speed: Annotated[float, Field(ge=0.5, le=2.0)] = 1.0,
+    part_of: Annotated[str | None, Field(max_length=80, description=PART_OF)] = None,
 ) -> dict:
     """Text to speech in a library voice, a gallery voice or a described one."""
     design = SpeakDesignIn(description=voice_description) if voice_description and not voice_id else None
     with acting(ctx, "generate") as (db, cur):
-        out = audio.speak(SpeakIn(text=text, voice_id=voice_id, design=design, language=language, speed=speed),
-                          db=db, cur=cur)
+        out = audio.speak(SpeakIn(text=text, voice_id=voice_id, design=design, language=language, speed=speed,
+                                  part_of=part_of), db=db, cur=cur)
         return _batch(out, engine=out.engine_resolved)
 
 
@@ -593,7 +601,8 @@ def search_library(
     """Find pictures, videos and audio in the Library, newest first."""
     with acting(ctx, "read") as (db, cur):
         page = library.list_media(kind=kind, origin=None, q=query, tag=None, project_id=None, include=None,
-                                  folder_id=None, favourite=False, limit=limit, cursor=None, db=db, cur=cur)
+                                  folder_id=None, favourite=False, limit=limit, cursor=None, home=None,
+                                  include_home=None, db=db, cur=cur)
         return {"items": [_item(i) for i in page.items], "more": page.next_cursor is not None}
 
 

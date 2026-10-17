@@ -17,7 +17,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.drivers.mock import MockDriver
 from app.main import app
-from app.models import Job, Workspace
+from app.models import Job, MediaItem, Workspace
 from app.podcast.publish import GROUND
 from app.worker import process_one
 from app.llm import set_transport
@@ -282,6 +282,8 @@ def test_music_bed_is_generated_ducked_and_mixed(client, monkeypatch):
     with SessionLocal() as db:
         gens = db.query(Job).filter(Job.type == "generate").all()
         assert len(gens) == 1 and gens[0].status == "done"
+        bed = db.query(MediaItem).filter(MediaItem.kind == "audio").one()
+        assert bed.home == "story"
 
 
 # ---------------------------------------------------------------- the video

@@ -420,6 +420,8 @@ class MediaItem(Base):
     # RAW / HEIC / TIFF uploads: the file as it came; generation_id points at the sRGB working copy
     source_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # migration 0026: the studio this is a working part of; None is a final output, listed everywhere
+    home: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, index=True)
 

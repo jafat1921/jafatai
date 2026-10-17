@@ -255,7 +255,8 @@ class Run:
         item = self.db.get(MediaItem, (ps.song or {}).get("media_id") or "")
         if item is None:
             item = MediaItem(id=new_id(), workspace_id=ps.workspace_id, kind="audio", origin="generated",
-                             title=f"{ps.title or 'Poetry Short'} · song"[:300], tags=["poetry"], duration_s=secs)
+                             title=f"{ps.title or 'Poetry Short'} · song"[:300], tags=["poetry"], duration_s=secs,
+                             home="poetry")
             self.db.add(item)
             self.db.flush()
         g = enqueue_generation(self.db, workspace_id=ps.workspace_id, project_id=None, target_type="media",

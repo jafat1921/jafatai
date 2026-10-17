@@ -113,7 +113,8 @@ def generate_video(body: VideoGenerateIn, db: Session = Depends(get_db), cur: Cu
     prompt, params = brand.apply_to_request(db, cur.workspace_id, body.brand_kit_id, prompt, params)
     title = (body.title or "").strip() or lib.short_title(mn.plain(body.prompt))
     item = MediaItem(id=new_id(), workspace_id=cur.workspace_id, kind="video", origin="generated", title=title,
-                     tags=[], width=w, height=h, duration_s=params["duration_s"], folder_id=into)
+                     tags=[], width=w, height=h, duration_s=params["duration_s"], folder_id=into,
+                     home=lib.home_of(body.part_of))
     db.add(item)
     db.flush()
     g = enqueue_generation(db, workspace_id=cur.workspace_id, project_id=None, target_type="media",

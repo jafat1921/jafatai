@@ -1,6 +1,6 @@
 import { useDeferredValue, useId, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { ChevronRight, Download, Film, Heart, Images, Loader2, Music, Search, Wand2 } from 'lucide-react'
+import { ChevronRight, Download, Film, Heart, Images, Layers, Loader2, Music, Search, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ApiMadeChip } from '@/components/studio/api-made-chip'
@@ -86,8 +86,10 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
   const [tag, setTag] = useState<string | null>(null)
   const [fav, setFav] = useState(false)
   const [apiOnly, setApiOnly] = useState(false)
+  // working parts of the studios (character boards, poetry songs...) are hidden unless asked for
+  const [parts, setParts] = useState(false)
   const query = useDeferredValue(q)
-  const filter = libraryFilter(kind, origin, query, tag, { folderId, favourite: fav, apiOnly })
+  const filter = libraryFilter(kind, origin, query, tag, { folderId, favourite: fav, apiOnly, parts })
   const list = useMediaList(filter)
   const items = flatItems(list.data)
   const { folders } = useFolders(kind)
@@ -115,7 +117,7 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
   const copy = COPY[kind]
   const noun = copy.noun
   const rootLabel = copy.root
-  const filtered = !!(query.trim() || tag || origin !== 'all' || fav || apiOnly)
+  const filtered = !!(query.trim() || tag || origin !== 'all' || fav || apiOnly || parts)
   const path = folderPath(folders, folderId)
   const here = path.at(-1)
 
@@ -287,6 +289,9 @@ export function LibraryPage({ kind }: { kind: MediaKind }) {
             </div>
             <Chip selected={fav} onClick={() => setFav((f) => !f)} icon={<Heart aria-hidden />}>
               Favourites
+            </Chip>
+            <Chip selected={parts} onClick={() => setParts((p) => !p)} icon={<Layers aria-hidden />}>
+              Studio parts
             </Chip>
             <ApiMadeChip on={apiOnly} onChange={setApiOnly} />
             {tags.length > 0 && (

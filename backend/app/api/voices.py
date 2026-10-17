@@ -173,7 +173,7 @@ def design_preview(body: DesignPreviewIn, db: Session = Depends(get_db), cur: Cu
     speak = SpeakIn(text=text, design=SpeakDesignIn(description=body.description, seed=body.seed),
                     engine=body.engine, language=language, aerab=body.aerab, count=1,
                     title=f"Voice design · {' '.join(body.description.split())[:60]}", folder_id=body.folder_id)
-    out = vc.queue_speech(db, cur, speak, flow="voice_design")
+    out = vc.queue_speech(db, cur, speak, flow="voice_design", home="voice")
     db.commit()
     if out.get("engine_resolved") == "omnivoice":
         ins = voice_instruct.normalise(body.description, language)

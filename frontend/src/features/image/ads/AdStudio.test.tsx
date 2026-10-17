@@ -154,7 +154,7 @@ describe('ad helpers', () => {
 })
 
 describe('brief form', () => {
-  it('picks the default kit, nudges for contact details, sends the ticked offers', async () => {
+  it('starts with no kit, then nudges for contact details and sends the ticked offers', async () => {
     const calls = mockApi((method, path) => {
       if (path === '/brand-kits') return [KIT]
       if (method === 'POST' && path === '/ads') return campaign({ status: 'running', review: null })
@@ -163,6 +163,11 @@ describe('brief form', () => {
     })
     renderAt('/image/ads', routes)
     expect(await screen.findByText('Say what you are advertising first.')).toBeInTheDocument()
+    // even the only kit waits to be picked
+    const kitSelect = await screen.findByLabelText('Brand kit')
+    await screen.findByRole('option', { name: /iXperts/ })
+    expect(kitSelect).toHaveValue('')
+    await userEvent.selectOptions(kitSelect, 'k1')
     expect(await screen.findByRole('link', { name: 'iXperts' })).toHaveAttribute('href', '/brand-kits/k1')
     expect(screen.getByText(/Add your website or booking link and social accounts/)).toBeInTheDocument()
     // the footer pick starts from the kit's digital details; unticking one sends the campaign's own pick
@@ -396,6 +401,8 @@ describe('design leap (M16b)', () => {
       return []
     })
     renderAt('/image/ads', routes)
+    await screen.findByRole('option', { name: /iXperts/ })
+    await userEvent.selectOptions(screen.getByLabelText('Brand kit'), 'k1')
     expect(await screen.findByText('Using your style')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('What are you advertising?'), 'Cleaning')
     await userEvent.click(screen.getByRole('button', { name: 'Add a quote' }))

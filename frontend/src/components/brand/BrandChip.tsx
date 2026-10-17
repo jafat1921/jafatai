@@ -43,6 +43,7 @@ export function BrandChip({ choice, className }: { choice: BrandChoice; classNam
         onChange={(e) => setKit(e.target.value)}
         className={cn(fieldClass, 'h-6 w-auto max-w-44 py-0 pr-6 text-small')}
       >
+        <option value="">No brand</option>
         {kits.map((k) => (
           <option key={k.id} value={k.id}>
             {k.name}
@@ -53,7 +54,7 @@ export function BrandChip({ choice, className }: { choice: BrandChoice; classNam
       <span aria-hidden className="text-studio-muted">
         ·
       </span>
-      <Switch id={`${uid}-on`} checked={on} onCheckedChange={setOn} aria-label="Use the brand kit" />
+      <Switch id={`${uid}-on`} checked={on} onCheckedChange={setOn} disabled={!kit} aria-label="Use the brand kit" />
       <label htmlFor={`${uid}-on`} className="min-w-6 text-studio-muted">
         {on ? 'On' : 'Off'}
       </label>

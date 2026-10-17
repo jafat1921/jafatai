@@ -144,23 +144,23 @@ export function useSetProjectKit(projectId: string) {
 }
 
 /**
- * The generator chip's state: the default kit is preselected and on when one exists, off when none.
+ * The generator chip's state. Off with no kit picked until the user picks one, every time: a kit that
+ * switched itself on put the logo into pictures nobody meant to brand.
  * `sendId` is what goes into brand_kit_id (undefined while off).
  */
 export function useBrandChoice() {
   const { kits } = useBrandKits()
   const [picked, setPicked] = useState<string | null>(null)
-  const [enabled, setEnabled] = useState<boolean | null>(null)
-  const fallback = kits.find((k) => k.is_default) ?? null
-  const kit = kits.find((k) => k.id === picked) ?? fallback ?? kits[0] ?? null
-  const on = !!kit && (enabled ?? !!fallback)
+  const [enabled, setEnabled] = useState(false)
+  const kit = kits.find((k) => k.id === picked) ?? null
+  const on = !!kit && enabled
   return {
     kits,
     kit,
     on,
     setKit: (id: string) => {
-      setPicked(id)
-      setEnabled(true)
+      setPicked(id || null)
+      setEnabled(!!id)
     },
     setOn: setEnabled,
     sendId: on ? kit?.id : undefined,

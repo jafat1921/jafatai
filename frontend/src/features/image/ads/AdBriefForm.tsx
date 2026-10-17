@@ -66,7 +66,8 @@ export function AdBriefForm() {
   const editQuote = (key: number, v: Partial<QuoteRow>) => setQuotes((rows) => rows.map((r) => (r.key === key ? { ...r, ...v } : r)))
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((o) => ({ ...o, [k]: v }))
 
-  const kitId = picked ?? (kits.find((k) => k.is_default) ?? kits[0])?.id ?? ''
+  // no kit until the user picks one, even when there is only one
+  const kitId = picked ?? ''
   const kit = kits.find((k) => k.id === kitId)
   const claims = kit?.claims ?? []
   const missing = kit

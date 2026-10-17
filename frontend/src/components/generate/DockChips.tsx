@@ -34,7 +34,7 @@ export function ModelChip({ models, model, onChange, speed, onSpeed, blockedBy, 
 }
 
 export function BrandDockChip({ choice }: { choice: BrandChoice }) {
-  const value = choice.kit ? `${choice.kit.name}${choice.on ? '' : ' (off)'}` : 'none'
+  const value = choice.kit ? `${choice.kit.name}${choice.on ? '' : ' (off)'}` : choice.kits.length ? 'off' : 'none'
   return (
     <DockChip
       name="Brand"

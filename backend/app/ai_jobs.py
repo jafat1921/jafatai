@@ -664,13 +664,18 @@ def _dialogue_rows(ideas, chars: list[Character], cast_ids: list[str]) -> list[d
     return rows[:MAX_LINES]
 
 
-def _mark_dialogue(run: "AiRun", plans: list[dict], frac: float) -> None:
-    """The verified aerab pass over the planned lines; the planner was asked for the marks already."""
+def _mark_dialogue(run: "AiRun", plans: list[dict], frac: float, language: str | None = None) -> None:
+    """The verified aerab pass over the planned lines; the planner was asked for the marks already. A film with
+    its own language (contract v4a) also tags each line with it, for the voice that speaks it."""
     rows = [r for p in plans for r in p.get("dialogue") or []]
-    if not rows or not aerab.applies(None, "\n".join(r["text"] for r in rows)):
+    lang = language if language and language != "en" else None
+    if lang:
+        for r in rows:
+            r["language"] = lang
+    if not rows or not aerab.applies(lang, "\n".join(r["text"] for r in rows)):
         return
     run.ctx.progress(frac, "Adding aerab to the dialogue…")
-    done = aerab.finish_lines_sync([r["text"] for r in rows], what="shot dialogue",
+    done = aerab.finish_lines_sync([r["text"] for r in rows], lang, what="shot dialogue",
                                    tick=lambda: run.ctx.progress(frac, "Adding aerab to the dialogue…"))
     for r, text in zip(rows, done):
         r["text"] = text
@@ -735,14 +740,17 @@ def _previous_scene(db: Session, scene: Scene) -> Scene | None:
 
 
 def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_shots: int, frac: float,
-                first_seam: str = "cut", dialogue: bool = True) -> list[dict]:
+                first_seam: str = "cut", dialogue: bool = True, target_s: float | None = None) -> list[dict]:
     chars = _characters(db, project.id)
     kit = bm.project_kit(db, project)
     talk = dialogue and has_dialogue(scene)
+    # a long scene's list runs to dozens of shots, each with its lines; Urdu with aerab is token-hungry
+    budget = min(16000, max(5000, max_shots * (420 if P.film_language(project) != "en" else 260)))
     ideas = run.call(f"Planning shots for {scene.heading or 'the scene'}", frac, "reasoning",
                      P.suggest_shots_messages(project, chars, scene, max_shots, _previous_scene(db, scene),
-                                              brand=bm.planner_brief(kit) if kit else "", dialogue=talk),
-                     schema=P.ShotList, temperature=0.5, max_tokens=5000).data.shots[:max_shots]
+                                              brand=bm.planner_brief(kit) if kit else "", dialogue=talk,
+                                              target_s=target_s),
+                     schema=P.ShotList, temperature=0.5, max_tokens=budget).data.shots[:max_shots]
     plans = []
     for i, idea in enumerate(ideas):
         seam = first_seam if i == 0 else ("continue" if idea.continuous else "cut")
@@ -757,7 +765,7 @@ def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_sho
             "character_ids": cast_ids,
         })
     if talk:
-        _mark_dialogue(run, plans, frac)
+        _mark_dialogue(run, plans, frac, P.film_language(project))
     return plans
 
 
@@ -930,7 +938,7 @@ def _scene_plan(run: AiRun, db: Session, project: Project, scene: Scene, frac: f
         "character_ids": cast_ids,
     }
     if talk:
-        _mark_dialogue(run, [plan], frac)
+        _mark_dialogue(run, [plan], frac, P.film_language(project))
     return plan
 
 
@@ -961,8 +969,10 @@ def handle_storyboard(ctx) -> dict:
         # contract v26: the planner hands each shot its spoken lines unless the film has no dialogue
         talk = p.get("dialogue", True) is not False
         if mode == "shots":
-            plans = _plan_shots(run, db, project, scene, int(p.get("max_shots") or 6), frac, first_seam=seam,
-                                dialogue=talk)
+            # the autopilot's long scenes (contract v4a) each say how many shots and seconds they need
+            many = int((p.get("max_shots_by_scene") or {}).get(scene.id) or p.get("max_shots") or 6)
+            plans = _plan_shots(run, db, project, scene, many, frac, first_seam=seam, dialogue=talk,
+                                target_s=(p.get("scene_seconds") or {}).get(scene.id))
         else:
             plans = [_scene_plan(run, db, project, scene, frac, seam, dialogue=talk)]
         shots, sug = apply_shot_plan(db, scene, plans, action="storyboard", job_id=job.id)

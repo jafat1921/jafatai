@@ -25,7 +25,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import ai_jobs, brand, character_sheet, longtake, models_catalog, storyboard as sb, vision
+from app import aerab, ai_jobs, brand, character_sheet, longtake, models_catalog, storyboard as sb, vision
+from app import title_intro as ti
 from app import brand_moments as bm
 from app import cast as film_cast
 from app import estimate as est
@@ -105,15 +106,35 @@ def target_scenes(duration_s: float) -> int:
     return max(lo, min(hi, round(duration_s / (20 if duration_s <= 60 else 30))))
 
 
-def fit_durations(wanted: list[float], total: float) -> list[float]:
-    """Scale the outline's scene lengths so they add up to the requested runtime."""
-    cap = get_settings().longtake_max_s
+def fit_durations(wanted: list[float], total: float, many_shots: bool = False) -> list[float]:
+    """Scale the outline's scene lengths so they add up to the requested runtime. A scene covered by many
+    shots (contract v4a) isn't one take, so the long-take limit doesn't apply to it."""
+    cap = math.inf if many_shots else get_settings().longtake_max_s
     raw = [max(1.0, float(w or 0)) for w in wanted]
     scale = total / sum(raw)
     out = [max(2.0, min(cap, round(w * scale * 2) / 2)) for w in raw]
     # the last scene soaks up the rounding so the film lands on the asked length
     out[-1] = max(2.0, min(cap, round((total - sum(out[:-1])) * 2) / 2))
     return out
+
+
+SHOT_S = 7.5  # a long scene's shots run 5-10 s
+MAX_SCENE_SHOTS = 40
+SHOT_RANGE = (3.0, 20.0)
+# how much GPU work a long film keeps queued at once, so a cancel or another user's job isn't stuck behind it
+FRAME_BATCH = 24
+TAKE_BATCH = 12
+
+
+def shots_for(seconds: float) -> int:
+    return max(1, min(MAX_SCENE_SHOTS, math.ceil(seconds / SHOT_S)))
+
+
+def spread(durations: list[float], total: float) -> list[float]:
+    """Shot lengths scaled to fill the scene's time, each kept to SHOT_RANGE."""
+    lo, hi = SHOT_RANGE
+    scale = total / max(1e-6, sum(durations))
+    return [round(max(lo, min(hi, d * scale)) * 2) / 2 for d in durations]
 
 
 def initial_result(upscale: bool) -> dict:
@@ -128,6 +149,7 @@ def initial_result(upscale: bool) -> dict:
 
 class QuickOutline(BaseModel):
     title: str = ""
+    title_local: str = ""  # contract v4a: the title in the film's language, for the opening card
     logline: str
     characters: list[P.OutlineCharacter] = []
     scenes: list[P.OutlineScene] = Field(min_length=1)
@@ -135,26 +157,48 @@ class QuickOutline(BaseModel):
 
 NO_DIALOGUE = ("Nobody speaks on screen and there is no voice-over: tell it through action, images and ambient "
                "sound only. Write no character cues and no dialogue lines.")
+NO_EXTRAS = ("Only the cast above speaks. Anyone else (passers-by, a crowd, a waiter) stays in the background "
+             "and never has a line.")
 
 
 def outline_messages(project: Project, style: str, dialogue: bool, duration_s: float, brand: str = "",
-                     planner: str = "", expanded: str = "") -> list[dict]:
+                     planner: str = "", expanded: str = "", *, scenes: int | None = None,
+                     cast: list[Character] | None = None, language: str = "en", title: str = "") -> list[dict]:
     lo, hi = scene_range(duration_s)
     n = target_scenes(duration_s)
-    count = "exactly 1 scene" if hi == 1 else f"{n} scenes (anywhere from {lo} to {hi} is fine)"
+    if scenes:
+        each = duration_s / scenes
+        count = f"exactly {scenes} scene{'s' if scenes != 1 else ''} (about {each:g} seconds each)"
+    else:
+        count = "exactly 1 scene" if hi == 1 else f"{n} scenes (anywhere from {lo} to {hi} is fine)"
     talk = "Characters may speak; keep the lines few and short." if dialogue else NO_DIALOGUE
+    if scenes and dialogue:
+        talk = "Characters speak; give each scene real conversation that carries the story."
+    shape = ("Each scene is a full sequence in one place, covered by many shots of 5-10 seconds, so give every "
+             "scene enough happening to fill its time." if scenes else
+             "Each scene is filmed as ONE continuous shot, so keep every scene to one place and one clear action.")
+    who = ("characters (name plus a few words on their role; only who the idea needs, possibly nobody)" if not cast
+           else "characters (exactly the cast below, names unchanged, each with their role in this story)")
+    titled = ("title (a short film title, at most six words)" if not title
+              else f"title (the film is called \"{title}\"; give that)")
     user = (
         f"The idea, in the client's own words:\n{project.brief.strip()[:3000]}\n\n"
         + (f"The same idea, expanded (the client's words come first):\n{expanded.strip()[:3000]}\n\n"
            if expanded else "") +
         f"Make it {STYLE_PRESETS[style][1]}. Total running time: {duration_s:g} seconds, so plan {count} whose "
-        f"duration_s add up to {duration_s:g}.\n{talk}\n"
-        "Each scene is filmed as ONE continuous shot, so keep every scene to one place and one clear action.\n"
-        "Give: title (a short film title, at most six words), logline (one sentence), characters (name plus a few "
-        "words on their role; only who the idea needs, possibly nobody), and for each scene: heading (a slug line "
+        f"duration_s add up to {duration_s:g}.\n{talk}\n{shape}\n"
+        f"Give: {titled}, logline (one sentence), {who}, and for each scene: heading (a slug line "
         "like EXT. HARBOUR - NIGHT), logline, purpose, time_of_day (one of: " + ", ".join(P.TIMES) + "), mood "
         "(2-4 words), duration_s and characters (names exactly as in the cast)."
     )
+    if cast:
+        user += ("\n\nThe cast, already chosen; use these people and invent no other speaking part:\n"
+                 + "\n".join(P.character_line(c) for c in cast) + f"\n{NO_EXTRAS}")
+    note = P.language_note(language)
+    if note:
+        name = P.language_name(language)
+        user += (f"\n\n{note}\nAlso give title_local: the title in {name}. Everything else in this outline "
+                 "(title, logline, headings, purpose) stays in English.")
     if planner:
         user += f"\n\nFormat notes: {planner}"
     if brand:
@@ -162,12 +206,19 @@ def outline_messages(project: Project, style: str, dialogue: bool, duration_s: f
     return [{"role": "system", "content": P.DIRECTOR_SYSTEM}, {"role": "user", "content": user}]
 
 
-def draft_messages(project, chars, scenes, idx: int, plan: dict, dialogue: bool, seconds: float) -> list[dict]:
+def draft_messages(project, chars, scenes, idx: int, plan: dict, dialogue: bool, seconds: float,
+                   many_shots: bool = False, fixed_cast: bool = False) -> list[dict]:
     msgs = P.draft_scene_messages(project, chars, scenes, idx, plan={**plan, "duration_s": int(seconds)})
-    msgs[1]["content"] += (f"\n\nThe scene plays as one continuous {seconds:g}-second shot: one place, one "
-                           "unbroken moment, nothing that needs a cut.")
+    if many_shots:
+        msgs[1]["content"] += (f"\n\nThe scene runs about {seconds:g} seconds on screen and is covered by many "
+                               "shots, so give it enough action and dialogue to fill that time.")
+    else:
+        msgs[1]["content"] += (f"\n\nThe scene plays as one continuous {seconds:g}-second shot: one place, one "
+                               "unbroken moment, nothing that needs a cut.")
     if not dialogue:
         msgs[1]["content"] += "\n" + NO_DIALOGUE
+    elif fixed_cast:
+        msgs[1]["content"] += "\n" + NO_EXTRAS
     return msgs
 
 
@@ -405,6 +456,19 @@ class Autopilot:
         return f"{label} failed: {msg}" if not msg.startswith(label) else msg
 
     # ---- helpers
+    @property
+    def language(self) -> str:
+        return P.film_language(self.project)
+
+    @property
+    def many_shots(self) -> bool:
+        # scenes were asked for by number or length (contract v4a): long scenes, many shots each
+        return bool(self.p.get("scenes"))
+
+    @property
+    def fixed_cast(self) -> bool:
+        return bool(self.p.get("cast_ids"))
+
     def planner_notes(self) -> str:
         # the template's planner text, copied into the payload by POST /quick
         return str(self.p.get("planner") or "")
@@ -651,18 +715,27 @@ class Autopilot:
             db.flush()
             kit = bm.project_kit(db, project)
             expanded = self.magic_prompt(style, brand.prompt_context(kit) if kit else "")
-            try:
-                res = self.llm("Outlining the film", "reasoning",
-                               outline_messages(project, style, dialogue, total,
-                                                brand.prompt_context(kit) if kit else "", self.planner_notes(),
-                                                expanded),
-                               schema=QuickOutline, temperature=0.6, max_tokens=8000)
-            except LLMError as e:
-                raise StageFailed(f"The AI writer isn't available: {e}") from e
-            out: QuickOutline = res.data
+            want = int(self.p.get("scenes") or 0) or None
+            cast = self.characters() if self.fixed_cast else None
+            msgs = outline_messages(project, style, dialogue, total, brand.prompt_context(kit) if kit else "",
+                                    self.planner_notes(), expanded, scenes=want, cast=cast, language=self.language,
+                                    title=str(self.p.get("title") or ""))
+            out: QuickOutline | None = None
+            for _try in range(2):
+                try:
+                    res = self.llm("Outlining the film", "reasoning", msgs, schema=QuickOutline, temperature=0.6,
+                                   max_tokens=8000)
+                except LLMError as e:
+                    raise StageFailed(f"The AI writer isn't available: {e}") from e
+                out = res.data
+                if not want or len(out.scenes) >= want:
+                    break
+                # one more go when it came back short; after that the scenes it gave share the runtime
+                msgs = [*msgs[:-1], {**msgs[-1], "content": msgs[-1]["content"] + (
+                    f"\n\nYour last outline had {len(out.scenes)} scenes. It must have exactly {want}.")}]
             _lo, hi = scene_range(total)
-            plans = out.scenes[:hi]
-            durations = fit_durations([pl.duration_s for pl in plans], total)
+            plans = out.scenes[:want or hi]
+            durations = fit_durations([pl.duration_s for pl in plans], total, many_shots=self.many_shots)
             if self.p.get("title_auto", True) and out.title.strip():
                 project.title = P.clean_line(out.title)[:300]
             project.logline = project.logline or out.logline.strip()
@@ -672,10 +745,20 @@ class Autopilot:
             db.flush()
             for sc in scenes:
                 db.add(ai_jobs.snapshot(sc))
-            for c in out.characters:
-                ai_jobs.upsert_character(db, project, c.name, "", action="quick", job_id=self.job.id)
+            roles = [[c.name, c.role] for c in out.characters]
+            if self.fixed_cast:
+                # the chosen cast is the whole speaking cast: nobody the outline made up gets added
+                names = {c.name.casefold() for c in cast}
+                roles = [r for r in roles if r[0].casefold() in names]
+            else:
+                for c in out.characters:
+                    ai_jobs.upsert_character(db, project, c.name, "", action="quick", job_id=self.job.id)
+            local = P.clean_line(out.title_local)[:300]
+            if local and aerab.applies(self.language, local):
+                local = aerab.finish_lines_sync([local], self.language, tick=lambda: self.tick(),
+                                                what="film title")[0]
             o.update(scene_ids=[s.id for s in scenes], durations={s.id: d for s, d in zip(scenes, durations)},
-                     plan=[pl.model_dump() for pl in plans], roles=[[c.name, c.role] for c in out.characters])
+                     plan=[pl.model_dump() for pl in plans], roles=roles, title_local=local)
             self.tick(0.15, f"Planned {len(scenes)} scene{'s' if len(scenes) != 1 else ''}")
             ids = o["scene_ids"]
             by_id = {s.id: s for s in self.scenes()}
@@ -685,26 +768,37 @@ class Autopilot:
             if sc.script_text.strip():
                 continue
             seconds = float(o["durations"][sc.id])
+            # Urdu with its aerab takes several tokens a word
+            tokens = ai_jobs._tokens_for(P.words_for(int(seconds))) * (3 if self.language != "en" else 1)
             try:
                 res = self.llm(f"Writing scene {k + 1} of {len(scenes)}", "creative",
-                               draft_messages(project, self.characters(), scenes, k, plan, dialogue, seconds),
-                               temperature=0.8, max_tokens=ai_jobs._tokens_for(P.words_for(int(seconds))))
+                               draft_messages(project, self.characters(), scenes, k, plan, dialogue, seconds,
+                                              many_shots=self.many_shots, fixed_cast=self.fixed_cast),
+                               temperature=0.8, max_tokens=min(16000, tokens))
             except LLMError as e:
                 raise StageFailed(f"The AI writer isn't available: {e}") from e
             script = ai_jobs.with_aerab(lambda _f, m: self.tick(message=m), P.clean_script(res.content, sc.heading), 0)
             ai_jobs.write_scene(db, sc, {"script_text": script}, action="quick", job_id=self.job.id, summarize=False)
             self.tick(0.15 + 0.7 * (k + 1) / len(scenes))
 
-        if o.get("roles") and not o.get("looks_done"):
+        roles = o.get("roles") or []
+        if self.fixed_cast:
+            # a chosen cast keeps its own looks; only a member with no description yet gets one written
+            bare = {c.name.casefold() for c in self.characters() if not c.description.strip()}
+            roles = [r for r in roles if r[0].casefold() in bare]
+        if roles and not o.get("looks_done"):
             script = "\n\n".join(f"{s.heading}\n{s.script_text}" for s in scenes)
             try:
-                looks = self.llm("Describing the cast", "creative", P.looks_messages(project, o["roles"], script),
+                looks = self.llm("Describing the cast", "creative", P.looks_messages(project, roles, script),
                                  schema=P.CastLooks, temperature=0.5, max_tokens=1500).data
             except LLMError as e:
                 raise StageFailed(f"The AI writer isn't available: {e}") from e
+            known = {r[0].casefold() for r in roles}
             for look in looks.characters:
+                if self.fixed_cast and look.name.strip().casefold() not in known:
+                    continue
                 ai_jobs.upsert_character(db, project, look.name, look.description, action="quick", job_id=self.job.id)
-            o["looks_done"] = True
+        o["looks_done"] = True
         project.updated_at = utcnow()
         return None
 
@@ -714,11 +808,16 @@ class Autopilot:
         if not c.get("extracted"):
             if any(s.script_text.strip() for s in self.scenes()):
                 chars = self.characters()
-                if chars and any(not ch.description.strip() for ch in chars):
+                # a chosen cast (contract v4a) is complete: reading the script would add its walk-ons
+                if chars and not self.fixed_cast and any(not ch.description.strip() for ch in chars):
                     self.run_inline("ai_extract_characters", {"project_id": project.id}, "Reading the cast")
                 self.run_inline("ai_extract_locations", {"project_id": project.id}, "Finding the locations")
             c["extracted"] = True
             self.tick(0.2, "Cast and locations found")
+        if self.p.get("title_intro") and "music_id" not in (self.r.get("title_intro") or {}):
+            # queued now so the sting is long done by the time the film is stitched
+            g = ti.queue_music(db, project, self.p.get("style") or "cinematic", self.job.id)
+            self.r["title_intro"] = {"music_id": g.id if g else None}
 
         prompts = c.setdefault("portrait_prompts", {})
         waits: list[str] = []
@@ -772,18 +871,27 @@ class Autopilot:
         if not scenes:
             raise StageFailed("There's no script to storyboard")
         if any(not sb.scene_shots(db, s.id) for s in scenes):
-            self.run_inline("ai_storyboard", {"project_id": project.id, "mode": "scene", "chain": True,
-                                              "generate_frames": False, "overwrite": False, "scene_ids": [],
-                                              "dialogue": bool(self.p.get("dialogue", True))},
-                            "Planning the shots")
             durations = (self.r.get("outline") or {}).get("durations") or {}
+            payload = {"project_id": project.id, "mode": "scene", "chain": True, "generate_frames": False,
+                       "overwrite": False, "scene_ids": [], "dialogue": bool(self.p.get("dialogue", True))}
+            if self.many_shots:
+                secs = {s.id: float(durations[s.id]) for s in scenes if s.id in durations}
+                payload.update(mode="shots", scene_seconds=secs,
+                               max_shots_by_scene={sid: shots_for(v) for sid, v in secs.items()})
+            self.run_inline("ai_storyboard", payload, "Planning the shots")
             cap = self.s.longtake_max_s
             closing = db.get(Shot, bm.closing_record(project).get("shot_id") or "")
             for s in scenes:
                 shots = [x for x in sb.scene_shots(db, s.id) if closing is None or x.id != closing.id]
                 if not shots:
                     raise StageFailed(f"The storyboard has no shot for {s.heading or 'a scene'}")
-                if s.id in durations and len(shots) == 1:
+                if s.id in durations and len(shots) > 1 and self.many_shots:
+                    want = float(durations[s.id])
+                    if closing is not None and closing.scene_id == s.id:
+                        want = max(2.0, want - closing.duration_s)
+                    for shot, d in zip(shots, spread([x.duration_s for x in shots], want)):
+                        shot.duration_s = d
+                elif s.id in durations and len(shots) == 1:
                     # one shot per scene in quick mode: the shot is the scene's whole planned length;
                     # the closing packshot/reveal comes out of the last scene's time so the film keeps its length
                     want = float(durations[s.id])
@@ -795,6 +903,8 @@ class Autopilot:
         shots = sb.project_shots(db, project.id)
         waits: list[str] = []
         for n, shot in enumerate(shots, start=1):
+            if len(set(waits)) >= FRAME_BATCH:
+                break  # the rest are queued once this batch is through
             if bm.is_reveal(db, shot):
                 continue  # the exact logo reveal has no frames
             prev, _ = sb.neighbours(db, shot)
@@ -816,13 +926,15 @@ class Autopilot:
         shots = sb.project_shots(self.db, self.project.id)
         waits: list[str] = []
         for n, shot in enumerate(shots, start=1):
+            if len(set(waits)) >= TAKE_BATCH:
+                break
             if bm.is_reveal(self.db, shot):
                 waits += self.reveal_slot(shot)
             else:
                 waits += self.take_slot(shot, f"shot {n} of {len(shots)}")
         if waits:
-            done = len(shots) - len(set(waits))
-            return Wait(waits, f"{max(0, done)} of {len(shots)} takes approved")
+            done = sum(1 for s in shots if sb.approved(self.db, "shot", s.id, "take"))
+            return Wait(waits, f"{done} of {len(shots)} takes approved")
         return None
 
     def stage_stitch(self):
@@ -839,20 +951,24 @@ class Autopilot:
             if st.get("attempts", 0) >= STITCH_ATTEMPTS:
                 raise StageFailed(f"Stitching failed: {(job.error if job else None) or 'the render disappeared'}")
 
+        intro = self.intro_card()
+        if isinstance(intro, Wait):
+            return intro
         reel = rl.get_reel(db, project)
         rl.sync(db, reel)
         plans, _ = rl.plan(db, reel)
         sel = rl.select_scenes(plans, None)
         if not sel.plans:
             raise StageFailed("Nothing to stitch: no shot has an approved take")
+        extra = {"title_intro": intro} if intro else {}
         render = Generation(
             workspace_id=project.workspace_id, project_id=project.id, target_type="project", target_id=project.id,
             kind="render", version=next_version(db, "project", project.id, "render"), status="queued",
             prompt=f"{project.title} · {sel.auto_title}", seed=new_seed(),
             params={"quality": "draft", "title": sel.auto_title, "title_auto": True, "scene_ids": sel.scene_ids,
                     "scene_range": sel.label, "full": sel.full, "clips": sum(len(p.clips) for p in sel.plans),
-                    "duration_s": rl.film_length(sel.plans), "autopilot": self.job.id,
-                    "created_by": {"flow": "autopilot", "job_id": self.job.id}},
+                    "duration_s": rl.film_length(sel.plans) + (intro["seconds"] if intro and sel.full else 0),
+                    "autopilot": self.job.id, "created_by": {"flow": "autopilot", "job_id": self.job.id}, **extra},
         )
         db.add(render)
         db.flush()
@@ -866,6 +982,20 @@ class Autopilot:
         reel.updated_at = utcnow()
         st.update(render_id=render.id, attempts=st.get("attempts", 0) + 1)
         return Wait([job.id], "Stitching the film")
+
+    def intro_card(self):
+        """The opening title card (contract v4a), saved on the project for the stitch; waits for its sting."""
+        if not self.p.get("title_intro"):
+            return None
+        rec = self.r.setdefault("title_intro", {})
+        g = self.db.get(Generation, rec.get("music_id") or "") if rec.get("music_id") else None
+        if g is not None and g.status in ("queued", "generating") and g.job_id:
+            return Wait([g.job_id], "Scoring the opening title")
+        music = g.id if g is not None and g.status in ("ready", "approved") else None
+        c = ti.card(self.project, (self.r.get("outline") or {}).get("title_local") or "", self.language, music)
+        self.project.settings = {**(self.project.settings or {}), "title_intro": c}
+        rec.update(card=c)
+        return c
 
     def stage_upscale(self):
         want = self.p.get("upscale")

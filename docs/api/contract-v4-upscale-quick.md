@@ -87,7 +87,7 @@ extends: contract-v0..v3
 `Project` gains `authoring_mode: "quick"` (string; no migration needed if it's already a free string — verify).
 
 ### Quick Create: implementation notes (as built)
-- **Validation:** `duration_s` outside 5..`LONGTAKE_MAX_S × 4` → `422`. `upscale` is `{engine: best|fast|quick, target: 1080p|1440p|4k}` or `null`.
+- **Validation:** `duration_s` outside 5..`max(LONGTAKE_MAX_S × 4, 1200)` → `422` (ceiling raised in v4a; see contract-v4a-quick-feature.md for language, cast, scenes and the opening title). `upscale` is `{engine: best|fast|quick, target: 1080p|1440p|4k}` or `null`.
 - **Job:** `type="autopilot"`. `job.result.stages` is present from creation, with all six stages `pending`. `result` also has `waiting_on` (child job ids), `outline`, `cast`, `stitch` and `upscale` (internal resume state; the UI can ignore these). `vision_unavailable` is set once the vision model fails.
 - **Waiting looks like `queued`:** while its frames or takes render, the autopilot hands itself back to the queue (`status="queued"`, `message` = "Storyboard: Frames for 3 shots"). It is claimed again when its children finish. The UI should show the stage timeline, not "waiting for a worker", for `type="autopilot"`.
 - **Cancel** (`POST /jobs/{id}/cancel`) also cancels the autopilot's queued or running children. **Retry** continues at the first unfinished stage; cancelled attempts don't count against `AUTO_RETRIES`.

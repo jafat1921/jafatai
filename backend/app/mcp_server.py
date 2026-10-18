@@ -532,13 +532,28 @@ def create_project_from_idea(
     aspect_ratio: Literal["16:9", "9:16", "1:1"] = "16:9",
     style: Literal["cinematic", "documentary", "animated", "commercial"] = "cinematic",
     dialogue: bool = True,
+    language: Annotated[str, Field(pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$",
+                                   description="ISO 639-1 of the dialogue and on-screen words, e.g. ur")] = "en",
+    cast_ids: Annotated[list[str], Field(max_length=8, description="Character Studio character ids: the whole "
+                                                                   "speaking cast, with their looks and voices")] = [],
+    scenes: Annotated[int | None, Field(ge=1, le=12, description="Exactly this many scenes")] = None,
+    scene_seconds: Annotated[float | None, Field(ge=5, le=600, description="Length of each scene; with scenes "
+                                                                            "it sets the runtime")] = None,
+    title_intro: Annotated[bool | None, Field(description="A 7 s opening title with music; on by default for a "
+                                                          "non-English film or one of 60 s or more")] = None,
+    title: Annotated[str | None, Field(max_length=120, description="The film's title, instead of the AI's")]
+    = None,
 ) -> dict:
-    """Quick Create: the autopilot writes, casts, storyboards and renders a whole short film. Takes a long time;
-    poll the job, or read mixai://projects/{project_id}."""
+    """Quick Create: the autopilot writes, casts, storyboards and renders a whole film. Takes a long time;
+    poll the job, or read mixai://projects/{project_id}. For a feature: language, an existing cast, scenes x
+    scene_seconds up to 20 minutes, many shots a scene."""
     with acting(ctx, "generate") as (db, cur):
         out = quick.quick_create(QuickIn(prompt=idea, duration_s=duration_s, aspect_ratio=aspect_ratio, style=style,
-                                         dialogue=dialogue), db=db, cur=cur)
-        return {"project_id": out.project.id, "title": out.project.title, **_job(out.job)}
+                                         dialogue=dialogue, language=language, cast_ids=cast_ids, scenes=scenes,
+                                         scene_seconds=scene_seconds, title_intro=title_intro, title=title),
+                                 db=db, cur=cur)
+        return {"project_id": out.project.id, "title": out.project.title, "runtime_s": out.project.target_runtime_s,
+                **_job(out.job)}
 
 
 

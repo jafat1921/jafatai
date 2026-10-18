@@ -23,6 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import storyboard as sb
+from app import title_intro
 from app.config import get_settings
 from app.models import Generation, Job, Project, Reel, ReelClip, Scene, new_id, utcnow
 from app.schemas import (
@@ -864,8 +865,16 @@ def handle_assemble(ctx) -> dict:
             built.append(p.scene.id)
             db.commit()
 
-        ctx.progress(0.75, "Joining film")
         mezz = []
+        intro = title_intro.for_render(project, sel.full)
+        if intro:
+            # contract v4a: the opening title goes in front as one more piece of the join
+            ctx.progress(0.72, "Opening title")
+            got = title_intro.build(db, intro, live[0].scene, live[0].clips[0].gen, size, work / "intro",
+                                    work / "intro.mp4")
+            intro.update(got)
+            mezz.append(Mezz(work / "intro.mp4", got["length"], title_intro.CHAPTER))
+        ctx.progress(0.75, "Joining film")
         for p in live:
             m = p.mezzanine
             length = float((m.params or {}).get("duration_s") or p.length)
@@ -902,6 +911,8 @@ def handle_assemble(ctx) -> dict:
                         "input_hash": p.mezzanine.params.get("input_hash")} for p in live],
         "chapters": [{"title": c[0], "start_s": round(c[1], 3), "end_s": round(c[2], 3)} for c in j["chapters"]],
     }
+    if intro:
+        render.params["title_intro"] = intro
     reel.updated_at = utcnow()
     return {"file_path": rel, "media_type": "video/mp4", "duration_s": j["length"], "wall_seconds": wall,
             "scenes_built": built, "scenes_cached": cached, "fallbacks": fallbacks}

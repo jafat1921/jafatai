@@ -112,6 +112,35 @@ def words_for(duration_s: int) -> int:
     return max(40, min(900, int(duration_s * 2.2)))
 
 
+def film_language(project) -> str:
+    """The film's spoken language (contract v4a, project.settings.language); English when unset."""
+    return str((getattr(project, "settings", None) or {}).get("language") or "en").lower()
+
+
+def language_name(code: str) -> str:
+    from app.voices import lang_name
+
+    return lang_name((code or "en").split("-")[0])
+
+
+def language_note(language: str | None) -> str:
+    """What a writer is told about a film that isn't in English; "" for English."""
+    if not language or language == "en":
+        return ""
+    name = language_name(language)
+    rule = aerab.writing_rule(language)
+    return (f"The film is in {name}. Every spoken line and any words seen on screen (a sign, a letter, a caption) "
+            f"are written in {name}. Scene headings, character cues and action lines stay in English so the crew "
+            "can shoot from them." + (f" {name} text: {rule}" if rule else ""))
+
+
+def character_line(c) -> str:
+    desc = (c.description or "").strip()
+    prof = getattr(c, "profile", None) or {}
+    extra = "; ".join(f"{k}: {prof[k]}" for k in ("role", "age", "personality", "wardrobe") if prof.get(k))
+    return f"- {c.name}: {desc or extra or 'no description yet'}" + (f" ({extra})" if desc and extra else "")
+
+
 def film_block(project, characters: Iterable = ()) -> str:
     parts = [f"Title: {project.title}"]
     if project.logline:
@@ -119,7 +148,7 @@ def film_block(project, characters: Iterable = ()) -> str:
     if project.brief and project.brief != project.logline:
         parts.append(f"Brief from the director: {project.brief}")
     parts.append(f"Target runtime: about {project.target_runtime_s} seconds")
-    cast = [f"- {c.name}: {c.description or 'no description yet'}" for c in characters]
+    cast = [character_line(c) for c in characters]
     if cast:
         parts.append("Characters:\n" + "\n".join(cast))
     return "\n".join(parts)
@@ -159,10 +188,10 @@ WRITER_SYSTEM = (
 )
 
 
-def writer_system(user: str) -> str:
+def writer_system(user: str, language: str | None = None) -> str:
     """The screenwriter's system prompt; a film in Urdu, Arabic... also gets the aerab rule, the language
-    read from the brief, the idea and the scenes around it."""
-    rule = aerab.writing_rule(None, user)
+    the film's own (contract v4a) or else read from the brief, the idea and the scenes around it."""
+    rule = aerab.writing_rule(language if language and language != "en" else None, user)
     return WRITER_SYSTEM + (f"\n\nDialogue and narration: {rule}" if rule else "")
 
 
@@ -219,13 +248,16 @@ def draft_scene_messages(project, characters, scenes, idx: int, plan: dict | Non
         want.append("Characters present: " + ", ".join(known["characters"]))
     if idea:
         want.append(f"The director's idea for this scene: {idea}")
+    language = film_language(project)
+    note = language_note(language)
     user = (
         f"{film_block(project, characters)}\n\nSurrounding scenes:\n{context_block(scenes, idx)}\n\n"
         + "\n".join(want)
         + f"\n\nWrite this scene in about {words_for(duration)} words. It must flow out of the scene before it "
         "and set up the scene after it."
+        + (f"\n\n{note}" if note else "")
     )
-    return [{"role": "system", "content": writer_system(user)}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": writer_system(user, language)}, {"role": "user", "content": user}]
 
 
 def draft_json_messages(project, characters, scenes, idx: int, idea: str = "") -> list[dict]:
@@ -471,6 +503,7 @@ FRAME_RULES = """Rules for frame prompts (an image model sees each one alone, wi
 - Describe one frozen moment, present tense, concrete and visual. No sounds, no thoughts, no story recap, no camera moves.
 - Never use a character's name alone; describe the person each time (the name may follow the description).
 - Plain text, flush-left, one paragraph each, under 110 words. No markdown, no lists, no quotes.
+- Always in English, whatever language the film is in; never copy dialogue or words in another script into a prompt.
 Rules for the motion prompt (a video model animates from the start frame to the end frame):
 - Say what moves and how over the shot's duration: performance, gestures, the camera move, light changes. Keep it physically plausible for the duration.
 - Never quote spoken words or copy dialogue from the script: the lines are voiced separately. Speech is performance only ("she answers him quietly").
@@ -500,11 +533,14 @@ def _style(project) -> str:
             else "Style: photorealistic cinematic film still, natural colour, shallow depth of field.")
 
 
-def dialogue_ask(scene, many: bool) -> str:
+def dialogue_ask(scene, many: bool, language: str | None = None) -> str:
     """The storyboard's dialogue lines (contract v26): what is said on screen, word for word from the script,
     so it can be spoken in the characters' voices and lip-synced."""
     where = "each shot" if many else "the shot"
-    rule = aerab.writing_rule(None, scene.script_text or "")
+    lang = language if language and language != "en" else None
+    rule = aerab.writing_rule(lang, scene.script_text or "")
+    if lang:
+        rule = f"in {language_name(lang)}, exactly as the script has it. {rule}".strip()
     ask = (f"Also give {where} dialogue: the lines spoken on screen in it, in order, as a list of "
            '{"character": the speaker\'s name exactly as in the cast list, "text": the words exactly as the script '
            "has them, in the script's own language}. No parentheticals, no stage directions, no voice-over or "
@@ -523,11 +559,14 @@ SHOTLIST_SYSTEM = (
 
 
 def suggest_shots_messages(project, characters, scene, max_shots: int, previous=None, brand: str = "",
-                           dialogue: bool = False) -> list[dict]:
+                           dialogue: bool = False, target_s: float | None = None) -> list[dict]:
     before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}" if previous else ""
+    # a long scene (contract v4a) is covered by many short shots that together fill its running time
+    length = (f"The scene runs about {target_s:g} seconds on screen: plan about {max_shots} shots of 5-10 seconds "
+              f"each whose duration_s add up to about {target_s:g}, covering the whole script. ") if target_s else ""
     user = (
         f"{film_block(project, characters)}\n\nScene: {scene.heading or '(no heading)'}\n---\n"
-        f"{scene.script_text.strip()[:6000]}\n---{before}\n\n"
+        f"{scene.script_text.strip()[:12000 if target_s else 6000]}\n---{before}\n\n{length}"
         f"Break this scene into at most {max_shots} shots, in order. For each shot give: shot_type (one of: "
         + ", ".join(SHOT_TYPES) + "), duration_s (1-20; time spoken lines at about 2.5 words a second), "
         "description (what happens, one or two sentences), camera (framing and any move), characters (names exactly "
@@ -536,7 +575,7 @@ def suggest_shots_messages(project, characters, scene, max_shots: int, previous=
         "(true only when the action flows straight on from the previous shot with no jump in time or place)."
     )
     if dialogue:
-        user += "\n\n" + dialogue_ask(scene, True)
+        user += "\n\n" + dialogue_ask(scene, True, film_language(project))
     if brand:
         user += "\n\n" + brand + "\nGive each shot brand_placements (an empty list where the brand doesn't fit)."
     return [{"role": "system", "content": SHOTLIST_SYSTEM}, {"role": "user", "content": user}]
@@ -643,7 +682,7 @@ def scene_frames_messages(project, characters, scene, location, duration_s: floa
         f"motion_prompt = what happens in between.\n\n{_style(project)}\n\n{FRAME_RULES}"
     )
     if dialogue:
-        user += "\n\n" + dialogue_ask(scene, False)
+        user += "\n\n" + dialogue_ask(scene, False, film_language(project))
     if brand:
         user += ("\n\n" + brand + "\nAlso give brand_placements for this shot (an empty list if the brand doesn't "
                  "fit here), and describe those objects in the start and end prompts.")

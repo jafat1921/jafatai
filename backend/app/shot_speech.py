@@ -76,6 +76,8 @@ def clean_lines(lines: list[dict] | None, speakers) -> list[dict]:
         if cid not in allowed:
             raise HTTPException(422, "Every line's speaker has to be one of the shot's characters")
         row = {"character_id": cid, "text": text[:LINE_MAX]}
+        if ln.get("language"):
+            row["language"] = str(ln["language"]).lower()[:12]
         if ln.get("pause_after_s") is not None:
             row["pause_after_s"] = round(max(0.0, min(10.0, float(ln["pause_after_s"]))), 2)
         out.append(row)
@@ -85,7 +87,7 @@ def clean_lines(lines: list[dict] | None, speakers) -> list[dict]:
 
 
 def public(lines: list[dict] | None) -> list[dict]:
-    return [{k: ln[k] for k in ("character_id", "text", "pause_after_s") if ln.get(k) is not None}
+    return [{k: ln[k] for k in ("character_id", "text", "pause_after_s", "language") if ln.get(k) is not None}
             for ln in lines or []]
 
 
@@ -157,17 +159,20 @@ def plan(db: Session, workspace_id: str, lines: list[dict] | None, cache: dict |
         if not ok and name not in missing:
             missing.append(name)
         row = {"character_id": ln.get("character_id"), "name": name, "voice_id": vid if ok else None, "text": text}
+        if ln.get("language"):
+            row["language"] = ln["language"]
         if ln.get("pause_after_s") is not None:
             row["pause_after_s"] = float(ln["pause_after_s"])
         rows.append(row)
     if not rows:
         return None
-    native = bool(missing) and all(native_audio.looks_english(r["text"]) for r in rows)
+    native = bool(missing) and all(native_audio.looks_english(r["text"]) and r.get("language") in (None, "en")
+                                   for r in rows)
     if missing and not native:
         picks = {}
         for i, r in enumerate(rows):
             if r["voice_id"] is None:
-                lang = native_audio.language_of(r["text"]) or "en"
+                lang = _language(r["text"], None, r.get("language"))
                 picks[i] = stand_in(lang, _gender(db, r["character_id"] or ""), r["character_id"] or r["name"])
         # no gallery voice for that language: the old fallback is still better than a failed take
         native = None in picks.values()
@@ -204,11 +209,14 @@ def keep_speakers(shot: Shot) -> None:
 
 # ---------------------------------------------------------------- speaking the lines
 
-def _language(text: str, voice) -> str:
-    # an Urdu, Arabic or Hindi line says so in its letters; Latin text is spoken in the voice's own language
+def _language(text: str, voice, hint: str | None = None) -> str:
+    # an Urdu, Arabic or Hindi line says so in its letters; Latin text is spoken in the film's language when
+    # the line carries one (contract v4a), else in the voice's own
     found = native_audio.language_of(text)
     if found and found != "en":
         return found
+    if hint and hint != "en" and found != "en" and not (hint in aerab.ARABIC_SCRIPT_LANGS and text.isascii()):
+        return hint
     lang = (voice.language if voice is not None else None) or "en"
     return "en" if lang in aerab.ARABIC_SCRIPT_LANGS else lang
 
@@ -243,7 +251,7 @@ def ensure_takes(db: Session, workspace_id: str, user_id: str | None, d: dict) -
     out = []
     for row in d["lines"]:
         voice = vc.find_voice(db, workspace_id, row.get("voice_id"))
-        language = _language(row["text"], voice)
+        language = _language(row["text"], voice, row.get("language"))
         fp = _fp(row["text"], row.get("voice_id"), language)
         g = db.get(Generation, row["take_id"]) if row.get("take_id") and row.get("fp") == fp else None
         if g is None:

@@ -617,6 +617,7 @@ class DialogueLineIn(BaseModel):
     character_id: str = Field(max_length=36)
     text: str = Field(max_length=600)
     pause_after_s: float | None = Field(None, ge=0, le=10)
+    language: str | None = Field(None, max_length=12)  # contract v4a: the film's language, kept on edits
 
 
 class BrandPlacement(BaseModel):

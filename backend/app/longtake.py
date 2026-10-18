@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app import storyboard as sb
 from app.config import get_settings
-from app.llm import LLMError, chat_sync
+from app.llm import LLMError, chat_sync, film
 from app.llm import prompts as P
 from app.models import Character, Generation, Location, Project, Scene, Shot
 from app.workflows import frames_for, snap_8n1
@@ -222,7 +222,8 @@ def beats_messages(project, scene, shot, characters, location, motion: str, wind
             {"role": "user", "content": user}]
 
 
-def write_beats(db: Session, shot: Shot, duration_s: float, *, tick=None, old_duration: float | None = None) -> tuple[list[dict], dict]:
+def write_beats(db: Session, shot: Shot, duration_s: float, *, tick=None, old_duration: float | None = None,
+                film_model: str | None = None) -> tuple[list[dict], dict]:
     """Ask the creative model for one beat per chunk. Locked beats are kept (lock rule)."""
     chunks = plan_chunks(duration_s)
     windows = beat_windows(chunks, duration_s)
@@ -240,7 +241,8 @@ def write_beats(db: Session, shot: Shot, duration_s: float, *, tick=None, old_du
         texts, info = [fixed[i]["prompt"] for i in range(len(windows))], {"model": None, "seconds": 0}
     else:
         res = chat_sync("creative", beats_messages(project, scene, shot, chars, location, motion, windows, fixed),
-                        schema=BeatList, temperature=0.6, max_tokens=300 + 140 * len(windows), tick=tick)
+                        tick=tick, **{"schema": BeatList, "temperature": 0.6, "max_tokens": 300 + 140 * len(windows),
+                                      **film.overrides(film_model, "creative")})
         texts = [P.clean_line(b.prompt) for b in res.data.beats]
         info = res.call_info("creative")
         # models miscount on long lists; pad with the overall motion rather than fail the render
@@ -506,7 +508,8 @@ def resolve_beats(ctx, gen: Generation, shot: Shot | None, chunks: list[dict], d
         return [b["prompt"] for b in shot.beats], "shot"
     ctx.progress(0.01, "Writing the take's beats…")
     try:
-        beats, _ = write_beats(ctx.db, shot, duration, tick=lambda: ctx.progress(0.01, "Writing the take's beats…"))
+        beats, _ = write_beats(ctx.db, shot, duration, tick=lambda: ctx.progress(0.01, "Writing the take's beats…"),
+                               film_model=(gen.params or {}).get("film_model"))
     except (LLMError, LongTakeError) as e:
         # the take still renders, every chunk just follows the whole-take motion prompt
         log.warning("beats unavailable for %s, using the take prompt: %s", gen.id, e)

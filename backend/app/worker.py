@@ -376,6 +376,11 @@ def handle_generate(ctx: JobContext) -> dict:
 
     if getattr(result, "params_update", None):
         gen.params = {**(gen.params or {}), **result.params_update}
+    if (gen.params or {}).get("mux_audio") and result.media_type.startswith("video/"):
+        # a feature's take cut from the scene's dialogue track keeps that exact slice as its sound
+        from app import film_audio
+
+        film_audio.mux(abs_path, Path(gen.params["mux_audio"]))
     meta = dict(result.meta or {})
     if restore.needs_finish(gen.params):
         # Photo Studio: back to the source's full size, blended / composited (app.photo.restore)

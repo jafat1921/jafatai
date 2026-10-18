@@ -12,7 +12,7 @@ from typing import Any, Awaitable, Callable
 from app.config import Settings, get_settings
 from app.drivers.base import DriverResult, ProgressCallback
 from app.drivers.comfy_client import ComfyClient, ComfyError, ComfyOutput, parse_outputs, pick_client
-from app import aerab
+from app import aerab, gpu_memory
 from app import models_catalog as mc
 from app import native_audio
 from app.character_panels import VIEW_ALIASES, VIEW_PROMPTS
@@ -825,10 +825,20 @@ class ComfyDriver:
             weights = {tpl.node_id(t): w for t, w in tpl.manifest.get("progress_weights", {}).items()
                        if any(n.get("_meta", {}).get("title") == t for n in graph.values())}
 
+            timeout = TIMEOUTS.get(plan.template, 1800.0)
             t0 = time.monotonic()
-            prompt_id, entry = await client.run(
-                graph, progress_cb, timeout=TIMEOUTS.get(plan.template, 1800.0), weights=weights
-            )
+            try:
+                prompt_id, entry = await client.run(graph, progress_cb, timeout=timeout, weights=weights)
+            except ComfyError as e:
+                if not gpu_memory.is_oom(str(e)):
+                    raise
+                # usually Ollama still holding a big model on this card: let it go and try the same graph once more
+                log.warning("%s ran out of GPU memory (%s); freeing VRAM and retrying once", plan.template, e)
+                progress_cb(0.0, "Freeing GPU memory and retrying")
+                await asyncio.to_thread(gpu_memory.unload_ollama)
+                await client.free_memory()
+                t0 = time.monotonic()
+                prompt_id, entry = await client.run(graph, progress_cb, timeout=timeout, weights=weights)
             wall = round(time.monotonic() - t0, 3)
 
             outs = [o for o in parse_outputs(entry) if o.kind == plan.media]

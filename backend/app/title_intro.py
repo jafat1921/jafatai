@@ -6,7 +6,9 @@ instrumental sting from the music models under it. The autopilot writes the card
 .title_intro once the outline is done and queues the sting early; the stitch (reel.handle_assemble) draws it
 and joins it in front of the first scene, for whole-film renders only.
 """
+import functools
 import logging
+import re
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -14,6 +16,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 from sqlalchemy.orm import Session
 
 from app import brand_render as br
+from app import speech_language as sl
 from app import models_catalog as mc
 from app import storyboard as sb
 from app import subtitles as st
@@ -32,6 +35,13 @@ CHAPTER = "Title"
 ZOOM = 0.04
 INK = (243, 233, 210)
 SHADE = 0.42
+
+FONTS = Path(__file__).resolve().parent / "assets" / "fonts"
+# English on the card is set in a display serif; the Noto faces are the fallback the server may not have
+LATIN_DISPLAY = FONTS / "dm-serif-display" / "DMSerifDisplay-Regular.ttf"
+BUNDLED = {st.NASTALIQ: FONTS / "noto-nastaliq-urdu" / "NotoNastaliqUrdu[wght].ttf",
+           st.NASKH: FONTS / "noto-naskh-arabic" / "NotoNaskhArabic[wght].ttf"}
+_PARENS = re.compile(r"\s*[(\[]([^)\]]*)[)\]]")
 
 STINGS = {
     "cinematic": "Cinematic opening title sting, slow swelling strings and low brass, a soft timpani hit, "
@@ -76,6 +86,14 @@ def card(project: Project, title_local: str, language: str, music_id: str | None
     """What the stitch draws: the main line in the film's language, the English title under it."""
     english = project.title.strip()
     local = (title_local or "").strip() if language != "en" else ""
+    if local and "latin" in sl.letters_by_script(local) and len(sl.letters_by_script(local)) > 1:
+        # "روشنی (The Light of Ramadan)": one script a line, or the Nastaliq face draws the English as boxes
+        latin = [m for m in _PARENS.findall(local) if set(sl.letters_by_script(m)) == {"latin"}]
+        local = _PARENS.sub("", local).strip()
+        if "latin" in sl.letters_by_script(local):
+            local = ""
+        if not english and latin:
+            english = latin[0].strip()
     main = local or english
     # a title typed in Urdu as the override has no English line to go under it
     sub = english if local and local != english and not br.is_rtl(english) else ""
@@ -116,15 +134,15 @@ def still(c: dict, size: tuple[int, int], bg: Image.Image | None) -> Image.Image
     else:
         img = Image.new("RGB", (w, h), (14, 12, 10))
     d = ImageDraw.Draw(img, "RGBA")
-    nastaliq = c.get("font") == st.NASTALIQ
+    (title, title_path), sub = layout(c)
+    nastaliq = c.get("font") == st.NASTALIQ and title_path != LATIN_DISPLAY
     # Nastaliq stacks and slopes, so it needs more height for the same weight on screen
     size_main = round(min(w, h) * (0.15 if nastaliq else 0.11))
-    font, lines = br.fit_text(d, c["title"], st.font_file(c["font"]), size_main, w * 0.84, 2)
+    font, lines = br.fit_text(d, title, title_path, size_main, w * 0.84, 2)
     block = br.text_block_height(font, len(lines))
     sub_font, sub_lines = (None, [])
-    if c.get("subtitle"):
-        sub_font, sub_lines = br.fit_text(d, c["subtitle"], st.font_file(c.get("subtitle_font") or st.LATIN),
-                                          round(min(w, h) * 0.045), w * 0.8, 1)
+    if sub:
+        sub_font, sub_lines = br.fit_text(d, sub[0], sub[1], round(min(w, h) * 0.045), w * 0.8, 1)
     sub_h = br.text_block_height(sub_font, 1) if sub_font else 0
     top = h * 0.46 - (block + sub_h) / 2
     br.draw_lines(d, lines, font, w / 2, top, INK)
@@ -133,6 +151,52 @@ def still(c: dict, size: tuple[int, int], bg: Image.Image | None) -> Image.Image
         d.line((w * 0.44, y - h * 0.008, w * 0.56, y - h * 0.008), fill=INK + (150,), width=max(2, h // 400))
         br.draw_lines(d, sub_lines, sub_font, w / 2, y + h * 0.01, INK + (220,))
     return img
+
+
+def font_path(family: str | None) -> Path | None:
+    if family in (None, "", st.LATIN):
+        return LATIN_DISPLAY
+    return st.font_file(family) or BUNDLED.get(family)
+
+
+@functools.lru_cache(maxsize=64)
+def draws(path: Path | None, text: str) -> bool:
+    """Whether the font has its own glyph for every letter of `text` (no missing-glyph boxes)."""
+    if path is None or not Path(path).is_file():
+        return False
+    f = br.load_font(path, 40)
+
+    def ink(s: str) -> bytes:
+        im = Image.new("L", (120, 80), 0)
+        ImageDraw.Draw(im).text((8, 8), s, font=f, fill=255)
+        return im.tobytes()
+
+    missing = ink("\U0010fffd")
+    return all(ink(ch) != missing for ch in set(text) if ch.isalpha())
+
+
+def _line(text: str, family: str | None) -> tuple[str, Path | None]:
+    """The text and the font file to draw it with. Latin lines get the display serif; a line its own face
+    can't draw falls back to the bundled face for its script, and as a last resort loses the letters
+    nothing here can draw."""
+    scripts = set(sl.letters_by_script(text))
+    if scripts <= {"latin"}:
+        return text, LATIN_DISPLAY
+    path = font_path(family)
+    if draws(path, text):
+        return text, path
+    for alt in BUNDLED.values():
+        if draws(alt, text):
+            return text, alt
+    keep = "".join(ch for ch in text if not ch.isalpha() or draws(path, ch))
+    return " ".join(keep.split()), path
+
+
+def layout(c: dict) -> tuple[tuple[str, Path | None], tuple[str, Path | None] | None]:
+    """(title line, subtitle line or None), each with the font file that covers it."""
+    title = _line(c["title"], c.get("font"))
+    sub = _line(c["subtitle"], c.get("subtitle_font") or st.LATIN) if c.get("subtitle") else None
+    return title, sub
 
 
 def clip_cmd(still_png: Path, music: Path | None, dst: Path, c: dict, size: tuple[int, int], *, fps: int,
@@ -172,4 +236,4 @@ def build(db: Session, c: dict, scene, first_take: Generation | None, size: tupl
     rl.run_ff(clip_cmd(png, music, dst, c, size, fps=rl.FPS, venc=rl.VENC, aenc=rl.AENC, afmt=rl.AFMT,
                        head_idr_s=rl.HEAD_IDR_S))
     return {"length": round(float(c.get("seconds") or SECONDS), 3), "music": music is not None,
-            "font": c.get("font"), "font_file": str(st.font_file(c.get("font") or st.LATIN) or "")}
+            "font": c.get("font"), "font_file": str(layout(c)[0][1] or "")}

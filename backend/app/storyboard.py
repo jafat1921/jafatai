@@ -319,9 +319,24 @@ def take_frames(db: Session, shot: Shot) -> tuple[Generation | None, Generation 
     return start, approved(db, "shot", shot.id, "keyframe_end")
 
 
+def people_anchor(db: Session, shot: Shot) -> str:
+    """Who is in frame, described in full: a video model sees each prompt alone."""
+    rows = []
+    for cid in shot.character_ids or []:
+        c = db.get(Character, cid)
+        if c is None:
+            continue
+        prof = c.profile or {}
+        extra = "; ".join(str(prof[k]) for k in ("age", "wardrobe") if prof.get(k))
+        desc = "; ".join(x for x in ((c.description or "").strip(), extra) if x)
+        rows.append(f"{c.name}: {desc}" if desc else c.name)
+    return ("In frame: " + " | ".join(rows) + ".") if rows else ""
+
+
 def world_anchors(db: Session, shot: Shot) -> str:
     scene = db.get(Scene, shot.scene_id)
-    parts = []
+    parts = [people_anchor(db, shot)] if shot.character_ids else []
+    parts = [p for p in parts if p]
     loc_id = shot.location_id or (scene.location_id if scene else None)
     loc = db.get(Location, loc_id) if loc_id else None
     if loc:
@@ -346,6 +361,10 @@ def frame_prompt(db: Session, shot: Shot, kind: str) -> str:
         anchors = world_anchors(db, shot)
         return with_style(project, f"{base}\n{anchors}" if anchors and anchors not in base else base)
     base = (shot.start_prompt if kind == "keyframe_start" else shot.end_prompt).strip()
+    people = people_anchor(db, shot) if base else ""
+    if people and any((c.description or "").strip() and c.description.strip()[:40] not in base
+                      for c in (db.get(Character, cid) for cid in shot.character_ids or []) if c is not None):
+        base = f"{base}\n{people}"  # a frame written from names only (a voice-first cut) gets the looks
     return with_style(project, base) if base else ""
 
 
@@ -407,6 +426,10 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
 
         # the shot's lines in its characters' voices (contract v26); the worker speaks them before the take
         shot_speech.attach(db, shot, params)
+        from app import film_audio
+
+        # a shot cut from its scene's dialogue track takes its slice of that track instead
+        film_audio.attach(db, shot, params)
         steady = bm.hero_motion(db, shot, project)
         if steady:
             params["brand_prompt"] = steady

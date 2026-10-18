@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session
 
 from app.llm import LLMError, chat_sync
 from app.llm import prompts as P
+from app.llm import film
 from app.llm.client import is_warm, model_for
 from app import aerab
 from app import brand
+from app import film_language as fl
 from app import brand_moments as bm
 from app import storyboard as sb
 from app.models import Character, Job, Location, Project, Scene, SceneVersion, Shot, Suggestion, utcnow
@@ -259,9 +261,25 @@ class AiRun:
         self.thinking: list[str] = []
         self.extra: dict = {}
 
+    film_model: str | None = None  # set by the worker's prompt fill for an autopilot shot
+
     def call(self, label: str, frac: float, role, messages, **kw):
+        # an autopilot film's steps run inline with its FILM_LLM_MODEL in the payload
+        payload = getattr(self.ctx.job, "payload", None) or {}
+        kw = {**film.overrides(self.film_model or payload.get("film_model"), role), **kw}
+        if payload.get("inline_of") or self.film_model:
+            kw.setdefault("think", False)  # planning, not puzzles: thinking only eats the budget
+            try:
+                return self._call(label, frac, role, messages, **kw)
+            except LLMError as e:
+                return film.retry_json(lambda m, **k: self._call(f"{label} (again)", frac, role, m, **k),
+                                       messages, kw, e)
+        return self._call(label, frac, role, messages, **kw)
+
+    def _call(self, label: str, frac: float, role, messages, **kw):
         cold = not is_warm(role)
-        shown = f"{label} (loading {model_for(role)}, the first call can take a few minutes)" if cold else label
+        shown = (f"{label} (loading {kw.get('model') or model_for(role)}, the first call can take a few minutes)"
+                 if cold else label)
         self.ctx.progress(frac, shown + "…")
         t0 = time.monotonic()
 
@@ -672,6 +690,12 @@ def _mark_dialogue(run: "AiRun", plans: list[dict], frac: float, language: str |
     if lang:
         for r in rows:
             r["language"] = lang
+        if any(fl.off_script(r["text"], lang) for r in rows):
+            # the planner wrote English for an Urdu film: TranslateGemma, then the aerab pass below
+            run.ctx.progress(frac, "Translating the dialogue…")
+            done = fl.localise([r["text"] for r in rows], lang, tick=lambda: run.ctx.progress(frac, "Translating…"))
+            for r, text in zip(rows, done):
+                r["text"] = text
     if not rows or not aerab.applies(lang, "\n".join(r["text"] for r in rows)):
         return
     run.ctx.progress(frac, "Adding aerab to the dialogue…")
@@ -751,6 +775,20 @@ def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_sho
                                               brand=bm.planner_brief(kit) if kit else "", dialogue=talk,
                                               target_s=target_s),
                      schema=P.ShotList, temperature=0.5, max_tokens=budget).data.shots[:max_shots]
+    if target_s and len(ideas) < max_shots:
+        # weak planners hand back one 60 s shot for a minute-long scene; ask once with the number spelled out
+        msgs = P.suggest_shots_messages(project, chars, scene, max_shots, _previous_scene(db, scene),
+                                        brand=bm.planner_brief(kit) if kit else "", dialogue=talk, target_s=target_s)
+        msgs[-1] = {**msgs[-1], "content": msgs[-1]["content"] + (
+            f"\n\nYour last list had {len(ideas)} shot{'s' if len(ideas) != 1 else ''}. It must have exactly "
+            f"{max_shots} shots of 5-10 seconds each.")}
+        try:
+            again = run.call(f"Planning shots for {scene.heading or 'the scene'} again", frac, "reasoning", msgs,
+                             schema=P.ShotList, temperature=0.5, max_tokens=budget).data.shots[:max_shots]
+            if len(again) > len(ideas):
+                ideas = again
+        except LLMError as e:
+            log.warning("second shot list failed, splitting the first: %s", e)
     plans = []
     for i, idea in enumerate(ideas):
         seam = first_seam if i == 0 else ("continue" if idea.continuous else "cut")
@@ -765,8 +803,114 @@ def _plan_shots(run: AiRun, db: Session, project: Project, scene: Scene, max_sho
             "character_ids": cast_ids,
         })
     if talk:
+        # every line of the script in exactly one shot: duplicates go, dropped ones go back in order
+        ensure_lines(plans, script_lines(scene, chars))
+    speakers = [r["character_id"] for r in script_lines(scene, chars)]
+    for p in plans:
+        if not p["character_ids"]:
+            # nobody named in frame: the shot's speakers, else the scene's
+            p["character_ids"] = list(dict.fromkeys([r["character_id"] for r in p["dialogue"]] or speakers[:2]))
+    if target_s:
+        plans = split_plans(plans, max_shots)
+    if talk:
         _mark_dialogue(run, plans, frac, P.film_language(project))
     return plans
+
+
+# a split shot's beats: same place and moment, a different angle each
+BEATS = (("wide", "wide view of the moment"), ("medium", "medium shot"), ("close_up", "close-up"),
+         ("over_shoulder", "reaction, over the shoulder"), ("insert", "insert on a telling detail"))
+SPLIT_MAX_S = 10.0  # one LTX pass: single takes over chunked long ones
+
+
+def split_plans(plans: list[dict], need: int, cap: float = SPLIT_MAX_S, limit: int = 40) -> list[dict]:
+    """Splits the longest shots into consecutive beats until there are `need` of them and none runs past `cap`
+    seconds. Deterministic: the planner had its two chances."""
+    out = [dict(p) for p in plans]
+    k = 0
+    while out and len(out) < limit:
+        i = max(range(len(out)), key=lambda j: float(out[j].get("duration_s") or 0))
+        if len(out) >= need and float(out[i].get("duration_s") or 0) <= cap:
+            break
+        a = out[i]
+        shot_type, note = BEATS[k % len(BEATS)]
+        k += 1
+        half = round(float(a.get("duration_s") or 0) / 2, 1) or 2.0
+        lines = list(a.get("dialogue") or [])
+        cut = (len(lines) + 1) // 2
+        b = {**a, "shot_type": shot_type, "duration_s": half, "seam_in": "cut", "handoff_text": "",
+             "description": f"{a.get('description') or ''} ({note})".strip(),
+             "start_prompt": a.get("end_prompt") or a.get("start_prompt") or "",
+             "dialogue": lines[cut:], "character_ids": list(a.get("character_ids") or [])}
+        a.update(duration_s=half, dialogue=lines[:cut])
+        out.insert(i + 1, b)
+    return out
+
+
+def script_lines(scene: Scene, chars: list[Character]) -> list[dict]:
+    """The scene's spoken lines as dialogue rows, a speech per row; lines nobody in the cast speaks are left out."""
+    from app.shot_speech import LINE_MAX
+
+    rows: list[dict] = []
+    last = None
+    for kind, cue, line in sb.screenplay_lines(scene.script_text or ""):
+        if kind != "dialogue":
+            last = last if kind == "paren" else None
+            continue
+        ids = _char_ids([cue], chars) if cue else []
+        if not ids:
+            continue
+        if last is not None and last["character_id"] == ids[0]:
+            last["text"] = f"{last['text']} {line}"[:LINE_MAX]
+        else:
+            last = {"character_id": ids[0], "text": line[:LINE_MAX]}
+            rows.append(last)
+    from app.film_audio import _split_line
+
+    # a speech longer than one shot goes in at its sentence breaks, so the shots can share it
+    return [{**r, "text": t} for r in rows for t in _split_line(r["text"])]
+
+
+def _key(text: str) -> str:
+    return " ".join(aerab.strip(text or "").split()).casefold()
+
+
+def ensure_lines(plans: list[dict], rows: list[dict]) -> None:
+    """Every script line in exactly one shot. The script is the source: a planner's line that isn't in it
+    (reworded, or English for an Urdu film) goes, and the script's own words come back in its place."""
+    seen: set[str] = set()
+    script = {_key(r["text"]) for r in rows}
+    for p in plans:
+        keep = []
+        for r in p["dialogue"]:
+            k = _key(r["text"])
+            if k not in seen and (k in script or not script):
+                seen.add(k)
+                keep.append(r)
+        p["dialogue"] = keep
+    missing = [r for r in rows if _key(r["text"]) not in seen]
+    if missing:
+        log.info("putting %d dropped line(s) back into the shots", len(missing))
+        for r in missing:
+            # where it falls in the script decides which shot says it
+            k = rows.index(r)
+            p = plans[min(len(plans) - 1, k * len(plans) // max(1, len(rows)))]
+            p["dialogue"].append(dict(r))
+            if r["character_id"] not in p["character_ids"]:
+                p["character_ids"].append(r["character_id"])
+
+
+def spread_lines(plans: list[dict], rows: list[dict]) -> None:
+    from app.shot_speech import MAX_LINES
+
+    if not plans:
+        return
+    for k, r in enumerate(rows):
+        p = plans[min(len(plans) - 1, k * len(plans) // len(rows))]
+        if len(p["dialogue"]) < MAX_LINES:
+            p["dialogue"].append(dict(r))
+            if r["character_id"] not in p["character_ids"]:
+                p["character_ids"].append(r["character_id"])
 
 
 def compile_shot(run: AiRun, db: Session, shot: Shot, frac: float, label: str | None = None) -> None:
@@ -793,8 +937,10 @@ def fill_shot_prompt(ctx, gen) -> str:
     kind = "keyframe_start" if gen.kind == "keyframe_mid" else gen.kind
     field = {"keyframe_start": "start_prompt", "keyframe_end": "end_prompt", "take": "motion_prompt"}[kind]
     if not getattr(shot, field).strip() and shot.prompt_mode == "auto":
+        run = AiRun(ctx)
+        run.film_model = (gen.params or {}).get("film_model")
         try:
-            compile_shot(AiRun(ctx), db, shot, 0.02, label="Writing this shot's prompts first")
+            compile_shot(run, db, shot, 0.02, label="Writing this shot's prompts first")
         except LLMError as e:
             raise RuntimeError(f"Couldn't write this shot's prompts ({e}). Write them in the shot inspector, "
                                "or try again when the AI is reachable.") from e
@@ -927,7 +1073,8 @@ def _scene_plan(run: AiRun, db: Session, project: Project, scene: Scene, frac: f
                                 brand=bm.planner_brief(kit) if kit else "", dialogue=talk),
         schema=P.SceneFrames, temperature=0.5, max_tokens=1800,
     ).data
-    cast_ids = _char_ids(d.characters, chars)
+    cast_ids = _char_ids(d.characters, chars) or list(dict.fromkeys(
+        r["character_id"] for r in script_lines(scene, chars)))[:2]
     plan = {
         "shot_type": d.shot_type, "duration_s": duration,
         "description": (d.description or scene.logline or scene.summary).strip(),

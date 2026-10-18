@@ -34,6 +34,8 @@ os.environ.update(
         "TRANSLATE_LLM_MODEL": "",
         # and for the marking model's installed check
         "AERAB_LLM_MODEL": "creative",
+        # and the film model's (test_quick_language turns it on)
+        "FILM_LLM_MODEL": "off",
     }
 )
 

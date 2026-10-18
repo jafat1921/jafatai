@@ -485,6 +485,7 @@ async def marking_model() -> str | None:
 
 async def _run(text: str, language: str | None, budget: float | None = None, progress=None,
                keep_replies: bool = False) -> Result:
+    from app.config import get_settings
     from app.llm import LLMError, chat
 
     lang = resolve(language, text) or detect_language(text) or "ur"
@@ -494,6 +495,8 @@ async def _run(text: str, language: str | None, budget: float | None = None, pro
         return Result(text, language=lang, coverage=coverage(text))
     todo = wanted[:MAX_UNITS]
     model = await marking_model()
+    # the 26B marker is a one-shot; Ollama's 5 min default would hold its VRAM against ComfyUI
+    keep = (get_settings().ollama_keep_alive_big or None) if model else None
     deadline = time.monotonic() + budget if budget else None
     before = list(parts)
     refused: set[int] = set()
@@ -511,7 +514,8 @@ async def _run(text: str, language: str | None, budget: float | None = None, pro
             wait = min(wait, left)
         sent = [parts[i] for i in chunk]
         call = chat("creative", messages(sent, lang, strict), schema=Marked, think=False,
-                    temperature=0.2, max_tokens=min(4000, 300 + 3 * size), timeout=wait, model=model)
+                    temperature=0.2, max_tokens=min(4000, 300 + 3 * size), timeout=wait, model=model,
+                    keep_alive=keep)
         try:
             # the budget covers chat()'s own JSON repair call as well
             res = await (asyncio.wait_for(call, wait) if deadline is not None else call)

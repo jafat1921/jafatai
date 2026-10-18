@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app import brand_moments as bm
 from app import cast, character_panels as cp
 from app import camera as cam
-from app import longtake, shot_speech
+from app import film_audio, longtake, shot_speech
 from app import storyboard as sb
 from app.ai_jobs import active_job, enqueue_ai
 from app.config import get_settings
@@ -310,6 +310,62 @@ def render_scene(scene_id: str, body: TakesIn | None = None, db: Session = Depen
         raise HTTPException(409, "No shot in this scene has an approved START frame yet")
     db.commit()
     return [job_out(j) for j in jobs]
+
+
+# ---------------------------------------------------------------- voice first (contract v4a addendum)
+# A scene's dialogue is spoken first and its shots cut from the measured track; each step runs per scene, so
+# a scene added or edited by hand builds the same way as the autopilot's.
+
+def _scene_for_audio(db: Session, scene_id: str, cur: CurrentUser) -> Scene:
+    scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
+    if not scene.script_text.strip():
+        raise HTTPException(409, "This scene has no script yet")
+    return scene
+
+
+def _voiced(out: dict) -> dict:
+    return {"status": out["status"], "lines": out["lines"], "job_ids": out["job_ids"]}
+
+
+@router.post("/scenes/{scene_id}/voice", status_code=202)
+def voice_scene(scene_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    """Speak (or re-speak) the scene's lines in their characters' voices; unchanged lines keep their takes."""
+    scene = _scene_for_audio(db, scene_id, cur)
+    out = film_audio.voice_scene(db, scene, cur.id)
+    db.commit()
+    return _voiced(out)
+
+
+@router.post("/scenes/{scene_id}/plan-shots")
+def plan_scene_shots(scene_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    """Cut the scene into shots from its spoken lines. Shots whose lines didn't change are kept."""
+    scene = _scene_for_audio(db, scene_id, cur)
+    out = film_audio.plan_scene(db, scene)
+    db.commit()
+    return out
+
+
+@router.post("/scenes/{scene_id}/build", status_code=202)
+def build_scene(scene_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_editor)):
+    """Voice, then (once every line is spoken) cut the shots and queue the new shots' frames. Call again
+    while it says "voicing"."""
+    from app.ai_jobs import queue_frames
+
+    scene = _scene_for_audio(db, scene_id, cur)
+    out = _voiced(film_audio.voice_scene(db, scene, cur.id))
+    if out["status"] == "voiced":
+        planned = film_audio.plan_scene(db, scene)
+        frames = [g.job_id for sid in planned["new_shot_ids"] for g in queue_frames(db, db.get(Shot, sid))]
+        out.update(status="planned", **planned, frame_job_ids=frames)
+    db.commit()
+    return out
+
+
+@router.get("/scenes/{scene_id}/audio")
+def scene_audio(scene_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
+    """The scene's dialogue track and whether its shots still match its lines."""
+    scene = get_owned(db, Scene, scene_id, cur.workspace_id, "Scene")
+    return film_audio.status(db, scene)
 
 
 # ---------------------------------------------------------------- long takes (contract v2)

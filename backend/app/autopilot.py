@@ -26,6 +26,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app import aerab, ai_jobs, brand, character_sheet, longtake, models_catalog, storyboard as sb, vision
+from app import film_audio as fa
+from app import film_language as fl
 from app import title_intro as ti
 from app import brand_moments as bm
 from app import cast as film_cast
@@ -33,6 +35,7 @@ from app import estimate as est
 from app import reel as rl
 from app.config import get_settings
 from app.llm import LLMError, chat_sync
+from app.llm import film
 from app.llm import prompts as P
 from app.models import Character, Generation, Job, Location, Project, Scene, Shot, utcnow
 from app.services import approve, enqueue_generation, generation_file, media_url, new_seed, next_version
@@ -120,7 +123,7 @@ def fit_durations(wanted: list[float], total: float, many_shots: bool = False) -
 
 SHOT_S = 7.5  # a long scene's shots run 5-10 s
 MAX_SCENE_SHOTS = 40
-SHOT_RANGE = (3.0, 20.0)
+SHOT_RANGE = (3.0, 10.0)  # one LTX pass each; chunked long takes drift
 # how much GPU work a long film keeps queued at once, so a cancel or another user's job isn't stuck behind it
 FRAME_BATCH = 24
 TAKE_BATCH = 12
@@ -171,13 +174,13 @@ def outline_messages(project: Project, style: str, dialogue: bool, duration_s: f
         count = f"exactly {scenes} scene{'s' if scenes != 1 else ''} (about {each:g} seconds each)"
     else:
         count = "exactly 1 scene" if hi == 1 else f"{n} scenes (anywhere from {lo} to {hi} is fine)"
-    talk = "Characters may speak; keep the lines few and short." if dialogue else NO_DIALOGUE
-    if scenes and dialogue:
-        talk = "Characters speak; give each scene real conversation that carries the story."
+    talk = (f"Characters speak: give each scene real conversation that carries the story, about "
+            f"{round(fa.SPOKEN_SHARE * 100)}% of its running time spoken." if dialogue else NO_DIALOGUE)
     shape = ("Each scene is a full sequence in one place, covered by many shots of 5-10 seconds, so give every "
              "scene enough happening to fill its time." if scenes else
-             "Each scene is filmed as ONE continuous shot, so keep every scene to one place and one clear action.")
-    who = ("characters (name plus a few words on their role; only who the idea needs, possibly nobody)" if not cast
+             "Each scene is one place and one clear stretch of action, covered by a few shots of 5-10 seconds.")
+    who = ("characters (name plus a few words on their role; only who the idea needs, and at least one person in "
+           "every scene unless the idea has nobody in it)" if not cast
            else "characters (exactly the cast below, names unchanged, each with their role in this story)")
     titled = ("title (a short film title, at most six words)" if not title
               else f"title (the film is called \"{title}\"; give that)")
@@ -207,17 +210,18 @@ def outline_messages(project: Project, style: str, dialogue: bool, duration_s: f
 
 
 def draft_messages(project, chars, scenes, idx: int, plan: dict, dialogue: bool, seconds: float,
-                   many_shots: bool = False, fixed_cast: bool = False) -> list[dict]:
+                   many_shots: bool = False, fixed_cast: bool = False, language: str = "en") -> list[dict]:
     msgs = P.draft_scene_messages(project, chars, scenes, idx, plan={**plan, "duration_s": int(seconds)})
-    if many_shots:
-        msgs[1]["content"] += (f"\n\nThe scene runs about {seconds:g} seconds on screen and is covered by many "
-                               "shots, so give it enough action and dialogue to fill that time.")
-    else:
-        msgs[1]["content"] += (f"\n\nThe scene plays as one continuous {seconds:g}-second shot: one place, one "
-                               "unbroken moment, nothing that needs a cut.")
+    msgs[1]["content"] += (f"\n\nThe scene runs about {seconds:g} seconds on screen and is covered by "
+                           f"{'many shots' if many_shots else 'a few shots'}, so give it enough action and "
+                           "dialogue to fill that time.")
     if not dialogue:
         msgs[1]["content"] += "\n" + NO_DIALOGUE
-    elif fixed_cast:
+    else:
+        # the length comes from what is said: a target the writer can count
+        msgs[1]["content"] += (f"\nAim for about {fa.spoken_target(seconds, language)} spoken words of dialogue "
+                               f"(about {fa.words_per_s(language):g} words a second), in several lines from the cast.")
+    if dialogue and fixed_cast:
         msgs[1]["content"] += "\n" + NO_EXTRAS
     return msgs
 
@@ -299,11 +303,28 @@ class Autopilot:
         self.save()
         self.ctx.progress(overall, f"{label}: {self.message}" if label and self.message else self.message or label)
 
+    @property
+    def film_model(self) -> str | None:
+        # asked once per run: a model pulled mid-film is picked up on the next resume
+        if not hasattr(self, "_film_model"):
+            self._film_model = film.film_model()
+            self.r["film_model"] = self._film_model
+        return self._film_model
+
     def llm(self, message: str, role, messages, **kw):
+        kw = {**film.overrides(self.film_model, role), **kw}
+        kw.setdefault("think", False)  # planning and writing; thinking only ate the token budget
         self.tick(message=message)
         t0 = time.monotonic()
-        res = chat_sync(role, messages, tick=lambda: self.tick(message=f"{message} {int(time.monotonic() - t0)} s"),
-                        **kw)
+
+        def ask(msgs, **k):
+            return chat_sync(role, msgs, tick=lambda: self.tick(message=f"{message} {int(time.monotonic() - t0)} s"),
+                             **k)
+
+        try:
+            res = ask(messages, **kw)
+        except LLMError as e:
+            res = film.retry_json(ask, messages, kw, e)
         calls = self.r.setdefault("calls", [])
         calls.append({**res.call_info(role), "step": message})
         del calls[:-40]  # a long film makes a lot of calls; the newest are the interesting ones
@@ -313,7 +334,8 @@ class Autopilot:
         W = _w()
         now = utcnow()
         child = Job(workspace_id=self.job.workspace_id, type=type, project_id=self.project.id,
-                    payload={**payload, "inline_of": self.job.id}, status="running", attempts=1,
+                    payload={**payload, "inline_of": self.job.id, "film_model": self.film_model},
+                    status="running", attempts=1,
                     priority=ai_jobs.PRIORITY.get(type, 0), started_at=now, heartbeat_at=now, message="Starting")
         self.db.add(child)
         self.db.flush()
@@ -360,7 +382,8 @@ class Autopilot:
 
             self.tick(message="Improving the prompt")
             out = enhance_sync(self.project.brief, "quick", mode=mp.get("mode") or "auto", style=style,
-                               brand_context=brand_context, tick=lambda: self.tick())
+                               brand_context=brand_context, tick=lambda: self.tick(),
+                               llm=film.overrides(self.film_model, "creative"))
             done = {"mode": mp.get("mode"), "status": "done", "changed": out["changed"],
                     "original_prompt": self.project.brief, "enhanced_prompt": out["enhanced"]}
             if out.get("notes"):
@@ -559,7 +582,15 @@ class Autopilot:
         # attempts that were cancelled (job cancel / resume) don't count against the retry budget
         cancelled = set(self.db.scalars(select(Job.id).where(
             Job.id.in_([g.job_id for g in mine if g.job_id]), Job.status == "cancelled")).all())
-        return [g for g in mine if g.job_id not in cancelled]
+        return self._this_run([g for g in mine if g.job_id not in cancelled])
+
+    def _this_run(self, gens: list[Generation]) -> list[Generation]:
+        """Drops attempts that failed before the last retry; finished ones stay candidates."""
+        since = self.r.get("resumed_at")
+        if not since:
+            return gens
+        cut = datetime.fromisoformat(since)
+        return [g for g in gens if not (g.status == "failed" and g.created_at <= cut)]
 
     def _last_error(self, gens: list[Generation]) -> str:
         for g in reversed(gens):
@@ -629,6 +660,37 @@ class Autopilot:
             return []
         raise StageFailed(f"Couldn't generate {label} after {len(gens)} tries: {self._last_error(gens)}")
 
+    def reuse_portrait(self, ch: Character) -> Generation | None:
+        """A finished but unapproved portrait (or sheet hero) is the character's look already: approve it
+        instead of drawing a new face."""
+        db = self.db
+        rows = db.scalars(select(Generation).where(
+            Generation.target_type == "character", Generation.target_id == ch.id, Generation.kind == "portrait",
+            Generation.status == "ready", Generation.file_path.is_not(None),
+        ).order_by(Generation.created_at.desc(), Generation.version.desc())).all()
+        # our own attempts still go through image_slot's vision check
+        g = next((g for g in rows if not (g.params or {}).get("autopilot")
+                  and (f := generation_file(g)) is not None and f.is_file()), None)
+        if g is not None:
+            self._approve(g, "reused")
+            return g
+        hero = character_sheet.hero(db, ch.id)
+        path = generation_file(hero) if hero is not None else None
+        if path is None or not path.is_file():
+            return None
+        try:
+            pic = character_sheet.open_picture(hero)
+        except HTTPException as e:
+            log.warning("couldn't reuse %s's sheet hero: %s", ch.name, e.detail)
+            return None
+        g = character_sheet.store_picture(ch, pic, "portrait", prompt=hero.prompt,
+                                          params={"source": "sheet_hero", "from_generation_id": hero.id},
+                                          version=next_version(db, "character", ch.id, "portrait"))
+        db.add(g)
+        db.flush()
+        self._approve(g, "reused")
+        return g
+
     def take_slot(self, shot: Shot, label: str) -> list[str]:
         if sb.approved(self.db, "shot", shot.id, "take"):
             return []
@@ -668,9 +730,9 @@ class Autopilot:
         kit = bm.project_kit(self.db, self.project)
         if kit is None:
             raise StageFailed("The brand kit for the closing logo reveal is gone")
-        tries = [g for g in self.db.scalars(select(Generation).where(
+        tries = self._this_run([g for g in self.db.scalars(select(Generation).where(
             Generation.target_type == "shot", Generation.target_id == shot.id, Generation.kind == "take"))
-            if (g.params or {}).get("source") == "logo_reveal"]
+            if (g.params or {}).get("source") == "logo_reveal"])
         live = next((g for g in tries if g.status in ("queued", "generating", "ready")), None)
         if live is None and len(tries) >= TAKE_ATTEMPTS:
             raise StageFailed(f"Couldn't render the logo reveal: {self._last_error(tries)}")
@@ -689,8 +751,50 @@ class Autopilot:
             prompt, params = sb.prepare_shot_generation(self.db, shot, kind, "", {})
         except HTTPException as e:
             raise StageFailed(str(e.detail)) from e
+        if self.film_model:
+            params["film_model"] = self.film_model
         return enqueue_generation(self.db, workspace_id=shot.workspace_id, project_id=shot.project_id,
                                   target_type="shot", target_id=shot.id, kind=kind, prompt=prompt, params=params)
+
+    @property
+    def audio_first(self) -> bool:
+        # a talking feature: voices first, shots cut to them; an advert keeps the planner (brand moments)
+        return bool(self.p.get("dialogue", True)) and bm.project_kit(self.db, self.project) is None
+
+    def voice_first(self, scenes: list[Scene]):
+        """Each scene the editor's way (film_audio.voice_scene, then plan_scene): its lines spoken, then its
+        shots cut from the measured track. Wait while lines are being spoken; scenes nobody speaks in (or with
+        no voice to be had) are left for the shot planner."""
+        db, project = self.db, self.project
+        v = self.r.setdefault("voices", {"scenes": {}})
+        todo = [s for s in scenes if not sb.scene_shots(db, s.id)]
+        waits, ready, total = [], [], 0
+        for s in todo:
+            try:
+                out = fa.voice_scene(db, s, tick=lambda: self.tick())
+            except HTTPException as e:
+                raise StageFailed(f"Couldn't speak the lines of {s.heading or 'a scene'}: {e.detail}") from e
+            v["scenes"][s.id] = out["status"]
+            if out["status"] in ("silent", "no_voice"):
+                continue
+            for g in out["generations"]:
+                if g.status in ("queued", "generating") and g.job_id:
+                    self.link(g)
+                    waits.append(g.job_id)
+            total += out["lines"]
+            ready.append(s)
+        if waits:
+            self.db.flush()
+            return Wait(waits, f"Voices: {total - len(waits)} of {total} lines spoken")
+        for s in ready:
+            self.tick(message=f"Cutting {s.heading or 'the scene'} to its dialogue")
+            try:
+                fa.plan_scene(db, s, tick=lambda: self.tick())
+            except HTTPException as e:
+                raise StageFailed(str(e.detail)) from e
+        if ready:
+            self.tick(0.2, "Shots cut to the voices")
+        return None
 
     def _reference(self, shot: Shot) -> Path | None:
         for cid in shot.character_ids or []:
@@ -754,6 +858,12 @@ class Autopilot:
                 for c in out.characters:
                     ai_jobs.upsert_character(db, project, c.name, "", action="quick", job_id=self.job.id)
             local = P.clean_line(out.title_local)[:300]
+            if self.p.get("title_auto", True):
+                # "روشni (The Light of Ramadan)": the card needs one clean line in each script
+                english, local = fl.clean_titles(project.title, local, self.language, tick=lambda: self.tick())
+                project.title = english[:300] or project.title
+            else:
+                local = fl.clean_titles(project.title, local, self.language, tick=lambda: self.tick())[1]
             if local and aerab.applies(self.language, local):
                 local = aerab.finish_lines_sync([local], self.language, tick=lambda: self.tick(),
                                                 what="film title")[0]
@@ -764,32 +874,16 @@ class Autopilot:
             by_id = {s.id: s for s in self.scenes()}
 
         scenes = [by_id[i] for i in ids]
-        for k, (sc, plan) in enumerate(zip(scenes, o["plan"])):
-            if sc.script_text.strip():
-                continue
-            seconds = float(o["durations"][sc.id])
-            # Urdu with its aerab takes several tokens a word
-            tokens = ai_jobs._tokens_for(P.words_for(int(seconds))) * (3 if self.language != "en" else 1)
-            try:
-                res = self.llm(f"Writing scene {k + 1} of {len(scenes)}", "creative",
-                               draft_messages(project, self.characters(), scenes, k, plan, dialogue, seconds,
-                                              many_shots=self.many_shots, fixed_cast=self.fixed_cast),
-                               temperature=0.8, max_tokens=min(16000, tokens))
-            except LLMError as e:
-                raise StageFailed(f"The AI writer isn't available: {e}") from e
-            script = ai_jobs.with_aerab(lambda _f, m: self.tick(message=m), P.clean_script(res.content, sc.heading), 0)
-            ai_jobs.write_scene(db, sc, {"script_text": script}, action="quick", job_id=self.job.id, summarize=False)
-            self.tick(0.15 + 0.7 * (k + 1) / len(scenes))
-
         roles = o.get("roles") or []
         if self.fixed_cast:
             # a chosen cast keeps its own looks; only a member with no description yet gets one written
             bare = {c.name.casefold() for c in self.characters() if not c.description.strip()}
             roles = [r for r in roles if r[0].casefold() in bare]
         if roles and not o.get("looks_done"):
-            script = "\n\n".join(f"{s.heading}\n{s.script_text}" for s in scenes)
+            # before any scene is written, so the drafts, shot lists and frames all describe the same people
+            story = "\n".join(f"{pl.get('heading') or ''}: {pl.get('logline') or ''}" for pl in o["plan"])
             try:
-                looks = self.llm("Describing the cast", "creative", P.looks_messages(project, roles, script),
+                looks = self.llm("Describing the cast", "creative", P.looks_messages(project, roles, story),
                                  schema=P.CastLooks, temperature=0.5, max_tokens=1500).data
             except LLMError as e:
                 raise StageFailed(f"The AI writer isn't available: {e}") from e
@@ -799,8 +893,83 @@ class Autopilot:
                     continue
                 ai_jobs.upsert_character(db, project, look.name, look.description, action="quick", job_id=self.job.id)
         o["looks_done"] = True
+
+        for k, (sc, plan) in enumerate(zip(scenes, o["plan"])):
+            if sc.script_text.strip():
+                continue
+            script = self.write_scene(scenes, k, plan, float(o["durations"][sc.id]), dialogue)
+            ai_jobs.write_scene(db, sc, {"script_text": script}, action="quick", job_id=self.job.id, summarize=False)
+            self.tick(0.15 + 0.7 * (k + 1) / len(scenes))
+        if dialogue and not o.get("timed"):
+            self.retime(scenes, o, dialogue)
+            o["timed"] = True
         project.updated_at = utcnow()
         return None
+
+    def write_scene(self, scenes: list[Scene], k: int, plan: dict, seconds: float, dialogue: bool,
+                    note: str = "") -> str:
+        """One scene's script: drafted, asked once more when it is too thin to fill its time, its English lines
+        translated for a film in another script, then the aerab pass."""
+        project, sc = self.project, scenes[k]
+        # Urdu with its aerab takes several tokens a word
+        tokens = ai_jobs._tokens_for(P.words_for(int(seconds))) * (3 if self.language != "en" else 1)
+        msgs = draft_messages(project, self.characters(), scenes, k, plan, dialogue, seconds,
+                              many_shots=self.many_shots, fixed_cast=self.fixed_cast, language=self.language)
+        if note:
+            msgs[-1] = {**msgs[-1], "content": f"{msgs[-1]['content']}\n\n{note}"}
+        try:
+            res = self.llm(f"Writing scene {k + 1} of {len(scenes)}", "creative", msgs,
+                           temperature=0.8, max_tokens=min(16000, tokens))
+        except LLMError as e:
+            raise StageFailed(f"The AI writer isn't available: {e}") from e
+        script = P.clean_script(res.content, sc.heading)
+        want = fa.spoken_target(seconds, self.language) if dialogue and self.characters() else 0
+        have = fa.spoken_words(script)
+        if want and have < want / 2:
+            # too thin for its running time (or silent): one more go with the number spelled out
+            told = "nobody speaking" if not have else f"only {have} spoken words"
+            msgs[-1] = {**msgs[-1], "content": msgs[-1]["content"] + (
+                f"\n\nYour last draft had {told}. Write the scene again with about {want} spoken words: several "
+                "lines from the cast, each under its character cue.")}
+            try:
+                again = self.llm(f"Writing scene {k + 1} again, with more dialogue", "creative", msgs,
+                                 temperature=0.8, max_tokens=min(16000, tokens))
+                redo = P.clean_script(again.content, sc.heading)
+                script = redo if fa.spoken_words(redo) > have else script
+            except (LLMError, StageFailed) as e:
+                log.warning("second draft of a thin scene failed: %s", e)
+        script = fl.localise_script(script, self.language, tick=lambda: self.tick())
+        return ai_jobs.with_aerab(lambda _f, m: self.tick(message=m), script, 0)
+
+    def retime(self, scenes: list[Scene], o: dict, dialogue: bool) -> None:
+        """Content first: each scene runs as long as what's in it. When the film misses its runtime by more than
+        10 %, the scenes that are off are written once more against a timing table; then the plan follows the
+        scripts (shots are never stretched to make up the time)."""
+        lang = self.language
+        want = {s.id: float(o["durations"][s.id]) for s in scenes}
+        now = {s.id: fa.content_seconds(s.script_text, lang) for s in scenes}
+        target = sum(want.values())
+        got = sum(now[i] if now[i] is not None else want[i] for i in want)
+        if target and abs(got - target) > 0.1 * target:
+            table = "\n".join(f"Scene {k + 1}: about {now[s.id] or 0:.0f} s now, needs about {want[s.id]:.0f} s"
+                              for k, s in enumerate(scenes))
+            for k, (s, plan) in enumerate(zip(scenes, o["plan"])):
+                n = now[s.id]
+                if n is not None and abs(n - want[s.id]) <= 0.1 * want[s.id]:
+                    continue
+                more = n is None or n < want[s.id]
+                note = (f"Timing check, at about {fa.words_per_s(lang):g} spoken words a second:\n{table}\n"
+                        f"Write scene {k + 1} so it runs about {want[s.id]:.0f} seconds: "
+                        + ("add spoken lines and action to fill it." if more else "trim lines and action to fit."))
+                self.tick(message=f"Retiming scene {k + 1}")
+                script = self.write_scene(scenes, k, plan, want[s.id], dialogue, note=note)
+                ai_jobs.write_scene(self.db, s, {"script_text": script}, action="quick", job_id=self.job.id,
+                                    summarize=False)
+                now[s.id] = fa.content_seconds(script, lang)
+        for s in scenes:
+            if now[s.id] is not None:
+                o["durations"][s.id] = max(2.0, float(now[s.id]))
+        o["content_seconds"] = {s.id: now[s.id] for s in scenes}
 
     def stage_cast(self):
         db, project = self.db, self.project
@@ -823,6 +992,8 @@ class Autopilot:
         waits: list[str] = []
         chars, locs = self.characters(), self.locations()
         for ch in chars:
+            if not sb.approved(db, "character", ch.id, "portrait"):
+                self.reuse_portrait(ch)
             if ch.id not in prompts and not sb.approved(db, "character", ch.id, "portrait"):
                 try:
                     out = self.run_inline("ai_portrait_prompt", {"character_id": ch.id},
@@ -870,12 +1041,16 @@ class Autopilot:
         scenes = [s for s in self.scenes() if s.script_text.strip()]
         if not scenes:
             raise StageFailed("There's no script to storyboard")
+        voiced = self.voice_first(scenes) if self.audio_first else None
+        if isinstance(voiced, Wait):
+            return voiced
         if any(not sb.scene_shots(db, s.id) for s in scenes):
             durations = (self.r.get("outline") or {}).get("durations") or {}
             payload = {"project_id": project.id, "mode": "scene", "chain": True, "generate_frames": False,
                        "overwrite": False, "scene_ids": [], "dialogue": bool(self.p.get("dialogue", True))}
-            if self.many_shots:
-                secs = {s.id: float(durations[s.id]) for s in scenes if s.id in durations}
+            secs = {s.id: float(durations[s.id]) for s in scenes if s.id in durations}
+            if self.many_shots or any(v > fa.PIECE_S for v in secs.values()):
+                # one shot must never carry a long scene: coverage, each shot one pass
                 payload.update(mode="shots", scene_seconds=secs,
                                max_shots_by_scene={sid: shots_for(v) for sid, v in secs.items()})
             self.run_inline("ai_storyboard", payload, "Planning the shots")
@@ -885,7 +1060,9 @@ class Autopilot:
                 shots = [x for x in sb.scene_shots(db, s.id) if closing is None or x.id != closing.id]
                 if not shots:
                     raise StageFailed(f"The storyboard has no shot for {s.heading or 'a scene'}")
-                if s.id in durations and len(shots) > 1 and self.many_shots:
+                if fa.record(project, s.id).get("shots"):
+                    continue  # cut from its dialogue: the voices set the lengths
+                if s.id in durations and len(shots) > 1:
                     want = float(durations[s.id])
                     if closing is not None and closing.scene_id == s.id:
                         want = max(2.0, want - closing.duration_s)
@@ -897,7 +1074,7 @@ class Autopilot:
                     want = float(durations[s.id])
                     if closing is not None and closing.scene_id == s.id:
                         want = max(2.0, want - closing.duration_s)
-                    shots[0].duration_s = max(1.0, min(cap, want))
+                    shots[0].duration_s = max(1.0, min(SHOT_RANGE[1] if self.many_shots else cap, want))
             self.tick(0.2, "Shots planned")
 
         shots = sb.project_shots(db, project.id)
@@ -912,8 +1089,9 @@ class Autopilot:
             ref = self._reference(shot)
             for kind in kinds:
                 desc = shot.start_prompt if kind == "keyframe_start" else shot.end_prompt
+                seen = " ".join(x for x in (desc or shot.description, sb.people_anchor(db, shot)) if x)
                 waits += self.image_slot("shot", shot.id, kind, lambda shot=shot, kind=kind: self._enqueue_shot(shot, kind),
-                                         desc or shot.description, ref,
+                                         seen, ref,
                                          f"shot {n}'s {'first' if kind == 'keyframe_start' else 'last'} frame")
         if waits:
             return Wait(waits, f"Frames for {len(shots)} shot{'s' if len(shots) != 1 else ''}")
@@ -1120,4 +1298,7 @@ def cancel_children(db: Session, job: Job) -> None:
 def on_retry(job: Job) -> None:
     job.priority = 0
     if job.result:
-        job.result = {**job.result, "waiting_on": []}
+        # tries that failed before now (a full GPU, a dead server) don't spend the resumed job's budget
+        job.result = {**job.result, "waiting_on": [], "resumed_at": utcnow().isoformat()}
+        if isinstance(job.result.get("stitch"), dict):
+            job.result["stitch"] = {**job.result["stitch"], "attempts": 0}

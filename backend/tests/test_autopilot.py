@@ -306,7 +306,8 @@ def test_resume_continues_from_the_failed_stage(client, brain, fast_driver):
     assert r.status_code == 200, r.text
     job = drive(out["job"]["id"], fast_driver)
     assert job.status == "done", job.error
-    assert b.seen.count("QuickOutline") == 1 and b.seen.count("draft") == 1
+    # the silent draft was asked once more for its lines on the first run; nothing was rewritten on the retry
+    assert b.seen.count("QuickOutline") == 1 and b.seen.count("draft") == 2
     with SessionLocal() as db:
         assert len(db.scalars(select(Generation).where(Generation.kind == "portrait")).all()) == portraits
 

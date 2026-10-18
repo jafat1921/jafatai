@@ -179,6 +179,7 @@ async def _raw_chat(
     max_tokens: int,
     think: bool,
     timeout: float,
+    keep_alive: str | None = None,
 ) -> ChatResult:
     s = get_settings()
     t0 = time.monotonic()
@@ -192,6 +193,8 @@ async def _raw_chat(
         }
         if schema:
             body["format"] = schema
+        if keep_alive:
+            body["keep_alive"] = keep_alive
         try:
             data = await _post(client, f"{server_root()}/api/chat", body, model, timeout)
         except LLMError as e:
@@ -216,6 +219,7 @@ async def _raw_chat(
             body["reasoning_effort"] = "none"
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": {"name": "answer", "schema": schema}}
+        # no keep_alive here: Ollama's /v1 doesn't take it, and other servers don't need it
         data = await _post(client, f"{s.llm_base_url.rstrip('/')}/chat/completions", body, model, timeout)
         choice = (data.get("choices") or [{}])[0]
         msg = choice.get("message") or {}
@@ -267,10 +271,13 @@ async def chat(
     think: bool | None = None,
     retry_empty: bool = True,
     model: str | None = None,
+    keep_alive: str | None = None,
 ) -> ChatResult:
     """One chat call for a role. With `schema`, `result.data` is a validated instance or LLMError is raised.
-    `model` overrides the role's model for this one call (Ad Studio picks its own copywriter)."""
+    `model` overrides the role's model for this one call (Ad Studio picks its own copywriter). `keep_alive`
+    is Ollama's (native API only): how long the model stays loaded afterwards."""
     s = get_settings()
+    chosen = model is not None
     model = model or model_for(role)
     if think is None:
         # only the reasoning role is allowed to think; creative/vision answers must land in content
@@ -281,7 +288,7 @@ async def chat(
     async with _client(timeout) as client:
         res = await _raw_chat(
             client, model, messages, schema=json_schema, temperature=temperature,
-            max_tokens=max_tokens, think=think, timeout=timeout,
+            max_tokens=max_tokens, think=think, timeout=timeout, keep_alive=keep_alive,
         )
         if not res.content and res.finish_reason == "length" and retry_empty:
             # the whole budget went on thinking; one retry with room to spare and thinking off
@@ -289,7 +296,7 @@ async def chat(
             first_thinking = res.thinking
             res = await _raw_chat(
                 client, model, messages, schema=json_schema, temperature=temperature,
-                max_tokens=max_tokens * 2, think=False, timeout=timeout,
+                max_tokens=max_tokens * 2, think=False, timeout=timeout, keep_alive=keep_alive,
             )
             res.thinking = res.thinking or first_thinking
             if not res.content:
@@ -307,18 +314,23 @@ async def chat(
             first_error = str(e).splitlines()[0][:300]
             log.warning("invalid JSON from %s (%s); running one repair pass", model, first_error)
 
-        repair_model = model if role == "creative" else model_for("creative")
+        # a model chosen for the call (a film's FILM_LLM_MODEL) repairs its own answer too
+        repair_model = model if role == "creative" or chosen else model_for("creative")
         fixed = await _raw_chat(
             client, repair_model, _repair_messages(res.content, json_schema, first_error),
             schema=json_schema, temperature=0.0, max_tokens=max(max_tokens, 1024), think=False, timeout=timeout,
+            keep_alive=keep_alive if repair_model == model else None,
         )
         try:
             res.data = _validate(schema, fixed.content)
         except (ValidationError, ValueError) as e:
-            raise LLMError(
+            err = LLMError(
                 f"{model} didn't return valid {schema.__name__} JSON, and the repair pass failed too: "
                 f"{str(e).splitlines()[0][:200]}"
-            ) from e
+            )
+            # callers with a retry of their own (llm.film.retry_json) re-ask with this
+            err.content, err.truncated = res.content, res.finish_reason == "length"
+            raise err from e
         res.content = fixed.content
         res.seconds += fixed.seconds
         res.usage["repaired"] = True

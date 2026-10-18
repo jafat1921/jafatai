@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     llm_api: str = "auto"
     llm_num_ctx: int = 8192
     llm_timeout_s: float = 600.0
+    # Ollama keep_alive for the big one-shot models (aerab marks, TranslateGemma): Ollama's 5 min default
+    # leaves ~17 GB on a card ComfyUI needs. Empty: Ollama's default
+    ollama_keep_alive_big: str = "30s"
+    # every LLM step of a Quick Create film (outline, scenes, shot lists, cast and frame prompts) when installed;
+    # the small creative / reasoning models ignore shot counts and languages. "off": the roles' models
+    film_llm_model: str = "gemma4:26b"
     # magic prompt (UI polish P1): what generators do when the client doesn't say; auto | on | off
     magic_prompt_default: str = "auto"
     enhance_timeout_s: float = 30.0
@@ -151,6 +157,11 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [p.strip().rstrip("/") for p in v.split(",") if p.strip()]
         return v
+
+    @field_validator("film_llm_model", mode="before")
+    @classmethod
+    def _film_model(cls, v):
+        return v.strip() or "gemma4:26b" if isinstance(v, str) else v
 
     @field_validator("aerab_llm_model", mode="before")
     @classmethod

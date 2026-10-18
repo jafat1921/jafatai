@@ -118,6 +118,9 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
     prompt = mentioned.prompt
     choice = {k: getattr(body, k) for k in ("image_model", "image_speed", "video_quality", "smooth_motion")
               if getattr(body, k) is not None}
+    if (body.scenes or body.scene_seconds) and "video_quality" not in choice:
+        # a feature is watched at full size; draft-size takes (768x448) look soft once stitched
+        choice["video_quality"] = "hq"
     settings = models_catalog.clean_project_settings({}, choice)
     if language != "en":
         settings["language"] = language  # read by every writer prompt for this film, not just the autopilot

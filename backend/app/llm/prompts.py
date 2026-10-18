@@ -507,7 +507,8 @@ FRAME_RULES = """Rules for frame prompts (an image model sees each one alone, wi
 Rules for the motion prompt (a video model animates from the start frame to the end frame):
 - Say what moves and how over the shot's duration: performance, gestures, the camera move, light changes. Keep it physically plausible for the duration.
 - Never quote spoken words or copy dialogue from the script: the lines are voiced separately. Speech is performance only ("she answers him quietly").
-- One paragraph, present tense, under 90 words, flush-left plain text."""
+- Time-code the beats over the shot ("0-3 s: …, 3-6 s: …"), then one performance line (how each person in frame moves, looks and reacts).
+- Present tense, 150-300 words, flush-left plain text, no markdown."""
 
 
 def _people(characters) -> str:
@@ -562,13 +563,16 @@ def suggest_shots_messages(project, characters, scene, max_shots: int, previous=
                            dialogue: bool = False, target_s: float | None = None) -> list[dict]:
     before = f"\nThe previous scene ends: {previous.summary or previous.logline or previous.heading}" if previous else ""
     # a long scene (contract v4a) is covered by many short shots that together fill its running time
-    length = (f"The scene runs about {target_s:g} seconds on screen: plan about {max_shots} shots of 5-10 seconds "
-              f"each whose duration_s add up to about {target_s:g}, covering the whole script. ") if target_s else ""
+    # there the count is a contract, not a ceiling: the weak planners answered a minute-long scene with one shot
+    length = (f"The scene runs about {target_s:g} seconds on screen. Return exactly {max_shots} shots of 5-10 "
+              f"seconds each whose duration_s add up to about {target_s:g}, covering the whole script in order; "
+              "vary the framing from shot to shot (wide, medium, close-up, a reaction, an insert). ") if target_s else ""
+    count = f"exactly {max_shots}" if target_s else f"at most {max_shots}"
     user = (
         f"{film_block(project, characters)}\n\nScene: {scene.heading or '(no heading)'}\n---\n"
         f"{scene.script_text.strip()[:12000 if target_s else 6000]}\n---{before}\n\n{length}"
-        f"Break this scene into at most {max_shots} shots, in order. For each shot give: shot_type (one of: "
-        + ", ".join(SHOT_TYPES) + "), duration_s (1-20; time spoken lines at about 2.5 words a second), "
+        f"Break this scene into {count} shots, in order. For each shot give: shot_type (one of: "
+        + ", ".join(SHOT_TYPES) + "), duration_s (1-10; time spoken lines at about 2.5 words a second), "
         "description (what happens, one or two sentences), camera (framing and any move), characters (names exactly "
         "as in the cast list), start_visual and end_visual (what the first and the last frame show), handoff (what "
         "carries over from the previous shot: a prop, a look, an emotion; empty for the first shot), and continuous "
@@ -576,6 +580,12 @@ def suggest_shots_messages(project, characters, scene, max_shots: int, previous=
     )
     if dialogue:
         user += "\n\n" + dialogue_ask(scene, True, film_language(project))
+        if target_s:
+            user += (" Spread the script's spoken lines through the shots in script order: every line in exactly one "
+                     "shot, each with its speaker, two or three lines a shot at most, and no line left out.")
+        user += (" One visible speaker per talking shot: cut shot / reverse shot between the people talking, with a "
+                 "short reaction shot of the listener after each exchange. Every shot names who is in frame in "
+                 "characters (never an empty list when someone is on screen).")
     if brand:
         user += "\n\n" + brand + "\nGive each shot brand_placements (an empty list where the brand doesn't fit)."
     return [{"role": "system", "content": SHOTLIST_SYSTEM}, {"role": "user", "content": user}]

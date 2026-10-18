@@ -206,7 +206,9 @@ def test_long_scene_shot_maths():
 
 # ---------------------------------------------------------------- the whole film
 
-def test_urdu_film_with_a_studio_cast_end_to_end(client, feature_brain, aerab_calls, fast_driver):
+def test_urdu_film_with_a_studio_cast_end_to_end(client, feature_brain, aerab_calls, fast_driver, monkeypatch):
+    # the shot planner's path (an advert, or lines nobody can voice); voice-first is test_film_audio
+    monkeypatch.setattr(ap_mod.Autopilot, "audio_first", property(lambda self: False))
     b = feature_brain()
     mara = studio_character(client, name="Mara", description="Woman, 60s, grey braid")
     with_portrait(client, fast_driver, mara)
@@ -226,7 +228,10 @@ def test_urdu_film_with_a_studio_cast_end_to_end(client, feature_brain, aerab_ca
     assert "The film is in Urdu" in text and "- Mara: Woman, 60s, grey braid" in text
     assert all("The film is in Urdu" in _user_text(x) for x in b.bodies["draft"])
     shotlists = b.bodies["ShotList"]
-    assert len(shotlists) == 2 and "about 20 seconds on screen" in _user_text(shotlists[0])
+    # content first: one short line a scene, so the plan follows the scripts, not the 20 s asked for
+    secs = job.result["outline"]["durations"]
+    assert all(s < 6 for s in secs.values())
+    assert len(shotlists) == 2 and "seconds on screen" in _user_text(shotlists[0])
     assert "in Urdu, exactly as the script has it" in _user_text(shotlists[0])
     assert all("Always in English" in _user_text(x) for x in b.bodies["FramePrompts"])
     assert "CastLooks" not in b.bodies  # the studio character keeps her own looks
@@ -241,8 +246,8 @@ def test_urdu_film_with_a_studio_cast_end_to_end(client, feature_brain, aerab_ca
         assert db.get(Character, mara["id"]).description == "Woman, 60s, grey braid"
         for sc in scenes:
             shots = db.scalars(select(Shot).where(Shot.scene_id == sc.id).order_by(Shot.order)).all()
-            assert len(shots) == 3
-            assert sum(s.duration_s for s in shots) >= 19.5
+            assert len(shots) == ap_mod.shots_for(secs[sc.id])
+            assert sum(s.duration_s for s in shots) >= secs[sc.id] - 0.5
             # the walk-on's line was dropped; Mara's is hers, in Urdu, with its marks
             assert shots[0].dialogue == [{"character_id": mara["id"], "text": mark(URDU), "language": "ur"}]
         take = db.scalars(select(Generation).where(Generation.project_id == pid, Generation.kind == "take",
@@ -257,7 +262,7 @@ def test_urdu_film_with_a_studio_cast_end_to_end(client, feature_brain, aerab_ca
         assert final.params["chapters"][0]["title"] == title_intro.CHAPTER
         assert final.params["chapters"][1]["start_s"] == pytest.approx(title_intro.SECONDS, abs=0.1)
         length = rl.probe(generation_file(final)).duration
-        assert length == pytest.approx(final.params["duration_s"], abs=0.6) and length > title_intro.SECONDS + 30
+        assert length == pytest.approx(final.params["duration_s"], abs=0.6) and length > title_intro.SECONDS + 4
         music = db.get(Generation, intro["music_id"])
         assert music.kind == "music" and music.params["model"] == title_intro.MUSIC_MODEL
     assert ("film title", "ur") in aerab_calls and ("shot dialogue", "ur") in aerab_calls

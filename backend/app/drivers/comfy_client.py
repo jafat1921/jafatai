@@ -246,6 +246,13 @@ class ComfyClient:
         except httpx.HTTPError as e:
             log.warning("cancel of %s failed: %s", prompt_id, e)
 
+    async def free_memory(self) -> None:
+        # keeps the models loaded (the retry wants them); drops cached activations and torch's spare pool
+        try:
+            await self._http.post("/free", json={"unload_models": False, "free_memory": True}, timeout=20.0)
+        except httpx.HTTPError as e:
+            log.warning("ComfyUI /free failed: %s", e)
+
     async def download(self, out: ComfyOutput, dest: Path) -> Path:
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(dest.suffix + ".part")

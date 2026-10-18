@@ -75,7 +75,7 @@ Tools a token can't use aren't listed for it. Anything slow returns job ids at o
 | `set_character_voice` | generate | Give a character a voice (`list_voices`). |
 | `write_podcast_episode` | generate | Create an episode with hosts and a topic, and script it. |
 | `render_podcast` | generate | `step=voices` speaks every line, then `step=mix` makes the episode file. |
-| `create_project_from_idea` | generate | Quick Create: the autopilot makes a whole film; `language`, `cast_ids`, `scenes`, `scene_seconds`, `title_intro`, `title` for a feature (contract v4a). |
+| `create_project_from_idea` | generate | Quick Create: the autopilot makes a whole film; `language`, `cast_ids`, `scenes`, `scene_seconds`, `title_intro`, `title`, `video_quality` (hq by default for a feature), `upscale` (contract v4a). |
 | `list_projects` | read | The film projects. |
 | `get_job` | read | Status, progress and, when done, a `download_url` (or the transcript). |
 | `wait_for_job` | read | Waits up to 60 s for a job, then returns it; call again if it's still running. |

@@ -90,10 +90,17 @@ def translator(source: str | None, target: str | None) -> str | None:
     return name
 
 
+def keep_alive(model: str) -> str | None:
+    # 27B of TranslateGemma idling on the card for Ollama's default 5 minutes starves ComfyUI
+    s = get_settings()
+    name = s.translate_llm_model.strip()
+    return (s.ollama_keep_alive_big or None) if name and model == name else None
+
+
 def _ask(model: str, text: str, source: str, target: str, tick) -> str:
     res = chat_sync("creative", [{"role": "user", "content": prompt(text, source, target)}], model=model,
                     think=False, temperature=0.0, max_tokens=min(4000, 200 + 4 * len(text)), timeout=240.0,
-                    tick=tick)
+                    tick=tick, keep_alive=keep_alive(model))
     return res.content.strip()
 
 

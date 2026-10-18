@@ -147,8 +147,10 @@ def _speaker(db: Session, workspace_id: str, cid: str, cache: dict) -> tuple[str
     return cache[cid]
 
 
-def plan(db: Session, workspace_id: str, lines: list[dict] | None, cache: dict | None = None) -> dict | None:
-    """What a take's speech step works from: each line with its speaker's name and voice."""
+def plan(db: Session, workspace_id: str, lines: list[dict] | None, cache: dict | None = None,
+         stand_ins: bool = False) -> dict | None:
+    """What a take's speech step works from: each line with its speaker's name and voice. `stand_ins`: never
+    leave lines to the video model's own audio while the Voice Gallery has a voice for them."""
     cache = {} if cache is None else cache
     rows, missing = [], []
     for ln in lines or []:
@@ -166,8 +168,8 @@ def plan(db: Session, workspace_id: str, lines: list[dict] | None, cache: dict |
         rows.append(row)
     if not rows:
         return None
-    native = bool(missing) and all(native_audio.looks_english(r["text"]) and r.get("language") in (None, "en")
-                                   for r in rows)
+    native = not stand_ins and bool(missing) and all(
+        native_audio.looks_english(r["text"]) and r.get("language") in (None, "en") for r in rows)
     if missing and not native:
         picks = {}
         for i, r in enumerate(rows):

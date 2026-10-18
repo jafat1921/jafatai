@@ -171,15 +171,16 @@ async def enhance(prompt: str, kind: str = "image", *, mode: str = "auto", model
 
 
 def enhance_sync(prompt: str, kind: str = "image", *, mode: str = "auto", model: str | None = None,
-                 style: str | None = None, brand_context: str = "", tick=None) -> dict:
+                 style: str | None = None, brand_context: str = "", tick=None, llm: dict | None = None) -> dict:
     """Worker side. `tick` can raise JobCancelled, which is allowed through."""
     early, key = _plan(prompt, kind, mode, model, style, brand_context)
     if early is not None:
         return early
     try:
+        # `llm`: chat keywords from the caller, e.g. a film's FILM_LLM_MODEL (llm.film.overrides)
         res = chat_sync("creative", messages(prompt, kind, model=model, style=style, brand_context=brand_context),
-                        tick=tick, schema=Enhanced, think=False, temperature=0.6, max_tokens=700,
-                        timeout=get_settings().enhance_timeout_s)
+                        tick=tick, **{"schema": Enhanced, "think": False, "temperature": 0.6, "max_tokens": 700,
+                                      "timeout": get_settings().enhance_timeout_s, **(llm or {})})
     except LLMError as e:
         log.warning("prompt enhancer unavailable: %s", e)
         return _result(prompt, notes=UNAVAILABLE)

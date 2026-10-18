@@ -117,6 +117,7 @@ export interface DesignSpec {
   texts: DesignTexts
   colours: { ground?: string; ink?: string; accent?: string }
   font_preset: string
+  display_font?: string
   logo: { position: 'auto' | 'none'; variant: string }
   focus: { x: number; y: number }
   print_safe: boolean
@@ -187,7 +188,7 @@ export interface PrintJob {
   stages: PrintStage[]
   brief: PrintCreate & { lines: PrintLines }
   size: PrintSize
-  brand_kit: { id: string; name: string } | null
+  brand_kit: { id: string; name: string; has_fonts?: boolean; has_logo?: boolean } | null
   concepts: PrintConcept[]
   designs: PrintDesign[]
   job: Job | null
@@ -224,6 +225,7 @@ export interface PrintOptions {
   distances: { id: Distance; label: string; metres: number; min_cap_mm: number }[]
   layouts: Record<ShapeFamily, { id: string; label: string; photo: boolean }[]>
   font_presets: { id: string; label: string }[]
+  display_fonts?: { id: string; label: string }[]
 }
 
 export interface DesignPatch {
@@ -233,6 +235,7 @@ export interface DesignPatch {
   hero?: 'name' | 'headline'
   caps?: boolean
   font_preset?: string
+  display_font?: string
   colours?: Partial<Record<'ground' | 'ink' | 'accent', string>>
   logo?: { position?: 'auto' | 'none' }
   print_safe?: boolean
@@ -365,6 +368,18 @@ export const FONT_PRESETS = [
   { id: 'elegant', label: 'Elegant (Playfair + Inter)' },
 ]
 
+// the name's face on its own; '' keeps the one the type sets
+export const DISPLAY_FONTS = [
+  { id: '', label: 'As the type' },
+  { id: 'archivo', label: 'Archivo Black' },
+  { id: 'anton', label: 'Anton' },
+  { id: 'bebas', label: 'Bebas Neue' },
+  { id: 'poppins', label: 'Poppins ExtraBold' },
+  { id: 'montserrat', label: 'Montserrat ExtraBold' },
+  { id: 'oswald', label: 'Oswald Bold' },
+  { id: 'playfair', label: 'Playfair Display Black' },
+]
+
 export const LAYOUTS: Record<ShapeFamily, { id: string; label: string; photo: boolean }[]> = {
   wide: [
     { id: 'band', label: 'Name with emblem and band', photo: false },
@@ -375,10 +390,12 @@ export const LAYOUTS: Record<ShapeFamily, { id: string; label: string; photo: bo
     { id: 'stack', label: 'Stacked lines', photo: false },
     { id: 'hero_top', label: 'Photo on top', photo: true },
     { id: 'photo_middle', label: 'Name, photo, details', photo: true },
+    { id: 'logo_hero', label: 'The logo as the headline', photo: false },
   ],
   square: [
     { id: 'centre', label: 'Centred', photo: false },
     { id: 'photo_circle', label: 'Photo in a circle', photo: true },
+    { id: 'logo_hero', label: 'The logo as the headline', photo: false },
   ],
   sheet: [
     { id: 'menu', label: 'Menu / price list', photo: false },

@@ -23,10 +23,13 @@ from app.ads import copy as cp
 from app.ads import service as ads
 from app.ads.stages import Review, Run, brand_context, brand_tokens
 from app.autopilot import POLL_S, WAIT_PRIORITY, StageFailed, Wait
+from app.config import get_settings
 from app.llm import LLMError, chat_sync
 from app.llm.print_prompts import (PRINT_ART_LOOK, PRINT_NO_TEXT, PRINT_PHOTO_LOOK, PrintConcepts,
                                    print_concept_messages)
 from app.models import AdCampaign, Generation, Job
+from app.photo import restore
+from app.photo.restore import RestoreError
 from app.print_studio import layout as pl
 from app.print_studio import service as ps
 from app.print_studio import sizes as sz
@@ -115,7 +118,8 @@ class PrintRun(Run):
         families = families or ps.families_for(b, count)
         cv = ps.canvas_of(b)
         shape = ps.shape_family(b)
-        layouts = {f: ps.layouts_for(b, f) for f in pl.DESIGN_FAMILIES}
+        logo = ps.kit_logo(self.kit)
+        layouts = {f: ps.layouts_for(b, f, logo) for f in pl.DESIGN_FAMILIES}
         lines = b["lines"]
         msgs = print_concept_messages(
             job=b["job"], job_label=sz.JOB_LABELS.get(b["job"], "Sign"), shape=shape,
@@ -139,7 +143,10 @@ class PrintRun(Run):
         for r, fam in zip(rows, families):
             r["family"] = fam
             r.update(kicker="", body="")
-        ps.spread(rows, b)
+        ps.spread(rows, b, logo)
+        if avoid is None:
+            # a rewrite of one option keeps the layout it had; only a fresh set needs the logo-led one
+            ps.offer_logo_hero(rows, b, self.kit)
         rows = self.self_check(rows)
         extra = " ".join(str(v) for k, v in lines.items() if k != "offers" and v) + " " + " ".join(lines["offers"])
         channels = cp.channels_of({"phone": lines["phone"], "website": lines["website"]}, [])
@@ -315,9 +322,50 @@ class PrintRun(Run):
         rec["final"] = final
         return "ready", None
 
+    def logo_cutouts(self) -> list[str]:
+        """A kit logo whose backdrop won't key out (not one plain colour) gets Photo Studio's BiRefNet cut-out,
+        once: the cut logo is cached by the kit and the file's content, and every layout uses that."""
+        kit = self.kit
+        cons = [x for x in self.c.concepts or [] if x.get("approved")]
+        if kit is None or not cons:
+            return []
+        rec = self.rec()
+        cuts = dict(rec.get("logo_cuts") or {})
+        waits = []
+        for variant in ("primary", "light", "dark"):
+            mid = br.logo_ref(kit, variant).get("media_id")
+            src = br.media_generation(self.db, kit.workspace_id, mid)
+            path = generation_file(src) if src is not None else None
+            if path is None or not path.is_file() or ps.logo_cut(kit, path) is not None:
+                continue
+            r = dict(cuts.get(mid) or {})
+            state, got = self.child(cons[0], r, "cutout", src, lambda: self.logo_cutout_request(cons[0], src),
+                                    "cutout")
+            cuts[mid] = r
+            if state == "wait":
+                waits += got
+            elif state == "done":
+                mask = ((got.params or {}).get("cutout") or {}).get("mask_file")
+                if mask is None or ps.logo_cut(kit, path, get_settings().data_dir / mask) is None:
+                    log.warning("print job %s: the %s logo couldn't be cut out; it stays off the designs",
+                                self.c.id, variant)
+        rec["logo_cuts"] = cuts
+        self.put(rec)
+        return waits
+
+    def logo_cutout_request(self, con: dict, src: Generation) -> tuple[str, dict]:
+        params, _ = restore.build_restore(self.db, src, "cutout", {"edge": {"feather": 0.6, "shift": 0}})
+        return "Logo cut-out", {"print_job": self.c.id, "concept_id": con["id"], "photo_group": "logo",
+                                "created_by": {"user_id": self.c.created_by, "flow": "print_studio"}, **params}
+
     def stage_pictures(self, _reviewed: bool):
         c = self.c
         waits, failed, ready, total = [], [], 0, 0
+        try:
+            waits += self.logo_cutouts()
+        except RestoreError as e:
+            # the cut-out tool is off on this server: the job goes on, the unkeyable logo stays off
+            log.warning("print job %s: no logo cut-out (%s)", c.id, e)
         for con in [dict(x) for x in c.concepts or [] if x.get("approved")]:
             photos = dict(con.get("photos") or {})
             for grp in ps.groups_of(con):

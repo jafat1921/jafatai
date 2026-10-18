@@ -20,8 +20,10 @@ from app.drivers.mock import MockDriver
 from app.llm import set_transport
 from app.models import AdCampaign, Generation, MediaItem
 from app.print_studio import export as ex
+from app.print_studio import fonts as pf
 from app.print_studio import gamut
 from app.print_studio import layout as pl
+from app.print_studio import logo as plogo
 from app.print_studio import raster
 from app.print_studio import sizes as sz
 from app.worker import process_one
@@ -396,6 +398,229 @@ def test_urdu_copy_gets_aerab_and_arabic_is_rtl(client, llm):
     assert j["designs"][0]["spec"]["rtl"] and j["designs"][0]["spec"]["texts"]["name"] == "سِتارہ جنرل سٹور"
     a = make(client, language="ar", variants=1)
     assert a["rtl"] and a["designs"][0]["status"] == "ready"
+
+
+# ---------------------------------------------------------------- kit logos, bullets, the footer, type
+
+CREAM, KIT_GREEN, KIT_YELLOW = (250, 246, 232), (30, 123, 58), (245, 183, 0)
+BOARD_COLOURS = {"ground": "#1E7B3A", "ink": "#FAF6E8", "accent": "#F5B700"}
+
+
+def badge(n=600, back=(255, 255, 255)) -> Image.Image:
+    """A round grocery badge saved on an opaque square: green ring, cream disc, a yellow dot."""
+    from PIL import ImageDraw
+
+    im = Image.new("RGB", (n * 2, n * 2), back)
+    d = ImageDraw.Draw(im)
+    d.ellipse((40, 40, 2 * n - 40, 2 * n - 40), fill=KIT_GREEN)
+    d.ellipse((160, 160, 2 * n - 160, 2 * n - 160), fill=CREAM)
+    d.ellipse((n - 80, n - 80, n + 80, n + 80), fill=KIT_YELLOW)
+    return im.resize((n, n), Image.LANCZOS)
+
+
+def board(layout, design="typographic", logo=True, **over) -> tuple:
+    a = pl.Assets(photo=photo(), logo=plogo.key(badge()) if logo else None)
+    sp = spec(1060, 1600, "board", layout, design, **{"colours": BOARD_COLOURS, "brand_name": "Stjärnans Livs", **over})
+    return pl.build(sp, a), a
+
+
+def test_a_logo_on_white_is_keyed_out_inside_whites_kept():
+    im = badge()
+    assert plogo.opaque(im)
+    cut = plogo.key(im)
+    a = np.asarray(cut)
+    h, w = a.shape[:2]
+    assert a[0, 0, 3] == 0 and a[h // 2, w // 2, 3] == 255  # the white square went; the mark stayed
+    # the cream disc is white-ish too, but not joined to the edge: it stays, colour and all
+    cream = a[h // 2, int(w * 0.2)]
+    assert cream[3] == 255 and np.abs(cream[:3].astype(int) - CREAM).max() <= 3
+    # the anti-aliased rim keeps a soft alpha and the ring's own colour, no white halo on a green panel
+    row = a[h // 2, : w // 8]
+    soft = row[(row[:, 3] > 0) & (row[:, 3] < 255)]
+    assert len(soft) and all(px[0] < 120 and px[1] < 170 for px in soft[:, :3])
+    assert plogo.roundish(cut)
+    # a backdrop that isn't one plain colour can't be keyed: the stage asks BiRefNet instead
+    rng = np.random.default_rng(1)
+    assert plogo.key(Image.fromarray(rng.integers(0, 256, (200, 200, 3), dtype=np.uint8))) is None
+    mask = Image.new("L", (100, 100), 0)
+    mask.paste(255, (25, 25, 75, 75))
+    got = plogo.with_mask(Image.new("RGB", (400, 400), (9, 9, 9)), mask).size
+    assert all(200 <= v <= 208 for v in got), got
+    # a logo that already has transparency only gets cropped
+    assert plogo.key(art()).size == (300, 200)
+
+
+def test_a_cut_logo_is_cached_per_kit_and_file(tmp_path):
+    src = tmp_path / "logo.png"
+    badge(back=(240, 240, 240)).save(src)
+    first = plogo.cut(tmp_path / "cache", "kit1", src)
+    assert first is not None and first.is_file()
+    assert plogo.cut(tmp_path / "cache", "kit1", src) == first
+    assert plogo.cut(tmp_path / "cache", "kit2", src) != first
+    noisy = tmp_path / "noisy.png"
+    Image.fromarray(np.random.default_rng(2).integers(0, 256, (120, 120, 3), dtype=np.uint8)).save(noisy)
+    assert plogo.cut(tmp_path / "cache", "kit1", noisy) is None  # stays off the design, never a box
+    m = tmp_path / "mask.png"
+    Image.new("L", (120, 120), 255).save(m)
+    assert plogo.cut(tmp_path / "cache", "kit1", noisy, m) is not None
+
+
+@pytest.mark.parametrize("layout,design", [("stack", "typographic"), ("hero_top", "photo"),
+                                           ("photo_middle", "photo"), ("logo_hero", "typographic")])
+def test_a_board_logo_is_a_hero(layout, design):
+    sc, a = board(layout, design)
+    rep = sc.report
+    assert rep["layout"] == layout and rep["used"]["logo"]
+    assert rep["logo_width"] >= 0.3, rep["logo_width"]
+    logo = next(e for e in sc.els if e.src == "logo")
+    assert (logo.box[1] + logo.box[3]) / 2 < 1600 * 0.5  # top third or the middle, never down with the small print
+    if layout != "logo_hero":
+        name = next(e for e in sc.els if e.role == "name")
+        assert logo.box[3] <= name.box[1] + 0.5  # above the name, as big as a hero
+    # the body copy keeps the board's floor; on a photo layout the picture gave way for it
+    body = [e for e in sc.els if e.kind == "text" and e.role in ("offers", "cta", "tagline")]
+    assert {e.role for e in body} == {"offers", "cta", "tagline"} and not rep["dropped"], rep["dropped"]
+    assert min(e.cap for e in body) >= 1060 * 0.028 - 0.05
+    assert rep["min_text"]["pass"] and rep["all_pass"], rep
+    raster.render(sc, a, raster.k_for(sc, 500))
+
+
+def test_logo_hero_leaves_out_the_kit_name_and_falls_back_without_a_logo():
+    sc, _ = board("logo_hero", texts={**TEXTS, "name": "Stjärnans  livs"})
+    logo = next(e for e in sc.els if e.src == "logo")
+    assert 0.4 <= sc.report["logo_width"] <= 0.6 and sc.report["name_in_logo"]
+    # the logo carries the name: no name line at all, the tagline straight under the logo
+    assert not any(e.role == "name" for e in sc.els)
+    first = min((e for e in sc.els if e.kind == "text" and e.box[1] > logo.box[3]), key=lambda e: e.box[1])
+    assert first.role == "tagline"
+    other, _ = board("logo_hero", brand_name="Another Brand")
+    assert next(e for e in other.els if e.role == "name").cap > sz.min_cap_mm("street") * 2
+    plain, _ = board("logo_hero", logo=False)
+    assert plain.report["layout"] == "stack" and plain.report["fallback"]["asked"] == "logo_hero"
+
+
+def test_one_option_is_offered_logo_led():
+    from types import SimpleNamespace
+
+    from app.print_studio import service as ps
+
+    b = {"job": "board", "width_cm": 106, "height_cm": 160, "shape": "rect",
+         "lines": {"name": "Stjärnans Livs"}}
+    kit = SimpleNamespace(name="stjärnans livs", logos={"primary": {"media_id": "m1"}})
+    rows = [{"family": "photo"}, {"family": "typographic"}, {"family": "illustration"}]
+    ps.spread(rows, b, True)
+    ps.offer_logo_hero(rows, b, kit)
+    assert [r["layout"] for r in rows].count("logo_hero") == 1 and rows[1]["layout"] == "logo_hero"
+    assert "logo_hero" not in ps.layouts_for(b, "typographic") and "logo_hero" in ps.layouts_for(b, "typographic", True)
+    other = [{"family": "photo"}]
+    ps.offer_logo_hero(other, b, SimpleNamespace(name="Else", logos=kit.logos))
+    assert "layout" not in other[0]
+
+
+@pytest.mark.parametrize("align_layout", ["stack", "logo_hero"])
+def test_bullets_share_one_x_and_wrapped_lines_hang(align_layout):
+    offers = ["Färska grönsaker och frukt varje morgon direkt från odlare här i närheten", "Bröd", "Kaffe to go"]
+    sc, _ = board(align_layout, texts={**TEXTS, "offers": offers})
+    bullets = [e for e in sc.els if e.role == "bullet"]
+    lines = [e for e in sc.els if e.role == "offers"]
+    assert len(bullets) == 3 and len(lines) == 3
+    assert len({round(e.box[0], 3) for e in bullets}) == 1  # every bullet on the same x
+    assert len({round(e.box[0], 3) for e in lines}) == 1 and all(e.align == "left" for e in lines)
+    assert len(lines[0].lines) > 1 and len(lines[1].lines) == 1  # wrapped and unwrapped, one block
+    # the block as a whole sits in the middle of the column
+    right = max(e.box[0] + max(sc_width(sc, e, ln) for ln in e.lines) for e in lines)
+    assert abs((bullets[0].box[0] + right) / 2 - 530) < 1060 * 0.03
+
+
+def sc_width(sc, e, line) -> float:
+    from PIL import ImageDraw
+
+    from app.ads import layout as lay
+
+    f = pf.font(e.face, 200)
+    return lay._width(ImageDraw.Draw(Image.new("L", (4, 4))), line, f, sc.lang) / 200 * e.em
+
+
+def test_footer_on_a_big_board_is_read_from_the_street():
+    for layout in ("stack", "hero_top"):
+        sc, _ = board(layout, "photo")
+        info = [e for e in sc.els if e.kind == "text" and e.role in ("hours", "phone", "address")]
+        assert {e.role for e in info} == {"hours", "phone", "address"}, sc.report["dropped"]
+        assert all(e.cap >= sz.min_cap_mm("street") for e in info)
+        # two or more rows at a size that suits the board, not one thin strip of 15 mm letters
+        assert len({round(e.box[1]) for e in info}) >= 2 and min(e.cap for e in info) >= 1060 * 0.03
+        band = next(e for e in sc.els if e.role == "band")
+        assert all(e.box[1] >= band.box[1] for e in info)
+
+
+def test_board_type_is_heavy_and_follows_a_round_logo():
+    assert pf.board_preset("modern", False, False) == "bold" and pf.board_preset("impact", False, False) == "impact"
+    assert pf.board_preset("modern", True, False) == "friendly" and pf.board_preset("bold", True, True) == "friendly"
+    assert pf.board_preset("brand", True, True) == "brand"
+    sc, _ = board("stack", font_preset="modern", font_auto=True)
+    assert sc.report["font"]["preset"] == "friendly"
+    name = next(e for e in sc.els if e.role == "name")
+    assert name.face.path.name == "Poppins-ExtraBold.ttf"
+    kept, _ = board("stack", font_preset="modern")  # the owner's own pick is left alone
+    assert kept.report["font"]["preset"] == "modern"
+    anton, _ = board("stack", display_font="anton")
+    assert next(e for e in anton.els if e.role == "name").face.path.name == "Anton-Regular.ttf"
+
+
+def test_a_board_with_a_kit_logo_end_to_end(client, llm):
+    from app.print_studio import service as ps
+    from tests.test_brand import asset
+
+    buf = io.BytesIO()
+    badge().save(buf, "PNG")
+    logo = asset(client, "logo", "badge.png", buf.getvalue()).json()["item"]["id"]
+    r = client.post("/api/brand-kits", json={"name": "Stjärnans Livs", "logos": {"primary": {"media_id": logo}},
+                                             "palette": [{"hex": "#1E7B3A"}, {"hex": "#F5B700"}, {"hex": "#FAF6E8"}]})
+    assert r.status_code == 201, r.text
+    j = make(client, job="board", width_cm=106, height_cm=160, variants=2, brand_kit_id=r.json()["id"])
+    assert j["status"] == "done", j["stages"]
+    assert [c["layout"] for c in j["concepts"]].count("logo_hero") == 1
+    for d in j["designs"]:
+        assert d["report"]["used"]["logo"] and d["report"]["logo_width"] >= 0.25, d["report"]
+        assert d["spec"]["font_auto"] and d["spec"]["brand_name"] == "Stjärnans Livs"
+    with SessionLocal() as db:
+        c = db.get(AdCampaign, j["id"])
+        kit = ps.ads.kit_of(db, c)
+        from app import brand as br
+
+        path = br.media_file(db, kit.workspace_id, logo)
+        cached = ps.logo_cut(kit, path)
+        assert cached is not None and cached.is_file()
+        with Image.open(cached) as im:
+            assert im.mode == "RGBA" and im.getpixel((0, 0))[3] == 0
+    d = j["designs"][0]
+    bad = client.patch(f"/api/print/{j['id']}/designs/{d['id']}", json={"display_font": "comic"})
+    assert bad.status_code == 422
+    ok = client.patch(f"/api/print/{j['id']}/designs/{d['id']}", json={"display_font": "bebas"})
+    assert ok.status_code == 200 and ok.json()["spec"]["display_font"] == "bebas"
+    assert {"id": "anton", "label": "Anton"} in client.get("/api/print/options").json()["display_fonts"]
+
+
+def test_an_unkeyable_logo_asks_birefnet_once(client, llm):
+    from tests.test_brand import asset
+
+    buf = io.BytesIO()
+    # a logo on a photo-like backdrop: nothing plain to key, so the cut-out mask has to do it
+    Image.fromarray(np.random.default_rng(4).integers(0, 256, (300, 300, 3), dtype=np.uint8)).save(buf, "PNG")
+    logo = asset(client, "logo", "busy.png", buf.getvalue()).json()["item"]["id"]
+    r = client.post("/api/brand-kits", json={"name": "Busy", "logos": {"primary": {"media_id": logo}}})
+    assert r.status_code == 201, r.text
+    j = make(client, job="board", width_cm=106, height_cm=160, variants=1, brand_kit_id=r.json()["id"])
+    assert j["status"] == "done", j["stages"]
+    with SessionLocal() as db:
+        c = db.get(AdCampaign, j["id"])
+        cut = ((c.stages or {}).get("pictures") or {}).get("logo_cuts") or {}
+        g = db.get(Generation, (cut.get(logo) or {}).get("cutout") or "")
+        assert g is not None and (g.params or {}).get("restore", {}).get("tool") == "cutout"
+        assert g.params["print_job"] == c.id
+        # the mask came back: the logo is cut by it, cached, and on the design
+        assert ((g.params or {}).get("cutout") or {}).get("mask_file")
+    assert j["designs"][0]["report"]["used"]["logo"]
 
 
 # ---------------------------------------------------------------- MCP

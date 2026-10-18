@@ -37,6 +37,32 @@ PRESETS: dict[str, dict] = {
         "display": _v("playfair-display", fz.PLAYFAIR, 800), "bold": _v(*INTER, 700), "text": _v(*INTER, 500)}},
 }
 DEFAULT = "bold"
+# heavy enough to carry a board's name from across the street
+HEAVY = ("bold", "condensed", "impact", "friendly")
+# the name's face on its own, chosen apart from the preset (Latin only)
+DISPLAY: dict[str, tuple[str, Face]] = {
+    "archivo": ("Archivo Black", _v("archivo-black", "ArchivoBlack-Regular.ttf")),
+    "anton": ("Anton", _v("anton", "Anton-Regular.ttf")),
+    "bebas": ("Bebas Neue", _v("bebas-neue", "BebasNeue-Regular.ttf")),
+    "poppins": ("Poppins ExtraBold", Face(ROOT / "poppins" / "Poppins-ExtraBold.ttf")),
+    "montserrat": ("Montserrat ExtraBold", _v(*MONT, 800)),
+    "oswald": ("Oswald Bold", _v("oswald", OSWALD, 700)),
+    "playfair": ("Playfair Display Black", _v("playfair-display", fz.PLAYFAIR, 900)),
+}
+
+
+def board_preset(preset: str, round_logo: bool, logo_led: bool) -> str:
+    """The preset a sign or board gets when nobody picked one by hand: a light face goes up to a heavy display
+    one, and a rounded badge logo pulls towards the rounded geometric Poppins ExtraBold that sits with it."""
+    if preset == fz.BRAND:
+        return preset
+    if round_logo and (logo_led or preset not in HEAVY):
+        return "friendly"
+    return preset if preset in HEAVY else DEFAULT
+
+
+def display_out() -> list[dict]:
+    return [{"id": k, "label": v[0]} for k, v in DISPLAY.items()]
 
 
 def faces(preset: str, script: str, brand_fonts: list[Path] | None = None) -> tuple[dict[str, Face], bool]:

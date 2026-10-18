@@ -15,6 +15,7 @@ Text only ever sits on solid colour (ground, band or panel), never straight on a
 exact and nudged to WCAG AA. Ad Studio's text measuring, wrapping, shaping and contrast maths are reused.
 """
 from dataclasses import dataclass, field, replace
+from itertools import combinations
 
 from PIL import Image, ImageDraw
 
@@ -22,19 +23,22 @@ from app.ads import layout as lay
 from app.ads.fonts import Face, script_of
 from app.print_studio import fonts as pf
 from app.print_studio import gamut
+from app.print_studio import logo as plogo
 from app.print_studio import sizes as sz
 
 LAYOUTS = {
     "wide": ("band", "awning", "photo_side"),
-    "tall": ("stack", "hero_top", "photo_middle"),
-    "square": ("centre", "photo_circle"),
+    "tall": ("stack", "hero_top", "photo_middle", "logo_hero"),
+    "square": ("centre", "photo_circle", "logo_hero"),
     "sheet": ("menu", "menu_photo"),
 }
 PHOTO_LAYOUTS = ("photo_side", "hero_top", "photo_middle", "photo_circle", "menu_photo")
+LOGO_LAYOUTS = ("logo_hero",)  # only offered when the brand kit has a logo
 LAYOUT_LABELS = {"band": "Name with emblem and a contact band", "awning": "Awning stripes over the name",
                  "photo_side": "Photo at the side", "stack": "Stacked lines", "hero_top": "Photo on top",
                  "photo_middle": "Name, photo, details", "centre": "Centred", "photo_circle": "Photo in a circle",
-                 "menu": "Menu / price list", "menu_photo": "Menu with a photo"}
+                 "menu": "Menu / price list", "menu_photo": "Menu with a photo",
+                 "logo_hero": "The logo as the headline"}
 DESIGN_FAMILIES = ("typographic", "photo", "illustration")
 DECOR = ("none", "awning", "frame")
 TEXT_KEYS = ("name", "tagline", "headline", "offers", "hours", "phone", "address", "website", "cta")
@@ -176,6 +180,7 @@ class Row:
     aspect: float = 1.0
     src: str = ""
     pill: str = ""  # pill fill
+    fixed: bool = False  # art that keeps its size while the type around it shrinks (a hero logo)
     # filled while sizing
     got: float = 0.0
     out_lines: list = field(default_factory=list)
@@ -197,14 +202,17 @@ class Stack:
         """Size one row at the scale; False when it can't stay above its minimum."""
         t, w = self.t, self.w
         if r.kind == "art":
-            r.h = min(r.height * scale, w / max(r.aspect, 1e-6))
-            return r.h >= r.min_cap
+            r.h = min(r.height * (1.0 if r.fixed else scale), w / max(r.aspect, 1e-6))
+            return r.fixed or r.h >= r.min_cap
+        # type shrinks with the scale down to its own floor and no further, so the big lines give way before a
+        # small one is dropped; a row only fails when even its floor won't fit the width
+        cap = max(r.cap * scale, min(r.cap, r.min_cap))
         if r.kind == "text":
-            r.got, r.out_lines = t.fit(r.text, r.face, w, r.cap * scale, r.lines)
+            r.got, r.out_lines = t.fit(r.text, r.face, w, cap, r.lines)
             r.h = t.block(r.face, r.got, len(r.out_lines))
             return r.got >= r.min_cap - 1e-6
         if r.kind == "pill":
-            r.got, r.out_lines = t.fit(r.text, r.face, w * 0.8, r.cap * scale, 1)
+            r.got, r.out_lines = t.fit(r.text, r.face, w * 0.8, cap, 1)
             r.h = r.got * 2.6
             return r.got >= r.min_cap - 1e-6
         if r.kind == "info":
@@ -219,9 +227,9 @@ class Stack:
                     return w - r.cap * scale * 1.6
                 return w * (0.62 if lay.split_price(o)[1] else 1.0)
 
-            caps = [t.fit(label(o), r.face, room(o), r.cap * scale, 2)[0] for o in r.items]
+            caps = [t.fit(label(o), r.face, room(o), cap, r.lines)[0] for o in r.items]
             r.got = min(caps) if caps else 0.0
-            r.parts = [t.fit(label(o), r.face, room(o), r.got, 2)[1] for o in r.items]
+            r.parts = [t.fit(label(o), r.face, room(o), r.got, r.lines)[1] for o in r.items]
             if not r.got:
                 r.h = 0
                 return True
@@ -241,11 +249,21 @@ class Stack:
             # icon, a small gap, the text; groups on one line are spaced by 1.6 caps
             return sum(1.35 + 0.45 + t.width(x, r.face) / t.m(r.face)["cap"] for _, x, _r in group) + 1.6 * (len(group) - 1)
 
-        one = min(r.cap * scale, w / line_w(items))
-        if one >= r.min_cap - 1e-6 or r.lines == 1:
-            r.got, r.multi, r.parts = one, False, [[(*it, [it[1]]) for it in items]]
-            r.h = one * 1.35
-            return one >= r.min_cap - 1e-6
+        want = max(r.cap * scale, min(r.cap, r.min_cap))
+        # whole items on one row, or on two or more when that sets them clearly bigger: a single thin strip
+        # of small print along a big board passes the minimum and still can't be read from across the street
+        c, groups = 0.0, [items]
+        for n in range(1, min(max(1, r.lines), len(items)) + 1):
+            split = _rows_of(items, n, line_w)
+            got = min(want, min(w / line_w(g) for g in split))
+            if not c or got > c * 1.25:
+                c, groups = got, split
+            if got >= want - 1e-6:
+                break
+        if c >= r.min_cap - 1e-6 or r.lines == 1:
+            r.got, r.multi, r.parts = c, len(groups) > 1, [[(*it, [it[1]]) for it in g] for g in groups]
+            r.h = len(groups) * c * 1.35 + (len(groups) - 1) * c * 0.75
+            return c >= r.min_cap - 1e-6
         if len(items) > r.lines:
             return False
         # one item a line, and a long one (the opening hours on a narrow sign) may wrap to a second
@@ -386,16 +404,19 @@ class Stack:
         x0, _, x1, _ = self.box
         out = []
         ink = lay.ensure_contrast(r.colour, lay.lum(r.on), NEED)
+        # the bullets are one left-aligned block, the block centred (or set to the stack's side): every bullet
+        # on the same x, a wrapped line hanging under its own text rather than under the bullet
+        block = max((t.width(ln, r.face) * em for ls in r.parts for ln in ls), default=0.0) + c * 1.6
+        bx0, bx1 = self._x(min(block, x1 - x0))
         for item, lines in zip(r.items, r.parts):
             h = c + (len(lines) - 1) * adv
             if r.kind == "offers":
                 d = c * 0.55
-                widest = max(t.width(ln, r.face) * em for ln in lines) + c * 1.6
-                lx0, _ = self._x(widest)
                 accent = r.pill or ink
-                out.append(El("circle", "background", (lx0, y + c / 2 - d / 2, lx0 + d, y + c / 2 + d / 2),
+                out.append(El("circle", "background", (bx0, y + c / 2 - d / 2, bx0 + d, y + c / 2 + d / 2),
                               fill=accent, role="bullet"))
-                out.append(text_el(t, "offers", r.face, lines, c, (lx0 + c * 1.6, y, x1, y + h), ink, "left", r.on))
+                out.append(text_el(t, "offers", r.face, lines, c, (bx0 + c * 1.6, y, max(bx1, bx0 + c * 1.6), y + h),
+                                   ink, "left", r.on))
             else:
                 pre, num, post = lay.split_price(item)
                 out.append(text_el(t, "offers", r.face, lines, c, (x0, y, x1, y + h), ink, "left", r.on))
@@ -406,6 +427,20 @@ class Stack:
                               fill=lay.hexs(lay.mix(ink, r.on or "#FFFFFF", 0.75)), role="rule"))
             y += h + c * 0.9
         return out
+
+
+def _rows_of(items: list, n: int, width) -> list[list]:
+    """The items in order on n rows, split where the widest row comes out narrowest."""
+    if n <= 1:
+        return [list(items)]
+    best, out = None, [list(items)]
+    for cuts in combinations(range(1, len(items)), n - 1):
+        edges = (0, *cuts, len(items))
+        rows = [list(items[a:b]) for a, b in zip(edges, edges[1:])]
+        widest = max(width(g) for g in rows)
+        if best is None or widest < best:
+            best, out = widest, rows
+    return out
 
 
 def _menu_label(o: str) -> str:
@@ -482,14 +517,32 @@ class Builder:
         self.texts = {k: (t.get(k) or ([] if k == "offers" else "")) for k in TEXT_KEYS}
         self.script = script_of(self.lang, " ".join([self.texts["name"], self.texts["headline"],
                                                      self.texts["tagline"]]))
-        faces, caps = pf.faces(spec.get("font_preset") or pf.DEFAULT, self.script, spec.get("brand_fonts") or [])
+        self.job = spec.get("job") or "sign"
+        logo_on = (spec.get("logo") or {}).get("position") != "none"
+        self.logo = assets.logo if logo_on else None
+        self.logo_round = self.logo is not None and plogo.roundish(self.logo)
+        # the kit's name on its own logo: a logo-led design needn't set it big a second time
+        brand = " ".join((spec.get("brand_name") or "").split()).casefold()
+        self.name_in_logo = bool(self.logo is not None and brand and
+                                 " ".join(self.texts["name"].split()).casefold() == brand)
+        preset = spec.get("font_preset") or pf.DEFAULT
+        if spec.get("font_auto") and self.job in ("board", "sign"):
+            preset = pf.board_preset(preset, self.logo_round, spec.get("layout") == "logo_hero")
+        faces, caps = pf.faces(preset, self.script, spec.get("brand_fonts") or [])
+        display = pf.DISPLAY.get(spec.get("display_font") or "")
+        if display is not None and self.script == "latin":
+            faces = {**faces, "display": display[1]}
         self.caps = caps if spec.get("caps") is None else bool(spec.get("caps")) and self.script == "latin"
         self.t = Type(faces, self.script, self.lang)
         self.col = colours_of(spec)
         self.distance = spec.get("distance") or "street"
         self.min_cap = sz.min_cap_mm(self.distance)
         self.hero_cap = sz.hero_cap_mm(self.distance)
-        self.report: dict = {"dropped": [], "contrast": {}, "below_min": []}
+        # body copy on a sign or board (offers, the button, a hero line under a photo) is never set much smaller
+        # than the contact band: the distance minimum, or about 3 % of the short side when that's larger
+        self.body_min = max(self.min_cap, self.s * 0.028) if self.job in ("board", "sign") else self.min_cap
+        self.report: dict = {"dropped": [], "contrast": {}, "below_min": [],
+                             "font": {"preset": preset, "display": spec.get("display_font") or None}}
         self.els: list[El] = []
 
     # -- pieces
@@ -505,14 +558,30 @@ class Builder:
         """(asset key, width / height) of what goes at the start of the name: the illustration on an
         illustration design, else the kit logo."""
         fam = self.spec.get("design") or "typographic"
-        logo_on = (self.spec.get("logo") or {}).get("position") != "none"
         if fam == "illustration" and self.assets.art is not None:
             a = self.assets.art
             return "art", a.width / a.height
-        if logo_on and self.assets.logo is not None:
-            a = self.assets.logo
-            return "logo", a.width / a.height
+        if self.logo is not None:
+            return "logo", self.logo.width / self.logo.height
         return None
+
+    @property
+    def hero_logo(self) -> bool:
+        """A sign or board with the kit's logo as its emblem: the logo is a hero, never a small mark."""
+        e = self.emblem()
+        return e is not None and e[0] == "logo" and self.job in ("board", "sign")
+
+    def logo_size(self, room_h: float, frac: float = 0.34) -> float:
+        """The hero logo's height: about a third of the trim width for a badge (more for a wide wordmark, which
+        is thin), at most room_h."""
+        asp = self.logo.width / self.logo.height
+        w = min(self.W - 2 * self.m, self.W * min(0.8, frac * max(1.0, asp) ** 0.5))
+        return min(w / asp, room_h)
+
+    def logo_row(self, room_h: float, frac: float = 0.34) -> Row:
+        asp = self.logo.width / self.logo.height
+        return Row("logo", kind="art", src="logo", height=self.logo_size(room_h, frac), aspect=asp, keep=8,
+                   gap=0.12, fixed=True)
 
     def info_items(self) -> list[tuple]:
         return [(icon, (self.texts[k] or "").strip(), k) for k, icon in INFO_KEYS if (self.texts[k] or "").strip()]
@@ -533,12 +602,12 @@ class Builder:
                     self.name_row(big * 0.5, 2, c["ink"], on), self.tagline_row(tag * 0.8, on)]
         rows = [self.name_row(big, lines, c["ink"], on), self.tagline_row(tag, on)]
         if headline:
-            rows.append(Row("headline", text=headline, face="bold", cap=tag * 0.85, min_cap=self.min_cap, lines=2,
+            rows.append(Row("headline", text=headline, face="bold", cap=tag * 0.85, min_cap=self.body_min, lines=2,
                             keep=6, colour=c["accent_ink"], on=on, gap=1.0))
         return rows
 
     def tagline_row(self, cap: float, on: str, colour: str | None = None) -> Row:
-        return Row("tagline", text=self.texts["tagline"], face="bold", cap=cap, min_cap=self.min_cap, lines=2, keep=7,
+        return Row("tagline", text=self.texts["tagline"], face="bold", cap=cap, min_cap=self.body_min, lines=2, keep=7,
                    colour=colour or self.col["ink"], on=on, gap=0.7)
 
     def info_row(self, cap: float, on: str, colour: str, lines: int = 1, gap: float = 0.0) -> Row:
@@ -547,11 +616,12 @@ class Builder:
 
     def offers_row(self, cap: float, on: str, kind: str = "offers") -> Row:
         offers = [o for o in self.texts["offers"] or [] if (o or "").strip()][:8]
-        return Row("offers", kind=kind, items=offers, face="bold", cap=cap, min_cap=self.min_cap, keep=3,
-                   colour=self.col["ink"], on=on, pill=self.col["accent"], gap=1.2)
+        big = kind == "offers" and self.job in ("board", "sign")
+        return Row("offers", kind=kind, items=offers, face="bold", cap=cap, min_cap=self.body_min, keep=3,
+                   lines=3 if big else 2, colour=self.col["ink"], on=on, pill=self.col["accent"], gap=1.2)
 
     def cta_row(self, cap: float) -> Row:
-        return Row("cta", kind="pill", text=self.texts["cta"], face="bold", cap=cap, min_cap=self.min_cap, keep=2,
+        return Row("cta", kind="pill", text=self.texts["cta"], face="bold", cap=cap, min_cap=self.body_min, keep=2,
                    colour=self.col["band_ink"], pill=self.col["accent"], gap=1.0)
 
     def art_row(self, height: float, min_h: float) -> Row | None:
@@ -650,7 +720,7 @@ class Builder:
         self.els.append(El("rect", "background", (split - self.s * 0.04, -self.B, split, H + self.B),
                            fill=c["accent"], role="rule"))
         col_h = H - 2 * m
-        rows = [self.art_row(col_h * 0.16, col_h * 0.07)]
+        rows = [self.logo_row(col_h * 0.34) if self.hero_logo else self.art_row(col_h * 0.16, col_h * 0.07)]
         rows += self.hero_rows(col_h * 0.36, c["ground"], lines=2, tag=col_h * 0.13)
         rows.append(self.info_row(max(self.min_cap, col_h * 0.08), c["ground"], c["ink"], 2, gap=1.4))
         self.els += self.stack((m, m, split - self.s * 0.04 - m, H - m), rows, "left")
@@ -659,33 +729,65 @@ class Builder:
         W, H, m, c = self.W, self.H, self.m, self.col
         self.els.append(self.full(0, H, c["ground"]))
         top = self.decor(self.spec.get("decor") or "none")
-        band_h, row = self.band(max(self.min_cap, W * 0.05), 4)
+        band_h, row = self.band(max(self.min_cap, W * 0.045), 4)
         if row is not None:
             self.put_band(band_h, row)
         y0, y1 = max(m, top + m * 0.6), H - band_h - m * 0.8
         col_h = y1 - y0
         rows = self.hero_rows(min(W * 0.2, col_h * 0.2), c["ground"], lines=3, tag=W * 0.075)
-        rows.insert(2, self.art_row(col_h * 0.3, col_h * 0.1))
+        if self.hero_logo:
+            rows.insert(0, self.logo_row(col_h * 0.34, 0.38))
+        else:
+            rows.insert(2, self.art_row(col_h * 0.3, col_h * 0.1))
         rows.append(self.offers_row(W * 0.045, c["ground"]))
         rows.append(self.cta_row(W * 0.045))
         self.els += self.stack((m, y0, W - m, y1), rows, "center", "spread")
 
+    def fits(self, box, rows: list) -> bool:
+        """Whether the rows fit the box with nothing dropped and nothing under its minimum (a dry run)."""
+        rep: dict = {}
+        Stack(self.t, box, "center", "spread", rep).run([r for r in rows if r is not None])
+        return not rep.get("dropped") and not rep.get("below_min")
+
     def tall_hero_top(self) -> None:
         W, H, m, c = self.W, self.H, self.m, self.col
-        ph = H * (0.44 if W / H > 0.5 else 0.36)
         self.els.append(self.full(0, H, c["ground"]))
-        self.photo((-self.B, -self.B, W + self.B, ph))
-        self.els.append(El("rect", "background", (-self.B, ph, W + self.B, ph + max(1.0, self.s * 0.015)),
-                           fill=c["accent"], role="rule"))
         band_h, row = self.band(max(self.min_cap, W * 0.035), 3)
         if row is not None:
             self.put_band(band_h, row)
-        y0, y1 = ph + m * 0.9, H - band_h - m * 0.7
-        col_h = y1 - y0
-        rows = [self.art_row(col_h * 0.12, col_h * 0.05)]
-        rows += self.hero_rows(min(W * 0.15, col_h * 0.22), c["ground"], lines=2, tag=W * 0.06)
-        rows.append(self.offers_row(W * 0.04, c["ground"]))
-        rows.append(self.cta_row(W * 0.04))
+        y1 = H - band_h - m * 0.7
+
+        def column(ph: float):
+            y0 = ph + m * 0.9
+            col_h = y1 - y0
+            badge = None
+            rows = [self.art_row(col_h * 0.12, col_h * 0.05)]
+            if self.hero_logo and self.logo_round:
+                # a badge sits across the photo's lower edge, centred: the board's focal point
+                lh = self.logo_size(min(ph * 0.6, col_h * 0.7))
+                lw = lh * self.logo.width / self.logo.height
+                badge = El("image", "logo", ((W - lw) / 2, ph - lh / 2, (W + lw) / 2, ph + lh / 2), src="logo",
+                           fit="contain", role="logo")
+                y0 = ph + lh / 2 + m * 0.6
+                col_h = y1 - y0
+                rows = []
+            elif self.hero_logo:
+                rows = [self.logo_row(col_h * 0.3)]
+            rows += self.hero_rows(min(W * 0.15, col_h * 0.22), c["ground"], lines=2, tag=W * 0.06)
+            rows.append(self.offers_row(W * 0.04, c["ground"]))
+            rows.append(self.cta_row(W * 0.04))
+            return y0, rows, badge
+
+        # the picture gives way before the copy does: it shortens until the lines fit at their full minimum
+        ph = H * (0.44 if W / H > 0.5 else 0.36)
+        while ph > H * 0.24 and not self.fits((m, column(ph)[0], W - m, y1), column(ph)[1]):
+            ph -= H * 0.02
+        y0, rows, badge = column(ph)
+        self.photo((-self.B, -self.B, W + self.B, ph))
+        self.els.append(El("rect", "background", (-self.B, ph, W + self.B, ph + max(1.0, self.s * 0.015)),
+                           fill=c["accent"], role="rule"))
+        if badge is not None:
+            self.els.append(badge)
         self.els += self.stack((m, y0, W - m, y1), rows, "center", "spread")
 
     def tall_photo_middle(self) -> None:
@@ -694,18 +796,30 @@ class Builder:
         band_h, row = self.band(max(self.min_cap, W * 0.035), 3)
         if row is not None:
             self.put_band(band_h, row)
-        top_h = H * 0.24
-        p0, p1 = top_h, H * 0.62
-        rows = [self.name_row(min(W * 0.17, top_h * 0.5), 2, c["ink"], c["ground"]),
+        hero = self.hero_logo
+        top_h = H * (0.34 if hero else 0.24)
+        rows = [self.name_row(min(W * 0.17, top_h * (0.28 if hero else 0.5)), 2, c["ink"], c["ground"]),
                 self.tagline_row(W * 0.055, c["ground"])]
+        if hero:
+            rows.insert(0, self.logo_row(top_h * 0.62, 0.38))
         self.els += self.stack((m, m, W - m, top_h - m * 0.5), rows, "center", "center")
+        y1 = H - band_h - m * 0.7
+
+        def low(p1: float) -> list:
+            rows = [Row("headline", text=self.texts["headline"], face="bold", cap=W * 0.06, min_cap=self.body_min,
+                        lines=2, keep=6, colour=c["accent_ink"], on=c["ground"]),
+                    self.offers_row(W * 0.04, c["ground"]), self.cta_row(W * 0.04)]
+            if not hero:
+                low_h = y1 - (p1 + m * 0.8)
+                rows.append(self.art_row(low_h * 0.2, low_h * 0.08))
+            return rows
+
+        # the photo band shortens until the lines under it fit at their full minimum
+        p0, p1 = top_h, H * (0.66 if hero else 0.62)
+        while p1 > p0 + H * 0.18 and not self.fits((m, p1 + m * 0.8, W - m, y1), low(p1)):
+            p1 -= H * 0.02
         self.photo((m * 0.6, p0, W - m * 0.6, p1), shape="rounded", radius=self.s * 0.03)
-        low = [Row("headline", text=self.texts["headline"], face="bold", cap=W * 0.06, min_cap=self.min_cap, lines=2,
-                   keep=6, colour=c["accent_ink"], on=c["ground"]),
-               self.offers_row(W * 0.04, c["ground"]), self.cta_row(W * 0.04)]
-        low_h = H - band_h - m * 0.7 - (p1 + m * 0.8)
-        low.append(self.art_row(low_h * 0.2, low_h * 0.08))
-        self.els += self.stack((m, p1 + m * 0.8, W - m, H - band_h - m * 0.7), low, "center", "spread")
+        self.els += self.stack((m, p1 + m * 0.8, W - m, y1), low(p1), "center", "spread")
 
     def square_centre(self, with_photo: bool = False) -> None:
         W, H, m, c = self.W, self.H, self.m, self.col
@@ -730,12 +844,53 @@ class Builder:
             box = (box[0], box[1] + d + m * 0.5, box[2], box[3])
             bh = box[3] - box[1]
         else:
-            rows.append(self.art_row(bh * 0.3, bh * 0.1))
+            rows.append(self.logo_row(bh * 0.34) if self.hero_logo else self.art_row(bh * 0.3, bh * 0.1))
+        if with_photo and self.hero_logo:
+            rows.append(self.logo_row(bh * 0.24))
         rows += self.hero_rows(bh * 0.2, c["ground"], lines=2, tag=bh * 0.08)
-        if with_photo:
+        if with_photo and not self.hero_logo:
             rows.append(self.art_row(bh * 0.12, bh * 0.05))
         rows.append(self.info_row(max(self.min_cap, bh * 0.045), c["ground"], c["ink"], 3, gap=1.3))
         self.els += self.stack(box, rows, "center", "center")
+
+    def logo_hero(self) -> None:
+        """The kit's logo is the headline: big and centred in the upper part, the name under it (left out when
+        the logo already carries it), then the lines and the contact band."""
+        W, H, m, c = self.W, self.H, self.m, self.col
+        self.els.append(self.full(0, H, c["ground"]))
+        if self.round:
+            ring = max(0.6, self.s * 0.012)
+            self.els.append(El("frame", "background", (m * 0.5, m * 0.5, W - m * 0.5, H - m * 0.5), fill=c["accent"],
+                               stroke=ring, radius=(W - m) / 2, role="ring"))
+            inset = W * (1 - 0.7071) / 2 + m * 0.4
+            box = (inset, inset, W - inset, H - inset)
+            band_h = 0.0
+        else:
+            top = self.decor(self.spec.get("decor") or "none")
+            band_h, row = self.band(max(self.min_cap, W * 0.04), 4 if W < H else 2)
+            if row is not None:
+                self.put_band(band_h, row)
+            box = (m, max(m, top + m * 0.6), W - m, H - band_h - m * 0.8)
+        col_h = box[3] - box[1]
+        tall = H > W * 1.3
+        rows = [self.logo_row(col_h * (0.5 if tall else 0.42), 0.62)]
+        tag = W * 0.06
+        if self.name_in_logo:
+            # the logo says the name: no second name line, the tagline follows straight on
+            self.report["name_in_logo"] = True
+            rows.append(self.tagline_row(tag * 1.15, c["ground"]))
+        else:
+            rows.append(self.name_row(min(W * 0.14, col_h * 0.14), 2, c["ink"], c["ground"]))
+            rows.append(self.tagline_row(tag, c["ground"]))
+        if self.texts["headline"]:
+            rows.append(Row("headline", text=self.caps_of(self.texts["headline"]), face="display", cap=W * 0.07,
+                            min_cap=self.min_cap * 1.2, lines=2, keep=6, colour=c["accent_ink"], on=c["ground"],
+                            gap=1.0))
+        rows.append(self.offers_row(W * 0.04, c["ground"]))
+        rows.append(self.cta_row(W * 0.04))
+        if self.round:
+            rows.append(self.info_row(max(self.min_cap, col_h * 0.045), c["ground"], c["ink"], 3, gap=1.3))
+        self.els += self.stack(box, rows, "center", "spread" if tall else "center")
 
     def sheet_menu(self, with_photo: bool = False) -> None:
         W, H, m, c = self.W, self.H, self.m, self.col
@@ -784,7 +939,10 @@ class Builder:
             # no picture yet (or a typographic concept moved to another shape): the plain layout of the family
             self.report["fallback"] = {"asked": layout, "used": LAYOUTS[fam][0]}
             layout = LAYOUTS[fam][0]
-        {"band": self.wide_band, "awning": lambda: self.wide_band(awning=True), "photo_side": self.wide_photo_side,
+        if layout in LOGO_LAYOUTS and self.logo is None:
+            self.report["fallback"] = {"asked": layout, "used": LAYOUTS[fam][0]}
+            layout = LAYOUTS[fam][0]
+        {"logo_hero": self.logo_hero, "band": self.wide_band, "awning": lambda: self.wide_band(awning=True), "photo_side": self.wide_photo_side,
          "stack": self.tall_stack, "hero_top": self.tall_hero_top, "photo_middle": self.tall_photo_middle,
          "centre": self.square_centre, "photo_circle": lambda: self.square_centre(with_photo=True),
          "menu": self.sheet_menu, "menu_photo": lambda: self.sheet_menu(with_photo=True)}[layout]()
@@ -822,7 +980,8 @@ class Builder:
                     "px": list(self.c.size_px), "mp": round(self.c.megapixels, 1), "label": self.c.label()},
             shape="round" if self.round else "rect",
             used={"photo": any(e.src == "photo" for e in self.els), "art": any(e.src == "art" for e in self.els),
-                  "logo": any(e.src == "logo" for e in self.els)})
+                  "logo": any(e.src == "logo" for e in self.els)},
+            logo_width=round(max((e.box[2] - e.box[0] for e in self.els if e.src == "logo"), default=0.0) / W, 3))
         self.report["below_min"] = sorted(set(self.report.get("below_min") or []))
         self.report["dropped"] = list(dict.fromkeys(self.report.get("dropped") or []))
 

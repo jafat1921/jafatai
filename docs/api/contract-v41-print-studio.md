@@ -69,8 +69,10 @@ generations of their own: `target_type "print_file"`, `target_id` = the design i
 ### DesignPatch
 
 `texts` (`name, tagline, headline, offers[], hours, phone, address, website, cta`), `layout` (one of the shape's,
-else 422), `decor` (`none|awning|frame`), `hero` (`name|headline`), `caps`, `font_preset`, `colours`
-(`ground, ink, accent` as `#RRGGBB`), `logo.position` (`auto|none`), `focus {x, y}`, `print_safe`, `reset`.
+else 422), `decor` (`none|awning|frame`), `hero` (`name|headline`), `caps`, `font_preset`, `display_font`
+(the name's face on its own: `archivo|anton|bebas|poppins|montserrat|oswald|playfair`, `""` follows the preset,
+else 422; listed in options as `display_fonts`), `colours` (`ground, ink, accent` as `#RRGGBB`),
+`logo.position` (`auto|none`), `focus {x, y}`, `print_safe`, `reset`.
 
 ### ResizeIn
 
@@ -95,7 +97,11 @@ new size.
 
 `report`: `family, layout, contrast {role: ratio}, all_pass, min_text {cap_mm, cap_cm, role, need_mm, distance,
 pass}, colours, gamut [{role, hex, safe, chroma, ceiling}], dropped [roles], below_min, fonts {role: cap mm},
-boxes {trim, safe}` (fractions of the full canvas, for the overlays), `canvas, shape, used, fallback`.
+boxes {trim, safe}` (fractions of the full canvas, for the overlays), `canvas, shape, used, fallback,
+logo_width` (the logo's width over the trim width), `font {preset, display}` (what was actually set).
+
+`spec` also carries `font_auto` (true when neither the owner nor the kit chose the type), `display_font` and
+`brand_name` (the kit's name).
 
 ## 4. Pipeline (`ad_campaign` job, payload `print: true`)
 
@@ -109,12 +115,33 @@ boxes {trim, safe}` (fractions of the full canvas, for the overlays), `canvas, s
    illustration designs a flat illustration on white (keyed to transparency). Then Real-ESRGAN up to what the print
    needs, at most 4× and 8192 px on the long side (the anime model for illustrations); Lanczos does the rest. A
    failed picture leaves the design type-only rather than stopping the job.
+   **Kit logos** (`app/print_studio/logo.py`): a logo without transparency has its backdrop keyed out (the
+   border colour flood-filled from the edges, RGB distance ≤ 16, so whites inside the mark stay; the rim keeps a
+   soft alpha in the mark's own colour). When the border isn't one plain colour, this stage runs Photo Studio's
+   BiRefNet cut-out (`photo_cutout_mask`) on it once (`stages.pictures.logo_cuts`). The cut logo is cached as
+   `workspaces/<ws>/print/logos/<sha1(kit, file)>.png`; a logo that can't be cut stays off the designs, never
+   placed as an opaque box.
 3. **Layout** (`app/print_studio/layout.py`): a scene in millimetres from the real ratio: wide (`band`, `awning`,
-   `photo_side`), tall (`stack`, `hero_top`, `photo_middle`), square (`centre`, `photo_circle`; round stickers keep
-   the copy in the inscribed square), sheet (`menu`, `menu_photo`). Every text row is fitted to its column and
-   never set below the distance minimum (capital height ≈ 3 mm per metre, at least 1.5 mm); optional lines go
-   first (website, address, offers, button), the name never. Text sits only on solid colour; every line is nudged
-   to WCAG AA (4.5:1). The background and photos run into the bleed. RTL mirrors.
+   `photo_side`), tall (`stack`, `hero_top`, `photo_middle`, `logo_hero`), square (`centre`, `photo_circle`,
+   `logo_hero`; round stickers keep the copy in the inscribed square), sheet (`menu`, `menu_photo`). Every text row
+   is fitted to its column and never set below the distance minimum (capital height ≈ 3 mm per metre, at least
+   1.5 mm); optional lines go first (website, address, offers, button), the name never. Text sits only on solid
+   colour; every line is nudged to WCAG AA (4.5:1). The background and photos run into the bleed. RTL mirrors.
+   - On signs and boards the kit logo is a hero: about a third of the trim width (a badge), at the top or across
+     the photo's lower edge, sized first while the type shrinks around it (≥ 30 % of the width on a board).
+     `logo_hero` (offered only with a kit logo) makes the logo the headline (40–55 % of the width); when the
+     shop's name equals the kit's name no name line is set (`report.name_in_logo`), the tagline follows the logo.
+     A fresh set of concepts for such a shop always includes one `logo_hero` option (a type-only one takes it).
+   - Body copy on signs and boards (tagline, offers, button, a small hero line) has a floor of the distance
+     minimum or 2.8 % of the short side, whichever is larger. Type shrinks to its floor before a line is dropped,
+     and on `hero_top` / `photo_middle` the photo band shortens (down to about a fifth of the height) before the
+     copy goes under it. Offers on signs and boards may wrap to three lines.
+   - Offers are one left-aligned block, the block centred: one bullet x, wrapped lines hang under their text.
+   - The contact band keeps the distance minimum and wraps onto two or more rows when that sets the lines at
+     least 25 % bigger; the band grows to fit (fascias stay on one row).
+   - Type: the owner's preset wins, then the kit's fonts (`brand`); otherwise on signs and boards a light preset
+     (`modern`, `elegant`) goes up to `bold`, and a round badge logo pulls towards `friendly` (Poppins ExtraBold,
+     always for `logo_hero`).
 4. **Files** (`brief.export_all`, or `POST /files`): the scene rendered at print size and written as below.
 
 ## 5. Files

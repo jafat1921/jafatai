@@ -125,6 +125,7 @@ class DesignPatch(BaseModel):
     hero: Literal["name", "headline"] | None = None
     caps: bool | None = None
     font_preset: str | None = Field(None, max_length=20)
+    display_font: str | None = Field(None, max_length=20, description="The name's face on its own; '' follows the type")
     colours: dict[Literal["ground", "ink", "accent"], str] | None = None
     logo: LogoIn | None = None
     focus: FocusIn | None = None
@@ -191,6 +192,7 @@ def options(kit_id: str | None = None, db: Session = Depends(get_db), cur: Curre
             "decor": [{"id": "none", "label": "None"}, {"id": "awning", "label": "Awning stripes"},
                       {"id": "frame", "label": "Frame"}],
             "font_presets": pfonts.presets_out(bool(kit is not None and kit.font_files)),
+            "display_fonts": pfonts.display_out(),
             "image_models": models, "variants": {"min": 1, "max": 6, "default": 3},
             "formats": [{"id": f, "label": {"pdf": "PDF (print)", "png": "PNG", "jpg": "JPG", "svg": "SVG (editable)",
                                             "zip": "Layers (ZIP)"}[f]} for f in ex.FORMATS]}
@@ -310,7 +312,7 @@ def _apply(rec: dict, body: DesignPatch) -> dict:
     if body.texts is not None:
         t = {**(o.get("texts") or {}), **body.texts.model_dump(exclude_unset=True)}
         o["texts"] = {k: v for k, v in t.items() if v is not None}
-    for k in ("layout", "decor", "hero", "font_preset"):
+    for k in ("layout", "decor", "hero", "font_preset", "display_font"):
         v = getattr(body, k)
         if v is not None:
             o[k] = v
@@ -329,6 +331,8 @@ def _apply(rec: dict, body: DesignPatch) -> dict:
 
 def _check_patch(c: AdCampaign, body: DesignPatch, kit) -> None:
     _preset_ok(body.font_preset, kit)
+    if body.display_font and body.display_font not in pfonts.DISPLAY:
+        raise HTTPException(422, f"Unknown display font '{body.display_font}'")
     if body.layout is not None and body.layout not in pl.LAYOUTS[ps.shape_family(ps.brief_of(c))]:
         raise HTTPException(422, f"Layout '{body.layout}' doesn't fit this shape")
 
@@ -432,7 +436,7 @@ def resize(db: Session, cur: CurrentUser, c: AdCampaign, design_id: str, body: R
     new = ps.create(db, cur, {**b, "language": c.language,
                               "title": f"{name} · {sz.cm(body.width_cm * 10)} × {sz.cm(body.height_cm * 10)} cm"}, kit)
     nb = ps.brief_of(new)
-    allowed = ps.layouts_for(nb, con.get("family") or "typographic")
+    allowed = ps.layouts_for(nb, con.get("family") or "typographic", ps.kit_logo(kit))
     for grp, pic in list((con.get("photos") or {}).items()):
         # the same picture, upscaled again for what the new size needs
         con["photos"][grp] = {k: v for k, v in pic.items() if k not in ("final", "upscale", "upscale_tries")}

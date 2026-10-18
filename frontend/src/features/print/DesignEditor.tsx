@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Segmented } from '@/features/image/ads/Segmented'
 import { usePatchDesign } from '@/hooks/usePrint'
-import { FONT_PRESETS, LAYOUTS, printApi, type Decor, type DesignPatch, type DesignSpec, type DesignTexts, type PrintDesign, type PrintJob } from '@/lib/print'
+import { DISPLAY_FONTS, FONT_PRESETS, LAYOUTS, printApi, type Decor, type DesignPatch, type DesignSpec, type DesignTexts, type PrintDesign, type PrintJob } from '@/lib/print'
 import { announce } from '@/stores/ui'
 import { PrintChecks } from './PrintChecks'
 
@@ -44,6 +44,7 @@ type Edit = {
   hero: 'name' | 'headline'
   caps: boolean
   font_preset: string
+  display_font: string
   colours: { ground: string; ink: string; accent: string }
   logo: 'auto' | 'none'
   print_safe: boolean
@@ -56,6 +57,7 @@ const fromSpec = (s: DesignSpec, report: PrintDesign['report']): Edit => ({
   hero: s.hero,
   caps: s.caps,
   font_preset: s.font_preset,
+  display_font: s.display_font ?? '',
   colours: {
     ground: s.colours.ground || report.colours?.ground || '#FFFFFF',
     ink: s.colours.ink || report.colours?.ink || '#1B1B1B',
@@ -77,6 +79,7 @@ function patchOf(base: Edit, e: Edit): DesignPatch {
   if (e.hero !== base.hero) p.hero = e.hero
   if (e.caps !== base.caps) p.caps = e.caps
   if (e.font_preset !== base.font_preset) p.font_preset = e.font_preset
+  if (e.display_font !== base.display_font) p.display_font = e.display_font
   const colours: DesignPatch['colours'] = {}
   for (const c of COLOURS) if (e.colours[c.key].toUpperCase() !== base.colours[c.key].toUpperCase() && HEX.test(e.colours[c.key])) colours[c.key] = e.colours[c.key]
   if (Object.keys(colours).length) p.colours = colours
@@ -98,7 +101,9 @@ export function DesignEditor({ job, design }: { job: PrintJob; design: PrintDesi
   const save = usePatchDesign(job.id)
   const patch = useMemo(() => patchOf(base, edit), [base, edit])
   const dirty = Object.keys(patch).length > 0
-  const layouts = LAYOUTS[job.size.family]
+  // the logo-led layout only means something with a kit logo
+  const layouts = LAYOUTS[job.size.family].filter((l) => l.id !== 'logo_hero' || job.brand_kit?.has_logo || edit.layout === l.id)
+  const presets = job.brand_kit?.has_fonts ? [{ id: 'brand', label: 'Brand fonts' }, ...FONT_PRESETS] : FONT_PRESETS
   const rtl = spec.rtl
 
   // a fresh saved version (or another option picked) starts the form again from it
@@ -227,7 +232,17 @@ export function DesignEditor({ job, design }: { job: PrintJob; design: PrintDesi
           <div className="flex min-w-0 flex-col gap-1">
             <Label htmlFor={id('font')}>Type</Label>
             <select id={id('font')} className={SELECT} value={edit.font_preset} onChange={(e) => setEdit((x) => ({ ...x, font_preset: e.target.value }))}>
-              {FONT_PRESETS.map((f) => (
+              {presets.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <Label htmlFor={id('display')}>Name type</Label>
+            <select id={id('display')} className={SELECT} value={edit.display_font} onChange={(e) => setEdit((x) => ({ ...x, display_font: e.target.value }))}>
+              {DISPLAY_FONTS.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.label}
                 </option>

@@ -25,6 +25,7 @@ from app.config import get_settings
 from app.models import AdCampaign, BrandKit, Generation, Job, MediaItem, new_id, utcnow
 from app.print_studio import export as ex
 from app.print_studio import layout as pl
+from app.print_studio import logo as plogo
 from app.print_studio import raster
 from app.print_studio import sizes as sz
 from app.services import gen_out, generation_file, job_out, next_version
@@ -90,24 +91,46 @@ def families_for(b: dict, count: int) -> list[str]:
     return [plan[i % len(plan)] for i in range(count)]
 
 
-def layouts_for(b: dict, family: str) -> list[str]:
-    allowed = pl.LAYOUTS[shape_family(b)]
+def layouts_for(b: dict, family: str, logo: bool = False) -> list[str]:
+    allowed = [x for x in pl.LAYOUTS[shape_family(b)] if logo or x not in pl.LOGO_LAYOUTS]
     if family == "photo":
         return [x for x in allowed if x in pl.PHOTO_LAYOUTS] or list(allowed)
     return [x for x in allowed if x not in pl.PHOTO_LAYOUTS] or list(allowed)
 
 
-def spread(rows: list[dict], b: dict) -> None:
+def spread(rows: list[dict], b: dict, logo: bool = False) -> None:
     """Each design gets a layout of its family, the repeats spread across what the shape offers."""
     used: dict[str, list[str]] = {}
     for r in rows:
-        pool = layouts_for(b, r["family"])
+        pool = layouts_for(b, r["family"], logo)
         seen = used.setdefault(r["family"], [])
         want = r.get("layout")
         if want not in pool or (want in seen and len(seen) < len(pool)):
             want = next((x for x in pool if x not in seen), pool[len(seen) % len(pool)])
         r["layout"] = want
         seen.append(want)
+
+
+def kit_logo(kit: BrandKit | None) -> bool:
+    return kit is not None and bool(br.logo_ref(kit).get("media_id"))
+
+
+def _same(a: str, b: str) -> bool:
+    return bool(a.strip()) and " ".join(a.split()).casefold() == " ".join(b.split()).casefold()
+
+
+def offer_logo_hero(rows: list[dict], b: dict, kit: BrandKit | None) -> None:
+    """A sign or board for a shop named like its kit, with the kit's logo, gets at least one option where the
+    logo is the headline. A type-only option takes it first, so no picture is made for nothing."""
+    if not rows or not kit_logo(kit) or b["job"] not in ("board", "sign"):
+        return
+    if "logo_hero" not in pl.LAYOUTS[shape_family(b)] or not _same(b["lines"]["name"], kit.name or ""):
+        return
+    if any(r.get("layout") == "logo_hero" for r in rows):
+        return
+    order = {"typographic": 0, "illustration": 1, "photo": 2}
+    pick = min(reversed(rows), key=lambda r: order.get(r.get("family"), 3))
+    pick.update(layout="logo_hero", family="typographic")
 
 
 def create(db: Session, cur, body: dict, kit: BrandKit | None) -> AdCampaign:
@@ -226,6 +249,10 @@ def spec_for(c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None) -> dict:
     photos = con.get("photos") or {}
     pic, art = photos.get("photo") or {}, photos.get("art") or {}
     layout = o.get("layout") or con.get("layout")
+    # the owner's pick wins, then the kit's own fonts; only the writer's pick may be made heavier for a board
+    explicit = o.get("font_preset") or b.get("font_preset")
+    kit_fonts = kit is not None and bool(kit.font_files)
+    font = explicit or ("brand" if kit_fonts else con.get("font") or "bold")
     return {
         "job": b["job"], "design": con.get("family") or "typographic", "layout": layout,
         "decor": o.get("decor") or con.get("decor") or "none", "hero": o.get("hero") or con.get("hero") or "name",
@@ -236,7 +263,8 @@ def spec_for(c: AdCampaign, con: dict, rec: dict, kit: BrandKit | None) -> dict:
         "texts": texts,
         "colours": {**(con.get("colours") or {}), **{k: v for k, v in (o.get("colours") or {}).items() if v}},
         "palette": list(kit.palette or []) if kit is not None else [],
-        "font_preset": o.get("font_preset") or b.get("font_preset") or con.get("font") or "bold",
+        "font_preset": font, "font_auto": not (explicit or kit_fonts), "display_font": o.get("display_font") or "",
+        "brand_name": (kit.name or "") if kit is not None else "",
         "logo": {"position": (o.get("logo") or {}).get("position") or "auto",
                  "variant": (o.get("logo") or {}).get("variant") or "auto"},
         "focus": dict(o.get("focus") or {"x": 0.5, "y": 0.5}),
@@ -268,13 +296,21 @@ def _art(db: Session, gid: str | None) -> Image.Image | None:
         return lay.prepare_logo(path) if path is not None else None
 
 
+def logo_cut(kit: BrandKit, path: Path | None, mask: Path | None = None) -> Path | None:
+    root = get_settings().data_dir / "workspaces" / kit.workspace_id / "print" / "logos"
+    return plogo.cut(root, kit.id, path, mask)
+
+
 def _logo(db: Session, kit: BrandKit | None, spec: dict) -> Image.Image | None:
     if kit is None or (spec.get("logo") or {}).get("position") == "none":
         return None
     ws = kit.workspace_id
-    a = lay.AdAssets(logo=br.media_file(db, ws, br.logo_ref(kit).get("media_id")),
-                     logo_light=br.media_file(db, ws, br.logo_ref(kit, "light").get("media_id")),
-                     logo_dark=br.media_file(db, ws, br.logo_ref(kit, "dark").get("media_id")))
+
+    def cut(variant: str) -> Path | None:
+        # the cached cut-out, so no logo ever reaches the page on its own white (or any colour) square
+        return logo_cut(kit, br.media_file(db, ws, br.logo_ref(kit, variant).get("media_id")))
+
+    a = lay.AdAssets(logo=cut("primary"), logo_light=cut("light"), logo_dark=cut("dark"))
     ground = pl.colours_of(spec)["ground"]
     logo, _ = lay._logo_pick(a, (spec.get("logo") or {}).get("variant") or "auto", lay.lum(ground))
     return logo

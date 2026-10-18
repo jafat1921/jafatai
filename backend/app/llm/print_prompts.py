@@ -94,7 +94,10 @@ PRINT_RULES = """Signage rules:
   sunlight and at a glance; the accent for the band and the details. Prefer colours that print well (not neon
   screen greens and blues). Use what customers of this kind of business recognise: {knowledge}
 - font: one of bold (Archivo Black), condensed (Bebas Neue caps), impact (Anton), modern (Montserrat),
-  friendly (Poppins), elegant (Playfair). caps: true to set the name in capitals.
+  friendly (Poppins), elegant (Playfair). caps: true to set the name in capitals. A board or sign wants a heavy
+  display face (bold, condensed, impact or friendly); friendly suits a rounded badge logo.
+- layout logo_hero, where it is offered: the brand's logo is the headline, big and centred, the name small
+  under it; the other lines as usual.
 - decor: none, awning (shop-front stripes along the top) or frame (a border line).
 - Every design is a different idea: a different colour pair, type and feel."""
 

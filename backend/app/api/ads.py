@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import brand as br
-from app import brand_templates as bt
 from app import models_catalog as mc
 from app import visibility as vis
 from app.ads import fonts as fz
@@ -57,7 +56,7 @@ class CreateIn(BaseModel):
         "offers": ["Från 215 kr/timme", "Ingen bindningstid"], "formats": ["4:5", "9:16"], "variants": 3}]})
 
     title: str = Field("", max_length=200)
-    brand_kit_id: str | None = Field(None, max_length=64, description="Default: the workspace's default kit")
+    brand_kit_id: str | None = Field(None, max_length=64, description="None: no brand")
     subject: str = Field(min_length=1, max_length=200, description="The service or product")
     description: str = Field("", max_length=600)
     brief: str = Field("", max_length=2000, description="Free text; empty lets the creative director decide")
@@ -179,15 +178,13 @@ def _camp(db: Session, cur: CurrentUser, cid: str) -> AdCampaign:
 
 
 def _kit(db: Session, ws: str, kit_id: str | None) -> BrandKit | None:
-    if kit_id:
-        kit = br.get_kit(db, ws, kit_id)
-        if kit is None:
-            raise HTTPException(404, "Brand kit not found")
-        return kit
-    try:
-        return bt.pick_kit(db, ws, None)
-    except HTTPException:
-        return None  # no kit, or several and none is the default: an ad without brand assets still works
+    # no kit asked for means no brand: falling back to the default kit put one client's logo on another's sign
+    if not kit_id:
+        return None
+    kit = br.get_kit(db, ws, kit_id)
+    if kit is None:
+        raise HTTPException(404, "Brand kit not found")
+    return kit
 
 
 def _check_font_preset(p: str | None, kit: BrandKit | None) -> None:

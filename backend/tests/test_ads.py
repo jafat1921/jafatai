@@ -566,3 +566,16 @@ def test_api_campaigns_stay_out_of_the_app(client, llm):
         assert all(g.via_api for g in db.query(Generation).filter(Generation.target_type == "ad_photo",
                                                                    Generation.target_id.in_(
                                                                        [x["id"] for x in camp.concepts])))
+
+
+def test_no_kit_asked_means_no_brand_even_with_a_default_kit(client):
+    # a default kit used to be applied silently: one client's logo landed on another client's sign
+    from app.api.ads import _kit
+    from app.db import SessionLocal
+    from app.models import BrandKit, Workspace
+
+    with SessionLocal() as db:
+        ws = db.query(Workspace).first()
+        db.add(BrandKit(workspace_id=ws.id, name="Somebody else", is_default=True))
+        db.commit()
+        assert _kit(db, ws.id, None) is None

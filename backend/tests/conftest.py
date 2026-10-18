@@ -32,6 +32,8 @@ os.environ.update(
         "MAGIC_PROMPT_DEFAULT": "off",
         # the same for TranslateGemma's model listing; test_translate turns it on
         "TRANSLATE_LLM_MODEL": "",
+        # and for the marking model's installed check
+        "AERAB_LLM_MODEL": "creative",
     }
 )
 

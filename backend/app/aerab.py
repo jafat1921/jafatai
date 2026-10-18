@@ -458,9 +458,33 @@ def _weak(rows: list[str], idx, lang: str) -> list[int]:
     return [i for i in idx if coverage(rows[i]) < min_coverage(lang)]
 
 
+_missing_warned: set[str] = set()
+
+
+async def marking_model() -> str | None:
+    """AERAB_LLM_MODEL when the LLM server has it, else None (the creative model). The small default creative
+    model left most words unmarked on the live server, so a bigger one is the default here."""
+    from app.config import get_settings
+    from app.llm import LLMError
+    from app.llm.client import bare_tag, installed_models
+
+    want = get_settings().aerab_llm_model.strip()
+    if not want:
+        return None
+    try:
+        have = await installed_models()
+    except LLMError:
+        return want  # can't list: let the call itself succeed or fail as before
+    if bare_tag(want) in have:
+        return want
+    if want not in _missing_warned:
+        _missing_warned.add(want)
+        log.warning("aerab: %s isn't installed; using the creative model", want)
+    return None
+
+
 async def _run(text: str, language: str | None, budget: float | None = None, progress=None,
                keep_replies: bool = False) -> Result:
-    from app.config import get_settings
     from app.llm import LLMError, chat
 
     lang = resolve(language, text) or detect_language(text) or "ur"
@@ -469,7 +493,7 @@ async def _run(text: str, language: str | None, budget: float | None = None, pro
     if not wanted:
         return Result(text, language=lang, coverage=coverage(text))
     todo = wanted[:MAX_UNITS]
-    model = get_settings().aerab_llm_model.strip() or None
+    model = await marking_model()
     deadline = time.monotonic() + budget if budget else None
     before = list(parts)
     refused: set[int] = set()

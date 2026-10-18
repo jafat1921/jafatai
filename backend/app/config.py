@@ -122,8 +122,8 @@ class Settings(BaseSettings):
     # whether ACE-Step sees the aerab on Urdu lyrics; the lyrics keep them either way. Off is the A/B for
     # songs drifting into Arabic, since its training lyrics were almost all written without marks
     song_lyrics_aerab: bool = True
-    # the model that adds the marks; empty: the creative role's model (LLM_MODEL_CREATIVE)
-    aerab_llm_model: str = ""
+    # the model that adds the marks, when installed; empty or missing: the creative role's model
+    aerab_llm_model: str = "gemma4:26b"
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
     # where the engine venvs keep their Hugging Face downloads (empty: their own default)
@@ -150,6 +150,19 @@ class Settings(BaseSettings):
     def _split_csv(cls, v):
         if isinstance(v, str):
             return [p.strip().rstrip("/") for p in v.split(",") if p.strip()]
+        return v
+
+    @field_validator("aerab_llm_model", mode="before")
+    @classmethod
+    def _aerab_model(cls, v):
+        # servers carry an empty AERAB_LLM_MODEL= from the old .env.example; that now means the default, and
+        # "creative" is how to ask for the creative model
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return "gemma4:26b"
+            if v.lower() == "creative":
+                return ""
         return v
 
     @field_validator("data_dir", mode="after")

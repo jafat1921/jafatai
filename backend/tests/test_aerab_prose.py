@@ -237,3 +237,45 @@ def test_debug_is_admin_only(client, fake, login):  # noqa: F811
     assert editor.post("/api/text/aerab", json={"text": ORIG}).status_code == 200
     params = app.openapi()["paths"]["/api/text/aerab"]["post"].get("parameters", [])
     assert all(p["name"] != "debug" for p in params)
+
+
+def test_marking_model_is_used_only_when_installed(monkeypatch):
+    import asyncio
+
+    from app import aerab
+    from app.llm import LLMError
+    from app.llm import client
+
+    monkeypatch.setenv("AERAB_LLM_MODEL", "gemma4:26b")
+    from app.config import get_settings
+    get_settings.cache_clear()
+
+    async def have(names):
+        return names
+
+    monkeypatch.setattr(client, "installed_models", lambda: have({"gemma4:26b", "gemma4:e4b"}))
+    assert asyncio.run(aerab.marking_model()) == "gemma4:26b"
+    monkeypatch.setattr(client, "installed_models", lambda: have({"gemma4:e4b"}))
+    assert asyncio.run(aerab.marking_model()) is None  # missing: the creative model
+
+    async def down():
+        raise LLMError("no server")
+
+    monkeypatch.setattr(client, "installed_models", down)
+    assert asyncio.run(aerab.marking_model()) == "gemma4:26b"
+    monkeypatch.setenv("AERAB_LLM_MODEL", "creative")
+    get_settings.cache_clear()
+    assert asyncio.run(aerab.marking_model()) is None
+    get_settings.cache_clear()
+
+
+def test_empty_aerab_model_setting_means_the_default(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("AERAB_LLM_MODEL", "")
+    get_settings.cache_clear()
+    assert get_settings().aerab_llm_model == "gemma4:26b"
+    monkeypatch.setenv("AERAB_LLM_MODEL", "Creative")
+    get_settings.cache_clear()
+    assert get_settings().aerab_llm_model == ""
+    get_settings.cache_clear()

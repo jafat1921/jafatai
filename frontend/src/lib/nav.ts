@@ -30,6 +30,7 @@ import {
   Maximize2,
   Settings,
   ShieldUser,
+  Printer,
   PenLine,
   Shuffle,
   Sparkles,
@@ -80,7 +81,7 @@ export interface MenuSection {
   modelsNote?: string
 }
 
-export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | '3d' | 'audio' | 'upscale' | 'queue' | 'settings' | 'admin'
+export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | '3d' | 'audio' | 'upscale' | 'queue' | 'settings' | 'admin' | 'print'
 
 export interface RailItem {
   id: RailId
@@ -199,6 +200,8 @@ export const RAIL_ITEMS: RailItem[] = [
 export const SETTINGS_ITEM: RailItem = { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' }
 // contract v38: only rendered for admins
 export const ADMIN_ITEM: RailItem = { id: 'admin', label: 'Admin', icon: ShieldUser, to: '/admin' }
+// contract v41: Print Studio, admins only too
+export const PRINT_ITEM: RailItem = { id: 'print', label: 'Print Studio', icon: Printer, to: '/admin/print' }
 
 const TOOL_ROUTE: Partial<Record<ModelType, string>> = { image: '/image/generate', edit: '/image/edit', video: '/video/create', audio: '/audio/music' }
 
@@ -256,6 +259,7 @@ export function activeRail(pathname: string): RailId | null {
   if (p.startsWith('/brand-kits')) return 'brand'
   if (p.startsWith('/queue')) return 'queue'
   if (p.startsWith('/settings')) return 'settings'
+  if (p.startsWith('/admin/print')) return 'print'
   if (p.startsWith('/admin')) return 'admin'
   return null
 }
@@ -311,6 +315,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/admin\/payments/, 'Payments'],
   [/^\/admin\/usage/, 'GPU usage'],
   [/^\/admin\/audit/, 'Audit log'],
+  [/^\/admin\/print/, 'Print Studio'],
   [/^\/admin$/, 'Admin'],
 ]
 

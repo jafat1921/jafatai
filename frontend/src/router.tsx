@@ -284,6 +284,15 @@ export const shellRoutes: RouteObject[] = [
         const { AuditPage } = await import('@/features/admin/AuditPage')
         return <AuditPage />
       }),
+      // contract v41: Print Studio, inside the admin section so its guard covers it
+      page('print', async () => {
+        const { PrintStudioPage } = await import('@/features/print/PrintStudioPage')
+        return <PrintStudioPage />
+      }),
+      page('print/:id', async () => {
+        const { PrintJobPage } = await import('@/features/print/PrintJobPage')
+        return <PrintJobPage />
+      }),
     ],
   },
   // contract v27: admin only while PUBLIC_API is off (the page sends anyone else back to Settings)

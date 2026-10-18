@@ -587,6 +587,127 @@ def make_ad_campaign(
                 "next": "When the job is done, search_library for the ads (tag 'ad')"}
 
 
+# ---------------------------------------------------------------- Print Studio (contract v41, admins only)
+
+from app.api.print import LinesIn as PrintLines  # noqa: E402
+
+# hidden from everyone else's tools/list, and refused with the answer an unknown tool gets
+ADMIN_TOOLS = {"make_print_design", "get_print_design", "print_other_size"}
+
+
+def _admin_only(cur: CurrentUser, name: str) -> None:
+    if not cur.user.is_admin:
+        raise ToolError(f"Unknown tool: {name}")
+
+
+@tool("generate", title="Make a print design")
+def make_print_design(
+    ctx: Context,
+    width_cm: Annotated[float, Field(ge=3, le=500, description="Trim width in cm")],
+    height_cm: Annotated[float, Field(ge=3, le=500, description="Trim height in cm")],
+    lines: Annotated[PrintLines, Field(description="The owner's lines, set exactly as written: name (required), "
+                                                   "tagline, offers[], opening_hours, phone, address, website")],
+    job: Literal["sign", "board", "flyer", "sticker"] = "sign",
+    dpi: Literal[100, 150, 200, 300] | None = None,
+    bleed_mm: Annotated[float, Field(ge=0, le=20)] = 3.0,
+    viewing_distance: Literal["near", "street", "road"] | None = None,
+    shape: Literal["rect", "round"] = "rect",
+    business_type: Annotated[str, Field(max_length=160, description='e.g. "livs / mini market"')] = "",
+    language: Annotated[str, Field(pattern=r"^[a-z]{2,3}(-[a-z]{2,4})?$")] = "en",
+    style: Annotated[str, Field(max_length=300, description="Style hint: colours, feel, lettering")] = "",
+    brand_kit_id: str | None = None,
+    product_media_ids: Annotated[list[str], Field(max_length=3)] = [],
+    photo_media_ids: Annotated[list[str], Field(max_length=6, description="The owner's own photos, used as they "
+                                                                          "are")] = [],
+    options: Annotated[int, Field(ge=1, le=6, description="Design options")] = 3,
+    families: list[Literal["typographic", "photo", "illustration"]] | None = None,
+    export: Annotated[bool, Field(description="Make every option's PDF, PNG, JPG, SVG and layers ZIP")] = True,
+) -> dict:
+    """Print Studio: shop signs, boards, flyers and stickers at real sizes, 1-6 design options with print files
+    (PDF with bleed and crop marks, PNG/JPG at the dpi, editable SVG, layer PNGs). Runs in one go; follow it with
+    get_print_design."""
+    from app.api.print import CreateIn, create_job
+
+    with acting(ctx, "generate") as (db, cur):
+        _admin_only(cur, "make_print_design")
+        try:
+            body = CreateIn(width_cm=width_cm, height_cm=height_cm, lines=lines, job=job, dpi=dpi, bleed_mm=bleed_mm,
+                            viewing_distance=viewing_distance, shape=shape, business_type=business_type,
+                            language=language, style=style, brand_kit_id=brand_kit_id,
+                            product_media_ids=product_media_ids, photo_media_ids=photo_media_ids, variants=options,
+                            families=families, export_all=export, review=False)
+        except ValidationError as e:
+            raise ToolError("; ".join(x["msg"].removeprefix("Value error, ") for x in e.errors())) from None
+        out = create_job(body, db=db, cur=cur)
+        return {"design_id": out["id"], "title": out["title"], "size": out["size"]["label"],
+                **_job(db.get(Job, out["job"]["id"])),
+                "next": "wait_for_job until done, then get_print_design for the options and their files"}
+
+
+def _print_report(db: Session, cur: CurrentUser, design_id: str, origin: str) -> dict:
+    from app.api.print import get_job as get_print_job
+
+    c = jsonable_encoder(get_print_job(design_id, db=db, cur=cur))
+    opts = []
+    for d in c["designs"]:
+        g = db.get(Generation, d["generation_id"] or "")
+        files = {}
+        for fmt, f in (d["files"].get("files") or {}).items():
+            fg = db.get(Generation, f["generation_id"])
+            if fg is not None:
+                files[fmt] = file_links.url_for(fg, origin)
+        rep = d.get("report") or {}
+        con = next((x for x in c["concepts"] if x["id"] == d["concept_id"]), {})
+        opts.append({"option": d["n"], "option_id": d["id"], "status": d["status"], "family": con.get("family"),
+                     "layout": rep.get("layout"), "headline": con.get("headline"),
+                     "preview_url": file_links.url_for(g, origin) if g is not None else None,
+                     "files_status": d["files"]["status"], "files": files,
+                     "checks": {"min_text": rep.get("min_text"), "contrast_ok": rep.get("all_pass"),
+                                "dropped": rep.get("dropped"), "gamut": rep.get("gamut")}})
+    out = {"design_id": c["id"], "title": c["title"], "status": c["status"], "size": c["size"]["label"],
+           "stages": [{k: s.get(k) for k in ("key", "status", "detail")} for s in c["stages"]], "options": opts,
+           "download_expires_in_s": file_links.TTL_S}
+    if c.get("job"):
+        out["job"] = _job(db.get(Job, c["job"]["id"]))
+    return out
+
+
+@tool("read", title="Get a print design")
+def get_print_design(ctx: Context, design_id: str) -> dict:
+    """A Print Studio job: its stages, and per option the preview and the PDF/PNG/JPG/SVG/ZIP download links
+    (ten minutes each; ask again for fresh ones)."""
+    with acting(ctx, "read") as (db, cur):
+        _admin_only(cur, "get_print_design")
+        return _print_report(db, cur, design_id, _origin(ctx))
+
+
+@tool("generate", title="Make another print size")
+def print_other_size(
+    ctx: Context,
+    design_id: str,
+    option: Annotated[int, Field(ge=1, le=6, description="Which option to take")],
+    width_cm: Annotated[float, Field(ge=3, le=500)],
+    height_cm: Annotated[float, Field(ge=3, le=500)],
+    job: Literal["sign", "board", "flyer", "sticker"] | None = None,
+    dpi: Literal[100, 150, 200, 300] | None = None,
+    export: bool = True,
+) -> dict:
+    """The same design (copy, colours, picture) laid out again at another size, as a new print job."""
+    from app.api.print import ResizeIn, _job as print_job, resize
+
+    with acting(ctx, "generate") as (db, cur):
+        _admin_only(cur, "print_other_size")
+        c = print_job(db, cur, design_id)
+        cons = {x["id"]: x.get("n") for x in c.concepts or []}
+        d = next((a for a in c.ads or [] if cons.get(a["concept_id"]) == option), None)
+        if d is None:
+            raise ToolError(f"Option {option} isn't laid out in this design")
+        out = resize(db, cur, c, d["id"], ResizeIn(width_cm=width_cm, height_cm=height_cm, job=job, dpi=dpi,
+                                                   export_all=export))
+        return {"design_id": out["id"], "title": out["title"], "size": out["size"]["label"],
+                **_job(db.get(Job, out["job"]["id"])), "next": "wait_for_job, then get_print_design"}
+
+
 @tool("generate", title="Make a Poetry Short")
 def make_poetry_short(
     ctx: Context,
@@ -819,15 +940,21 @@ LISTINGS = {"tools/list": "tools", "resources/list": "resources", "resources/tem
 
 async def scope_filter(ctx, call_next):
     """Hide what the token can't use. tools/call checks again in acting(), so hiding is only cosmetic."""
+    req = ctx.request
+    scopes, role, *rest = (req.scope.get(STATE_KEY) if isinstance(req, Request) else None) or (None, "viewer")
+    admin = bool(rest and rest[0])
+    name = (ctx.params or {}).get("name") if ctx.method == "tools/call" else None
+    if name in ADMIN_TOOLS and not admin:
+        # before argument checks, so a bad call can't tell an admin tool from a missing one either
+        return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "isError": True}
     res = await call_next(ctx)
     key = LISTINGS.get(ctx.method)
     if key is None or res is None:
         return res
-    req = ctx.request
-    scopes, role = (req.scope.get(STATE_KEY) if isinstance(req, Request) else None) or (None, "viewer")
     data = res.model_dump(by_alias=True, exclude_none=True) if isinstance(res, BaseModel) else dict(res)
     if key == "tools":
-        data["tools"] = [t for t in data.get("tools", []) if allowed(scopes, role, TOOL_SCOPE.get(t["name"], "manage"))]
+        data["tools"] = [t for t in data.get("tools", []) if allowed(scopes, role, TOOL_SCOPE.get(t["name"], "manage"))
+                         and (admin or t["name"] not in ADMIN_TOOLS)]
     elif not allowed(scopes, role, "read"):
         data[key] = []
     return data
@@ -836,10 +963,11 @@ async def scope_filter(ctx, call_next):
 server.middleware.append(scope_filter)
 
 
-def _check_token(raw: str) -> tuple[frozenset[str] | None, str] | None:
+def _check_token(raw: str) -> tuple[frozenset[str] | None, str, bool] | None:
     with SessionLocal() as db:
         cur = resolve_token(db, raw)
-        return (cur.scopes, cur.role) if cur else None
+        # whether the token's user is an admin, for the admin-only tools
+        return (cur.scopes, cur.role, bool(cur.user.is_admin)) if cur else None
 
 
 class Endpoint:

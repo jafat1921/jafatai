@@ -171,7 +171,11 @@ class AdPatch(BaseModel):
 
 
 def _camp(db: Session, cur: CurrentUser, cid: str) -> AdCampaign:
-    return get_owned(db, AdCampaign, cid, cur.workspace_id, "Ad campaign")
+    c = get_owned(db, AdCampaign, cid, cur.workspace_id, "Ad campaign")
+    if c.kind == "print":
+        # a Print Studio job (admin only) is never an ad campaign here
+        raise HTTPException(404, "Ad campaign not found")
+    return c
 
 
 def _kit(db: Session, ws: str, kit_id: str | None) -> BrandKit | None:
@@ -233,7 +237,7 @@ def create_campaign(body: CreateIn, db: Session = Depends(get_db), cur: CurrentU
 
 @router.get("", summary="List ad campaigns")
 def list_campaigns(db: Session = Depends(get_db), cur: CurrentUser = Depends(get_current_user)):
-    rows = db.scalars(select(AdCampaign).where(AdCampaign.workspace_id == cur.workspace_id,
+    rows = db.scalars(select(AdCampaign).where(AdCampaign.workspace_id == cur.workspace_id, AdCampaign.kind == "ad",
                                                *vis.where(AdCampaign, vis.wanted(cur)))
                       .order_by(AdCampaign.updated_at.desc()).limit(200)).all()
     return [svc.summary_out(db, c) for c in rows]

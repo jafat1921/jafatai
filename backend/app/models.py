@@ -882,6 +882,8 @@ class AdCampaign(Base):
     id: Mapped[str] = _id()
     workspace_id: Mapped[str] = _ws()
     via_api: Mapped[bool] = _via()
+    # migration 0029: "ad", or "print" for a Print Studio job (contract v41)
+    kind: Mapped[str] = mapped_column(String(20), default="ad", server_default="ad")
     title: Mapped[str] = mapped_column(String(200), default="", server_default="")
     brand_kit_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     language: Mapped[str] = mapped_column(String(12), default="en", server_default="en")

@@ -14,7 +14,9 @@ from tests.test_api_tokens import _mint, _user, flags, login  # noqa: F401  (fix
 
 ACCEPT = {"Accept": "application/json, text/event-stream"}
 READ_TOOLS = {"list_projects", "get_job", "wait_for_job", "search_library", "get_media", "list_voices",
-              "get_poetry_short"}
+              "get_poetry_short",
+              # the test user is an admin, so the admin-only Print Studio reader is listed too (contract v41)
+              "get_print_design"}
 
 
 class Mcp:
@@ -119,7 +121,7 @@ def test_a_viewer_only_sees_read_tools(client, anon, login, flags):
         u = db.scalars(select(User).where(User.email == "ed@test.local")).one()
         db.scalars(select(Membership).where(Membership.user_id == u.id)).one().role = "viewer"
         db.commit()
-    assert m.tools() == READ_TOOLS
+    assert m.tools() == READ_TOOLS - {"get_print_design"}  # not an admin: no Print Studio
     assert m.call("generate_image", prompt="x")["isError"]
 
 

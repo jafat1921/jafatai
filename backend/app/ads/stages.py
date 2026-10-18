@@ -808,6 +808,11 @@ class Run:
         svc.put_ad(c, rec)
 
 def handle(ctx) -> dict:
+    if (ctx.job.payload or {}).get("print"):
+        # a Print Studio job (contract v41) runs on the same job type, so cancel and retry treat it alike
+        from app.print_studio import stages as print_stages
+
+        return print_stages.handle(ctx)
     W = _w()
     run = Run(ctx)
     try:

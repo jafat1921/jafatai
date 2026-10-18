@@ -182,6 +182,8 @@ describe('save as template', () => {
     expect(prompt).toHaveValue('A [perfume bottle] on marble')
     expect(within(dialog).getByText('Filled in each time: [perfume bottle].')).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Save template' })).toBeDisabled()  // no name yet
+    // marking hands focus back to the prompt on the next frame; typing before that lands in the prompt
+    await waitFor(() => expect(prompt).toHaveFocus())
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Perfume shot')
     await user.click(within(dialog).getByRole('button', { name: 'Save template' }))
     await waitFor(() =>

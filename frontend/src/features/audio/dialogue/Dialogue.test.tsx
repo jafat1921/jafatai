@@ -102,7 +102,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Dialogue', { timeout: 15_000 }, () => {
+describe('Dialogue', () => {
   it('lists scripts and creates one', async () => {
     const calls = api(script(THREE))
     renderAt('/audio/dialogue', routes)

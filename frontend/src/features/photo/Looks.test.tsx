@@ -35,7 +35,7 @@ function setup(extra: (method: string, path: string, body: unknown) => unknown =
 const save = () => fireEvent.keyDown(document.body, { key: 's', ctrlKey: true })
 const lastRender = (calls: { method: string; path: string; body: unknown }[]) => calls.filter((c) => c.path === '/photo/g1/render').at(-1)?.body
 
-describe('Looks tab', { timeout: 15_000 }, () => {
+describe('Looks tab', () => {
   it('lists looks with live previews of this photo and applies one over the current settings, with intensity', async () => {
     const calls = setup()
     const user = userEvent.setup()

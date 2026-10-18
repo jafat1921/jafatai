@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
+
+// findBy*/waitFor give up after 1 s by default; a worker starved by a parallel backend run
+// can stall that long between two renders, so give them room (a real miss still fails)
+configure({ asyncUtilTimeout: 5000 })
 
 afterEach(() => cleanup())
 

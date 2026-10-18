@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StemSplit, StemsResponse } from '@/lib/stems'
@@ -67,12 +67,14 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
-describe('Stems', { timeout: 15_000 }, () => {
+describe('Stems', () => {
   it('splits a picked video into four stems and lists them above the earlier split', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })  // so the 1.5 s job poll can be skipped below
     const calls = api()
     const user = userEvent.setup()
     renderAt('/audio/stems', routes)
@@ -93,7 +95,8 @@ describe('Stems', { timeout: 15_000 }, () => {
     expect(await within(panel).findByRole('progressbar', { name: 'Split progress' })).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: 'Split' })).toBeDisabled()
 
-    const fresh = await screen.findByRole('list', { name: 'Stems, This split' }, { timeout: 5000 })
+    await act(() => vi.advanceTimersByTimeAsync(1500))
+    const fresh = await screen.findByRole('list', { name: 'Stems, This split' })
     expect(within(fresh).getAllByRole('listitem')).toHaveLength(4)
     expect(within(fresh).getByRole('button', { name: 'Open Harbour at dusk — Drums' })).toBeInTheDocument()
     const earlier = screen.getByRole('region', { name: 'Previous splits of this track' })

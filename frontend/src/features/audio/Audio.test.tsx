@@ -68,7 +68,7 @@ function api(opts: { items?: MediaItem[]; lyrics?: () => unknown; aerab?: (lyric
 
 const posted = (calls: ReturnType<typeof api>, path = '/audio/generate') => calls.find((c) => c.method === 'POST' && c.path === path)?.body
 
-describe('Audio Studio', { timeout: 15_000 }, () => {
+describe('Audio Studio', () => {
   it('Song: posts style tags, sectioned lyrics, vocal, language, length and takes', async () => {
     const calls = api()
     renderAt('/audio/song', routes, seedCatalog)

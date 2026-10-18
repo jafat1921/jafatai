@@ -37,7 +37,7 @@ function setup(path = '/image/studio/g2', extra: Extra = () => undefined) {
 
 const slider = (name: string) => screen.getByRole('slider', { name }) as HTMLInputElement
 
-describe('Develop (Lightroom layout)', { timeout: 15_000 }, () => {
+describe('Develop (Lightroom layout)', () => {
   it('has the left panel, tool strip, filmstrip and view toolbar', async () => {
     setup()
     await screen.findByRole('slider', { name: 'Exposure' })

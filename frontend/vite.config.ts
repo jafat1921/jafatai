@@ -47,5 +47,11 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     css: false,
     exclude: ['e2e/**', 'node_modules/**'],
+    // jsdom costs ~1.8 s to build; vmThreads builds it once per worker and still gives each file
+    // its own module context, which took a full run from ~98 s to ~40 s
+    pool: 'vmThreads',
+    // the page-level tests drive whole studios through user-event and sit at 2-3 s on an idle
+    // machine; 5 s wasn't enough headroom when the backend suite runs alongside
+    testTimeout: 15_000,
   },
 })

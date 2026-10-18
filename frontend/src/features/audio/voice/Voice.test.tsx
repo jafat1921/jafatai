@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CONSENT_STATEMENT } from '@/lib/voice'
@@ -61,13 +61,14 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
 const speakButton = () => screen.getByRole('button', { name: /^Speak\b.*Enter/ })
 
-describe('Speak', { timeout: 15_000 }, () => {
+describe('Speak', () => {
   it('posts voice, engine, language, speed, tags and aerab for an Urdu line', async () => {
     const calls = api()
     renderAt('/audio/speak?voice=v1', routes)
@@ -192,7 +193,7 @@ describe('Speak', { timeout: 15_000 }, () => {
   })
 })
 
-describe('Voices', { timeout: 15_000 }, () => {
+describe('Voices', () => {
   it('lists voices with kind, language and uses, and filters by starred', async () => {
     const calls = api()
     renderAt('/audio/voices', routes)
@@ -259,6 +260,7 @@ describe('Voices', { timeout: 15_000 }, () => {
   })
 
   it('Transcribe fills the transcript once the job finishes, and Done saves it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })  // so the 1 s job poll can be skipped below
     let polls = 0
     const calls = api({
       jobs: () => {
@@ -282,7 +284,8 @@ describe('Voices', { timeout: 15_000 }, () => {
     const done = await screen.findByRole('dialog', { name: 'Ammi is ready' })
     await user.click(within(done).getByRole('button', { name: 'Transcribe' }))
     expect(posts(calls, '/voices/v9/transcribe')).toHaveLength(1)
-    await waitFor(() => expect(within(done).getByRole('textbox', { name: 'Reference transcript' })).toHaveValue('Salaam, aap kaise hain?'), { timeout: 5000 })
+    await act(() => vi.advanceTimersByTimeAsync(1000))
+    await waitFor(() => expect(within(done).getByRole('textbox', { name: 'Reference transcript' })).toHaveValue('Salaam, aap kaise hain?'))
 
     await user.click(within(done).getByRole('button', { name: 'Done' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({ path: '/voices/v9', body: { ref_text: 'Salaam, aap kaise hain?' } }))
@@ -316,7 +319,7 @@ describe('Voices', { timeout: 15_000 }, () => {
   })
 })
 
-describe('Recorder', { timeout: 15_000 }, () => {
+describe('Recorder', () => {
   const openRecorder = async (user: ReturnType<typeof userEvent.setup>) => {
     const dialog = await screen.findByRole('dialog', { name: 'Add a voice' })
     await user.click(within(dialog).getByRole('radio', { name: 'Record' }))
@@ -374,7 +377,7 @@ describe('Recorder', { timeout: 15_000 }, () => {
   })
 })
 
-describe('Design', { timeout: 15_000 }, () => {
+describe('Design', () => {
   it('preview from a preset, keep the seed, then save as a designed voice', async () => {
     const calls = api()
     renderAt('/audio/design', routes)

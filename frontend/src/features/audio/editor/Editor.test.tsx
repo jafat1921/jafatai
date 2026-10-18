@@ -43,7 +43,7 @@ async function open() {
   return { calls, wave, user: userEvent.setup() }
 }
 
-describe('Audio editor', { timeout: 15_000 }, () => {
+describe('Audio editor', () => {
   it('loads the peaks and the analysis of the opened version', async () => {
     const { calls } = await open()
     const peaks = calls.find((c) => c.path === '/audio/a1/peaks')

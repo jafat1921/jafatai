@@ -34,7 +34,7 @@ function setup(path = '/image/studio/g2', extra: Extra = () => undefined) {
 
 const slider = (name: string) => screen.getByRole('slider', { name }) as HTMLInputElement
 
-describe('Photo Studio', { timeout: 15_000 }, () => {
+describe('Photo Studio', () => {
   it('opens a developed version on its base, with its saved settings, and previews on the server without WebGL', async () => {
     const calls = setup()
     expect(await screen.findByRole('heading', { name: /^Photo Studio · Lighthouse/ })).toBeInTheDocument()

@@ -38,7 +38,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Score a Clip', { timeout: 15_000 }, () => {
+describe('Score a Clip', () => {
   it('lays tracks under a video, previews the mix in sync, and saves a new video version', async () => {
     const calls = api()
     renderAt('/audio/score?video=v1&audio=a1', routes)

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { qk } from '@/hooks/keys'
 import { shellRoutes } from '@/router'
@@ -10,6 +10,10 @@ import { mockApi, systemOk, T } from '@/test/media-fixtures'
 import { AppShell } from './AppShell'
 
 afterEach(() => vi.unstubAllGlobals())
+
+// the workspace route is lazy and pulls in most of the studio; a cold import of it can take
+// several seconds on a busy run, so pay for it here rather than inside a test's findBy wait
+beforeAll(() => import('@/features/workspace/WorkspacePage'), 30_000)
 
 const project: Project = {
   id: 'p1',
@@ -75,15 +79,14 @@ describe('app shell', () => {
 
   it('inside a project it switches to the project switcher, stage tabs and queue drawer button', async () => {
     renderApp('/projects/p1/script')
-    // the workspace route is lazy, so the shell appears once it has loaded (a cold import is slow on a busy run)
-    const banner = (await screen.findAllByRole('banner', {}, { timeout: 12000 }))[0]
+    const banner = (await screen.findAllByRole('banner'))[0]
     expect(await within(banner).findByRole('button', { name: /Switch project/ })).toHaveTextContent('The Bleaching Reef')
     expect(within(banner).getByRole('tablist', { name: 'Production stages' })).toBeInTheDocument()
     expect(within(banner).getByRole('button', { name: /^Queue:/ })).toBeInTheDocument()
     expect(within(banner).queryByTestId('page-title')).not.toBeInTheDocument()
     // the rail stays, with Video lit for studio work
     expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Video' })).toHaveAttribute('aria-current', 'true')
-  }, 15000)
+  })
 
   it('keeps the old /projects and /create addresses working', async () => {
     const { router } = renderApp('/projects')

@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { galleryAsVoice, initialsOf, isGalleryId, matchesGallery, type GalleryResponse, type GalleryVoice } from '@/lib/gallery'
@@ -106,6 +106,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -125,7 +126,7 @@ describe('lib/gallery', () => {
   })
 })
 
-describe('Gallery page', { timeout: 15_000 }, () => {
+describe('Gallery page', () => {
   it('shows cards and filter chips with counts; chips and search filter on the server', async () => {
     const calls = api()
     renderAt('/audio/gallery', routes)
@@ -152,6 +153,8 @@ describe('Gallery page', { timeout: 15_000 }, () => {
   })
 
   it('plays a ready sample straight away, and polls one that is still being prepared', async () => {
+    // the sample check polls every 2 s; skip the wait rather than sit through it
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     api({ preparing: 1 })
     renderAt('/audio/gallery', routes)
     const user = userEvent.setup()
@@ -162,7 +165,8 @@ describe('Gallery page', { timeout: 15_000 }, () => {
 
     await user.click(screen.getByRole('button', { name: 'Play the sample of Dadi Amma, grandmother' }))
     expect(await within(card('Dadi Amma, grandmother')).findByText('Preparing sample…')).toBeInTheDocument()
-    await waitFor(() => expect(usePlayer.getState().id).toBe('gallery:ur-dadi'), { timeout: 5000 })
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    await waitFor(() => expect(usePlayer.getState().id).toBe('gallery:ur-dadi'))
     expect(usePlayer.getState().src).toBe('/api/voices/gallery/ur-dadi/sample')
     expect(within(card('Dadi Amma, grandmother')).queryByText('Preparing sample…')).not.toBeInTheDocument()
   })
@@ -216,7 +220,7 @@ describe('Gallery page', { timeout: 15_000 }, () => {
   })
 })
 
-describe('Voice picker: Gallery section', { timeout: 15_000 }, () => {
+describe('Voice picker: Gallery section', () => {
   it('lists gallery voices for the line language, searches them, and speaks with the one picked', async () => {
     const calls = api()
     renderAt('/audio/speak?voice=v1', routes)

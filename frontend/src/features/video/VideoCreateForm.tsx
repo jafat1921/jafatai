@@ -22,7 +22,7 @@ import { pickModel } from '@/lib/models'
 import type { VideoAspect, VideoGenerateRequest } from '@/lib/types'
 import { cameraSummary } from '@/lib/camera'
 import { plainPrompt } from '@/lib/mentions'
-import { clampDuration, smoothBlockedReason, VIDEO_ASPECTS, videoBlockedReason, VIDEO_MENTIONS, videoPayload, type VideoForm } from '@/lib/video'
+import { clampDuration, smoothBlockedReason, speechHint, VIDEO_ASPECTS, videoBlockedReason, VIDEO_MENTIONS, videoPayload, type VideoForm } from '@/lib/video'
 import { announce } from '@/stores/ui'
 import { LengthChip } from './videoDock'
 
@@ -157,7 +157,7 @@ export function VideoCreateForm({ form, setForm, modelPicked, onRun, pending, er
           estimate={estimate}
           icon={<Film aria-hidden />}
           blocked={blocked}
-          note={form.endImageId && form.imageId ? 'Moves from your start picture to your end picture.' : form.imageId ? 'Starts on your image and moves from there.' : 'Made from your words alone.'}
+          note={speechHint(form.prompt) ?? (form.endImageId && form.imageId ? 'Moves from your start picture to your end picture.' : form.imageId ? 'Starts on your image and moves from there.' : 'Made from your words alone.')}
           pending={pending}
         />
       }

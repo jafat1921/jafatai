@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     # Ad Studio's copywriter: this model when set, else the largest of ads_llm_models that is installed
     ads_llm_model: str = ""
     ads_llm_models: Annotated[list[str], NoDecode] = ["gemma4:26b", "qwen2.5:14b-instruct", "gemma4:e4b"]
+    # every translation step (dub lines today) goes to this model; not installed or empty: the creative model.
+    # Google TranslateGemma, Gemma terms: commercial use is fine within the Gemma prohibited-use policy
+    translate_llm_model: str = "translategemma:27b"
     # the eye that picks the best photo and checks the finished ads; empty: LLM_MODEL_VISION, then the copywriter
     ads_vision_model: str = ""
     # auto: use Ollama's native /api/chat when the server answers /api/version
@@ -116,6 +119,9 @@ class Settings(BaseSettings):
     # .env files carry on; aerab_languages says which languages it covers
     urdu_aerab: bool = True
     aerab_languages: str = "ur,ar,fa,ps,sd,pnb"
+    # whether ACE-Step sees the aerab on Urdu lyrics; the lyrics keep them either way. Off is the A/B for
+    # songs drifting into Arabic, since its training lyrics were almost all written without marks
+    song_lyrics_aerab: bool = True
     # the model that adds the marks; empty: the creative role's model (LLM_MODEL_CREATIVE)
     aerab_llm_model: str = ""
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU

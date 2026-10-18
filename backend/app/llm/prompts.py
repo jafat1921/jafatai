@@ -473,6 +473,7 @@ FRAME_RULES = """Rules for frame prompts (an image model sees each one alone, wi
 - Plain text, flush-left, one paragraph each, under 110 words. No markdown, no lists, no quotes.
 Rules for the motion prompt (a video model animates from the start frame to the end frame):
 - Say what moves and how over the shot's duration: performance, gestures, the camera move, light changes. Keep it physically plausible for the duration.
+- Never quote spoken words or copy dialogue from the script: the lines are voiced separately. Speech is performance only ("she answers him quietly").
 - One paragraph, present tense, under 90 words, flush-left plain text."""
 
 

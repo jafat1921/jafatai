@@ -261,15 +261,23 @@ def test_speak_with_voices_and_engines(client, tmp_path, fast_driver):
         p = db.get(Generation, r.json()["items"][0]["generation_id"]).params
         assert p["voice"]["ref_file"] and p["voice"]["ref_text"] == "ref words" and p["exaggeration"] == 1.2
 
-    r = speak(client, voice_id=v["id"], engine="chatterbox")  # the voice's language: Urdu
+    r = speak(client, voice_id=v["id"], engine="chatterbox", text="یہ اردو ہے")  # the voice's language: Urdu
     assert r.status_code == 422 and r.json()["detail"] == "Chatterbox doesn't speak Urdu. Use OmniVoice."
-    r = speak(client, engine="voxcpm", language="ur")
+    # an English line with the Urdu voice and no language is English, which Chatterbox speaks
+    r = speak(client, voice_id=v["id"], engine="chatterbox")
+    assert r.status_code == 202, r.text
+    r = speak(client, engine="voxcpm", language="ur", text="یہ اردو ہے")
     assert r.status_code == 422 and r.json()["detail"] == "VoxCPM2 doesn't speak Urdu. Use OmniVoice."
+    # Urdu letters left on the English default are still Urdu, not English for VoxCPM to mangle
+    r = speak(client, engine="voxcpm", language="en", text="یہ اردو ہے")
+    assert r.status_code == 422 and r.json()["detail"] == "VoxCPM2 doesn't speak Urdu. Use OmniVoice."
+    r = speak(client, engine="voxcpm", language="en", text="Hello there, my friend. یہ میری آواز ہے۔")
+    assert r.status_code == 422 and "part of this text is in Urdu" in r.json()["detail"]
     r = speak(client, voice_id=v["id"], engine="kokoro", language="en")
     assert r.status_code == 422 and "Kokoro can't clone" in r.json()["detail"]
     r = speak(client, voice_id=preset["id"], engine="omnivoice")
     assert r.status_code == 422
-    r = speak(client, voice_id=preset["id"], language="hi")
+    r = speak(client, voice_id=preset["id"], language="hi", text="यह मेरी आवाज़ है")
     assert r.status_code == 422 and "speaks English" in r.json()["detail"]
     assert speak(client, voice_id="missing").status_code == 422
     assert speak(client, engine="espeak").status_code == 422

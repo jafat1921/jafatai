@@ -196,7 +196,7 @@ def test_speak_with_a_gallery_voice(client, fast_driver):
 
     bad = speak(client, voice_id="gallery:nope")
     assert bad.status_code == 422 and bad.json()["detail"] == "That gallery voice doesn't exist"
-    wrong = speak(client, voice_id="gallery:bm_george", language="hi")
+    wrong = speak(client, voice_id="gallery:bm_george", language="hi", text="यह मेरी आवाज़ है")
     assert wrong.status_code == 422 and "speaks English" in wrong.json()["detail"]
 
 

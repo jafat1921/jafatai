@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import library as lib, voice_gallery
+from app import library as lib, speech_language, voice_gallery
 from app.config import get_settings
 from app.models import Generation, Job, MediaItem, VoiceProfile, new_id, utcnow
 from app.services import enqueue_generation, generation_file, job_out, media_url, new_seed
@@ -175,11 +175,14 @@ def _who_can(feature: str) -> str:
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
 
 
+def _best_for(language: str) -> str:
+    return next((x.label for x in ENGINES.values() if language in x.languages and allowed(x)), default().label)
+
+
 def check_language(e: Engine, language: str) -> None:
     if language in e.languages or e.open_languages:
         return
-    best = next((x.label for x in ENGINES.values() if language in x.languages and allowed(x)), default().label)
-    raise VoiceError(f"{e.label} doesn't speak {lang_name(language)}. Use {best}.")
+    raise VoiceError(f"{e.label} doesn't speak {lang_name(language)}. Use {_best_for(language)}.")
 
 
 def resolve_engine(requested: str | None, voice: VoiceProfile | None, design: dict | None) -> Engine:
@@ -391,7 +394,12 @@ def queue_speech(db: Session, cur, body, *, flow: str = "speak", seed: int | Non
     design = body.design.model_dump() if getattr(body, "design", None) is not None and voice is None else None
     try:
         e = resolve_engine(body.engine, voice, design)
-        language = (body.language or (voice.language if voice else None) or "en").lower()
+        # the letters win over the voice's language: an Urdu voice reading an English line speaks English
+        language = speech_language.dominant(body.text, body.language, voice.language if voice else None)
+        for _, lang in speech_language.runs(body.text, language):
+            if lang != language and lang not in e.languages and not e.open_languages:
+                raise VoiceError(f"{e.label} doesn't speak {lang_name(lang)}, and part of this text is in "
+                                 f"{lang_name(lang)}. Use {_best_for(lang)}.")
         if e.id == "kokoro":
             preset = (voice.preset or {}).get("id") if voice else KOKORO_DEFAULT.get(language)
             p = kokoro_preset(preset or "")

@@ -7,6 +7,7 @@ Migration **0015** adds `dub_project` and `transcript`. It builds on v16: voices
 - `GET /api/transcripts/{id}` returns `{id, media_id, language, text, segments: [{start, end, text, words?: [{start, end, w}]}], cleanup_text?, status}`.
 - `GET /api/transcripts/{id}/subtitles?format=srt|vtt` returns the subtitle file as an attachment.
 - `POST /api/transcripts/{id}/cleanup` returns 202. The local LLM removes fillers, keeps names and terms, and stores the result in `cleanup_text`.
+  - Cleanup tidies in the transcript's own language and never translates, so it stays on the creative model (not TRANSLATE_LLM_MODEL).
 
 ## Dub project
 `DubOut`:
@@ -19,6 +20,7 @@ Migration **0015** adds `dub_project` and `transcript`. It builds on v16: voices
 - `segments`: `[{id, start, end, speaker_id, source_text, target: {lang: {text, take_id?, fit, status, verify?: {wer, overrun_s}}}}]`
   - `fit` is `smart | stretch | strict`.
 - `glossary`: `[{source, target: {lang: text}, note?}]`. These are pinned in every translation prompt.
+- **Translation model (addendum).** The `translate` stage goes through `app.llm.translate`: TranslateGemma (`TRANSLATE_LLM_MODEL`, default `translategemma:27b`) translates each line faithfully with its model-card prompt, in numbered chunks of up to 8 lines (a chunk whose numbering breaks is redone line by line). It knows nothing of time budgets or the glossary, so the creative model's editor pass then runs only on lines that overrun their word budget clearly, contain a glossary term, or came back empty (every line in `careful` mode). Not installed, an unknown source language or a target it doesn't list (e.g. Saraiki, Balochi, Cantonese): the single creative prompt with budgets and glossary, as before. The fit stage's shorter line stays on the creative model. Aerab is unchanged: the verified pass runs on the target lines after the stage.
 - `settings`: `{quality: "fast" | "careful", fit: "smart", keep_background: true, background_db: 0, voice_match: "per_speaker"}`
 - `tracks`: `{lang: {media_id, generation_id, built_at}}` holds the finished dubbed audio per language. A failed or cancelled run never replaces a finished track.
 

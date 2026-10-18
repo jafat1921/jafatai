@@ -28,6 +28,9 @@ _transport: httpx.AsyncBaseTransport | None = None
 _native_cache: dict[str, bool] = {}
 # models this process has already talked to; the first call may include a cold load
 _warm: set[str] = set()
+# server root -> (when asked, bare tags installed there)
+_installed: dict[str, tuple[float, set[str]]] = {}
+INSTALLED_TTL_S = 300.0
 
 
 class LLMError(RuntimeError):
@@ -54,6 +57,7 @@ def set_transport(transport: httpx.AsyncBaseTransport | None) -> None:
     _transport = transport
     _native_cache.clear()
     _warm.clear()
+    _installed.clear()
 
 
 def model_for(role: Role) -> str:
@@ -386,3 +390,19 @@ async def list_models() -> list[str]:
             raise _unreachable() from e
         except (httpx.HTTPError, ValueError) as e:
             raise LLMError(f"Couldn't list models: {e}") from e
+
+
+def bare_tag(name: str) -> str:
+    return name.strip().lower().removesuffix(":latest")
+
+
+async def installed_models() -> set[str]:
+    """Bare tags of what the LLM server has. Remembered for a few minutes so a long job doesn't ask per batch;
+    LLMError when the server can't be asked (that answer isn't remembered)."""
+    root = server_root()
+    hit = _installed.get(root)
+    if hit and time.monotonic() - hit[0] < INSTALLED_TTL_S:
+        return hit[1]
+    names = {bare_tag(n) for n in await list_models() if n}
+    _installed[root] = (time.monotonic(), names)
+    return names

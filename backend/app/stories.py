@@ -30,7 +30,7 @@ from app import library as lib
 from app import montage as mt
 from app import models_catalog as mc
 from app import subtitles as st
-from app import venv_runner, voice_instruct, voices
+from app import speech, speech_language, venv_runner, voice_instruct, voices
 from app.config import get_settings
 from app.lanes import gpu_lane
 from app.models import Generation, Job, MediaItem, new_id
@@ -200,12 +200,14 @@ def with_aerab(ctx, texts: list[str], language: str) -> list[str]:
     return out
 
 
-def runner_segments(e: voices.Engine, cast: dict, rows: list[dict], work: Path) -> list[dict]:
+def runner_segments(e: voices.Engine, cast: dict, rows: list[dict], work: Path, language: str = "en") -> list[dict]:
     """One segment per line, each with its own speaker's voice, so the whole book is one model load."""
     segs = []
     for n, ln in enumerate(rows):
         c = cast[ln["speaker"]]
-        seg = {"text": ln["spoken"], "out": str(work / f"line{n:05d}.wav")}
+        # an English line in an Urdu book (or the other way round) is spoken in its own language
+        seg = {"text": ln["spoken"], "out": str(work / f"line{n:05d}.wav"),
+               "language": speech.segment_language(e, ln["spoken"], language)}
         emotion = ln.get("emotion")
         if e.id == "kokoro":
             seg["voice"] = c["preset"]
@@ -294,11 +296,13 @@ def narrate(ctx, p: dict, out: Path, work: Path) -> dict:
     pages = req["pages"]
     rows = [{**ln, "page": i} for i, page in enumerate(pages) for ln in page["lines"]]
     spoken = [" ".join(ln["text"].split()) for ln in rows]
+    # a book sent as "en" but written in Urdu still gets its aerab and an Urdu Whisper check
+    heard_in = speech_language.dominant(" ".join(spoken), language)
     if req.get("aerab", True):
-        spoken = with_aerab(ctx, spoken, language)
+        spoken = with_aerab(ctx, spoken, heard_in)
     for ln, s in zip(rows, spoken):
         ln["spoken"] = s
-    segs = runner_segments(e, p["cast"], rows, work)
+    segs = runner_segments(e, p["cast"], rows, work, language)
     lane = gpu_lane(getattr(ctx, "lanes", None))
     _speak(ctx, e, language, segs, [ln["page"] for ln in rows], len(pages), lane)
 
@@ -344,7 +348,7 @@ def narrate(ctx, p: dict, out: Path, work: Path) -> dict:
         t = end
     if req.get("check"):
         ctx.progress(0.8, "Checking the pages")
-        for pg, m in zip(out_pages, _check(ctx, out_pages, [out / pg["file"] for pg in out_pages], language, lane)):
+        for pg, m in zip(out_pages, _check(ctx, out_pages, [out / pg["file"] for pg in out_pages], heard_in, lane)):
             pg["match"] = m
     seeds = {name: c["seed"] for name, c in p["cast"].items() if "seed" in c}
     res = {"pages": out_pages, "full": {"file": "full.mp3", "duration": round(t, 3), "pages": spans},

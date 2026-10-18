@@ -12,12 +12,15 @@ def run(job: dict) -> dict:
     if job.get("audios"):
         # a batch (a story's pages): one model load, a plain transcript per file
         files = job["audios"]
-        texts = []
+        texts, langs = [], []
         for n, path in enumerate(files):
             rio.progress(0.1 + 0.85 * n / len(files), f"Checking page {n + 1} of {len(files)}")
-            segs, _ = model.transcribe(path, language=job.get("language") or None, vad_filter=True)
+            segs, info = model.transcribe(path, language=job.get("language") or None, vad_filter=True)
             texts.append(" ".join(s.text.strip() for s in segs).strip())
-        return {"texts": texts}
+            # what Whisper hears when it isn't told (scripts/check-speech-language.py)
+            langs.append({"language": info.language,
+                          "probability": round(float(info.language_probability or 0), 3)})
+        return {"texts": texts, "languages": langs}
     segments, info = model.transcribe(job["audio"], language=job.get("language") or None, word_timestamps=True,
                                       vad_filter=True)
     total = float(getattr(info, "duration", 0) or 0)

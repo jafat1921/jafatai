@@ -12,7 +12,9 @@ from typing import Any, Awaitable, Callable
 from app.config import Settings, get_settings
 from app.drivers.base import DriverResult, ProgressCallback
 from app.drivers.comfy_client import ComfyClient, ComfyError, ComfyOutput, parse_outputs, pick_client
+from app import aerab
 from app import models_catalog as mc
+from app import native_audio
 from app.character_panels import VIEW_ALIASES, VIEW_PROMPTS
 from app.lanes import AUDIO_KINDS
 from app.workflows import build, frames_for, load, snap_multiple
@@ -58,6 +60,8 @@ LORA_FAMILIES = {"zimage_t2i", "zimage_i2i", "qwen_edit", "ltx23_i2v", "ltx23_ex
                  "ltx23_ia2v_extend"}
 RESTORE_TEMPLATES = {"photo_model_1x", "photo_face_restore", "photo_colourise", "photo_supir", "photo_cutout_mask",
                      "photo_sam_mask", "image_upscale_seedvr2"}
+# graphs where LTX writes the audio itself (no speech track)
+NATIVE_AUDIO = {"ltx23_i2v", "ltx23_two_stage", "ltx23_extend"}
 IMAGE_UPSCALE_TEMPLATES = {"image_upscale_zimage", "image_upscale_seedvr2", "image_upscale_esrgan"}
 UPSCALE_TEMPLATES = {"upscale_seedvr2", "upscale_flashvsr", "upscale_esrgan"}
 
@@ -66,6 +70,9 @@ ACE_LANGUAGES = frozenset({
     "ar", "az", "bg", "bn", "ca", "cs", "da", "de", "el", "en", "es", "fa", "fi", "fr", "he", "hi", "hr", "ht", "hu",
     "id", "is", "it", "ja", "ko", "la", "lt", "ms", "ne", "nl", "no", "pa", "pl", "pt", "ro", "ru", "sa", "sk", "sr",
     "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "yue", "zh"})
+# our languages ACE-Step has no tag for: the nearest one it was trained on (Shahmukhi is still Punjabi; Sindhi
+# and Pashto sung in Pakistan sit closer to Urdu than to anything else on the list)
+ACE_NEAREST = {"ur-latn": "ur", "pnb": "pa", "sd": "ur", "ps": "ur"}
 VOCALS = {"male": "male vocals", "female": "female vocals", "duet": "male and female duet vocals"}
 SA3_HINTS = {"loop": "seamless loop", "oneshot": "one-shot", "instrument": "solo instrument"}
 
@@ -167,7 +174,14 @@ def _ref_preamble(labels, n: int) -> str:
 
 
 def plan_generation(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
-    params = params or {}
+    plan = _plan(kind, prompt, params or {}, seed, lookup)
+    if plan.template in NATIVE_AUDIO and "prompt" in plan.inputs:
+        # LTX makes up its own soundtrack here; tell it what (not) to say. The lip-synced graphs get the voice.
+        plan.inputs["prompt"] = native_audio.ltx_prompt(plan.inputs["prompt"])
+    return plan
+
+
+def _plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
     negative = params.get("negative") or params.get("negative_prompt") or ""
     ref_ids = _ids(params.get("reference_ids"))[:3]
     loras = _loras(params)
@@ -598,16 +612,36 @@ def control_plan(c: dict, prompt: str, negative: str, seed: int, lookup) -> Plan
                 {"source_id": c["source_id"], "control": c.get("type"), "as_is": bool(c.get("as_is"))})
 
 
+def song_language(params: dict) -> str:
+    """The language the lyrics are sung in. The letters win over the picker: Urdu lyrics sent with the
+    default "en" would otherwise be read as English and come out as some third language."""
+    asked = str(params.get("language") or "en").lower()
+    found = native_audio.language_of(params.get("lyrics") or "")
+    if not found or found == "en" or found == asked.split("-")[0]:
+        return asked
+    # telling Urdu from Shahmukhi or Sindhi by the letters is a guess; the writer's pick stands
+    if found in aerab.ARABIC_SCRIPT_LANGS and asked in (*aerab.ARABIC_SCRIPT_LANGS, "pa"):
+        return asked
+    return found
+
+
 def style_tags(prompt: str, params: dict) -> str:
-    """Prompt plus the vocal and tempo chips, the way ACE-Step and MiniMax read their style text."""
+    """Prompt plus the vocal, language and tempo chips, the way ACE-Step and MiniMax read their style text."""
     parts = [prompt.strip().rstrip(",. ")]
     # no lyrics means instrumental whatever the vocal chip says: a voice with nothing to sing only hums
-    if params.get("vocal") == "none" or not (params.get("lyrics") or "").strip():
+    sung = params.get("vocal") != "none" and (params.get("lyrics") or "").strip()
+    if not sung:
         vocal = "instrumental"
     else:
         vocal = VOCALS.get(params.get("vocal") or "")
     if vocal and vocal not in parts[0].lower():
         parts.append(vocal)
+    if sung:
+        # ComfyUI's ACE-Step encoder never shows the language to its audio-code LM, only the caption and
+        # lyrics, so the caption has to say it
+        name = (native_audio.NAMES.get(song_language(params).split("-")[0]) or "").split(" (")[0]
+        if name and name.lower() not in parts[0].lower():
+            parts.append(f"sung in {name}")
     if params.get("bpm"):
         parts.append(f"{int(params['bpm'])} bpm")
     return ", ".join(p for p in parts if p)
@@ -627,8 +661,10 @@ def audio_plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
     lyrics = (params.get("lyrics") or "").strip()
 
     if m.template == "ace15_song":
-        lang = str(params.get("language") or "en").lower()
-        lang = "ur" if lang == "ur-latn" else lang
+        lang = song_language(params)
+        lang = ACE_NEAREST.get(lang, lang)
+        if lyrics and not get_settings().song_lyrics_aerab:
+            lyrics = aerab.strip(lyrics)
         inputs.update(tags=style_tags(prompt, params), lyrics=lyrics or "[Instrumental]",
                       language=lang if lang in ACE_LANGUAGES else "unknown")
         if params.get("bpm"):

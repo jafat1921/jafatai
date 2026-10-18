@@ -25,7 +25,7 @@ import { has, normalizeModelId } from '@/lib/models'
 import type { ModelInfo, VideoGenerateRequest } from '@/lib/types'
 import { cameraSummary } from '@/lib/camera'
 import { plainPrompt } from '@/lib/mentions'
-import { clampDuration, DEFAULT_I2V_FORM, i2vBlockedReason, i2vPayload, smoothBlockedReason, VIDEO_MENTIONS, videoResult, type I2vForm } from '@/lib/video'
+import { clampDuration, DEFAULT_I2V_FORM, i2vBlockedReason, i2vPayload, smoothBlockedReason, speechHint, VIDEO_MENTIONS, videoResult, type I2vForm } from '@/lib/video'
 import { announce } from '@/stores/ui'
 import { LengthChip } from './videoDock'
 
@@ -156,7 +156,7 @@ export function Img2VidPage() {
             estimate={estimate}
             icon={<Film aria-hidden />}
             blocked={why}
-            note={form.endId ? 'Moves from your start picture to your end picture.' : 'Opens on your picture and moves from there.'}
+            note={speechHint(form.prompt) ?? (form.endId ? 'Moves from your start picture to your end picture.' : 'Opens on your picture and moves from there.')}
             pending={generate.isPending}
           />
         }

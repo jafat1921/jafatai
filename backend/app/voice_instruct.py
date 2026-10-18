@@ -44,7 +44,9 @@ for accent, *names in (
         ("australian accent", "australian"), ("canadian accent", "canadian"), ("chinese accent", "chinese", "mandarin"),
         ("japanese accent", "japanese"), ("korean accent", "korean"), ("russian accent", "russian"),
         ("portuguese accent", "portuguese", "brazilian"),
-        # OmniVoice has no Pakistani or other South Asian accents; Indian is the closest it knows
+        # OmniVoice has no Pakistani or other South Asian accents; Indian is the closest it knows. Its accents
+        # are English accents only: the runner drops them on lines in any other language (an Urdu line with
+        # "indian accent" drifted out of Urdu)
         ("indian accent", "indian", "pakistani", "south asian", "desi", "urdu", "hindi", "punjabi", "sindhi",
          "bengali", "lahori", "karachi", "peshawari", "delhi", "mumbai")):
     _add("accent", accent, accent, *names)

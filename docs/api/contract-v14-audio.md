@@ -74,6 +74,20 @@ Song models and LTX-2.3 guess the vowels of unmarked text, so the marks (zer, za
 - **Video:** before a clip or take renders, Arabic-script lines inside quotes in the prompt (`"…"`, `“…”`, `«…»`, i.e. what LTX speaks) get marked in their own language. The original prompt is kept in `params.prompt_written`. Long takes mark the quoted lines of their beats too.
 - `URDU_AERAB=false` turns off all of it; `AERAB_LANGUAGES` picks the languages. If the LLM is down, the render goes ahead unmarked.
 
+### The sung language (ACE-Step 1.5)
+
+- ComfyUI's `TextEncodeAceStepAudio1.5` takes a `language` from its own list, which has `ur`, `hi`, `pa`, `ar`
+  and `fa`. It only reaches the lyrics encoder (`# Languages`); the audio-code LM that decides what is sung sees
+  just the caption and the lyrics. So the driver also adds "sung in Urdu" (or the language) to the style tags of
+  every song with lyrics, on all three song models.
+- The lyrics' letters win over the picker: Urdu-script lyrics sent with `language: "en"` are sung as `ur`,
+  Devanagari as `hi`. Mixed English + Urdu lyrics go in as `ur`. Among the Arabic-script languages the
+  writer's pick stands.
+- Codes ACE-Step has no tag for go to the nearest one: `ur-latn` and `sd`, `ps` to `ur`, `pnb` to `pa`.
+  Anything else not on its list goes in as `unknown`.
+- `SONG_LYRICS_AERAB=false` sends ACE-Step the lyrics without their marks (the stored lyrics keep them). It is
+  on by default; the off setting is the A/B to try if marked Urdu still drifts toward Arabic.
+
 ## Estimate
 `GET /api/estimate?kind=audio&model=&duration_s=&count=` uses the same response as the other kinds.
 

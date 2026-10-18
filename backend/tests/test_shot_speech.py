@@ -186,6 +186,41 @@ def test_a_speaker_without_a_voice_falls_back_to_native_audio(client, project, c
     assert g.status == "ready" and not g.params.get("speech_audio")
     assert g.params["dialogue"]["status"] == "native" and "no voice yet" in g.params["dialogue"]["notice"]
     assert 'Diver says: "One more dive."' in g.prompt
+    # LTX is told which language it is speaking
+    plan = plan_generation("take", g.prompt, g.params, 7, Lookup(Path(get_settings().data_dir)))
+    assert plan.inputs["prompt"].endswith('Diver says: "One more dive."\nThe dialogue is spoken in English.')
+
+
+def test_urdu_lines_without_a_voice_get_a_stand_in_and_lip_sync(client, project, character, fast_driver):
+    # LTX can't speak Urdu, so the line never goes into its prompt
+    client.patch(f"/api/characters/{character['id']}", json={"description": "A grey-haired woman, a diver"})
+    shot = talking_shot(client, fast_driver, project, character)
+    shot = say(client, shot, {"character_id": character["id"], "text": "سمندر آج بہت خاموش ہے۔"})
+    assert "stand-in voice" in shot["dialogue_notice"]
+    client.post(f"/api/shots/{shot['id']}/takes", json={"count": 1})
+    run_all(fast_driver)
+    [g] = takes(shot["id"])
+    d = g.params["dialogue"]
+    assert g.status == "ready" and g.params["lipsync"] is True and d["mode"] == "lipsync"
+    [row] = d["lines"]
+    voice = ss.voice_gallery.get(row["voice_id"].removeprefix("gallery:"))
+    assert row["stand_in"] and "ur" in voice["languages"] and voice["gender"] == "female"
+    assert row["language"] == "ur" and "سمندر" not in g.prompt
+    # the same character gets the same stand-in every time
+    assert ss.stand_in("ur", "female", character["id"]) == row["voice_id"]
+    plan = plan_generation("take", g.prompt, g.params, 7, Lookup(Path(get_settings().data_dir)))
+    assert plan.template == "ltx23_ia2v" and plan.inputs["prompt"] == g.prompt
+
+
+def test_roman_urdu_and_hindi_lines_are_not_left_to_ltx(client, project, character, fast_driver):
+    shot = talking_shot(client, fast_driver, project, character)
+    for text, lang in (("Tum kahan ja rahe ho, yaar?", "en"), ("आज समंदर शांत है", "hi")):
+        say(client, shot, {"character_id": character["id"], "text": text})
+        with SessionLocal() as db:
+            row = db.get(Shot, shot["id"])
+            p = ss.plan(db, row.workspace_id, row.dialogue)
+        assert p["mode"] == "lipsync" and p["lines"][0]["voice_id"].startswith("gallery:")
+        assert lang in ss.voice_gallery.get(p["lines"][0]["voice_id"][8:])["languages"]
 
 
 def test_a_take_queued_elsewhere_waits_for_its_lines(client, project, character, fast_driver):

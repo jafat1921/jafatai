@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from app import venv_runner, voice_instruct, voices
+from app import speech_language, venv_runner, voice_instruct, voices
 from app.audio_analysis import stream_info
 from app.audio_edit import atempo
 from app.config import get_settings
@@ -55,8 +55,17 @@ def assemble(parts: list[tuple[Path | None, float]], out_path: Path, tempo: floa
     return round(stream_info(out_path).duration, 3)
 
 
+def segment_language(e: voices.Engine, text: str, requested: str | None) -> str:
+    """The language one piece goes to the engine in. When its letters say another language the engine can't
+    speak, the request stands: that engine has nothing better to offer."""
+    lang = speech_language.language_of(text, requested)
+    if lang != (requested or "en") and lang not in e.languages and not e.open_languages:
+        return requested or "en"
+    return lang
+
+
 def runner_job(params: dict, e: voices.Engine, texts: list[str], work: Path, seed: int | None,
-               ref: Path | None) -> dict:
+               ref: Path | None, languages: list[str] | None = None) -> dict:
     v = params.get("voice") or {}
     speed = float(params.get("speed") or 1.0)
     duration = params.get("duration_s")
@@ -68,8 +77,12 @@ def runner_job(params: dict, e: voices.Engine, texts: list[str], work: Path, see
         hint = (v.get("design") or {}).get("speed") or ins.speed
         if speed == 1.0 and not duration and hint != 1.0:
             speed = float(hint)
-    job = {"engine": e.id, "language": params.get("language") or "en", "seed": seed, "device": "cuda",
-           "segments": [{"text": t, "out": str(work / f"seg{i}.wav")} for i, t in enumerate(texts)],
+    requested = params.get("language") or "en"
+    langs = languages or [segment_language(e, t, requested) for t in texts]
+    job = {"engine": e.id, "language": requested, "seed": seed, "device": "cuda",
+           # each piece carries its own language: a mixed English / Urdu script is several languages
+           "segments": [{"text": t, "out": str(work / f"seg{i}.wav"), "language": lang}
+                        for i, (t, lang) in enumerate(zip(texts, langs))],
            "ref_audio": str(ref) if ref else None, "ref_text": v.get("ref_text") or None,
            "instruct": instruct, "voice": v.get("preset")}
     # a fixed length wins over speed; the engine only gets it when there's one piece to fit
@@ -87,8 +100,16 @@ def synthesise(params: dict, seed: int | None, out_path: Path, progress_cb: Prog
                lane: str | None = None, run=None) -> DriverResult:
     e = voices.get_engine(params.get("engine") or voices.default_engine())
     text = params.get("text") or ""
-    segs = voices.segments(text, e)
-    texts = [str(v) for k, v in segs if k == "text"]
+    requested = params.get("language") or "en"
+    segs = []
+    for k, v in voices.segments(text, e):
+        if k != "text":
+            segs.append((k, v))
+            continue
+        # a sentence in another language is its own piece, spoken in that language, joined with no gap
+        segs += [("text", (piece, segment_language(e, piece, requested)))
+                 for piece, _ in speech_language.runs(str(v), requested)]
+    texts = [v[0] for k, v in segs if k == "text"]
     if not texts:
         raise RuntimeError("There are no words to speak")
     work = out_path.parent / f".{out_path.stem}.speech"
@@ -103,7 +124,7 @@ def synthesise(params: dict, seed: int | None, out_path: Path, progress_cb: Prog
                 raise RuntimeError("The voice's reference clip is missing")
             progress_cb(0.02, "Preparing the reference clip")
             ref = to_wav(src, work / "ref.wav")
-        job = runner_job(params, e, texts, work, seed, ref)
+        job = runner_job(params, e, texts, work, seed, ref, [v[1] for k, v in segs if k == "text"])
         progress_cb(0.05, f"Starting {e.label}")
         res = (run or venv_runner.run)(
             e.runner, e.venv, job, lane=lane, need_gb=e.vram_gb,

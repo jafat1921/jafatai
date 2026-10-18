@@ -22,7 +22,7 @@ video podcast). Stage records: `pending | running | review | done | skipped | fa
 | stage | what happens | review |
 |---|---|---|
 | poem | The lyrics writer (`/audio/lyrics` prompt, sections by length) writes verses and a chorus, or the user's own poem is used. Arabic-script languages get the verified aerab pass. | yes |
-| song | `generate` job, kind `song`, model `ace15_turbo`, the lyrics, style tags, vocal, `length_s`. A Library audio item; a re-sing is a new version of it. | yes |
+| song | `generate` job, kind `song`, model `ace15_turbo`, the lyrics, style tags, vocal, `length_s`. A Library audio item; a re-sing is a new version of it. The Short's language goes through the same mapping as the Song page (v14 "The sung language"): "sung in Urdu" in the tags, `ur` to ACE-Step. | yes |
 | timing | `poetry_timing` job (audio lane): vocal stem split, energy regions, Whisper word times; lines fitted in order (see 2). | yes |
 | scenes | LLM writes one image and one motion prompt per scene; a keyframe (`generate`, kind `image`) then a clip (`generate`, kind `video`, LTX-2.3 i2v, first frame = keyframe) per scene. | yes |
 | render | `poetry_render` job (general lane, ffmpeg): the story-video assembly (`app/montage.py`). | no |

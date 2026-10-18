@@ -4,6 +4,30 @@ import sys
 import runner_io as rio
 
 MODEL_ID = "k2-fsa/OmniVoice"
+# OmniVoice's ids are ISO 639-1 where one exists, 639-3 otherwise; a code it doesn't list is dropped with a
+# warning and the line is spoken "language-agnostic", which for Arabic or Roman Urdu meant another language
+LANG_IDS = {"ar": "arb", "or": "ory", "ne": "npi", "bal": "bgp", "tl": "fil", "ku": "kmr", "pa-arab": "pnb"}
+
+
+def omni_language(code):
+    c = (code or "").strip().lower().replace("_", "-")
+    if not c or c in ("auto", "und", "mul", "none"):
+        return None
+    if c in LANG_IDS:
+        return LANG_IDS[c]
+    # ur-latn (Roman Urdu) is still Urdu words; verify on server that "ur" reads Latin letters well
+    base = c.split("-")[0]
+    return LANG_IDS.get(base, base)
+
+
+def for_language(instruct, language):
+    # its accents are English accents ("only effective when the synthesis text is in English"); on an Urdu
+    # line "indian accent" pulled the voice away from Urdu, so they only go with English
+    if not instruct or language in (None, "en"):
+        return instruct or None
+    items = [x.strip() for x in str(instruct).replace("，", ",").split(",")]
+    kept = [x for x in items if x and not x.lower().endswith(" accent")]
+    return ", ".join(kept) or None
 
 
 def sample_rate(model) -> int:
@@ -35,7 +59,7 @@ def run(job: dict) -> dict:
         guidance_scale=float(job["guidance"]) if job.get("guidance") is not None else 2.0,
         denoise=bool(job["denoise"]) if job.get("denoise") is not None else True,
     )
-    kw = {"language": job.get("language") or None, "generation_config": config}
+    kw = {"language": omni_language(job.get("language")), "generation_config": config}
     if job.get("ref_audio"):
         # clone; OmniVoice runs its own ASR on the clip when ref_text is missing
         kw["ref_audio"] = job["ref_audio"]
@@ -57,7 +81,11 @@ def run(job: dict) -> dict:
         if seg.get("instruct") and not job.get("ref_audio"):
             call["instruct"] = seg["instruct"]
         if seg.get("language"):
-            call["language"] = seg["language"]
+            call["language"] = omni_language(seg["language"])
+        if call.get("instruct"):
+            call["instruct"] = for_language(call["instruct"], call["language"])
+            if not call["instruct"]:
+                call.pop("instruct")
         try:
             out = model.generate(text, **call)
         except ValueError as err:

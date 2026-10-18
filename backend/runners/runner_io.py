@@ -92,16 +92,13 @@ def main(fn) -> None:
 
 
 def speak_all(job: dict, synth, sample_rate) -> dict:
-    """Run `synth(text) -> audio` over every segment of a TTS job and write each one's wav.
+    """Run `synth(text, seg) -> audio` over every segment of a TTS job and write each one's wav.
 
-    With "per_segment": true (the gallery's sample batches) each segment may carry its own voice, so
-    synth is called as synth(text, seg) and reads instruct / seed / voice / language from seg."""
+    Every segment carries its own language (a mixed English / Urdu script is several), so synth always gets
+    seg. With "per_segment": true (gallery samples, story books) a segment may also carry its own voice,
+    instruct and seed."""
     segs = job.get("segments") or []
-    per_segment = bool(job.get("per_segment"))
     out, warnings = [], []
-
-    def say(text, seg):
-        return synth(text, seg) if per_segment else synth(text)
 
     for i, seg in enumerate(segs):
         progress(0.15 + 0.8 * i / max(1, len(segs)), f"Speaking line {i + 1}/{len(segs)}")
@@ -111,11 +108,11 @@ def speak_all(job: dict, synth, sample_rate) -> dict:
         # crash on the empty result (OmniVoice: "zero-size array to reduction operation maximum")
         if has_letters(text):
             try:
-                audio = say(text, seg)
+                audio = synth(text, seg)
             except Exception as e:  # noqa: BLE001
                 bare = strip_marks(text)
                 try:
-                    audio = say(bare, seg) if bare != text else None
+                    audio = synth(bare, seg) if bare != text else None
                 except Exception:  # noqa: BLE001
                     audio = None
                 if audio is None:

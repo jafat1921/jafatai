@@ -1,11 +1,15 @@
-"""The words of a dub: LLM translation in batches (glossary pinned, a time budget per line), the careful
-mode's self-review, a shorter line when a take overruns, and the word error rate the verify stage uses."""
+"""The words of a dub: translation in batches (TranslateGemma through app.llm.translate when installed, then
+the editor for lines over their time budget or with glossary terms; else one creative call with budgets and
+glossary pinned), the careful mode's self-review, a shorter line when a take overruns, and the word error rate the verify stage uses."""
+import logging
 import re
 
 from pydantic import BaseModel
 
 from app import aerab
 from app.voices import lang_name
+
+log = logging.getLogger("mixai.dub")
 
 BATCH = 12
 # spoken words per second at a relaxed dubbing pace; only a budget hint for the LLM
@@ -110,10 +114,52 @@ def shorter_messages(text: str, source: str, slot_s: float, lang: str, glossary:
 ASK = dict(think=False, temperature=0.3, max_tokens=4000, timeout=240.0)
 
 
+def over_budget(text: str, item: dict, lang: str) -> bool:
+    budget = word_budget(max(0.3, float(item["end"]) - float(item["start"])), lang)
+    # the budget is a hint and the fit stage still has atempo, so only a clear overrun goes to the editor
+    return len(words_of(text)) > max(budget + 1, budget * 1.2)
+
+
+def pinned(text: str, glossary: list[dict]) -> bool:
+    low = (text or "").casefold()
+    return any(src and src.casefold() in low for src in (" ".join(str(g.get("source") or "").split())
+                                                          for g in glossary or []))
+
+
+def _faithful_then_fit(batch: list[dict], src: str, lang: str, glossary: list[dict], careful: bool,
+                       tick) -> dict[str, str]:
+    from app.llm import LLMError, chat_sync
+    from app.llm.translate import translate
+
+    drafts = translate([s["text"] for s in batch], src, lang, tick=tick)
+    out = {s["id"]: " ".join(d.split()) for s, d in zip(batch, drafts)}
+    # TranslateGemma knows nothing of the time budget or the glossary, so the editor (the creative model) only
+    # sees the lines that need one of those; careful mode still reviews every line
+    fix = [s for s in batch if careful or not out[s["id"]] or over_budget(out[s["id"]], s, lang)
+           or pinned(s["text"], glossary)]
+    if not fix:
+        return out
+    try:
+        res = chat_sync("creative", review_messages(fix, out, src, lang, glossary), tick=tick, schema=Lines,
+                        **{**ASK, "temperature": 0.2})
+    except LLMError as e:
+        log.warning("dub editor pass failed (%s); keeping the plain translations", e)
+        return out
+    out.update({x.id: " ".join(x.text.split()) for x in res.data.lines if x.id in out and x.text.strip()})
+    return out
+
+
 def translate_batch(batch: list[dict], src: str | None, lang: str, glossary: list[dict], careful: bool,
                     tick=None) -> dict[str, str]:
-    from app.llm import chat_sync
+    from app.llm import LLMError, chat_sync
+    from app.llm.translate import translator
 
+    if translator(src, lang):
+        try:
+            return _faithful_then_fit(batch, src, lang, glossary, careful, tick)
+        except LLMError as e:
+            log.warning("translation model failed (%s); the creative model translates this batch", e)
+    # no TranslateGemma: one creative call that translates within the budgets and glossary, as before
     res = chat_sync("creative", translate_messages(batch, src, lang, glossary), tick=tick, schema=Lines, **ASK)
     out = {x.id: " ".join(x.text.split()) for x in res.data.lines}
     if careful:

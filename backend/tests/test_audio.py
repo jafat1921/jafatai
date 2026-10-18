@@ -374,7 +374,7 @@ def test_audio_plans(tmp_path):
     p = audio_plan("song", "dreamy synth pop", {"model": "ace15_turbo", "duration_s": 60, "lyrics": "[verse]\nhi",
                                                 "vocal": "female", "bpm": 100, "language": "ur-latn"}, 4, lk)
     assert p.template == "ace15_song" and p.media == "audio"
-    assert p.inputs["tags"] == "dreamy synth pop, female vocals, 100 bpm" and p.inputs["language"] == "ur"
+    assert p.inputs["tags"] == "dreamy synth pop, female vocals, sung in Urdu, 100 bpm" and p.inputs["language"] == "ur"
     assert p.inputs["bpm"] == 100 and p.inputs["seed"] == 4 and p.inputs["duration_s"] == 60
     p = audio_plan("song", "waltz", {"keyscale": "D minor", "time_signature": "3", "guidance": 3.5, "think": False}, 1, lk)
     assert (p.inputs["keyscale"], p.inputs["timesignature"], p.inputs["guidance"], p.inputs["audio_codes"]) == (
@@ -390,10 +390,41 @@ def test_audio_plans(tmp_path):
     p = audio_plan("sfx", "glass breaking", {}, 1, lk)
     assert p.template == "sa3_sfx" and p.inputs["prompt"] == "glass breaking"
     p = audio_plan("song", "city pop", {"model": "minimax_music3", "lyrics": "[verse]\nhi", "vocal": "duet"}, 1, lk)
-    assert p.inputs["caption"] == "city pop, male and female duet vocals" and p.inputs["lyrics"] == "[verse]\nhi"
+    assert p.inputs["caption"] == "city pop, male and female duet vocals, sung in English" and p.inputs["lyrics"] == "[verse]\nhi"
     assert style_tags("instrumental jazz", {"vocal": "none"}) == "instrumental jazz"
     p = audio_plan("song", "ghazal", {"model": "yue2", "lyrics": "[verse]\nhi\n[chorus]\nho"}, 1, lk)
     assert p.template == "yue2_song" and p.inputs["lyrics"] == "[Verse]\nhi\n[Chorus]\nho"
+
+
+UR_LYRICS = "[verse]\nدِل کی بات سُنو\n[chorus]\nچاند سِتارے ہیں"
+
+
+@pytest.mark.parametrize("asked,lyrics,lang,sung", [
+    ("ur", UR_LYRICS, "ur", "sung in Urdu"),
+    # the picker left on English: the letters win
+    ("en", UR_LYRICS, "ur", "sung in Urdu"),
+    ("en", "[verse]\nmain tumse pyar karta hoon\nyaar this is love\n" + UR_LYRICS, "ur", "sung in Urdu"),
+    ("en", "[verse]\nदिल की बात सुनो", "hi", "sung in Hindi"),
+    ("ur-latn", "[verse]\ndil ki baat suno", "ur", "sung in Urdu"),
+    # no ACE-Step tag of their own: the nearest one
+    ("pnb", "[verse]\nدِل دی گل سُنو", "pa", "sung in Punjabi"),
+    ("sd", "[verse]\nدل جي ڳالهه ٻڌو", "ur", "sung in Sindhi"),
+    ("ps", "[verse]\nزړه خبره واورئ", "ur", "sung in Pashto"),
+    ("en", "[verse]\nI love you so much tonight", "en", "sung in English"),
+])
+def test_song_language_follows_the_lyrics(tmp_path, asked, lyrics, lang, sung):
+    p = audio_plan("song", "soft ballad", {"model": "ace15_turbo", "lyrics": lyrics, "language": asked}, 1,
+                   Lookup(tmp_path))
+    assert p.inputs["language"] == lang and p.inputs["tags"].endswith(sung)
+    # the marks reach the model unless the A/B switch says otherwise
+    assert p.inputs["lyrics"] == lyrics
+
+
+def test_song_lyrics_aerab_switch(tmp_path, monkeypatch):
+    monkeypatch.setattr(get_settings(), "song_lyrics_aerab", False)
+    p = audio_plan("song", "ghazal", {"model": "ace15_turbo", "lyrics": UR_LYRICS, "language": "ur"}, 1,
+                   Lookup(tmp_path))
+    assert p.inputs["lyrics"] == "[verse]\nدل کی بات سنو\n[chorus]\nچاند ستارے ہیں"
 
 
 def test_save_audio_history_is_parsed_as_audio():
@@ -428,5 +459,5 @@ def test_worker_runs_an_audio_job_through_the_comfy_driver(client, tmp_path):
         assert g.params["comfy"]["template"] == "ace15_song" and db.get(Job, g.job_id).gpu_seconds == 12.0
         assert db.get(MediaItem, item["id"]).duration_s == 20  # the fake file can't be probed; the asked length stays
     graph = made[0].graphs[0]
-    assert node(graph, "Encode")["tags"] == "warm acoustic folk, fingerpicked guitar, male vocals"
+    assert node(graph, "Encode")["tags"] == "warm acoustic folk, fingerpicked guitar, male vocals, sung in English"
     assert node(graph, "Save")["filename_prefix"] == f"mixai/{item['generation_id']}"

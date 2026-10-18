@@ -121,11 +121,30 @@ starts fresh.
      `ltx23_ia2v_extend`.
    - `params.dialogue.status` becomes `"ready"`.
 
-### mode "native" (some speaker has no voice)
+### A speaker with no voice: stand-in or "native"
 
-There's no speech track. The lines go into the prompt as `Name says: "…"` (when they aren't there already),
-which is the LTX native audio from before. The worker's aerab pass marks quoted Urdu.
+LTX-2.3 only speaks the languages Lightricks validated (English, French, Spanish, German, Russian); Urdu,
+Hindi or Roman Urdu in its prompt comes out as babble. So a voiceless speaker only falls back to LTX when
+**every** line of the shot reads as plain English (`app.native_audio.looks_english`). Otherwise each
+voiceless speaker gets a **stand-in** gallery voice in the line's language (their gender when the profile or
+description says), the same voice every time for the same character. The plan stays `mode: "lipsync"`, the
+row carries `stand_in: true`, and the notice reads "Maya has no voice yet, so a stand-in voice speaks their
+lines. Pick a voice in Character Studio." Only when the gallery has no voice for that language does the take
+fall back to native.
+
+In `mode: "native"` there's no speech track. The lines go into the prompt as `Name says: "…"` (when they
+aren't there already), and the driver adds "The dialogue is spoken in English."
 `params.dialogue.status` becomes `"native"`, and the notice is on the shot.
+
+### What LTX hears when it makes its own sound
+
+Every LTX graph that writes its own audio (`ltx23_i2v`, `ltx23_two_stage`, `ltx23_extend`; not the ia2v
+lip-sync graphs) gets one clause added to the prompt in the driver (`app.native_audio.ltx_prompt`):
+quoted lines get their language named; a prompt that mentions talking but quotes nothing gets "Any talking
+is quiet and indistinct, with no clear words."; a prompt with no speech at all gets "Nobody talks or sings:
+no dialogue, no speech, no voice-over; just the sounds of the scene." These graphs run at CFG 1, so a negative
+prompt would never be read; the positive prompt is the only lever. The storyboard's motion prompts are told
+never to quote dialogue, since the lines travel separately.
 
 **The UI limits:** lip sync works best with one visible speaker. With two speakers in one shot, the editor
 suggests one shot per speaker or an over-the-shoulder shot.
@@ -182,3 +201,6 @@ The UI polls it while `item.status` is queued or generating, then shows a player
   chunk joins.
 - **The Test clip tab:** with the close-up panel, then with only a portrait. Do 5 s and 10 s both work?
 - **A Kokoro voice given an Urdu line:** you should get a readable 422 at "Render takes".
+- **An Urdu line for a character with no voice:** the take should be lip-synced in a stand-in Urdu voice,
+  not LTX babble. Try a woman's and a man's description.
+- **A silent shot (no lines):** no invented speech in the take's audio, just ambience.

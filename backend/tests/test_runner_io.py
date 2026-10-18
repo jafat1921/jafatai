@@ -18,7 +18,7 @@ def test_one_bad_line_does_not_stop_the_book(tmp_path, monkeypatch):
     monkeypatch.setattr(runner_io, "write_wav", fake_wav)
     said = []
 
-    def synth(text):
+    def synth(text, seg=None):
         said.append(text)
         if "\u064e" in text:  # marked text fails, as the live crash did; the bare retry works
             raise ValueError("zero-size array to reduction operation maximum which has no identity")

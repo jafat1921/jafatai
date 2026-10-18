@@ -8,11 +8,13 @@ it to the take's own job, which queues them and hands itself back to the queue (
 they are spoken. Then ffmpeg lays them end to end with their pauses and the take renders on ltx23_ia2v, or as
 a lip-synced long take once the speech runs past one LTX pass.
 
-A line whose speaker has no voice can't be lip-synced, so the whole take falls back to the video model's own
-audio (the lines go into the prompt in quotes, as before) and the shot says why.
+A line whose speaker has no voice gets a stand-in from the Voice Gallery (their language, their gender when the
+profile says) and the shot says so. Only when every line is plainly English does the take fall back to the video
+model's own audio, the lines in quotes in the prompt: LTX speaks English well and babbles in Urdu or Hindi.
 """
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,7 +23,7 @@ from fastapi import HTTPException
 from sqlalchemy import String, cast, select
 from sqlalchemy.orm import Session
 
-from app import aerab, longtake
+from app import aerab, longtake, native_audio, voice_gallery
 from app import audio_analysis as aa
 from app import audio_edit as ae
 from app import library as lib
@@ -91,10 +93,46 @@ def _names(names: list[str]) -> str:
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
-def missing_notice(names: list[str]) -> str:
+def missing_notice(names: list[str], stand_in: bool = False) -> str:
     verb = "has" if len(names) == 1 else "have"
+    if stand_in:
+        return (f"{_names(names)} {verb} no voice yet, so a stand-in voice speaks their lines. "
+                "Pick a voice in Character Studio.")
     return (f"{_names(names)} {verb} no voice yet, so this shot's lines use the video model's own audio instead "
             "of lip sync. Pick a voice in Character Studio.")
+
+
+_FEMALE = re.compile(r"\b(female|woman|women|girl|lady|mother|mom|wife|aunt|grandmother|daughter|sister|queen|"
+                     r"princess|she|her)\b")
+_MALE = re.compile(r"\b(male|man|men|boy|gentleman|father|dad|husband|uncle|grandfather|son|brother|king|prince|"
+                   r"he|his)\b")
+
+
+def _gender(db: Session, cid: str) -> str | None:
+    c = db.get(Character, cid) if cid else None
+    if c is None:
+        return None
+    # the profile's own answer first; the description only when it's blank
+    for text in (str((c.profile or {}).get("gender") or ""), c.description or ""):
+        text = text.lower()
+        f, m = _FEMALE.search(text), _MALE.search(text)
+        if f and (not m or f.start() < m.start()):
+            return "female"
+        if m:
+            return "male"
+    return None
+
+
+def stand_in(language: str, gender: str | None, key: str) -> str | None:
+    """A gallery voice for a speaker who has none, the same one every time for the same character."""
+    rows = sorted((v for v in voice_gallery.catalogue().values()
+                   if voice_gallery.available(v) and language in (v.get("languages") or [])), key=lambda v: v["id"])
+    if gender:
+        rows = [v for v in rows if v.get("gender") == gender] or rows
+    if not rows:
+        return None
+    pick = rows[int(hashlib.sha1(key.encode()).hexdigest(), 16) % len(rows)]
+    return voice_gallery.PREFIX + pick["id"]
 
 
 def _speaker(db: Session, workspace_id: str, cid: str, cache: dict) -> tuple[str, str | None, bool]:
@@ -124,9 +162,21 @@ def plan(db: Session, workspace_id: str, lines: list[dict] | None, cache: dict |
         rows.append(row)
     if not rows:
         return None
-    out = {"status": "pending", "mode": "native" if missing else "lipsync", "lines": rows}
+    native = bool(missing) and all(native_audio.looks_english(r["text"]) for r in rows)
+    if missing and not native:
+        picks = {}
+        for i, r in enumerate(rows):
+            if r["voice_id"] is None:
+                lang = native_audio.language_of(r["text"]) or "en"
+                picks[i] = stand_in(lang, _gender(db, r["character_id"] or ""), r["character_id"] or r["name"])
+        # no gallery voice for that language: the old fallback is still better than a failed take
+        native = None in picks.values()
+        if not native:
+            for i, vid in picks.items():
+                rows[i].update(voice_id=vid, stand_in=True)
+    out = {"status": "pending", "mode": "native" if native else "lipsync", "lines": rows}
     if missing:
-        out["notice"] = missing_notice(missing)
+        out["notice"] = missing_notice(missing, stand_in=not native)
     return out
 
 
@@ -155,9 +205,9 @@ def keep_speakers(shot: Shot) -> None:
 # ---------------------------------------------------------------- speaking the lines
 
 def _language(text: str, voice) -> str:
-    # an Urdu or Arabic line says so in its letters; anything else is spoken in the voice's own language
-    found = aerab.detect_language(text) if aerab.has_script(text) else None
-    if found:
+    # an Urdu, Arabic or Hindi line says so in its letters; Latin text is spoken in the voice's own language
+    found = native_audio.language_of(text)
+    if found and found != "en":
         return found
     lang = (voice.language if voice is not None else None) or "en"
     return "en" if lang in aerab.ARABIC_SCRIPT_LANGS else lang

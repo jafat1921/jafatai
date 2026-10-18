@@ -120,3 +120,15 @@ export function videoResult(res: (MediaItem & { job?: Job | null }) | MediaBatch
   const items = Array.isArray(batch.items) ? batch.items : single?.id ? [single] : []
   return { items, jobs: [...(batch.jobs ?? []), ...(single?.job ? [single.job] : [])] }
 }
+
+const QUOTED = /"([^"\n]+)"|“([^”\n]+)”|«([^»\n]+)»/g
+// Arabic-script, Devanagari, Gurmukhi and Bengali letters
+const NON_LATIN = /[؀-ۿݐ-ݿࢠ-ࣿऀ-ॿঀ-৿਀-੿]/
+
+/** A warning when the prompt asks the video model to say words it can't pronounce. LTX speaks English well;
+ * quoted Urdu or Hindi comes back as babble, and those lines belong to a character's own voice. */
+export function speechHint(prompt: string): string | null {
+  const lines = [...prompt.matchAll(QUOTED)].map((m) => m[1] ?? m[2] ?? m[3] ?? '')
+  if (!lines.some((l) => NON_LATIN.test(l))) return null
+  return 'The video model speaks English well, but quoted Urdu or Hindi comes out garbled. For those lines, give a character a voice in Character Studio and make a talking clip there.'
+}

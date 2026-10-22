@@ -335,6 +335,11 @@ def handle_generate(ctx: JobContext) -> dict:
 
         run_in_job(ctx, gen)
 
+    if (gen.params or {}).get("model") == "ideogram4":
+        from app import ideogram_caption
+
+        ideogram_caption.run_in_job(ctx, gen)
+
     if gen.kind in ("take", "video") and ((gen.params or {}).get("dialogue") or {}).get("status") == "pending":
         # character voices (contract v26): the lines are spoken and laid on a track first, or the take
         # goes back to the queue until they are

@@ -233,6 +233,9 @@ def _plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
             sources["speed"] = sp.id
         if params.get("steps"):
             inputs["steps"] = params["steps"]
+        if m.id == "ideogram4" and params.get("ideogram_caption"):
+            # the JSON caption the worker wrote (app.ideogram_caption); a pasted caption is already in prompt
+            inputs["prompt"] = params["ideogram_caption"]
         tpl = mc.template_for(m, sp.id if sp else None)
         return Plan(tpl, inputs, {}, _family(tpl, loras), "image", sources)
 

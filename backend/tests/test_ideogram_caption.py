@@ -307,3 +307,10 @@ def test_marks_are_not_mistakes_but_other_scripts_are(monkeypatch, tmp_path):
                                                                                other_script=True))
     out = ic.check(tmp_path / "x.png", cap)
     assert out["count"] == 3 and out["other_script"]
+
+
+def test_a_dropped_line_scores_worse_than_a_garbled_one():
+    want = ["Mr and Mrs Saadat Ali", "Proud Grandparents"]
+    garbled = ic.problems(want, ["Mr ark ms Saadat Ali", "Drous Grandparents"])["count"]
+    dropped = ic.problems(want, [])["count"]
+    assert dropped > garbled

@@ -274,6 +274,8 @@ def exact_lines(prompt: str) -> list[str]:
 
 _TEXTY = re.compile(r",?\s*\b(featuring|containing|bearing|with|displaying|showing|inscribed with)\s+(the\s+|some\s+)?"
                     r"(text|words?|lettering|inscriptions?|calligraphy|writing|names?|labels?)\b", re.I)
+_WORDY = re.compile(r"(,\s*|\s+and\s+|\s+with\s+)?\b(\w+\s+)?(calligraphy|lettering|typography|inscriptions?|"
+                    r"text|wording|writing)\b", re.I)
 QUIET = ("The lower part of the same scene: a calm, softly lit, uncluttered area with smooth, even tone, "
          "continuing the setting without any objects.")
 
@@ -307,6 +309,8 @@ def blank_out(caption: str, prompt: str) -> tuple[str, list[dict]]:
     hld = data["high_level_description"]
     for line in [ln["text"] for ln in layout]:
         hld = hld.replace(f"'{line}'", "").replace(f'"{line}"', "")
+    # "celebratory calligraphy for a birth announcement" came back as made-up words in the arch (22 Oct)
+    hld = _WORDY.sub("", _TEXTY.sub("", hld))
     data["high_level_description"] = re.sub(r"\s{2,}", " ", hld).strip()
     return json.dumps(data, ensure_ascii=False, separators=(",", ":")), layout
 
@@ -413,7 +417,8 @@ def write(prompt: str, width: int, height: int, *, aspect_ratio: str | None = No
             {"role": "user", "content": f"Aspect ratio: {ratio}\nIdea: {prompt.strip()}"}]
     try:
         model = _caption_model()
-        kw = {"model": model, "keep_alive": get_settings().ollama_keep_alive_big or None} if model else {}
+        # unload as soon as it answers: Ideogram's ~17 GB of weights need the same card a moment later
+        kw = {"model": model, "keep_alive": "0s"} if model else {}
         res = chat_sync("creative", msgs, tick=tick, schema=Caption, think=False, temperature=0.4,
                         max_tokens=1400, timeout=180 if model else 120, **kw)
     except LLMError as e:

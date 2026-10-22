@@ -36,6 +36,8 @@ os.environ.update(
         "AERAB_LLM_MODEL": "creative",
         # and the film model's (test_quick_language turns it on)
         "FILM_LLM_MODEL": "off",
+        # and Ideogram's caption writer
+        "IDEOGRAM_CAPTION_MODEL": "creative",
     }
 )
 

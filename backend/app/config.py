@@ -130,9 +130,10 @@ class Settings(BaseSettings):
     song_lyrics_aerab: bool = True
     # the model that adds the marks, when installed; empty or missing: the creative role's model
     aerab_llm_model: str = "gemma4:26b"
-    # the model that writes Ideogram 4's JSON captions; empty: the creative role's. A bigger one (gemma4:26b)
-    # lays pages out far better, but shares the 20 GB card with Ideogram's ~17 GB of weights
-    ideogram_caption_model: str = ""
+    # the model that writes Ideogram 4's JSON captions, when installed; "creative" or empty: the creative role's.
+    # e4b's layouts were nonsense and its prose ("celebratory calligraphy") got painted as made-up words; the
+    # 26b is unloaded straight after each caption so Ideogram gets the card back
+    ideogram_caption_model: str = "gemma4:26b"
     # read an Ideogram picture's lettering back with the vision model; stray or misspelt words: one redraw
     ideogram_text_check: bool = True
     # 3+ quoted English lines: Ideogram draws blank banners and the app sets the words (app.ideogram_text).
@@ -170,6 +171,13 @@ class Settings(BaseSettings):
     @classmethod
     def _film_model(cls, v):
         return v.strip() or "gemma4:26b" if isinstance(v, str) else v
+
+    @field_validator("ideogram_caption_model", mode="before")
+    @classmethod
+    def _ideogram_model(cls, v):
+        if isinstance(v, str) and v.strip().lower() == "creative":
+            return ""
+        return v
 
     @field_validator("aerab_llm_model", mode="before")
     @classmethod

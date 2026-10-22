@@ -320,3 +320,26 @@ def test_a_line_painted_twice_counts():
     p = ic.problems(["Life Happens, Coffee Helps"], ["Life Happens, Coffee Helps", "Life Happens, Coffee Helps"])
     assert p["count"] >= 1 and "coffee" in p["repeated"]
     assert ic.problems(["Life Happens, Coffee Helps"], ["Life Happens, Coffee Helps"])["count"] == 0
+
+
+def test_big_caption_model_is_unloaded_straight_after(monkeypatch):
+    seen = {}
+
+    def fake(role, msgs, **kw):
+        seen.update(kw)
+        return ChatResult(content="", thinking="", model="x", data=ic.Caption(high_level_description="A sign."))
+    monkeypatch.setattr(ic, "chat_sync", fake)
+    monkeypatch.setattr(ic, "_caption_model", lambda: "gemma4:26b")
+    ic.write('a sign "OPEN"', 832, 1248)
+    assert seen["model"] == "gemma4:26b" and seen["keep_alive"] == "0s"
+
+
+def test_exact_summary_loses_its_lettering_words():
+    cap = json.dumps({"high_level_description": "A golden archway with celebratory calligraphy for a birth "
+                                                "announcement, titled 'One'.",
+                      "compositional_deconstruction": {"background": "Hall.", "elements": [
+                          {"type": "text", "text": "One", "desc": "Serif."}, {"type": "text", "text": "Two",
+                                                                              "desc": "Serif."},
+                          {"type": "text", "text": "Three", "desc": "Serif."}]}})
+    hld = json.loads(ic.blank_out(cap, '"One" "Two" "Three"')[0])["high_level_description"]
+    assert "calligraphy" not in hld and "One" not in hld and "golden archway" in hld

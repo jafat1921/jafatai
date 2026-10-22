@@ -42,6 +42,8 @@ Return one JSON object with these keys:
   it is, its colours and materials, where it sits) and, for type "text", text: the exact characters to print.
 
 Rules:
+- Always include at least one "obj" element, even on a type-only poster (paper shapes, ornaments, a
+  texture panel): a caption of nothing but text gets the picture blocked.
 - One subject is one element (a person, a car, a cup with its saucer). Its parts go in its desc.
 - Anything in background must not be repeated as an element. The floor or ground is always background.
 - Every quoted phrase in the idea becomes a "text" element with exactly those characters, same spelling,
@@ -212,6 +214,12 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
     # an "obj" that is one of the quoted words drawn as a picture makes the word twice ("صبر", 22 Oct)
     lines = [w for w in quoted(prompt) if w.strip()]
     elements = [el for el in elements if el["type"] == "text" or not any(w in el["desc"] for w in lines)]
+    if not any(el["type"] == "obj" for el in elements):
+        # a caption of nothing but words came back "blocked by safety filter" twice for STAY CURIOUS; the
+        # same poster with paper shapes as an object rendered (22 Oct)
+        look = ", ".join(v for v in (cap.style_description.aesthetics, cap.background.strip()) if v)
+        elements.insert(0, {"type": "obj", "desc": "Decorative graphic shapes, texture and ornament that frame the "
+                                                   f"lettering{': ' + look if look else ''}."[:300]})
     for el in elements:
         if el["type"] == "text" and el["text"] in where:
             el["desc"] = f"{el['desc'].rstrip('.')}. Placed: {where[el['text']]}."

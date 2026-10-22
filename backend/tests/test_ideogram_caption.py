@@ -60,7 +60,7 @@ def test_no_llm_still_sends_a_caption(monkeypatch):
     cap, by_llm = ic.write('a sign "OPEN"', 832, 1248)
     data = json.loads(cap)
     assert not by_llm and data["high_level_description"] == 'a sign "OPEN"'
-    assert data["compositional_deconstruction"]["elements"][0]["text"] == "OPEN"
+    assert data["compositional_deconstruction"]["elements"][-1]["text"] == "OPEN"
     assert ic.is_caption(cap)
 
 
@@ -153,7 +153,7 @@ def test_the_picked_aspect_beats_the_pixel_ratio(monkeypatch):
     llm_says(monkeypatch, LLMError("down"))
     data = json.loads(ic.write(ANNOUNCEMENT, 832, 1280, aspect_ratio="2:3")[0])
     assert data["aspect_ratio"] == "2:3"
-    texts = {e["text"]: e["desc"] for e in data["compositional_deconstruction"]["elements"]}
+    texts = {e["text"]: e["desc"] for e in data["compositional_deconstruction"]["elements"] if e["type"] == "text"}
     assert "ribbon beneath" in texts["Son of Adeel and Fatima 3rd October 2026"]
     assert "above arch" not in texts["Proud Grandparents"]
 
@@ -167,8 +167,9 @@ def test_a_word_drawn_as_an_object_is_not_drawn_twice(monkeypatch):
                      {"type": "text", "text": "صبر", "desc": "Flowing gold Thuluth calligraphy, centred."}]})
     data = json.loads(ic.write('Arabic calligraphy of the word "صبر" in gold Thuluth script', 832, 1248)[0])
     els = data["compositional_deconstruction"]["elements"]
-    assert [e["type"] for e in els] == ["text"]
-    assert "bbox" not in els[0]  # nothing placed, so no lockup band pushing it to the bottom
+    assert [e["type"] for e in els] == ["obj", "text"]  # the stand-in frame, not the word as a picture
+    assert "صبر" not in els[0]["desc"]
+    assert "bbox" not in els[1]  # nothing placed, so no lockup band pushing it to the bottom
 
 
 def test_no_marker_words_reach_the_picture(monkeypatch):
@@ -178,3 +179,16 @@ def test_no_marker_words_reach_the_picture(monkeypatch):
     assert "THIS LINE" not in cap and "another line" not in cap
     assert ic._placements(ANNOUNCEMENT)["Alhamdulillah A Grandson Is Born"] == "elegant calligraphy above arch"
     assert ic._placements('a sign titled “Chai & Chill”')["Chai & Chill"] == "a sign"
+
+
+def test_a_words_only_caption_gets_a_picture_element(monkeypatch):
+    llm_says(monkeypatch, {
+        "high_level_description": "A Swiss typographic poster.",
+        "style_description": {"aesthetics": "Swiss style, paper collage"},
+        "background": "A cream paper sheet.",
+        "elements": [{"type": "text", "text": "STAY CURIOUS", "desc": "Giant condensed sans-serif capitals."}]})
+    els = json.loads(ic.write('Swiss poster with the words "STAY CURIOUS"', 832, 1248)[0])[
+        "compositional_deconstruction"]["elements"]
+    assert els[0]["type"] == "obj" and "paper collage" in els[0]["desc"]
+    assert "STAY CURIOUS" not in els[0]["desc"]
+    assert els[1]["text"] == "STAY CURIOUS"

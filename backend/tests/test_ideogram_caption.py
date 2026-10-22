@@ -85,3 +85,30 @@ def test_driver_renders_the_caption_not_the_prose(tmp_path):
     p = plan_generation("image", "a fox", {"model": "ideogram4", "ideogram_caption": cap}, 1, None)
     g, _ = build(p.template, p.inputs)
     assert g[find_node(g, "Positive")]["inputs"]["text"] == cap
+
+
+def test_the_sideways_subject_logo_is_repaired(monkeypatch):
+    # the caption gemma wrote for the Ouroboros logo on 22 Oct: a tall thin text box printed the name on end,
+    # and "Text logo for the subject." put the word "Subject" on the logo
+    llm_says(monkeypatch, {
+        "high_level_description": "An ouroboros serpent forms a grand spiral staircase.",
+        "style_description": {"medium": "Graphic Design"},
+        "background": "Midnight charcoal backdrop",
+        "elements": [
+            {"type": "obj", "bbox": [200, 100, 800, 900], "desc": "Ouroboros serpent coiled in a spiral."},
+            {"type": "text", "bbox": [300, 100, 700, 200], "text": "Ouroboros Architectonica",
+             "desc": "Text logo for the subject."}]})
+    prompt = ('Visionary logo for "Ouroboros Architectonica", architectural white and blueprint cyan, '
+              'precise neoclassical serif typography, centred composition')
+    data = json.loads(ic.write(prompt, 832, 1248)[0])
+    assert data["style_description"]["medium"] == "graphic_design"
+    text = data["compositional_deconstruction"]["elements"][1]
+    assert "bbox" not in text
+    assert "subject" not in text["desc"].lower()
+    assert "precise neoclassical serif typography" in text["desc"]
+    assert "blueprint cyan" not in text["desc"]  # only the lettering clauses travel
+
+
+def test_a_wide_text_box_is_kept():
+    assert ic._text_box([70, 100, 230, 900], "Daily Bread", "2:3") == [70, 100, 230, 900]
+    assert ic._text_box([300, 100, 700, 200], "Daily Bread", "1:1") is None

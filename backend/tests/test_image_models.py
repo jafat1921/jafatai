@@ -358,7 +358,8 @@ def test_ideogram4_renders_at_its_recommended_size_with_a_short_polish(tmp_path)
     p = plan_generation("image", "x", {"model": "ideogram4", "width": 832, "height": 1280}, 1, Lookup(tmp_path))
     g, _ = build(p.template, p.inputs)
     lat, sch = node(g, "Latent"), node(g, "Scheduler")
-    assert lat["width"] * lat["height"] >= 1024 * 1536 * 0.97 and lat["width"] % 16 == 0
+    assert (lat["width"], lat["height"]) == (832, 1280)  # ~1 MP, as Ideogram's own site serves
     assert (sch["width"], sch["height"]) == (lat["width"], lat["height"])
-    assert abs(lat["width"] / lat["height"] - 832 / 1280) < 0.01
+    p = plan_generation("image", "x", {"model": "ideogram4", "width": 512, "height": 768}, 1, Lookup(tmp_path))
+    assert p.inputs["width"] * p.inputs["height"] >= 1024 * 1024 * 0.97
     assert node(g, "LateCFG")["start_percent"] == 0.9

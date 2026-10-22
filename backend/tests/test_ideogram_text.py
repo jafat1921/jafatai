@@ -29,8 +29,13 @@ def test_blank_out_swaps_words_for_blank_surfaces(monkeypatch):
     assert all(ln["text"] not in blanked for ln in layout)  # nothing left for the model to paint
     assert [ln["text"] for ln in layout] == ic.exact_lines(ANNOUNCEMENT)
     assert all(len(ln["bbox"]) == 4 for ln in layout)
-    descs = " ".join(e["desc"] for e in els)
-    assert "ribbon" in descs and "plaque" in descs
+    assert els[-1]["desc"] == ic.QUIET  # one calm band under the art, not a blank plaque per line
+    band = layout[0]["band"]
+    assert all(ln["bbox"][0] >= band for ln in layout)
+    assert [ln["bbox"][0] for ln in layout] == sorted(ln["bbox"][0] for ln in layout)
+    first, second = (ln["bbox"][2] - ln["bbox"][0] for ln in layout[:2])
+    assert first > second  # the opening line leads
+    assert all(e["bbox"][2] <= band for e in els[:-1] if "bbox" in e)
     by_text = {ln["text"]: ln["hint"] for ln in layout}
     assert "calligraphy" in by_text["Alhamdulillah A Grandson Is Born"]
 
@@ -64,3 +69,15 @@ def test_set_text_draws_inside_its_box_and_keeps_the_art(tmp_path):
         above = px.crop((0, 0, 800, 980))
         assert inside.getextrema()[0] < 120  # dark ink went down in the box
         assert above.getextrema()[0] > 200  # and nowhere else
+
+
+def test_objects_lose_their_text_hooks():
+    cap = json.dumps({"high_level_description": "An arch.", "compositional_deconstruction": {
+        "background": "Dark hall.", "elements": [
+            {"type": "obj", "bbox": [100, 150, 300, 350], "desc": "An ornate pillar on the left, featuring text."},
+            {"type": "obj", "desc": "A golden ribbon containing the names."},
+            {"type": "text", "text": "One", "desc": "Serif."}, {"type": "text", "text": "Two", "desc": "Serif."},
+            {"type": "text", "text": "Three", "desc": "Serif."}]}})
+    data = json.loads(ic.blank_out(cap, '"One" "Two" "Three"')[0])
+    descs = [e["desc"] for e in data["compositional_deconstruction"]["elements"]]
+    assert descs[0] == "An ornate pillar on the left." and descs[1] == "A golden ribbon."

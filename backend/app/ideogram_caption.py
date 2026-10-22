@@ -261,7 +261,6 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
 # ---------------------------------------------------------------- exact text (app.ideogram_text)
 
 EXACT_MIN_LINES = 3
-_SURFACES = ("ribbon", "banner", "scroll", "plaque", "sign", "label", "card", "frame", "board", "tag", "panel")
 
 
 def exact_lines(prompt: str) -> list[str]:
@@ -273,37 +272,37 @@ def exact_lines(prompt: str) -> list[str]:
     return lines
 
 
-def _surface(where: str) -> str:
-    low = (where or "").lower()
-    found = next((s for s in _SURFACES if s in low), None)
-    if found:
-        return found
-    return "plaque" if "pillar" in low or "column" in low else "smooth plain panel"
+_TEXTY = re.compile(r",?\s*\b(featuring|containing|bearing|with|displaying|showing|inscribed with)\s+(the\s+|some\s+)?"
+                    r"(text|words?|lettering|inscriptions?|calligraphy|writing|names?|labels?)\b", re.I)
+QUIET = ("The lower part of the same scene: a calm, softly lit, uncluttered area with smooth, even tone, "
+         "continuing the setting without any objects.")
 
 
 def blank_out(caption: str, prompt: str) -> tuple[str, list[dict]]:
-    """The caption with each exact line swapped for a blank surface in its spot, and the layout to set the
-    words into afterwards: [{text, bbox, hint}]."""
+    """The caption without its words, and the layout to set them into afterwards: [{text, bbox, hint, band}].
+
+    The first try gave every line a blank plaque of its own where the small LLM had put it; the boxes were
+    nonsense, the model drew white form-like panels, and "a pillar featuring text" got gibberish painted on
+    it (22 Oct). Now the art fills the frame above a quiet band, and the lines are set there as one block."""
     data = json.loads(caption)
     els = data["compositional_deconstruction"]["elements"]
     texts = [el for el in els if el["type"] == "text"]
-    if any("bbox" not in t for t in texts):
-        # every line needs a spot; a half-placed set goes to the band under the art
-        for t in texts:
-            t.pop("bbox", None)
-        _lockup(els)
-        for i, t in enumerate(el for el in els if el["type"] == "text" and "bbox" not in el):
-            t["bbox"] = [600 + i * 110, 100, 690 + i * 110, 900]
+    objs = [el for el in els if el["type"] == "obj"]
+    for o in objs:
+        o["desc"] = _TEXTY.sub("", o["desc"]).strip()
+    shares = [1.7] + [1.0] * (len(texts) - 1)
+    unit = min(110, 400 / sum(shares))
+    top = int(950 - unit * sum(shares))
+    _fit_above([o for o in objs if "bbox" in o], top - 40)
+    els[:] = objs + [{"type": "obj", "bbox": [top - 20, 0, 1000, 1000], "desc": QUIET}]
     hint, where = _type_hint(prompt), _placements(prompt)
-    layout = []
-    for el in texts:
-        line = el["text"]
+    layout, y = [], top
+    for el, share in zip(texts, shares):
+        line, h = el["text"], int(unit * share)
         place = where.get(line) or where.get(line.replace("'", "’"), "")
-        layout.append({"text": line, "bbox": el["bbox"], "hint": f"{el['desc']} {hint} {place}".strip()})
-        surface = _surface(place)
-        el.clear()
-        el.update({"type": "obj", "bbox": layout[-1]["bbox"],
-                   "desc": f"A blank {surface}, plain and completely unmarked, smooth and empty."})
+        layout.append({"text": line, "bbox": [y, 90, y + h, 910], "hint": f"{el['desc']} {hint} {place}".strip(),
+                       "band": top - 20})
+        y += h
     # the lines named in the summary would be painted anyway
     hld = data["high_level_description"]
     for line in [ln["text"] for ln in layout]:
@@ -327,10 +326,18 @@ def _lockup(elements: list[dict]) -> None:
         h = int(h * scale)
         t["bbox"] = [y, 80, y + h, 920]
         y += h
-    limit = top - 30
+    _fit_above(placed, top - 30)
+
+
+def _fit_above(placed: list[dict], limit: int) -> None:
+    """Pictures that reach below `limit` shrink into the space above it, keeping their shape."""
     for el in placed:
         y1, x1, y2, x2 = el["bbox"]
         if y2 <= limit:
+            continue
+        if y1 >= limit - 60:
+            # wholly in the words' band (footprints on a threshold): let the model find it a place
+            el.pop("bbox")
             continue
         old_h = max(1, y2 - y1)
         y1 = min(y1, 60)

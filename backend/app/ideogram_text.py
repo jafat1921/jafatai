@@ -13,7 +13,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 from app.ads import fonts as fz
-from app.ads.layout import ensure_contrast, lum, mean_lum, worst_lum
+from app.ads.layout import ensure_contrast, lum, mean_lum, veil, worst_lum
 from app.brand_render import text_width
 
 log = logging.getLogger("mixai.ideogram")
@@ -30,6 +30,7 @@ FACES = (
     (r"condensed|poster|impact|bold sans|stencil|sport", fz.ROOT / "oswald" / "Oswald[wght].ttf", 600),
 )
 DEFAULT_FACE = (fz.ROOT / "montserrat" / fz.MONTSERRAT, 700)
+SERIF = (fz.ROOT / "playfair-display" / "PlayfairDisplay[wght].ttf", 600)
 LINE_GAP = 1.18
 SCRIPTS = ("great-vibes", "dancing-script")
 
@@ -70,9 +71,11 @@ def _wrap(d, text: str, font, max_w: float, sep: str = " ") -> list[str]:
     return [ln for ln in lines if ln]
 
 
-def fit(d, text: str, path: Path, weight: int | None, w: float, h: float):
-    """The biggest size where every line fits the box's width and the stack its height."""
+def fit(d, text: str, path: Path, weight: int | None, w: float, h: float, cap: int | None = None):
+    """The biggest size (up to `cap`) where every line fits the box's width and the stack its height."""
     size = int(h / max(1, text.count("\n") + 1) / LINE_GAP)
+    if cap:
+        size = min(size, cap)
     while True:
         font = fz.load(str(path), size, weight)
         # script faces set their words almost touching
@@ -92,17 +95,31 @@ def set_text(path: Path, layout: list[dict]) -> dict:
     with Image.open(path) as im:
         img = im.convert("RGB")
     W, H = img.size
+    band = next((ln["band"] for ln in layout if ln.get("band") is not None), None)
+    if band is not None:
+        # the quiet band under the art, deepened (or lifted) so the block of lines reads on it
+        dark = mean_lum(img, (0, band * H / 1000, W, H)) < 0.45
+        img = veil(img, "bottom", min(1.0, (1000 - band) / 1000 * 1.5), 0.72,
+                   (0, 0, 0) if dark else (255, 255, 255))
     words = Image.new("RGBA", img.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(words)
-    placed = []
-    for line in layout:
+    placed, lead = [], None
+    for i, line in enumerate(layout):
         y1, x1, y2, x2 = line["bbox"]
         box = (x1 * W / 1000, y1 * H / 1000, x2 * W / 1000, y2 * H / 1000)
         # stay inside the blank surface the model drew around this spot
         pad_x, pad_y = (box[2] - box[0]) * 0.08, (box[3] - box[1]) * 0.14
         inner = (box[0] + pad_x, box[1] + pad_y, box[2] - pad_x, box[3] - pad_y)
         fpath, weight = face_for(line.get("hint", ""))
-        font, lines, size = fit(d, line["text"], fpath, weight, inner[2] - inner[0], inner[3] - inner[1])
+        cap = None
+        if band is not None and i:
+            # a block under the art: the opening line leads, the rest support it in a serif ("Proud
+            # Grandparents" came out as big as the headline, in plain sans after a script)
+            cap = int(lead * 0.6)
+            if fpath == DEFAULT_FACE[0] or fpath.parent.name in SCRIPTS:
+                fpath, weight = SERIF
+        font, lines, size = fit(d, line["text"], fpath, weight, inner[2] - inner[0], inner[3] - inner[1], cap)
+        lead = lead or size
         colour = ink_for(img, inner, line.get("hint", ""))
         lh = size * LINE_GAP
         y = (inner[1] + inner[3]) / 2 - len(lines) * lh / 2

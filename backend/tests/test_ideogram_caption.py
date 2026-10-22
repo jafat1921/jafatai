@@ -274,4 +274,11 @@ def test_every_line_names_its_alphabet():
     assert ic._script("Öppet alla dagar") == "Latin letters"
     cap = json.loads(ic.fallback('elegant calligraphy above arch "Alhamdulillah A Grandson Is Born"', "2:3"))
     text = cap["compositional_deconstruction"]["elements"][-1]
-    assert text["desc"].endswith("Written in Latin letters, exactly as given.")
+    assert text["desc"].endswith("Written in Latin letters.")
+
+
+def test_no_filler_words_and_straight_apostrophes():
+    cap = json.loads(ic.fallback('a book cover titled “The Moon Who Couldn’t Sleep”', "2:3"))
+    text = cap["compositional_deconstruction"]["elements"][-1]
+    assert text["text"] == "The Moon Who Couldn't Sleep"
+    assert " as " not in f" {text['desc']} "

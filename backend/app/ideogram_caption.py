@@ -20,7 +20,8 @@ log = logging.getLogger("mixai.ideogram")
 MODEL_ID = "ideogram4"
 MAX_ELEMENTS = 8
 # a faint grey name came back when the desc gave no colour
-PLAIN_TEXT = "Clear, legible lettering, as written, in a colour that stands out strongly from the background."
+# every word here can end up printed: "as written" put a stray "as" on a book cover (22 Oct)
+PLAIN_TEXT = "Clear, legible lettering in a colour that stands out strongly from the background."
 MEDIUMS = ("photograph", "illustration", "3d_render", "painting", "graphic_design")
 # clauses of the user's prompt that say how lettering should look; they go into every text element
 _TYPE_WORDS = re.compile(r"typograph|font|letter|calligraph|serif|script|typeface|handwrit|\bcaps\b",
@@ -232,7 +233,9 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
         if el["text"] in where:
             el["desc"] = f"{el['desc'].rstrip('.')}. Placed: {where[el['text']]}."
         # "elegant calligraphy" turned "Alhamdulillah A Grandson Is Born" into made-up Arabic (22 Oct)
-        el["desc"] = f"{el['desc'].rstrip('.')}. Written in {_script(el['text'])}, exactly as given."
+        el["desc"] = f"{el['desc'].rstrip('.')}. Written in {_script(el['text'])}."
+        # a straight apostrophe: "Couldn’t" came out garbled three times running
+        el["text"] = el["text"].replace("’", "'")
     _lockup(elements)
     _hero(elements)
     style = cap.style_description.model_dump()

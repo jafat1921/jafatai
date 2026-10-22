@@ -169,7 +169,7 @@ def test_a_word_drawn_as_an_object_is_not_drawn_twice(monkeypatch):
     els = data["compositional_deconstruction"]["elements"]
     assert [e["type"] for e in els] == ["obj", "text"]  # the stand-in frame, not the word as a picture
     assert "صبر" not in els[0]["desc"]
-    assert "bbox" not in els[1]  # nothing placed, so no lockup band pushing it to the bottom
+    assert els[1]["bbox"] == [180, 60, 820, 940]  # the word is the picture: big and centred, not a bottom band
 
 
 def test_no_marker_words_reach_the_picture(monkeypatch):
@@ -192,3 +192,86 @@ def test_a_words_only_caption_gets_a_picture_element(monkeypatch):
     assert els[0]["type"] == "obj" and "paper collage" in els[0]["desc"]
     assert "STAY CURIOUS" not in els[0]["desc"]
     assert els[1]["text"] == "STAY CURIOUS"
+
+
+def test_stray_quoted_words_are_cut_from_picture_descs(monkeypatch):
+    llm_says(monkeypatch, {
+        "high_level_description": 'A honey jar label "Wild Nordic Honey" with a "BIO" seal.',
+        "background": 'Cream paper with a small "EST 1998" stamp.',
+        "elements": [{"type": "obj", "desc": 'A gold bee above a round seal reading "BIO".'},
+                     {"type": "text", "text": "Wild Nordic Honey", "desc": "Elegant black serif capitals, centred."}]})
+    cap = ic.write('honey jar label reading "Wild Nordic Honey"', 832, 1248)[0]
+    assert "BIO" not in cap and "EST 1998" not in cap
+    assert '"Wild Nordic Honey"' in json.loads(cap)["high_level_description"]
+
+
+def test_problems_counts_strays_and_misspellings():
+    p = ic.problems(["The Moon Who Couldn't Sleep"], ["The Moon Who Coulen't Sleep", "THIS LINE."])
+    assert p["extra"] == ["coulen", "line", "this"] and p["missing"] == ["couldn"]
+    assert ic.problems(["Chai & Chill"], ["Chai & Chill"])["count"] == 0
+    assert not ic._readable(["صبر"]) and ic._readable(["Öppet 08–22"])
+
+
+class Seeded(Gen):
+    seed = 5
+
+
+def _look(monkeypatch, tmp_path, verdicts, redraw=None):
+    verdicts = list(verdicts)
+    monkeypatch.setattr(ic, "check", lambda path, caption, tick=None: verdicts.pop(0))
+    first = tmp_path / "out.png"
+    first.write_bytes(b"first")
+    gen = Seeded("x", {"ideogram_caption": ic.fallback('a sign "OPEN"', "1:1")})
+    calls = []
+
+    def render(seed, path):
+        calls.append(seed)
+        if redraw:
+            raise redraw
+        path.write_bytes(b"second")
+        return "result-2"
+
+    out = ic.second_look(Ctx(), gen, render, first, "result-1")
+    return out, gen, first.read_bytes(), calls
+
+
+def test_clean_lettering_is_kept_without_a_redraw(monkeypatch, tmp_path):
+    out, gen, data, calls = _look(monkeypatch, tmp_path, [{"count": 0}])
+    assert (out, data, calls) == ("result-1", b"first", [])
+
+
+def test_a_better_redraw_replaces_the_first(monkeypatch, tmp_path):
+    out, gen, data, calls = _look(monkeypatch, tmp_path, [{"count": 3}, {"count": 0}])
+    assert (out, data, gen.seed) == ("result-2", b"second", calls[0])
+    assert gen.params["text_check"]["kept"] == "second"
+    assert not (tmp_path / "out_retry.png").exists()
+
+
+def test_a_redraw_no_better_or_broken_keeps_the_first(monkeypatch, tmp_path):
+    out, gen, data, _ = _look(monkeypatch, tmp_path, [{"count": 2}, {"count": 2}])
+    assert (out, data, gen.seed) == ("result-1", b"first", 5)
+    out, gen, data, _ = _look(monkeypatch, tmp_path, [{"count": 2}], redraw=RuntimeError("OOM"))
+    assert (out, data) == ("result-1", b"first") and gen.params["text_check"]["kept"] == "first"
+
+
+def test_a_lone_headline_fills_the_poster(monkeypatch):
+    # the third STAY CURIOUS: a thin strip of letters across an empty page, "giant" never reached the text
+    llm_says(monkeypatch, {
+        "high_level_description": "A Swiss typographic poster.",
+        "style_description": {"aesthetics": "Swiss style, minimalist."},
+        "background": "A plain, textured cream backdrop.",
+        "elements": [{"type": "text", "text": "STAY CURIOUS", "desc": "Overlapping condensed sans-serif capitals."}]})
+    prompt = 'Bold Swiss-style typographic poster with the words “STAY CURIOUS” in giant, overlapping letters'
+    frame, text = json.loads(ic.write(prompt, 832, 1248)[0])["compositional_deconstruction"]["elements"]
+    assert text["bbox"] == [180, 60, 820, 940]
+    assert "in giant" in text["desc"]
+    assert ".." not in frame["desc"] and "cream backdrop" not in frame["desc"]
+
+
+def test_every_line_names_its_alphabet():
+    assert ic._script("Alhamdulillah A Grandson Is Born") == "Latin letters"
+    assert ic._script("صبر") == "Arabic script"
+    assert ic._script("Öppet alla dagar") == "Latin letters"
+    cap = json.loads(ic.fallback('elegant calligraphy above arch "Alhamdulillah A Grandson Is Born"', "2:3"))
+    text = cap["compositional_deconstruction"]["elements"][-1]
+    assert text["desc"].endswith("Written in Latin letters, exactly as given.")

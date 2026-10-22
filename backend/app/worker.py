@@ -378,6 +378,12 @@ def handle_generate(ctx: JobContext) -> dict:
         "project_id": gen.project_id,
     }
     result = getattr(driver, method)(gen.prompt, params, gen.seed, abs_path, ctx.progress)
+    if (gen.params or {}).get("ideogram_caption"):
+        from app import ideogram_caption
+
+        result = ideogram_caption.second_look(
+            ctx, gen, lambda seed, path: getattr(driver, method)(gen.prompt, params, seed, path, ctx.progress),
+            abs_path, result)
 
     if getattr(result, "params_update", None):
         gen.params = {**(gen.params or {}), **result.params_update}

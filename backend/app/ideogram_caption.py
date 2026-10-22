@@ -154,6 +154,9 @@ def _placements(prompt: str) -> dict[str, str]:
                 lead = " ".join(words.split()[:2])
             elif lead and not words.lower().startswith(lead.lower()):
                 words = f"{lead} {words}".strip()
+            if i == len(quotes) - 1 and rest.strip():
+                # 'the words "STAY CURIOUS" in giant': the size came after the quote and was lost
+                words = f"{words}, {rest.strip()}".strip(", ")
             if words and q not in out:
                 out[q] = words[:160]
     return out
@@ -214,24 +217,33 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
     # an "obj" that is one of the quoted words drawn as a picture makes the word twice ("صبر", 22 Oct)
     lines = [w for w in quoted(prompt) if w.strip()]
     elements = [el for el in elements if el["type"] == "text" or not any(w in el["desc"] for w in lines)]
+    for el in elements:
+        if el["type"] == "obj":
+            el["desc"] = _unquote(el["desc"], lines)
     if not any(el["type"] == "obj" for el in elements):
         # a caption of nothing but words came back "blocked by safety filter" twice for STAY CURIOUS; the
         # same poster with paper shapes as an object rendered (22 Oct)
-        look = ", ".join(v for v in (cap.style_description.aesthetics, cap.background.strip()) if v)
+        look = cap.style_description.aesthetics.strip().rstrip(".")
         elements.insert(0, {"type": "obj", "desc": "Decorative graphic shapes, texture and ornament that frame the "
-                                                   f"lettering{': ' + look if look else ''}."[:300]})
+                                                   f"lettering{', ' + look if look else ''}."[:300]})
     for el in elements:
-        if el["type"] == "text" and el["text"] in where:
+        if el["type"] != "text":
+            continue
+        if el["text"] in where:
             el["desc"] = f"{el['desc'].rstrip('.')}. Placed: {where[el['text']]}."
+        # "elegant calligraphy" turned "Alhamdulillah A Grandson Is Born" into made-up Arabic (22 Oct)
+        el["desc"] = f"{el['desc'].rstrip('.')}. Written in {_script(el['text'])}, exactly as given."
     _lockup(elements)
+    _hero(elements)
     style = cap.style_description.model_dump()
     style["medium"] = _medium(style["medium"])
     style = {k: v for k, v in style.items() if v}
-    out: dict = {"aspect_ratio": ratio, "high_level_description": cap.high_level_description.strip()}
+    out: dict = {"aspect_ratio": ratio,
+                 "high_level_description": _unquote(cap.high_level_description.strip(), lines)}
     if style:
         out["style_description"] = style
-    out["compositional_deconstruction"] = {"background": cap.background.strip() or "A plain, simple backdrop.",
-                                           "elements": elements}
+    out["compositional_deconstruction"] = {
+        "background": _unquote(cap.background.strip(), lines) or "A plain, simple backdrop.", "elements": elements}
     return json.dumps(out, ensure_ascii=False)
 
 
@@ -261,6 +273,32 @@ def _lockup(elements: list[dict]) -> None:
         k = (limit - y1) / old_h
         cx, half = (x1 + x2) / 2, (x2 - x1) * k / 2
         el["bbox"] = [y1, int(cx - half), limit, int(cx + half)]
+
+
+def _script(text: str) -> str:
+    letters = [c for c in text if c.isalpha()]
+    if any(0x0600 <= ord(c) <= 0x06FF or 0x0750 <= ord(c) <= 0x08FF or 0xFB50 <= ord(c) <= 0xFEFF for c in letters):
+        return "Arabic script"
+    if all(ord(c) < 0x250 for c in letters):
+        return "Latin letters"
+    return "its own script"
+
+
+def _hero(elements: list[dict]) -> None:
+    """One line of words and nothing placed: it's the poster. Left to itself the renderer set "STAY CURIOUS"
+    as a thin strip across the middle of an empty page (22 Oct)."""
+    texts = [el for el in elements if el["type"] == "text"]
+    if len(texts) != 1 or any("bbox" in el for el in elements):
+        return
+    texts[0]["bbox"] = [180, 60, 820, 940]
+
+
+def _unquote(text: str, keep: list[str]) -> str:
+    """Quoted words the user never asked for ('a jar label reading "BIO"') get printed: drop them."""
+    def cut(m):
+        inner = next(g for g in m.groups() if g is not None)
+        return m.group(0) if inner in keep else ""
+    return re.sub(r"\s{2,}", " ", _QUOTE_ANY.sub(cut, text)).strip()
 
 
 def _with_hint(desc: str, hint: str) -> str:
@@ -324,3 +362,108 @@ def run_in_job(ctx, gen) -> None:
     params.update(ideogram_caption=caption, ideogram_caption_by="llm" if by_llm else "fallback")
     gen.params = params
     ctx.db.commit()
+
+
+# ---------------------------------------------------------------- second look at the lettering
+
+class SeenText(BaseModel):
+    lines: list[str] = Field(default_factory=list)
+
+
+READ_TEXT = ("Transcribe every piece of text you can see in this picture exactly as it is written, letter for "
+             "letter: headlines, small labels, stamps, signatures, watermarks. One entry per line of text. Do not "
+             "fix spelling and do not add words that aren't there. No text at all: an empty list. "
+             'Reply as JSON {"lines": ["..."]}.')
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[^\W_]+", text.casefold())
+
+
+def expected_lines(caption: str) -> list[str]:
+    try:
+        els = json.loads(caption)["compositional_deconstruction"]["elements"]
+    except (ValueError, KeyError, TypeError):
+        return []
+    return [e["text"] for e in els if e.get("type") == "text" and e.get("text")]
+
+
+def problems(expected: list[str], seen: list[str]) -> dict:
+    """Words in the picture nobody asked for, and asked-for words that didn't come out right."""
+    want = set(_tokens(" ".join(expected)))
+    got = _tokens(" ".join(seen))
+    extra = sorted({t for t in got if t not in want and len(t) > 1})
+    missing = sorted(want - set(got))
+    return {"extra": extra[:12], "missing": missing[:12], "count": len(extra) + len(missing)}
+
+
+def _readable(lines: list[str]) -> bool:
+    # the vision model reads Latin type well and Arabic-script calligraphy badly; judging that would only
+    # throw good pictures away
+    return all(ord(c) < 0x250 for c in "".join(lines) if c.isalpha())
+
+
+def read_text(path, tick=None) -> list[str] | None:
+    from PIL import Image
+
+    from app.ads.vision import b64
+
+    with Image.open(path) as img:
+        msgs = [{"role": "system", "content": "You read text in pictures. Answer only with JSON."},
+                {"role": "user", "content": READ_TEXT, "images": [b64(img, 1280)]}]
+    try:
+        res = chat_sync("vision", msgs, schema=SeenText, temperature=0.0, max_tokens=500,
+                        timeout=get_settings().vision_timeout_s, tick=tick)
+    except LLMError as e:
+        log.warning("lettering check skipped, vision model unavailable: %s", e)
+        return None
+    return [ln for ln in res.data.lines if ln.strip()]
+
+
+def check(path, caption: str, tick=None) -> dict | None:
+    expected = expected_lines(caption)
+    if not expected or not _readable(expected):
+        return None
+    seen = read_text(path, tick)
+    if seen is None:
+        return None
+    return {**problems(expected, seen), "seen": [s[:80] for s in seen[:12]]}
+
+
+def second_look(ctx, gen, render, abs_path, result):
+    """After the picture: read its lettering back, and when there are stray or misspelt words, make it once
+    more on another seed and keep whichever reads better. `render(seed, path)` runs the same job."""
+    caption = (gen.params or {}).get("ideogram_caption")
+    if not caption or not get_settings().ideogram_text_check:
+        return result
+    tick = lambda: ctx.progress(0.97, "Checking the lettering")  # noqa: E731
+    tick()
+    first = check(abs_path, caption, tick)
+    record: dict = {"first": first}
+    if first and first["count"]:
+        retry_seed = (int(gen.seed or 0) + 7919) % 2147483647
+        tmp = abs_path.with_name(f"{abs_path.stem}_retry{abs_path.suffix}")
+        ctx.progress(0.5, "Redrawing: the lettering came out wrong")
+        try:
+            try:
+                again = render(retry_seed, tmp)
+            except Exception as e:  # noqa: BLE001
+                if type(e).__name__ == "JobCancelled":
+                    raise
+                # the first picture is still a picture; a failed redraw mustn't cost the user it
+                log.warning("lettering redraw failed, keeping the first picture: %s", e)
+                record["kept"] = "first"
+                gen.params = {**(gen.params or {}), "text_check": record}
+                return result
+            second = check(tmp, caption, tick)
+            record["second"] = second
+            if second is not None and second["count"] < first["count"]:
+                tmp.replace(abs_path)
+                gen.seed, result = retry_seed, again
+                record["kept"] = "second"
+            else:
+                record["kept"] = "first"
+        finally:
+            tmp.unlink(missing_ok=True)
+    gen.params = {**(gen.params or {}), "text_check": record}
+    return result

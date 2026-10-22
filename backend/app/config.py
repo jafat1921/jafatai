@@ -133,6 +133,8 @@ class Settings(BaseSettings):
     # the model that writes Ideogram 4's JSON captions; empty: the creative role's. A bigger one (gemma4:26b)
     # lays pages out far better, but shares the 20 GB card with Ideogram's ~17 GB of weights
     ideogram_caption_model: str = ""
+    # read an Ideogram picture's lettering back with the vision model; stray or misspelt words: one redraw
+    ideogram_text_check: bool = True
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
     # where the engine venvs keep their Hugging Face downloads (empty: their own default)

@@ -7029,28 +7029,36 @@
    "required": {
     "model": [
      "MODEL",
-     {}
+     {
+      "tooltip": "Model used for the positive (conditional) pass."
+     }
     ],
     "positive": [
-     "CONDITIONING",
-     {}
-    ],
-    "model_negative": [
-     "MODEL",
-     {}
-    ],
-    "negative": [
      "CONDITIONING",
      {}
     ],
     "cfg": [
      "FLOAT",
      {
-      "default": 7.0,
+      "default": 4.0,
       "min": 0.0,
       "max": 100.0,
       "step": 0.1,
       "round": 0.01
+     }
+    ]
+   },
+   "optional": {
+    "model_negative": [
+     "MODEL",
+     {
+      "tooltip": "Model used for the negative (unconditional) pass. Use the same model for ordinary CFG."
+     }
+    ],
+    "negative": [
+     "CONDITIONING",
+     {
+      "tooltip": "Negative conditioning run on the negative model. Leave unconnected for a text-free (image-only) unconditional pass."
      }
     ]
    }
@@ -7059,11 +7067,14 @@
    "required": [
     "model",
     "positive",
-    "model_negative",
-    "negative",
     "cfg"
+   ],
+   "optional": [
+    "model_negative",
+    "negative"
    ]
   },
+  "is_input_list": false,
   "output": [
    "GUIDER"
   ],
@@ -7073,11 +7084,23 @@
   "output_name": [
    "GUIDER"
   ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
   "name": "DualModelGuider",
-  "display_name": "Dual Model Guider",
+  "display_name": "Dual Model CFG Guider",
   "description": "",
-  "python_module": "comfy_extras.nodes_ideogram4",
+  "python_module": "comfy_extras.nodes_custom_sampler",
   "category": "model/sampling/guiders",
-  "output_node": false
+  "output_node": false,
+  "deprecated": false,
+  "experimental": true,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
  }
 }

@@ -22,7 +22,7 @@
     "pack": "ComfyUI core 0.24 (comfy_extras.nodes_ideogram4, CLIPLoader type ideogram4)",
     "nodes": ["UNETLoader", "CLIPLoader", "Ideogram4Scheduler", "DualModelGuider", "CFGOverride",
               "EmptyFlux2LatentImage", "SamplerCustomAdvanced"],
-    "assumed": "DualModelGuider's widget is taken to be 'cfg' (the server dump didn't include its schema); /object_info confirms it"
+    "verified": "DualModelGuider schema read from the GPU server's /object_info on 2026-10-22"
   },
   "progress_weights": {"Sampler": 20, "UNet": 4, "UNetUncond": 4, "TextEncoder": 3}
 }

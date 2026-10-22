@@ -1,0 +1,28 @@
+{
+  "name": "ideogram4_t2i",
+  "family": "ideogram-4",
+  "description": "Ideogram 4 text-to-image, rebuilt from the Comfy-Org template image_ideogram4_t2i's subgraph (the caption-template group and the cloud API nodes left out): two UNets with a dual-model guider (cfg 7, cfg 3 over the last 30%), the Ideogram 4 scheduler, euler. Presets from the template: Turbo 12 steps mu 0.5 std 1.75, Default 20 / 0 / 1.75, Quality 48 / 0 / 1.5. Takes plain text or the model's structured JSON caption. Weights: Ideogram Non-Commercial Model Agreement (code Apache-2.0).",
+  "inputs": {
+    "prompt": {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "width":  {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "width"], ["Scheduler", "width"]]},
+    "height": {"type": "int", "default": 1024, "multiple_of": 16, "targets": [["Latent", "height"], ["Scheduler", "height"]]},
+    "seed":   {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"]]},
+    "steps":  {"type": "int", "default": 20, "targets": [["Scheduler", "steps"]]},
+    "mu":     {"type": "float", "default": 0.0, "targets": [["Scheduler", "mu"]]},
+    "std":    {"type": "float", "default": 1.75, "targets": [["Scheduler", "std"]]},
+    "filename_prefix": {"type": "str", "default": "mixai/ideogram4", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"image": {"node": "Save", "kind": "image"}},
+  "models": {
+    "diffusion_models": ["ideogram4_fp8_scaled.safetensors", "ideogram4_unconditional_fp8_scaled.safetensors"],
+    "text_encoders": ["qwen3vl_8b_fp8_scaled.safetensors"],
+    "vae": ["flux2-vae.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core 0.24 (comfy_extras.nodes_ideogram4, CLIPLoader type ideogram4)",
+    "nodes": ["UNETLoader", "CLIPLoader", "Ideogram4Scheduler", "DualModelGuider", "CFGOverride",
+              "EmptyFlux2LatentImage", "SamplerCustomAdvanced"],
+    "assumed": "DualModelGuider's widget is taken to be 'cfg' (the server dump didn't include its schema); /object_info confirms it"
+  },
+  "progress_weights": {"Sampler": 20, "UNet": 4, "UNetUncond": 4, "TextEncoder": 3}
+}

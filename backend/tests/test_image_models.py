@@ -20,9 +20,9 @@ NEW_TEMPLATES = (
     "krea2_t2i", "krea2_raw_t2i", "hidream_o1_dev_t2i", "hidream_o1_t2i", "anima_t2i", "anima_i2i",
     "illustrious_xl_t2i", "illustrious_xl_i2i", "realvis_xl_t2i", "realvis_xl_i2i", "flux2_klein9b_t2i",
     "flux2_klein9b_i2i", "flux2_klein9b_edit", "qwen_image21_t2i", "qwen_image21_full_t2i", "ernie_turbo_t2i",
-    "zimage_base_t2i", "zimage_base_i2i", "chroma1_hd_t2i", "wan22_still_t2i",
+    "zimage_base_t2i", "zimage_base_i2i", "chroma1_hd_t2i", "wan22_still_t2i", "ideogram4_t2i",
 )
-NC_IMAGE = {"anima", "krea2_turbo", "flux2_klein_9b", "qwen_image_21"}
+NC_IMAGE = {"anima", "krea2_turbo", "flux2_klein_9b", "qwen_image_21", "ideogram4"}
 
 
 def node(graph, title):
@@ -190,6 +190,8 @@ def test_qwen21_prompt_goes_through_its_encoder():
     ("zimage_base", None, "zimage_base_t2i", None),
     ("chroma1_hd", None, "chroma1_hd_t2i", None),
     ("wan22_still", None, "wan22_still_t2i", None),
+    ("ideogram4", None, "ideogram4_t2i", 20),
+    ("ideogram4", "turbo", "ideogram4_t2i", 12),
 ])
 def test_plan_dispatch(model, speed, template, steps, tmp_path):
     params = {"width": 1024, "height": 1024, "model": model, "loras": ["zimage_style.safetensors"]}
@@ -336,3 +338,17 @@ def test_qwen21_leaves_its_empty_reference_list_out(info):
 
     for name in ("qwen_image21_t2i", "qwen_image21_full_t2i"):
         assert check_template(name, info)["ok"], name
+
+
+def test_ideogram4_presets_reach_its_scheduler(tmp_path):
+    p = plan_generation("image", "a shop sign that says OPEN", {"model": "ideogram4", "speed": "quality",
+                                                                "width": 832, "height": 1216}, 3, Lookup(tmp_path))
+    g, _ = build(p.template, p.inputs)
+    sch = node(g, "Scheduler")
+    assert (sch["steps"], sch["mu"], sch["std"]) == (48, 0.0, 1.5)
+    assert (sch["width"], sch["height"]) == (node(g, "Latent")["width"], node(g, "Latent")["height"])
+    assert node(g, "Positive")["text"] == "a shop sign that says OPEN"
+    assert node(g, "Noise")["noise_seed"] == 3
+    # local weights only: none of Ideogram's cloud API nodes may sneak in
+    assert not any(n["class_type"].startswith("Ideogram") and n["class_type"] != "Ideogram4Scheduler"
+                   for n in g.values())

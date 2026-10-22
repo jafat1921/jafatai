@@ -53,6 +53,7 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "flux2_klein9b_i2i": 900.0, "flux2_klein9b_edit": 900.0, "qwen_image21_t2i": 1800.0,
             "qwen_image21_full_t2i": 2400.0, "ernie_turbo_t2i": 1200.0, "zimage_base_t2i": 1200.0,
             "zimage_base_i2i": 1200.0, "chroma1_hd_t2i": 1800.0, "wan22_still_t2i": 1800.0,
+            "ideogram4_t2i": 2400.0,
             # contract v40: a Final model is four samplers plus remesh / bake at 4K; the first run loads ~9 GB
             "trellis2_image_to_3d": 3600.0}
 # templates whose LoRA insertion point takes the user's LoRAs (Z-Image / Qwen-Edit / LTX families)
@@ -228,6 +229,7 @@ def _plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
                 inputs["shift"] = sp.shift
             if sp.sampler:
                 inputs.update(sampler=sp.sampler, scheduler=sp.scheduler)
+            inputs.update(sp.extra)
             sources["speed"] = sp.id
         if params.get("steps"):
             inputs["steps"] = params["steps"]

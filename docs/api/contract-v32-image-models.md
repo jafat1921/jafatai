@@ -53,6 +53,7 @@ graph's weights are missing, only that speed is unavailable (`speeds[].reason` s
 | qwen_image_21 | Qwen-Image 2.1 | TEXT | experimental | turbo 8, full 25 | no | Qwen Research (NC) |
 | chroma1_hd | Chroma1-HD | NEW | experimental | 26 steps cfg 3.5 | no | Apache-2.0 |
 | wan22_still | Wan 2.2 Cinematic still | NEW | experimental | 4 steps (Lightning) | no | Apache-2.0 |
+| ideogram4 (added 2026-10-22) | Ideogram 4 | TEXT | experimental | turbo 12, default 20, quality 48 | no | Ideogram Non-Commercial |
 | flux2_klein_9b_edit (edit) | FLUX.2 klein 9B | - | - | 4 steps, 1-3 refs | - | FLUX Non-Commercial |
 
 Existing rows gain `group` (Z-Image Turbo and FLUX.2 klein 4B: fast; Qwen-Image 2512: text) and their

@@ -26,6 +26,8 @@ class Speed:
     template: str | None = None
     sampler: str | None = None
     scheduler: str | None = None
+    # other graph inputs a preset sets (Ideogram 4's scheduler mu / std)
+    extra: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,7 @@ OPENRAIL_M = "CreativeML OpenRAIL-M: commercial use allowed, with use restrictio
 OPENRAIL_PP = "CreativeML OpenRAIL++-M: commercial use allowed, with use restrictions"
 SDXL_LIGHTNING = "sdxl_lightning_8step_lora.safetensors"
 ANIMA_TURBO = "anima-turbo-lora-v0.2.safetensors"
+IDEOGRAM_NC = "Ideogram Non-Commercial Model Agreement (weights); code Apache-2.0"
 # picker sections for image models, in order
 IMAGE_GROUPS = ("fast", "photo", "text", "anime", "experimental")
 
@@ -165,6 +168,17 @@ MODELS: dict[str, Model] = {m.id: m for m in (
           ),
           default_speed="turbo", est_seconds=35, licence=QWEN_RESEARCH, noncommercial=True, group="experimental",
           best_for=("posters", "small text")),
+    Model("ideogram4", "image", "Ideogram 4", "TEXT",
+          "Exact text, posters and clean layouts; follows long, structured prompts.", ("t2i", "text_render"),
+          "ideogram4_t2i",
+          speeds=(
+              Speed("turbo", "Turbo (12 steps)", 12, "Fastest", extra=(("mu", 0.5), ("std", 1.75))),
+              Speed("default", "Default (20 steps)", 20, "Balanced", extra=(("mu", 0.0), ("std", 1.75))),
+              Speed("quality", "Quality (48 steps)", 48, "Most detail, slowest", extra=(("mu", 0.0), ("std", 1.5))),
+          ),
+          # two 8.6 GB UNets plus a 9.9 GB encoder: they take turns on the 20 GB card, so first runs are slow
+          default_speed="default", est_seconds=90, licence=IDEOGRAM_NC, noncommercial=True, group="experimental",
+          best_for=("posters", "signs", "typography")),
     Model("chroma1_hd", "image", "Chroma1-HD", "NEW",
           "Open FLUX-based model with real CFG and negatives; wide range of styles.", ("t2i",), "chroma1_hd_t2i",
           est_seconds=60, licence=APACHE, group="experimental", best_for=("styles", "negative prompts")),

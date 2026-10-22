@@ -18,7 +18,9 @@ def make_engine(url: str):
             # WAL lets the API read while the worker writes progress updates
             cur.execute("PRAGMA journal_mode=WAL")
             cur.execute("PRAGMA foreign_keys=ON")
-            cur.execute("PRAGMA busy_timeout=5000")
+            # the same 30 s as `timeout` above (this pragma overrides it): at 5 s, two ad campaigns plus three
+            # video upscales writing progress at once failed with "database is locked" (22 Oct)
+            cur.execute("PRAGMA busy_timeout=30000")
             cur.close()
 
         return eng

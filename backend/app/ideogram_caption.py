@@ -8,6 +8,7 @@ import json
 import logging
 import math
 import re
+import unicodedata
 
 from pydantic import BaseModel, Field
 
@@ -378,16 +379,22 @@ def run_in_job(ctx, gen) -> None:
 
 class SeenText(BaseModel):
     lines: list[str] = Field(default_factory=list)
+    # decorative made-up Arabic sat above an all-English announcement and wasn't listed as a line (22 Oct)
+    other_script: bool = False
 
 
 READ_TEXT = ("Transcribe every piece of text you can see in this picture exactly as it is written, letter for "
              "letter: headlines, small labels, stamps, signatures, watermarks. One entry per line of text. Do not "
              "fix spelling and do not add words that aren't there. No text at all: an empty list. "
-             'Reply as JSON {"lines": ["..."]}.')
+             "Also say whether any writing in a non-Latin script appears anywhere, decorative calligraphy included "
+             "(Arabic, Urdu, Chinese...). "
+             'Reply as JSON {"lines": ["..."], "other_script": true or false}.')
 
 
 def _tokens(text: str) -> list[str]:
-    return re.findall(r"[^\W_]+", text.casefold())
+    # the reader writes "Alḥamdulillāh" for a plain "Alhamdulillah": marks aren't mistakes
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+    return re.findall(r"[^\W_]+", plain.casefold())
 
 
 def expected_lines(caption: str) -> list[str]:
@@ -413,7 +420,7 @@ def _readable(lines: list[str]) -> bool:
     return all(ord(c) < 0x250 for c in "".join(lines) if c.isalpha())
 
 
-def read_text(path, tick=None) -> list[str] | None:
+def read_text(path, tick=None) -> SeenText | None:
     from PIL import Image
 
     from app.ads.vision import b64
@@ -427,7 +434,7 @@ def read_text(path, tick=None) -> list[str] | None:
     except LLMError as e:
         log.warning("lettering check skipped, vision model unavailable: %s", e)
         return None
-    return [ln for ln in res.data.lines if ln.strip()]
+    return SeenText(lines=[ln for ln in res.data.lines if ln.strip()], other_script=res.data.other_script)
 
 
 def check(path, caption: str, tick=None) -> dict | None:
@@ -437,7 +444,11 @@ def check(path, caption: str, tick=None) -> dict | None:
     seen = read_text(path, tick)
     if seen is None:
         return None
-    return {**problems(expected, seen), "seen": [s[:80] for s in seen[:12]]}
+    out = {**problems(expected, seen.lines), "seen": [s[:80] for s in seen.lines[:12]]}
+    if seen.other_script:
+        # only asked for Latin letters (check skips anything else), so any other script is stray
+        out.update(count=out["count"] + 3, other_script=True)
+    return out
 
 
 def second_look(ctx, gen, render, abs_path, result):

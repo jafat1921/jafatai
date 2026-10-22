@@ -298,3 +298,12 @@ def test_caption_follows_the_official_schema(monkeypatch):
     text = data["compositional_deconstruction"]["elements"][-1]
     assert list(text) == ["type", "bbox", "text", "desc"]
     assert data["high_level_description"] == "A sign that says 'OPEN'."
+
+
+def test_marks_are_not_mistakes_but_other_scripts_are(monkeypatch, tmp_path):
+    assert ic.problems(["Alhamdulillah A Grandson Is Born"], ["Alḥamdulillāh A Grandson Is Born"])["count"] == 0
+    cap = ic.fallback('arch "A Grandson Is Born"', "2:3")
+    monkeypatch.setattr(ic, "read_text", lambda path, tick=None: ic.SeenText(lines=["A Grandson Is Born"],
+                                                                               other_script=True))
+    out = ic.check(tmp_path / "x.png", cap)
+    assert out["count"] == 3 and out["other_script"]

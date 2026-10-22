@@ -103,7 +103,8 @@ def test_the_sideways_subject_logo_is_repaired(monkeypatch):
     data = json.loads(ic.write(prompt, 832, 1248)[0])
     assert data["style_description"]["medium"] == "graphic_design"
     text = data["compositional_deconstruction"]["elements"][1]
-    assert "bbox" not in text
+    y1, x1, y2, x2 = text["bbox"]  # the tall box is gone; the name sits in a wide band under the emblem
+    assert x2 - x1 > (y2 - y1) * 3
     assert "subject" not in text["desc"].lower()
     assert "precise neoclassical serif typography" in text["desc"]
     assert "blueprint cyan" not in text["desc"]  # only the lettering clauses travel
@@ -112,3 +113,24 @@ def test_the_sideways_subject_logo_is_repaired(monkeypatch):
 def test_a_wide_text_box_is_kept():
     assert ic._text_box([70, 100, 230, 900], "Daily Bread", "2:3") == [70, 100, 230, 900]
     assert ic._text_box([300, 100, 700, 200], "Daily Bread", "1:1") is None
+
+
+def test_unplaced_name_gets_a_band_under_the_emblem(monkeypatch):
+    # the second Ouroboros try: emblem across the whole canvas, the name with no box, printed tiny in the middle
+    llm_says(monkeypatch, {
+        "high_level_description": "A logo of an ouroboros staircase.",
+        "background": "A solid midnight charcoal backdrop.",
+        "elements": [{"type": "obj", "bbox": [100, 100, 900, 900], "desc": "An ouroboros serpent staircase."},
+                     {"type": "text", "text": "Ouroboros Architectonica", "desc": "Neoclassical serif capitals."}]})
+    data = json.loads(ic.write('Logo for "Ouroboros Architectonica", serif typography', 832, 1248)[0])
+    emblem, name = data["compositional_deconstruction"]["elements"]
+    assert name["bbox"][0] >= 560 and name["bbox"][2] <= 1000
+    assert emblem["bbox"][2] < name["bbox"][0]
+    w, h = emblem["bbox"][3] - emblem["bbox"][1], emblem["bbox"][2] - emblem["bbox"][0]
+    assert abs(w - h) <= 2  # still square
+
+
+def test_no_pictures_placed_leaves_the_words_free(monkeypatch):
+    llm_says(monkeypatch, LLMError("down"))
+    data = json.loads(ic.write('a sign "OPEN"', 832, 1248)[0])
+    assert "bbox" not in data["compositional_deconstruction"]["elements"][0]

@@ -17,6 +17,8 @@ log = logging.getLogger("mixai.ideogram")
 
 MODEL_ID = "ideogram4"
 MAX_ELEMENTS = 8
+# a faint grey name came back when the desc gave no colour
+PLAIN_TEXT = "Clear, legible lettering, as written, in a colour that stands out strongly from the background."
 MEDIUMS = ("photograph", "illustration", "3d_render", "painting", "graphic_design")
 # clauses of the user's prompt that say how lettering should look; they go into every text element
 _TYPE_WORDS = re.compile(r"typograph|font|letter|calligraph|serif|script|typeface|handwrit|\bcaps\b",
@@ -145,7 +147,7 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
             box = _text_box(box, e.text.strip(), ratio)
             if len(desc.split()) < 4 or _LAZY.search(desc):
                 desc = ""
-            desc = _with_hint(desc or "Clear, legible lettering.", hint)
+            desc = _with_hint(desc or PLAIN_TEXT, hint)
         if box:
             item["bbox"] = box
         if kind == "text":
@@ -158,7 +160,8 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
         if words not in printed:
             elements = [el for el in elements if not (el["type"] == "text" and _close(el["text"], words))]
             elements.append({"type": "text", "text": words,
-                             "desc": _with_hint("Clear, legible lettering, as written.", hint)})
+                             "desc": _with_hint(PLAIN_TEXT, hint)})
+    _lockup(elements)
     style = cap.style_description.model_dump()
     style["medium"] = _medium(style["medium"])
     style = {k: v for k, v in style.items() if v}
@@ -168,6 +171,34 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
     out["compositional_deconstruction"] = {"background": cap.background.strip() or "A plain, simple backdrop.",
                                            "elements": elements}
     return json.dumps(out, ensure_ascii=False)
+
+
+def _lockup(elements: list[dict]) -> None:
+    """Placed pictures but unplaced words: the renderer squeezed the name into the middle of the emblem at a
+    few pixels high (Ouroboros, 22 Oct). Stack the words in a band at the bottom and fit the pictures above."""
+    texts = [el for el in elements if el["type"] == "text"]
+    placed = [el for el in elements if el["type"] == "obj" and "bbox" in el]
+    if not texts or not placed or any("bbox" in t for t in texts):
+        return
+    heights = [(150 if i == 0 else 90) * (t["text"].count("\n") + 1) for i, t in enumerate(texts)]
+    top = max(560, 1000 - 50 - sum(heights))
+    scale = min(1.0, (1000 - 50 - top) / sum(heights))
+    y = top
+    for t, h in zip(texts, heights):
+        h = int(h * scale)
+        t["bbox"] = [y, 80, y + h, 920]
+        y += h
+    limit = top - 30
+    for el in placed:
+        y1, x1, y2, x2 = el["bbox"]
+        if y2 <= limit:
+            continue
+        old_h = max(1, y2 - y1)
+        y1 = min(y1, 60)
+        # shrink about the centre line so the emblem keeps its shape
+        k = (limit - y1) / old_h
+        cx, half = (x1 + x2) / 2, (x2 - x1) * k / 2
+        el["bbox"] = [y1, int(cx - half), limit, int(cx + half)]
 
 
 def _with_hint(desc: str, hint: str) -> str:

@@ -144,9 +144,9 @@ ANNOUNCEMENT = ('golden Islamic archway, elegant calligraphy above arch "Alhamdu
 def test_each_line_carries_its_own_place_and_only_shared_type_words():
     assert ic._type_hint(ANNOUNCEMENT) == "precise serif typography"
     where = ic._placements(ANNOUNCEMENT)
-    assert where["Mr and Mrs Saadat Ali"] == "ornate pillars left reads THIS LINE right reads another line"
-    assert where["Proud Grandparents"] == "ornate pillars left reads another line right reads THIS LINE"
-    assert where["Son of Adeel and Fatima 3rd October 2026"] == "flowing ribbon beneath THIS LINE"
+    assert where["Mr and Mrs Saadat Ali"] == "ornate pillars left"
+    assert where["Proud Grandparents"] == "ornate pillars right"
+    assert where["Son of Adeel and Fatima 3rd October 2026"] == "flowing ribbon beneath"
 
 
 def test_the_picked_aspect_beats_the_pixel_ratio(monkeypatch):
@@ -169,3 +169,12 @@ def test_a_word_drawn_as_an_object_is_not_drawn_twice(monkeypatch):
     els = data["compositional_deconstruction"]["elements"]
     assert [e["type"] for e in els] == ["text"]
     assert "bbox" not in els[0]  # nothing placed, so no lockup band pushing it to the bottom
+
+
+def test_no_marker_words_reach_the_picture(monkeypatch):
+    # "THIS LINE" was printed on the announcement: descs carry plain lowercase location words only
+    llm_says(monkeypatch, LLMError("down"))
+    cap = ic.write(ANNOUNCEMENT, 832, 1280, aspect_ratio="2:3")[0]
+    assert "THIS LINE" not in cap and "another line" not in cap
+    assert ic._placements(ANNOUNCEMENT)["Alhamdulillah A Grandson Is Born"] == "elegant calligraphy above arch"
+    assert ic._placements('a sign titled “Chai & Chill”')["Chai & Chill"] == "a sign"

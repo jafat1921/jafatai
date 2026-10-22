@@ -131,16 +131,29 @@ def _type_hint(prompt: str) -> str:
     return "; ".join(picked)[:200]
 
 
+_SAYS = re.compile(r"\s*\b(reads|reading|says|saying|titled|that|which|with the words|of the words?|spelling)\s*$",
+                   re.I)
+
+
 def _placements(prompt: str) -> dict[str, str]:
-    """Each quoted phrase -> the words of the brief around it, with the other lines blanked out."""
+    """Each quoted phrase -> plain location words from the brief ("ornate pillars left").
+
+    Only lowercase prose with no quotes or markers: the renderer prints words it finds in a desc, and a
+    "THIS LINE" placeholder ended up on a birth announcement (22 Oct)."""
     out = {}
     for clause, quotes in _clauses(prompt):
-        for q in quotes:
-            where = clause
-            for other in quotes:
-                where = where.replace(f'"{other}"', "THIS LINE" if other == q else "another line")
-            if where.strip() != "THIS LINE":
-                out.setdefault(q, where[:200])
+        rest, lead = clause, ""
+        for i, q in enumerate(quotes):
+            before, _, rest = rest.partition(f'"{q}"')
+            words = before.strip()
+            while _SAYS.search(words):
+                words = _SAYS.sub("", words).strip()
+            if i == 0:
+                lead = " ".join(words.split()[:2])
+            elif lead and not words.lower().startswith(lead.lower()):
+                words = f"{lead} {words}".strip()
+            if words and q not in out:
+                out[q] = words[:160]
     return out
 
 
@@ -201,7 +214,7 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
     elements = [el for el in elements if el["type"] == "text" or not any(w in el["desc"] for w in lines)]
     for el in elements:
         if el["type"] == "text" and el["text"] in where:
-            el["desc"] = f"{el['desc'].rstrip('.')}. Where it goes, from the brief: {where[el['text']]}."
+            el["desc"] = f"{el['desc'].rstrip('.')}. Placed: {where[el['text']]}."
     _lockup(elements)
     style = cap.style_description.model_dump()
     style["medium"] = _medium(style["medium"])

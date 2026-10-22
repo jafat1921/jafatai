@@ -384,6 +384,11 @@ def handle_generate(ctx: JobContext) -> dict:
         result = ideogram_caption.second_look(
             ctx, gen, lambda seed, path: getattr(driver, method)(gen.prompt, params, seed, path, ctx.progress),
             abs_path, result)
+        if (gen.params or {}).get("exact_text"):
+            from app import ideogram_text
+
+            ctx.progress(0.99, "Setting the lettering")
+            gen.params = {**gen.params, "exact_text_set": ideogram_text.set_text(abs_path, gen.params["exact_text"])}
 
     if getattr(result, "params_update", None):
         gen.params = {**(gen.params or {}), **result.params_update}

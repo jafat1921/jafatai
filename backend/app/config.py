@@ -135,6 +135,9 @@ class Settings(BaseSettings):
     ideogram_caption_model: str = ""
     # read an Ideogram picture's lettering back with the vision model; stray or misspelt words: one redraw
     ideogram_text_check: bool = True
+    # 3+ quoted English lines: Ideogram draws blank banners and the app sets the words (app.ideogram_text).
+    # auto | off
+    ideogram_exact_text: str = "auto"
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
     # where the engine venvs keep their Hugging Face downloads (empty: their own default)

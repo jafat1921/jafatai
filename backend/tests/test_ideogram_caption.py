@@ -217,7 +217,7 @@ class Seeded(Gen):
 
 def _look(monkeypatch, tmp_path, verdicts, redraw=None):
     verdicts = list(verdicts)
-    monkeypatch.setattr(ic, "check", lambda path, caption, tick=None: verdicts.pop(0))
+    monkeypatch.setattr(ic, "check", lambda path, caption, tick=None, blank=False: verdicts.pop(0))
     first = tmp_path / "out.png"
     first.write_bytes(b"first")
     gen = Seeded("x", {"ideogram_caption": ic.fallback('a sign "OPEN"', "1:1")})

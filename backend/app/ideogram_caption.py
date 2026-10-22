@@ -258,6 +258,60 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
     return json.dumps(out, ensure_ascii=False, separators=(",", ":"))
 
 
+# ---------------------------------------------------------------- exact text (app.ideogram_text)
+
+EXACT_MIN_LINES = 3
+_SURFACES = ("ribbon", "banner", "scroll", "plaque", "sign", "label", "card", "frame", "board", "tag", "panel")
+
+
+def exact_lines(prompt: str) -> list[str]:
+    """The quoted lines we set ourselves: three or more, all Latin. Fewer is a headline piece, where Ideogram's
+    own lettering (neon, 3D, collage) is the point; Urdu and Arabic wait until English is right."""
+    lines = [w for w in quoted(prompt) if w.strip()]
+    if len(lines) < EXACT_MIN_LINES or not all(_script(w) == "Latin letters" for w in lines):
+        return []
+    return lines
+
+
+def _surface(where: str) -> str:
+    low = (where or "").lower()
+    found = next((s for s in _SURFACES if s in low), None)
+    if found:
+        return found
+    return "plaque" if "pillar" in low or "column" in low else "smooth plain panel"
+
+
+def blank_out(caption: str, prompt: str) -> tuple[str, list[dict]]:
+    """The caption with each exact line swapped for a blank surface in its spot, and the layout to set the
+    words into afterwards: [{text, bbox, hint}]."""
+    data = json.loads(caption)
+    els = data["compositional_deconstruction"]["elements"]
+    texts = [el for el in els if el["type"] == "text"]
+    if any("bbox" not in t for t in texts):
+        # every line needs a spot; a half-placed set goes to the band under the art
+        for t in texts:
+            t.pop("bbox", None)
+        _lockup(els)
+        for i, t in enumerate(el for el in els if el["type"] == "text" and "bbox" not in el):
+            t["bbox"] = [600 + i * 110, 100, 690 + i * 110, 900]
+    hint, where = _type_hint(prompt), _placements(prompt)
+    layout = []
+    for el in texts:
+        line = el["text"]
+        place = where.get(line) or where.get(line.replace("'", "’"), "")
+        layout.append({"text": line, "bbox": el["bbox"], "hint": f"{el['desc']} {hint} {place}".strip()})
+        surface = _surface(place)
+        el.clear()
+        el.update({"type": "obj", "bbox": layout[-1]["bbox"],
+                   "desc": f"A blank {surface}, plain and completely unmarked, smooth and empty."})
+    # the lines named in the summary would be painted anyway
+    hld = data["high_level_description"]
+    for line in [ln["text"] for ln in layout]:
+        hld = hld.replace(f"'{line}'", "").replace(f'"{line}"', "")
+    data["high_level_description"] = re.sub(r"\s{2,}", " ", hld).strip()
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":")), layout
+
+
 def _lockup(elements: list[dict]) -> None:
     """Placed pictures but unplaced words: the renderer squeezed the name into the middle of the emblem at a
     few pixels high (Ouroboros, 22 Oct). Stack the words in a band at the bottom and fit the pictures above."""
@@ -371,6 +425,9 @@ def run_in_job(ctx, gen) -> None:
                             aspect_ratio=params.get("aspect") or params.get("aspect_ratio"),
                             tick=lambda: ctx.progress(0.02, "Laying out the picture"))
     params.update(ideogram_caption=caption, ideogram_caption_by="llm" if by_llm else "fallback")
+    if get_settings().ideogram_exact_text != "off" and exact_lines(gen.prompt or ""):
+        caption, layout = blank_out(caption, gen.prompt or "")
+        params.update(ideogram_caption=caption, exact_text=layout)
     gen.params = params
     ctx.db.commit()
 
@@ -438,9 +495,10 @@ def read_text(path, tick=None) -> SeenText | None:
     return SeenText(lines=[ln for ln in res.data.lines if ln.strip()], other_script=res.data.other_script)
 
 
-def check(path, caption: str, tick=None) -> dict | None:
+def check(path, caption: str, tick=None, blank: bool = False) -> dict | None:
+    """blank: the words are set afterwards, so any lettering the model painted on its own is stray."""
     expected = expected_lines(caption)
-    if not expected or not _readable(expected):
+    if (not expected and not blank) or not _readable(expected):
         return None
     seen = read_text(path, tick)
     if seen is None:
@@ -460,7 +518,8 @@ def second_look(ctx, gen, render, abs_path, result):
         return result
     tick = lambda: ctx.progress(0.97, "Checking the lettering")  # noqa: E731
     tick()
-    first = check(abs_path, caption, tick)
+    blank = bool((gen.params or {}).get("exact_text"))
+    first = check(abs_path, caption, tick, blank=blank)
     record: dict = {"first": first}
     if first and first["count"]:
         retry_seed = (int(gen.seed or 0) + 7919) % 2147483647
@@ -477,7 +536,7 @@ def second_look(ctx, gen, render, abs_path, result):
                 record["kept"] = "first"
                 gen.params = {**(gen.params or {}), "text_check": record}
                 return result
-            second = check(tmp, caption, tick)
+            second = check(tmp, caption, tick, blank=blank)
             record["second"] = second
             if second is not None and second["count"] < first["count"]:
                 tmp.replace(abs_path)

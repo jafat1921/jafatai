@@ -3,6 +3,7 @@ blocks plain-text prompts far more often (a harmless coffee poster came back "bl
 idea as a caption rendered cleanly). The creative LLM writes the caption before the GPU step; the user's
 prompt stays readable in the Library and the caption rides along in params.
 """
+import asyncio
 import json
 import logging
 import math
@@ -10,7 +11,8 @@ import re
 
 from pydantic import BaseModel, Field
 
-from app.llm.client import LLMError, chat_sync
+from app.config import get_settings
+from app.llm.client import LLMError, bare_tag, chat_sync, installed_models
 from app.prompt_enhance import quoted
 
 log = logging.getLogger("mixai.ideogram")
@@ -23,7 +25,7 @@ MEDIUMS = ("photograph", "illustration", "3d_render", "painting", "graphic_desig
 # clauses of the user's prompt that say how lettering should look; they go into every text element
 _TYPE_WORDS = re.compile(r"typograph|font|letter|calligraph|serif|script|typeface|handwrit|\bcaps\b",
                          re.I)
-_QUOTE_STRIP = re.compile(r'"[^"\n]*"|“[^”\n]*”')
+_QUOTE_ANY = re.compile(r'"([^"\n]+)"|“([^”\n]+)”|«([^»\n]+)»')
 # what a lazy desc tends to say; the renderer prints such words, "Subject" turned up on a logo on 22 Oct
 _LAZY = re.compile(r"\b(subject|text logo|the text|logo text|label)\b", re.I)
 
@@ -105,9 +107,41 @@ def _medium(raw: str) -> str:
     return m if m in MEDIUMS else ""
 
 
+def _clauses(prompt: str) -> list[tuple[str, list[str]]]:
+    """(clause, the quoted phrases in it), split on commas outside quotes."""
+    found: list[str] = []
+
+    def hold(m):
+        found.append(next(g for g in m.groups() if g is not None))
+        return f"\x00{len(found) - 1}\x00"
+
+    out = []
+    for raw in re.split(r"[,;\n]", _QUOTE_ANY.sub(hold, prompt or "")):
+        ids = [int(i) for i in re.findall(r"\x00(\d+)\x00", raw)]
+        text = re.sub(r"\x00(\d+)\x00", lambda m: f'"{found[int(m.group(1))]}"', raw).strip()
+        if text:
+            out.append((text, [found[i] for i in ids]))
+    return out
+
+
 def _type_hint(prompt: str) -> str:
-    clauses = [c.strip() for c in re.split(r"[,;\n]", _QUOTE_STRIP.sub("", prompt)) if _TYPE_WORDS.search(c)]
-    return "; ".join(clauses)[:200]
+    # a clause that holds a quote says where that one line goes ("elegant calligraphy above arch"), not how
+    # all the lettering looks; it travels with its own line instead (_placements)
+    picked = [c for c, quotes in _clauses(prompt) if not quotes and _TYPE_WORDS.search(c)]
+    return "; ".join(picked)[:200]
+
+
+def _placements(prompt: str) -> dict[str, str]:
+    """Each quoted phrase -> the words of the brief around it, with the other lines blanked out."""
+    out = {}
+    for clause, quotes in _clauses(prompt):
+        for q in quotes:
+            where = clause
+            for other in quotes:
+                where = where.replace(f'"{other}"', "THIS LINE" if other == q else "another line")
+            if where.strip() != "THIS LINE":
+                out.setdefault(q, where[:200])
+    return out
 
 
 def _text_box(box: list[int] | None, text: str, ratio: str) -> list[int] | None:
@@ -136,6 +170,7 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
     """The caption as the renderer wants it, with every quoted phrase of the prompt printed verbatim."""
     elements = []
     hint = _type_hint(prompt)
+    where = _placements(prompt)
     for e in cap.elements[:MAX_ELEMENTS]:
         kind = "text" if e.type == "text" and (e.text or "").strip() else "obj"
         if not e.desc.strip() and kind == "obj":
@@ -161,6 +196,12 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
             elements = [el for el in elements if not (el["type"] == "text" and _close(el["text"], words))]
             elements.append({"type": "text", "text": words,
                              "desc": _with_hint(PLAIN_TEXT, hint)})
+    # an "obj" that is one of the quoted words drawn as a picture makes the word twice ("صبر", 22 Oct)
+    lines = [w for w in quoted(prompt) if w.strip()]
+    elements = [el for el in elements if el["type"] == "text" or not any(w in el["desc"] for w in lines)]
+    for el in elements:
+        if el["type"] == "text" and el["text"] in where:
+            el["desc"] = f"{el['desc'].rstrip('.')}. Where it goes, from the brief: {where[el['text']]}."
     _lockup(elements)
     style = cap.style_description.model_dump()
     style["medium"] = _medium(style["medium"])
@@ -218,14 +259,32 @@ def fallback(prompt: str, ratio: str) -> str:
     return assemble(cap, prompt, ratio)
 
 
-def write(prompt: str, width: int, height: int, *, tick=None) -> tuple[str, bool]:
-    """(caption, by_llm)."""
-    ratio = aspect(width, height)
+def _caption_model() -> str | None:
+    want = get_settings().ideogram_caption_model.strip()
+    if not want:
+        return None
+    try:
+        have = asyncio.run(installed_models())
+    except LLMError:
+        return want
+    if bare_tag(want) in have:
+        return want
+    log.warning("IDEOGRAM_CAPTION_MODEL %s isn't installed; using the creative model", want)
+    return None
+
+
+def write(prompt: str, width: int, height: int, *, aspect_ratio: str | None = None,
+          tick=None) -> tuple[str, bool]:
+    """(caption, by_llm). aspect_ratio: the one the user picked; 832x1248 alone reduces to 2:3 but
+    832x1280 to 13:20, which the model was never shown."""
+    ratio = aspect_ratio if aspect_ratio and re.fullmatch(r"\d{1,2}:\d{1,2}", aspect_ratio) else aspect(width, height)
     msgs = [{"role": "system", "content": SYSTEM},
             {"role": "user", "content": f"Aspect ratio: {ratio}\nIdea: {prompt.strip()}"}]
     try:
+        model = _caption_model()
+        kw = {"model": model, "keep_alive": get_settings().ollama_keep_alive_big or None} if model else {}
         res = chat_sync("creative", msgs, tick=tick, schema=Caption, think=False, temperature=0.4,
-                        max_tokens=1400, timeout=120)
+                        max_tokens=1400, timeout=180 if model else 120, **kw)
     except LLMError as e:
         log.warning("ideogram caption fell back to a plain wrapper: %s", e)
         return fallback(prompt, ratio), False
@@ -239,6 +298,7 @@ def run_in_job(ctx, gen) -> None:
     ctx.progress(0.02, "Laying out the picture")
     # TODO: Print/Ad Studio know their exact lines and zones; pass those in instead of re-reading the prose
     caption, by_llm = write(gen.prompt or "", params.get("width") or 1024, params.get("height") or 1024,
+                            aspect_ratio=params.get("aspect") or params.get("aspect_ratio"),
                             tick=lambda: ctx.progress(0.02, "Laying out the picture"))
     params.update(ideogram_caption=caption, ideogram_caption_by="llm" if by_llm else "fallback")
     gen.params = params

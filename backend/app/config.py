@@ -130,6 +130,9 @@ class Settings(BaseSettings):
     song_lyrics_aerab: bool = True
     # the model that adds the marks, when installed; empty or missing: the creative role's model
     aerab_llm_model: str = "gemma4:26b"
+    # the model that writes Ideogram 4's JSON captions; empty: the creative role's. A bigger one (gemma4:26b)
+    # lays pages out far better, but shares the 20 GB card with Ideogram's ~17 GB of weights
+    ideogram_caption_model: str = ""
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
     # where the engine venvs keep their Hugging Face downloads (empty: their own default)

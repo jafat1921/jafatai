@@ -23,6 +23,7 @@ MAX_ELEMENTS = 8
 # every word here can end up printed: "as written" put a stray "as" on a book cover (22 Oct)
 PLAIN_TEXT = "Clear, legible lettering in a colour that stands out strongly from the background."
 MEDIUMS = ("photograph", "illustration", "3d_render", "painting", "graphic_design")
+_HEX = re.compile(r"#[0-9A-Fa-f]{6}")
 # clauses of the user's prompt that say how lettering should look; they go into every text element
 _TYPE_WORDS = re.compile(r"typograph|font|letter|calligraph|serif|script|typeface|handwrit|\bcaps\b",
                          re.I)
@@ -238,16 +239,22 @@ def assemble(cap: Caption, prompt: str, ratio: str) -> str:
         el["text"] = el["text"].replace("’", "'")
     _lockup(elements)
     _hero(elements)
-    style = cap.style_description.model_dump()
-    style["medium"] = _medium(style["medium"])
+    # the official schema (ideogram-oss prompting.md): fixed key order, uppercase hex, no aspect_ratio key
+    # (the size comes from the latent), single quotes for text named in prose
+    elements = [{k: el[k] for k in ("type", "bbox", "text", "desc") if k in el} for el in elements]
+    s = cap.style_description
+    style = {"aesthetics": s.aesthetics.strip(), "lighting": s.lighting.strip(), "medium": _medium(s.medium),
+             "color_palette": [c.upper() for c in s.color_palette if _HEX.fullmatch(c.strip())][:16]}
     style = {k: v for k, v in style.items() if v}
-    out: dict = {"aspect_ratio": ratio,
-                 "high_level_description": _unquote(cap.high_level_description.strip(), lines)}
+    hld = _unquote(cap.high_level_description.strip(), lines)
+    for q in lines:
+        hld = hld.replace(f'"{q}"', f"'{q}'").replace(f"“{q}”", f"'{q}'")
+    out: dict = {"high_level_description": hld}
     if style:
         out["style_description"] = style
     out["compositional_deconstruction"] = {
         "background": _unquote(cap.background.strip(), lines) or "A plain, simple backdrop.", "elements": elements}
-    return json.dumps(out, ensure_ascii=False)
+    return json.dumps(out, ensure_ascii=False, separators=(",", ":"))
 
 
 def _lockup(elements: list[dict]) -> None:

@@ -172,9 +172,13 @@ MODELS: dict[str, Model] = {m.id: m for m in (
           "Exact text, posters and clean layouts; follows long, structured prompts.", ("t2i", "text_render"),
           "ideogram4_t2i",
           speeds=(
-              Speed("turbo", "Turbo (12 steps)", 12, "Fastest", extra=(("mu", 0.5), ("std", 1.75))),
-              Speed("default", "Default (20 steps)", 20, "Balanced", extra=(("mu", 0.0), ("std", 1.75))),
-              Speed("quality", "Quality (48 steps)", 48, "Most detail, slowest", extra=(("mu", 0.0), ("std", 1.5))),
+              # official presets (ideogram-oss inference.md): cfg 3 only for the last 1 / 2 / 3 steps
+              Speed("turbo", "Turbo (12 steps)", 12, "Fastest",
+                    extra=(("mu", 0.5), ("std", 1.75), ("polish_from", 0.917))),
+              Speed("default", "Default (20 steps)", 20, "Balanced",
+                    extra=(("mu", 0.0), ("std", 1.75), ("polish_from", 0.9))),
+              Speed("quality", "Quality (48 steps)", 48, "Most detail, slowest",
+                    extra=(("mu", 0.0), ("std", 1.5), ("polish_from", 0.9375))),
           ),
           # two 8.6 GB UNets plus a 9.9 GB encoder: they take turns on the 20 GB card, so first runs are slow
           default_speed="default", est_seconds=90, licence=IDEOGRAM_NC, noncommercial=True, group="experimental",

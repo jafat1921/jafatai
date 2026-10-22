@@ -12,7 +12,7 @@
   "6": {"class_type": "ConditioningZeroOut", "_meta": {"title": "Negative"},
         "inputs": {"conditioning": ["5", 0]}},
   "7": {"class_type": "CFGOverride", "_meta": {"title": "LateCFG"},
-        "inputs": {"model": ["1", 0], "cfg": 3.0, "start_percent": 0.7, "end_percent": 1.0}},
+        "inputs": {"model": ["1", 0], "cfg": 3.0, "start_percent": 0.9, "end_percent": 1.0}},
   "8": {"class_type": "DualModelGuider", "_meta": {"title": "Guider"},
         "inputs": {"model": ["7", 0], "positive": ["5", 0], "model_negative": ["2", 0], "negative": ["6", 0],
                    "cfg": 7.0}},

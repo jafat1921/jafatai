@@ -29,6 +29,7 @@ VIDEO_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (640, 640), "4:3":
 HQ_SIZES = {"16:9": (1280, 704), "9:16": (704, 1280), "1:1": (960, 960), "4:3": (1088, 832), "2.39:1": (1536, 640)}
 WAN_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (624, 624), "4:3": (704, 544), "2.39:1": (960, 400)}
 PORTRAIT_SIZE = (768, 1024)
+IDEOGRAM_MIN_PIXELS = 1024 * 1536
 MAX_FRAMES = 257  # ~10.7 s at 24 fps; longer shots belong to the long-take templates
 
 ANGLES_LORA = "qwen-image-edit-2511-multiple-angles-lora.safetensors"
@@ -233,6 +234,12 @@ def _plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
             sources["speed"] = sp.id
         if params.get("steps"):
             inputs["steps"] = params["steps"]
+        if m.id == "ideogram4" and w * h < IDEOGRAM_MIN_PIXELS:
+            # the ~1 MP the pickers ask for sits under Ideogram 4's recommended sizes (1024x1536 and up), and
+            # small lettering came out misspelt there
+            k = math.sqrt(IDEOGRAM_MIN_PIXELS / (w * h))
+            w, h = min(2048, snap_multiple(w * k, 16)), min(2048, snap_multiple(h * k, 16))
+            inputs.update(width=w, height=h)
         if m.id == "ideogram4" and params.get("ideogram_caption"):
             # the JSON caption the worker wrote (app.ideogram_caption); a pasted caption is already in prompt
             inputs["prompt"] = params["ideogram_caption"]

@@ -47,7 +47,7 @@ def test_quoted_words_win_over_a_paraphrase(monkeypatch):
         ]})
     cap, by_llm = ic.write('A poster that says "FRESH COFFEE" and "Öppet 08–22"', 832, 1248)
     data = json.loads(cap)
-    assert by_llm and data["aspect_ratio"] == "2:3"
+    assert by_llm and "aspect_ratio" not in data  # not a caption key: the size comes from the latent
     texts = [e["text"] for e in data["compositional_deconstruction"]["elements"] if e["type"] == "text"]
     assert texts == ["FRESH COFFEE", "Öppet 08–22"]  # the paraphrased headline is replaced, accents kept
     spoon = data["compositional_deconstruction"]["elements"][-3]
@@ -59,7 +59,7 @@ def test_no_llm_still_sends_a_caption(monkeypatch):
     llm_says(monkeypatch, LLMError("down"))
     cap, by_llm = ic.write('a sign "OPEN"', 832, 1248)
     data = json.loads(cap)
-    assert not by_llm and data["high_level_description"] == 'a sign "OPEN"'
+    assert not by_llm and data["high_level_description"] == "a sign 'OPEN'"
     assert data["compositional_deconstruction"]["elements"][-1]["text"] == "OPEN"
     assert ic.is_caption(cap)
 
@@ -152,7 +152,6 @@ def test_each_line_carries_its_own_place_and_only_shared_type_words():
 def test_the_picked_aspect_beats_the_pixel_ratio(monkeypatch):
     llm_says(monkeypatch, LLMError("down"))
     data = json.loads(ic.write(ANNOUNCEMENT, 832, 1280, aspect_ratio="2:3")[0])
-    assert data["aspect_ratio"] == "2:3"
     texts = {e["text"]: e["desc"] for e in data["compositional_deconstruction"]["elements"] if e["type"] == "text"}
     assert "ribbon beneath" in texts["Son of Adeel and Fatima 3rd October 2026"]
     assert "above arch" not in texts["Proud Grandparents"]
@@ -202,7 +201,7 @@ def test_stray_quoted_words_are_cut_from_picture_descs(monkeypatch):
                      {"type": "text", "text": "Wild Nordic Honey", "desc": "Elegant black serif capitals, centred."}]})
     cap = ic.write('honey jar label reading "Wild Nordic Honey"', 832, 1248)[0]
     assert "BIO" not in cap and "EST 1998" not in cap
-    assert '"Wild Nordic Honey"' in json.loads(cap)["high_level_description"]
+    assert "'Wild Nordic Honey'" in json.loads(cap)["high_level_description"]
 
 
 def test_problems_counts_strays_and_misspellings():
@@ -282,3 +281,20 @@ def test_no_filler_words_and_straight_apostrophes():
     text = cap["compositional_deconstruction"]["elements"][-1]
     assert text["text"] == "The Moon Who Couldn't Sleep"
     assert " as " not in f" {text['desc']} "
+
+
+def test_caption_follows_the_official_schema(monkeypatch):
+    llm_says(monkeypatch, {
+        "high_level_description": 'A sign that says "OPEN".',
+        "style_description": {"color_palette": ["#ff8c00", "orange", "#14213d"], "medium": "graphic design",
+                              "lighting": "flat", "aesthetics": "bold"},
+        "background": "A brick wall.",
+        "elements": [{"desc": "Bold red sans-serif capitals.", "text": "OPEN", "bbox": [100, 100, 300, 900],
+                      "type": "text"}]})
+    data = json.loads(ic.write('a sign "OPEN"', 832, 1248)[0])
+    assert list(data) == ["high_level_description", "style_description", "compositional_deconstruction"]
+    assert list(data["style_description"]) == ["aesthetics", "lighting", "medium", "color_palette"]
+    assert data["style_description"]["color_palette"] == ["#FF8C00", "#14213D"]
+    text = data["compositional_deconstruction"]["elements"][-1]
+    assert list(text) == ["type", "bbox", "text", "desc"]
+    assert data["high_level_description"] == "A sign that says 'OPEN'."

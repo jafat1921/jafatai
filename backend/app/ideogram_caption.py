@@ -468,8 +468,12 @@ def problems(expected: list[str], seen: list[str]) -> dict:
     got = _tokens(" ".join(seen))
     extra = sorted({t for t in got if t not in want and len(t) > 1})
     missing = sorted(want - set(got))
+    # the same line painted twice (a chalkboard sign and again under it) is stray too
+    asked = _tokens(" ".join(expected))
+    repeats = sorted({t for t in set(got) if t in want and got.count(t) > asked.count(t)})
     # a dropped word costs double: a redraw that simply left the pillar names out beat one that garbled them
-    return {"extra": extra[:12], "missing": missing[:12], "count": len(extra) + 2 * len(missing)}
+    return {"extra": extra[:12], "missing": missing[:12], "repeated": repeats[:12],
+            "count": len(extra) + 2 * len(missing) + (1 if repeats else 0)}
 
 
 def _readable(lines: list[str]) -> bool:

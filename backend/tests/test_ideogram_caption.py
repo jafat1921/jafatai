@@ -314,3 +314,9 @@ def test_a_dropped_line_scores_worse_than_a_garbled_one():
     garbled = ic.problems(want, ["Mr ark ms Saadat Ali", "Drous Grandparents"])["count"]
     dropped = ic.problems(want, [])["count"]
     assert dropped > garbled
+
+
+def test_a_line_painted_twice_counts():
+    p = ic.problems(["Life Happens, Coffee Helps"], ["Life Happens, Coffee Helps", "Life Happens, Coffee Helps"])
+    assert p["count"] >= 1 and "coffee" in p["repeated"]
+    assert ic.problems(["Life Happens, Coffee Helps"], ["Life Happens, Coffee Helps"])["count"] == 0

@@ -204,6 +204,11 @@ def beat_at(bts: list[dict], t: float) -> dict | None:
     return best
 
 
+def _speaks(bts: list[dict], who: str, a: float, b: float) -> bool:
+    return any(x["kind"] == "line" and x["character_id"] == who and x.get("start", 0) < b - 1e-6
+               and x.get("end", 0) > a + 1e-6 for x in bts)
+
+
 def cut_plans(bts: list[dict], cuts: list[dict], names: dict[str, str], cast: list[str],
               location_id: str | None) -> list[dict]:
     """A shot plan per piece of the cut (ai_jobs.replace_shots fields) plus its stretch of the track."""
@@ -214,6 +219,10 @@ def cut_plans(bts: list[dict], cuts: list[dict], names: dict[str, str], cast: li
         visual = (b.get("visual") or "").strip()
         cam = c["camera"]
         talking = bool(c.get("speaker_id")) and cam == c.get("speaker_id")
+        if not talking and len(cast) == 1 and cast[0] in names and _speaks(bts, cast[0], c["start"], c["end"]):
+            # a lone presenter: the podcast's room shot at the top showed him with his voice running and his
+            # mouth still (Ruslan's explainer, 23 Oct); while he speaks he is filmed speaking
+            cam, talking = cast[0], True
         other = next((x for x in cast if x != cam), None)
         if talking and c.get("piece", 0) % 2 == 1 and other in names:
             # a long speech cut in pieces: every other piece looks at the listener, the voice carrying on

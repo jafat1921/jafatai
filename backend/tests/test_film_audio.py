@@ -67,6 +67,21 @@ def test_shots_are_cut_to_the_track():
     assert sum(len(p["dialogue"]) for p in plans) == 3
 
 
+def test_a_lone_presenter_is_lip_synced_whenever_he_speaks():
+    # Ruslan's explainer (23 Oct): the room shots at the top and tail of each scene showed him with his voice
+    # running and his mouth still
+    bts = [{"kind": "line", "character_id": "r", "text": "Hello and welcome.", "visual": "Ruslan smiles"},
+           {"kind": "line", "character_id": "r", "text": "Step one is Create Image.", "visual": "He points"},
+           {"kind": "line", "character_id": "r", "text": "Try it today.", "visual": "He waves"}]
+    items, total = fa.timeline(bts, [6.0, 9.0, 5.0])
+    plans = fa.cut_plans(bts, fa.cut(items, total, "scene-r"), {"r": "Ruslan"}, ["r"], None)
+    for p in plans:
+        speaking = any(i["start"] < p["audio"]["end"] - 1e-6 and i["end"] > p["audio"]["start"] + 1e-6
+                       for i in items)
+        assert p["audio"]["lipsync"] == speaking, p
+    assert sum(len(p["dialogue"]) for p in plans) == 3
+
+
 class TalkingBrain(FeatureBrain):
     def outline(self, n):
         out = super().outline(n)

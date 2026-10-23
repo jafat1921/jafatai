@@ -4,6 +4,7 @@ import { VIDEO_HQ, VIDEO_STANDARD } from '@/lib/models'
 import type { ModelInfo } from '@/lib/types'
 
 export type RenderQuality = 'standard' | 'hq'
+export type LipsyncEngine = 'ltx' | 'wan_s2v'
 
 export const HQ_LONG_TAKE_REASON = 'High quality renders single-chunk shots only, so long takes use Standard.'
 export const SMOOTH_LONG_TAKE_REASON = 'Smooth motion works on single-chunk shots only, so it is skipped for long takes.'
@@ -34,6 +35,9 @@ export function useRenderOptions(projectId: string) {
     smooth,
     smoothOn: !!settings.smooth_motion && !!smooth?.available,
     setSmooth: (on: boolean) => save.mutate({ smooth_motion: on }),
+    // unset means the studio's default engine
+    lipsync: (settings.lipsync_engine ?? null) as LipsyncEngine | null,
+    setLipsync: (e: LipsyncEngine) => save.mutate({ lipsync_engine: e }),
     error: save.error,
   }
 }

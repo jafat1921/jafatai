@@ -61,3 +61,30 @@ def test_ltx_stays_available(tmp_path):
     params = {"speech_audio": str(tmp_path / "slice.wav"), "first_frame_id": "frame", "duration_s": 5.0,
               "lipsync": True}
     assert plan_generation("take", "x", params, 1, Lookup(tmp_path)).template == "ltx23_ia2v"
+
+
+@pytest.mark.parametrize("finish,steps,cfg,lora", [(None, 4, 1.0, True), ("fast", 4, 1.0, True), ("full", 20, 4.5, False)])
+def test_the_finish_picks_steps_and_the_speed_lora(wan, tmp_path, finish, steps, cfg, lora):
+    params = {"speech_audio": str(tmp_path / "slice.wav"), "first_frame_id": "frame", "duration_s": 4.0,
+              "lipsync": True, **({"s2v_finish": finish} if finish else {})}
+    p = plan_generation("take", "x", params, 1, Lookup(tmp_path))
+    g, _ = build(p.template, {**p.inputs, **{k: f"{k}.bin" for k in p.images}})
+    sampler = g[find_node(g, "Sampler")]["inputs"]
+    assert (sampler["steps"], sampler["cfg"]) == (steps, cfg)
+    titles = {n["_meta"]["title"] for n in g.values()}
+    assert ("SpeedLoRA" in titles) == lora
+    # without the LoRA the shift node reads the UNet straight
+    assert g[g[find_node(g, "Shift")]["inputs"]["model"][0]]["_meta"]["title"] == ("SpeedLoRA" if lora else "UNet")
+
+
+def test_an_hq_take_renders_at_720p(wan, tmp_path):
+    params = {"speech_audio": str(tmp_path / "slice.wav"), "first_frame_id": "frame", "duration_s": 4.0,
+              "lipsync": True, "quality": "hq"}
+    p = plan_generation("take", "x", params, 1, Lookup(tmp_path))
+    assert (p.inputs["width"], p.inputs["height"]) == (1280, 720)
+
+
+def test_the_takes_own_engine_beats_the_server_default(tmp_path):
+    params = {"speech_audio": str(tmp_path / "slice.wav"), "first_frame_id": "frame", "duration_s": 4.0,
+              "lipsync": True, "lipsync_engine": "wan_s2v"}
+    assert plan_generation("take", "x", params, 1, Lookup(tmp_path)).template == "wan22_s2v"

@@ -548,6 +548,9 @@ def create_project_from_idea(
                     "set, else standard")] = None,
     upscale: Annotated[quick.UpscaleIn | None, Field(
         description="Upscale the finished film, e.g. {\"engine\": \"best\", \"target\": \"1080p\"}")] = None,
+    lipsync_engine: Annotated[Literal["ltx", "wan_s2v"] | None, Field(
+        description="What lip-syncs the speaking shots: ltx (sharpest picture) or wan_s2v (the mouth always "
+                    "follows the voice, softer picture); empty is the server default")] = None,
 ) -> dict:
     """Quick Create: the autopilot writes, casts, storyboards and renders a whole film. Takes a long time;
     poll the job, or read mixai://projects/{project_id}. For a feature: language, an existing cast, scenes x
@@ -556,7 +559,8 @@ def create_project_from_idea(
         out = quick.quick_create(QuickIn(prompt=idea, duration_s=duration_s, aspect_ratio=aspect_ratio, style=style,
                                          dialogue=dialogue, language=language, cast_ids=cast_ids, scenes=scenes,
                                          scene_seconds=scene_seconds, title_intro=title_intro, title=title,
-                                         video_quality=video_quality, upscale=upscale),
+                                         video_quality=video_quality, upscale=upscale,
+                                         lipsync_engine=lipsync_engine),
                                  db=db, cur=cur)
         return {"project_id": out.project.id, "title": out.project.title, "runtime_s": out.project.target_runtime_s,
                 **_job(out.job)}

@@ -111,6 +111,10 @@ describe('Render stage', () => {
     expect(calls).toContainEqual({ method: 'PATCH', path: `/projects/${PID}`, body: { settings: { video_quality: 'hq' } } })
     await user.click(screen.getByRole('switch', { name: /Smooth motion/ }))
     expect(calls).toContainEqual({ method: 'PATCH', path: `/projects/${PID}`, body: { settings: { smooth_motion: true } } })
+    const lipsync = screen.getByRole('radiogroup', { name: /Lip-sync/ })
+    expect(lipsync).toHaveAccessibleName(/studio default/)
+    await user.click(within(lipsync).getByRole('radio', { name: 'LTX-2.3' }))
+    expect(calls).toContainEqual({ method: 'PATCH', path: `/projects/${PID}`, body: { settings: { lipsync_engine: 'ltx' } } })
 
     await user.click(screen.getByRole('button', { name: /render takes/i }))
     const dialog = await screen.findByRole('alertdialog')

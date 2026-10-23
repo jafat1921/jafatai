@@ -30,6 +30,9 @@ from app.podcast import vplan
 log = logging.getLogger("mixai.film_audio")
 
 PIECE_S = 10.0  # one LTX pass; a longer cut becomes consecutive shots
+# LTX's mouth goes still more often the longer a lip-synced take runs; speaking pieces stay short there
+LIPSYNC_PIECE_S = {"ltx": 6.0, "wan_s2v": PIECE_S}
+LIPSYNC_ENGINES = ("ltx", "wan_s2v")
 SILENT_S = (2.0, 4.0)
 LONG_LINE_S = 9.0
 _BREAK = re.compile(r"(?<=[.!?۔؟])\s+|(?<=[,،;])\s+")
@@ -196,6 +199,30 @@ def pieces(cuts: list[dict], max_s: float = PIECE_S) -> list[dict]:
     return out
 
 
+def lipsync_engine(project) -> str:
+    """The film's lip-sync engine: its own choice, else the server's FILM_LIPSYNC_ENGINE."""
+    e = ((project.settings or {}) if project is not None else {}).get("lipsync_engine")
+    return e if e in LIPSYNC_ENGINES else get_settings().film_lipsync_engine
+
+
+def words_in(bts: list[dict], who: str, a: float, b: float) -> str:
+    """What `who` says between a and b. A line running over the edges gives the share of its words that falls
+    inside, split by time (the TTS pace is even enough for a prompt)."""
+    out = []
+    for x in bts:
+        if x["kind"] != "line" or x["character_id"] != who:
+            continue
+        s, e = x.get("start", 0.0), x.get("end", 0.0)
+        if e <= a + 1e-6 or s >= b - 1e-6 or e <= s:
+            continue
+        words = x["text"].split()
+        lo = round(len(words) * max(0.0, (a - s) / (e - s)))
+        hi = round(len(words) * min(1.0, (b - s) / (e - s)))
+        if hi > lo:
+            out.append(" ".join(words[lo:hi]))
+    return " ".join(out).strip()
+
+
 def beat_at(bts: list[dict], t: float) -> dict | None:
     best = None
     for b in bts:
@@ -210,10 +237,10 @@ def _speaks(bts: list[dict], who: str, a: float, b: float) -> bool:
 
 
 def cut_plans(bts: list[dict], cuts: list[dict], names: dict[str, str], cast: list[str],
-              location_id: str | None) -> list[dict]:
+              location_id: str | None, piece_s: float = PIECE_S) -> list[dict]:
     """A shot plan per piece of the cut (ai_jobs.replace_shots fields) plus its stretch of the track."""
     plans = []
-    for c in pieces(cuts):
+    for c in pieces(cuts, piece_s):
         mid = (c["start"] + c["end"]) / 2
         b = beat_at(bts, mid) or {}
         visual = (b.get("visual") or "").strip()
@@ -233,8 +260,12 @@ def cut_plans(bts: list[dict], cuts: list[dict], names: dict[str, str], cast: li
                 shot_type = _ANGLES[c.get("piece", 0) // 2 % len(_ANGLES)]
                 frame = "Close-up" if shot_type == "close_up" else "Medium shot"
                 desc = f"{name} speaks. {visual}".strip()
-                motion = (f"{name} speaks on camera, the mouth moving with every word, natural small head "
-                          "movements.")
+                # the words themselves tie the mouth to the voice (LTX left it still with only "speaks");
+                # big arm sweeps smear and double up in the lip-sync models, so the hands stay calm
+                said = words_in(bts, cam, c["start"], c["end"]).replace('"', "'")
+                motion = (f'{name} looks into the camera and says: "{said}" ' if said else f"{name} speaks on camera. ")
+                motion += ("The mouth moves with every word, natural small head movements, calm small hand "
+                           "gestures close to the body, sharp steady hands. Steady locked-off camera.")
             else:
                 shot_type, frame = "over_shoulder", "Reaction shot"
                 desc = f"{name} listens. {visual}".strip()
@@ -420,7 +451,8 @@ def plan_scene(db: Session, scene: Scene, tick=None) -> dict:
     render_track(files, [it["start"] for it in items], total, folder / f"{scene.id}.wav", tick=tick)
     names = {c.id: c.name for c in film_cast.project_cast(db, project.id)}
     cast = list(dict.fromkeys(b["character_id"] for b in bts if b["kind"] == "line"))
-    plans = cut_plans(bts, cut(items, total, scene.id), names, cast, scene.location_id)
+    plans = cut_plans(bts, cut(items, total, scene.id), names, cast, scene.location_id,
+                      LIPSYNC_PIECE_S.get(lipsync_engine(project), PIECE_S))
 
     old_shots = {s.id: s for s in sb.scene_shots(db, scene.id)}
     old = {sid: a for sid, a in (rec.get("shots") or {}).items() if sid in old_shots}
@@ -493,8 +525,8 @@ def attach(db: Session, shot: Shot, params: dict) -> bool:
     clip = slice_audio(track, a["start"], a["end"], track.parent / "slices" / f"{shot.id}.wav")
     params["mux_audio"] = str(clip)
     if a["lipsync"]:
-        params.update(lipsync=True, speech_audio=str(clip), audio_start_s=0.0)
+        params.update(lipsync=True, speech_audio=str(clip), audio_start_s=0.0, lipsync_engine=lipsync_engine(project))
     else:
-        for k in ("lipsync", "speech_audio", "audio_start_s"):
+        for k in ("lipsync", "speech_audio", "audio_start_s", "lipsync_engine"):
             params.pop(k, None)
     return True

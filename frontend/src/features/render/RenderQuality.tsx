@@ -1,15 +1,22 @@
 import { useId } from 'react'
 import { RadioGroup } from 'radix-ui'
-import { Gauge } from 'lucide-react'
+import { Gauge, MessageCircle } from 'lucide-react'
 import { SwitchRow } from '@/components/studio/switch-row'
-import { cn } from '@/lib/utils'
 import { ErrorState } from '@/components/studio/states'
-import { useRenderOptions, type RenderQuality } from './renderOptions'
+import { useRenderOptions, type LipsyncEngine, type RenderQuality } from './renderOptions'
 
 const OPTIONS: { value: RenderQuality; title: string; hint: string }[] = [
   { value: 'standard', title: 'Standard', hint: 'LTX-2.3. Faster, with sound; works for long takes.' },
   { value: 'hq', title: 'High quality', hint: 'Two-stage LTX-2.3 at a higher resolution. Slower. Single-chunk shots only.' },
 ]
+
+const LIPSYNC: { value: LipsyncEngine; title: string; hint: string }[] = [
+  { value: 'ltx', title: 'LTX-2.3', hint: 'Sharpest picture, natural skin and teeth. Best for close-ups.' },
+  { value: 'wan_s2v', title: 'Wan S2V', hint: 'The mouth always follows the voice. Softer picture, slower.' },
+]
+
+const CARD =
+  'flex flex-col items-start gap-0.5 rounded-[6px] border border-studio-border-strong bg-studio-raised p-2 text-left transition-colors duration-150 hover:bg-studio-panel-hover data-[state=checked]:border-studio-accent data-[state=checked]:bg-studio-accent-soft disabled:cursor-not-allowed disabled:opacity-70'
 
 export function RenderQualityBar({ projectId }: { projectId: string }) {
   const uid = useId()
@@ -40,10 +47,7 @@ export function RenderQualityBar({ projectId }: { projectId: string }) {
                   disabled={off}
                   aria-label={o.title}
                   aria-describedby={`${uid}-${o.value}`}
-                  className={cn(
-                    'flex flex-col items-start gap-0.5 rounded-[6px] border border-studio-border-strong bg-studio-raised p-2 text-left transition-colors duration-150 hover:bg-studio-panel-hover',
-                    'data-[state=checked]:border-studio-accent data-[state=checked]:bg-studio-accent-soft disabled:cursor-not-allowed disabled:opacity-70',
-                  )}
+                  className={CARD}
                 >
                   <span aria-hidden className="text-body font-medium">
                     {o.title}
@@ -72,6 +76,36 @@ export function RenderQualityBar({ projectId }: { projectId: string }) {
           className="self-start"
         />
       )}
+      <div className="lg:col-span-2">
+        <div id={`${uid}-ls`} className="section-label mb-1.5 flex items-center gap-1">
+          <MessageCircle aria-hidden className="size-3.5" />
+          Lip-sync
+          {!opts.lipsync && <span className="font-normal normal-case text-studio-muted">· studio default</span>}
+        </div>
+        <RadioGroup.Root
+          aria-labelledby={`${uid}-ls`}
+          value={opts.lipsync ?? ''}
+          onValueChange={(v) => opts.setLipsync(v as LipsyncEngine)}
+          className="grid gap-2 sm:grid-cols-2"
+        >
+          {LIPSYNC.map((o) => (
+            <RadioGroup.Item
+              key={o.value}
+              value={o.value}
+              aria-label={o.title}
+              aria-describedby={`${uid}-ls-${o.value}`}
+              className={CARD}
+            >
+              <span aria-hidden className="text-body font-medium">
+                {o.title}
+              </span>
+              <span id={`${uid}-ls-${o.value}`} className="text-small text-studio-muted">
+                {o.hint}
+              </span>
+            </RadioGroup.Item>
+          ))}
+        </RadioGroup.Root>
+      </div>
       {!!opts.error && <ErrorState compact className="lg:col-span-2" title="Couldn't save the render settings" error={opts.error} />}
     </div>
   )

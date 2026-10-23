@@ -436,6 +436,9 @@ def prepare_shot_generation(db: Session, shot: Shot, kind: str, prompt: str, par
         else:
             params.pop("brand_prompt", None)
         prompt = bm.with_fragment(prompt.strip() or frame_prompt(db, shot, "take"), steady)
+        if params.get("lipsync"):
+            # a shaking camera costs the lip-sync models the mouth; the documentary look still asks for handheld
+            prompt = re.sub(r"\bhandheld\b", "tripod-mounted", prompt, flags=re.I)
 
     if not prompt:
         # the worker compiles start/end/motion prompts before rendering

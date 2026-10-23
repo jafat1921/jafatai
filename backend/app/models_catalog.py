@@ -673,6 +673,9 @@ def clean_project_settings(current: dict, patch: dict) -> dict:
                 raise HTTPException(422, f"video_quality must be one of: {', '.join(QUALITIES)}")
         elif key == "smooth_motion":
             val = bool(val)
+        elif key == "lipsync_engine":
+            if val not in ("ltx", "wan_s2v"):
+                raise HTTPException(422, "lipsync_engine must be one of: ltx, wan_s2v")
         elif key == "brand_closing":
             if val not in ("auto", "ai_packshot", "logo_reveal", "none"):
                 raise HTTPException(422, "brand_closing must be one of: auto, ai_packshot, logo_reveal, none")

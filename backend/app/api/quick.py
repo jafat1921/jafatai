@@ -47,6 +47,7 @@ class QuickIn(BaseModel):
     image_speed: str | None = None
     video_quality: Literal["standard", "hq"] | None = None
     smooth_motion: bool | None = None
+    lipsync_engine: Literal["ltx", "wan_s2v"] | None = None
     brand_kit_id: str | None = None  # contract v7: saved as project.settings.brand_kit_id
     template_id: str | None = Field(None, max_length=80)  # its planner notes steer the outline
     brand_closing: Literal["auto", "ai_packshot", "logo_reveal", "none"] | None = None
@@ -116,7 +117,8 @@ def quick_create(body: QuickIn, db: Session = Depends(get_db), cur: CurrentUser 
     # TODO: cast mentioned characters into the autopilot's project instead of describing them in words
     mentioned = mn.resolve(db, cur.workspace_id, body.prompt.strip(), budget=0)
     prompt = mentioned.prompt
-    choice = {k: getattr(body, k) for k in ("image_model", "image_speed", "video_quality", "smooth_motion")
+    choice = {k: getattr(body, k) for k in ("image_model", "image_speed", "video_quality", "smooth_motion",
+                                         "lipsync_engine")
               if getattr(body, k) is not None}
     if (body.scenes or body.scene_seconds) and "video_quality" not in choice:
         # a feature is watched at full size; draft-size takes (768x448) look soft once stitched

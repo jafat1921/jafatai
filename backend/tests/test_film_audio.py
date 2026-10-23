@@ -1,6 +1,7 @@
 """Voice-first features: the lines are spoken before any picture, and the shots are cut to the dialogue track
 with the video podcast's planner."""
 import json
+import re
 
 import httpx
 import pytest
@@ -80,6 +81,40 @@ def test_a_lone_presenter_is_lip_synced_whenever_he_speaks():
                        for i in items)
         assert p["audio"]["lipsync"] == speaking, p
     assert sum(len(p["dialogue"]) for p in plans) == 3
+
+
+def test_a_speaking_shot_quotes_the_words_it_carries():
+    long = ("Mix AI Cinema Studio writes your script, casts your film, draws every frame and renders the whole "
+            "thing on its own machines, so you only bring the idea.")
+    bts = [{"kind": "line", "character_id": "r", "text": "Hello and welcome.", "visual": ""},
+           {"kind": "line", "character_id": "r", "text": long, "visual": ""}]
+    items, total = fa.timeline(bts, [2.0, 14.0])
+    plans = [p for p in fa.cut_plans(bts, fa.cut(items, total, "scene-q"), {"r": "Ruslan"}, ["r"], None, 6.0)
+             if p["audio"]["lipsync"]]
+    assert all(p["duration_s"] <= 6.0 + 1e-6 for p in plans)
+    said = [re.search(r'says: "([^"]*)"', p["motion_prompt"]).group(1) for p in plans]
+    # the long line is shared out across its pieces, every word once, in order
+    assert " ".join(said).split() == ("Hello and welcome. " + long).split()
+    assert all("Steady locked-off camera" in p["motion_prompt"] for p in plans)
+
+
+def test_words_in_splits_a_line_by_time():
+    bts = [{"kind": "line", "character_id": "r", "text": "one two three four", "start": 0.0, "end": 4.0}]
+    assert fa.words_in(bts, "r", 0.0, 2.0) == "one two"
+    assert fa.words_in(bts, "r", 2.0, 4.0) == "three four"
+    assert fa.words_in(bts, "x", 0.0, 4.0) == ""
+
+
+def test_the_film_picks_its_lip_sync_engine(client, project):
+    r = client.patch(f"/api/projects/{project['id']}", json={"settings": {"lipsync_engine": "ltx"}})
+    assert r.status_code == 200, r.text
+    bad = client.patch(f"/api/projects/{project['id']}", json={"settings": {"lipsync_engine": "sadtalker"}})
+    assert bad.status_code == 422
+    with SessionLocal() as db:
+        assert fa.lipsync_engine(db.get(Project, project["id"])) == "ltx"
+        p = db.get(Project, project["id"])
+        p.settings = {}
+        assert fa.lipsync_engine(p) == get_settings().film_lipsync_engine
 
 
 class TalkingBrain(FeatureBrain):

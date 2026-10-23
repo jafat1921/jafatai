@@ -481,7 +481,8 @@ def _aspect(path: Path | None) -> str:
     return "16:9" if r >= 1.3 else "9:16" if r <= 0.77 else "1:1"
 
 
-def queue_test_clip(db: Session, cur, c: Character, text: str) -> dict:
+def queue_test_clip(db: Session, cur, c: Character, text: str, quality: str = "standard", finish: str | None = None,
+                    engine: str | None = None) -> dict:
     """A 5-10 s lip-synced talking clip of the character saying `text`, from the sheet's close-up (else the
     portrait). A Library video item; the line itself is a hidden take tagged clip:<id>."""
     from app import character_sheet as cs
@@ -511,14 +512,16 @@ def queue_test_clip(db: Session, cur, c: Character, text: str) -> dict:
     db.add(item)
     db.flush()
     who = f"{c.name}, {c.description.strip()}" if c.description.strip() else c.name
-    prompt = (f"Close-up of {who}, talking to the camera with a natural expression, blinking, small head "
-              "movements. Steady camera, soft light.")
+    said = text.replace('"', "'")
+    prompt = (f'Close-up of {who}, looking into the camera and saying: "{said}" Natural expression, the mouth '
+              "moving with every word, blinking, small head movements. Steady camera, soft light.")
     params = {"first_frame_id": source.id, "duration_s": TEST_CLIP_S[0], "fps": FPS,
               "aspect_ratio": _aspect(generation_file(source)), "dialogue": d,
-              "test_clip": {"character_id": c.id, "panel": panel},
+              "test_clip": {"character_id": c.id, "panel": panel}, "quality": quality,
               "created_by": {"user_id": cur.id, "flow": "character_test_clip"}}
     g = enqueue_generation(db, workspace_id=cur.workspace_id, project_id=None, target_type="media", target_id=item.id,
-                           kind="video", prompt=prompt, params=params)
+                           kind="video", prompt=prompt, params={**params, **({"s2v_finish": finish} if finish else {}),
+                                   **({"lipsync_engine": engine} if engine else {})})
     item.generation_id = g.id
     cs.put(c, test_clip={"media_id": item.id, "text": text, "panel": panel})
     speech = [db.get(Generation, r["take_id"]) for r in d["lines"]]

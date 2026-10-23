@@ -31,6 +31,13 @@ WAN_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (624, 624), "4:3": (
 PORTRAIT_SIZE = (768, 1024)
 # Wan 2.2 S2V: its 480p sizes (a 14B model at 1280x704 doesn't fit the 20 GB cards), 77 frames a pass at 16 fps
 WAN_S2V_SIZES = {"16:9": (832, 480), "9:16": (480, 832), "1:1": (640, 640), "4:3": (720, 544), "2.39:1": (960, 400)}
+# S2V is trained at 480p and 720p; hq takes go straight to 720p instead of being stretched from 480p
+WAN_S2V_HQ_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (960, 960), "4:3": (1088, 816),
+                    "2.39:1": (1536, 640)}
+# fast: Comfy's template with the lightx2v T2V LoRA, which Comfy itself says costs S2V detail and motion;
+# full: no LoRA, at Wan's own S2V shift and guide scale (3, 4.5) and 20 of its 40 steps
+WAN_S2V_FINISH = {"fast": {"steps": 4, "cfg": 1.0, "shift": 8.0, "full_model": False},
+                  "full": {"steps": 20, "cfg": 4.5, "shift": 3.0, "full_model": True}}
 WAN_S2V_FPS, WAN_S2V_PASS, WAN_S2V_MAX_PASSES = 16.0, 77, 3
 IDEOGRAM_MIN_PIXELS = 1024 * 1024
 MAX_FRAMES = 257  # ~10.7 s at 24 fps; longer shots belong to the long-take templates
@@ -43,7 +50,7 @@ TIMEOUTS = {"zimage_t2i": 900.0, "qwen_edit": 900.0, "ltx23_i2v": 3600.0, "ltx23
             "photo_cutout_mask": 300.0, "photo_sam_mask": 300.0,
             "image_upscale_zimage": 900.0, "image_upscale_seedvr2": 900.0, "image_upscale_esrgan": 300.0,
             "qwen_image_t2i": 1200.0, "flux2_klein_t2i": 600.0, "flux2_klein_edit": 900.0,
-            "ltx23_two_stage": 3600.0, "ltx23_ia2v": 3600.0, "ltx23_ia2v_extend": 3600.0, "wan22_t2v": 2400.0, "wan22_s2v": 3600.0,
+            "ltx23_two_stage": 3600.0, "ltx23_ia2v": 3600.0, "ltx23_ia2v_extend": 3600.0, "wan22_t2v": 2400.0, "wan22_s2v": 10800.0,
             "zimage_i2i": 900.0, "flux2_klein_i2i": 600.0, "qwen_image_i2i": 1200.0,
             "ace15_song": 900.0, "sa3_music": 600.0, "sa3_sfx": 600.0, "sa3_medium": 1200.0, "minimax_music3": 1800.0,
             "image_lineart": 300.0, "image_lineart_anime": 300.0, "image_depth": 300.0, "image_canny": 120.0,
@@ -357,8 +364,7 @@ def _plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
 
     if kind == "take_chunk" and params.get("speech_audio"):
         # a piece of a continuous camera track: the first starts from the angle keyframe, the rest continue
-        if params.get("context_video") and not (get_settings().film_lipsync_engine == "wan_s2v"
-                                                and params.get("first_frame_id")):
+        if params.get("context_video") and not (_lipsync_engine(params) == "wan_s2v" and params.get("first_frame_id")):
             return lipsync_extend_plan(prompt, params, seed, lookup, negative, loras)
         return lipsync_plan(prompt, params, seed, lookup, negative, loras)
 
@@ -395,13 +401,20 @@ def hq_plan(inputs: dict, images: dict, aspect: str, params: dict, loras, source
     return Plan("ltx23_two_stage", inputs, images, _family("ltx23_i2v", loras), "video", sources)
 
 
+def _lipsync_engine(params: dict) -> str:
+    # the film's choice (film_audio.attach), else the server default
+    return params.get("lipsync_engine") or get_settings().film_lipsync_engine
+
+
 def wan_s2v_plan(prompt: str, params: dict, seed: int, lookup) -> Plan:
     """A lip-synced take on Wan 2.2 S2V: the angle keyframe plus the speaker's voice, 77-frame passes at 16 fps
     (one to three) trimmed to the take. LTX's audio-to-video often left the mouth still while the voice ran
     (Ruslan's explainer, 23 Oct); S2V is built for a talking presenter."""
     first = params.get("first_frame_id")
     aspect = params.get("aspect_ratio") or lookup.project_aspect(params.get("project_id")) or "16:9"
-    w, h = WAN_S2V_SIZES.get(aspect, WAN_S2V_SIZES["16:9"])
+    sizes = WAN_S2V_HQ_SIZES if params.get("quality") == "hq" else WAN_S2V_SIZES
+    w, h = sizes.get(aspect, sizes["16:9"])
+    finish = params.get("s2v_finish") or get_settings().wan_s2v_finish
     dur = float(params.get("duration_s") or 5)
     frames = max(1, round(dur * WAN_S2V_FPS))
     passes = min(WAN_S2V_MAX_PASSES, math.ceil(frames / WAN_S2V_PASS))
@@ -410,10 +423,12 @@ def wan_s2v_plan(prompt: str, params: dict, seed: int, lookup) -> Plan:
         "prompt": prompt, "width": w, "height": h, "frames": frames, "passes": passes, "seed": seed,
         "audio_start_s": round(float(params.get("audio_start_s") or 0.0), 4), "duration_s": round(frames / WAN_S2V_FPS, 4),
         "one_pass": passes == 1, "two_passes": passes == 2,
+        **WAN_S2V_FINISH.get(finish, WAN_S2V_FINISH["fast"]),
     }
     images: dict[str, Path | list[Path]] = {"first_image": lookup.generation_file(first),
                                             "speech_audio": Path(params["speech_audio"])}
-    sources = {"first_frame_id": first, "lipsync": True, "engine": "wan_s2v", "passes": passes}
+    sources = {"first_frame_id": first, "lipsync": True, "engine": "wan_s2v", "passes": passes,
+               "finish": finish if finish in WAN_S2V_FINISH else "fast"}
     return Plan("wan22_s2v", inputs, images, [], "video", sources)
 
 
@@ -424,7 +439,7 @@ def lipsync_plan(prompt: str, params: dict, seed: int, lookup, negative: str, lo
     first = params.get("first_frame_id")
     if not first:
         raise ComfyError("A lip-sync take needs params.first_frame_id (the angle keyframe)")
-    if get_settings().film_lipsync_engine == "wan_s2v":
+    if _lipsync_engine(params) == "wan_s2v":
         return wan_s2v_plan(prompt, params, seed, lookup)
     aspect = params.get("aspect_ratio") or lookup.project_aspect(params.get("project_id")) or "16:9"
     final = params.get("quality") == "hq"

@@ -1622,6 +1622,10 @@ class CharacterVoiceDesignOut(BaseModel):
 
 class TestClipIn(BaseModel):
     text: str = Field(min_length=1, max_length=300)
+    # hq: 720p instead of 480p; full: Wan S2V's 20-step path (slow, cleaner hands and teeth)
+    quality: Literal["standard", "hq"] = "standard"
+    finish: Literal["fast", "full"] | None = None
+    lipsync_engine: Literal["ltx", "wan_s2v"] | None = None
 
 
 class TestClipOut(BaseModel):

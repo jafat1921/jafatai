@@ -142,6 +142,9 @@ class Settings(BaseSettings):
     # what lip-syncs a speaking take: wan_s2v (Wan 2.2 S2V, the default) or ltx (LTX-2.3 audio-to-video, whose
     # mouths often stayed still while the voice ran)
     film_lipsync_engine: str = "wan_s2v"
+    # Wan S2V sampling: fast = the 4-step lightx2v LoRA (soft faces, waxy teeth, smeared hands); full = no LoRA
+    # at Wan's own shift 3 / cfg 4.5, 20 steps, about ten times slower. A test clip can ask for either
+    wan_s2v_finish: str = "fast"
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
     # where the engine venvs keep their Hugging Face downloads (empty: their own default)

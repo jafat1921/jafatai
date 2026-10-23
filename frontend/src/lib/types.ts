@@ -305,6 +305,7 @@ export interface ProjectSettings {
   edit_model?: string | null
   video_quality?: 'standard' | 'hq' | null
   smooth_motion?: boolean | null
+  lipsync_engine?: 'ltx' | 'wan_s2v' | null
   [key: string]: unknown
 }
 

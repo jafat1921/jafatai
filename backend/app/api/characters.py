@@ -420,6 +420,7 @@ def make_test_clip(character_id: str, body: TestClipIn, db: Session = Depends(ge
                    cur: CurrentUser = Depends(require_editor)):
     """A 5-10 s lip-synced clip of the character saying the line, from the close-up panel (or the portrait)."""
     c = _character(db, cur, character_id)
-    out = shot_speech.queue_test_clip(db, cur, c, body.text)
+    out = shot_speech.queue_test_clip(db, cur, c, body.text, quality=body.quality, finish=body.finish,
+                                    engine=body.lipsync_engine)
     db.commit()
     return _test_clip_out(db, c, job=out["job"], speech_jobs=out["speech_jobs"])

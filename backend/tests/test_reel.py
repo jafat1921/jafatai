@@ -320,3 +320,16 @@ def test_rename_and_download(client, db, project, clips):
     g.file_path = "../../outside.mp4"
     db.commit()
     assert client.get(f"/api/generations/{gid}/download").status_code == 404
+
+
+def test_hq_film_is_stitched_at_its_takes_size(db, project):
+    # Ruslan's hq explainer (23 Oct): every take was 1280x704 and the film came out 768x448
+    p = db.get(Project, project["id"])
+    reel = rl.get_reel(db, p)
+    reel.settings = {}
+    p.settings = {**(p.settings or {}), "video_quality": "standard"}
+    db.commit()
+    assert rl.reel_size(db, reel) == rl.sb.draft_size(p.aspect_ratio)
+    p.settings = {**p.settings, "video_quality": "hq"}
+    db.commit()
+    assert rl.reel_size(db, reel) == (1280, 704) if p.aspect_ratio == "16:9" else rl.reel_size(db, reel)[0] >= 704

@@ -415,7 +415,13 @@ def reel_size(db: Session, reel: Reel) -> tuple[int, int]:
     if s and len(s) == 2:
         # handy for tests and tiny previews; must stay even for yuv420p
         return int(s[0]) // 2 * 2, int(s[1]) // 2 * 2
-    return sb.draft_size(db.get(Project, reel.project_id).aspect_ratio)
+    project = db.get(Project, reel.project_id)
+    if (project.settings or {}).get("video_quality") == "hq":
+        # an hq film's takes are 1280x704; stitching at the draft size threw that away (Ruslan's explainer, 23 Oct)
+        from app.drivers.comfy import HQ_SIZES
+
+        return HQ_SIZES.get(project.aspect_ratio, HQ_SIZES["16:9"])
+    return sb.draft_size(project.aspect_ratio)
 
 
 def scene_hash(clips: list[ClipPlan], size: tuple[int, int]) -> str:
@@ -903,7 +909,8 @@ def handle_assemble(ctx) -> dict:
         title = render.params.get("title") or title  # renamed while it was stitching
     render.file_path, render.media_type, render.status = rel, "video/mp4", "ready"
     render.params = {
-        **(render.params or {}), "input_hash": film_hash, "quality": "draft", "size": list(size),
+        **(render.params or {}), "input_hash": film_hash,
+        "quality": "hq" if (project.settings or {}).get("video_quality") == "hq" else "draft", "size": list(size),
         "title": title, "scene_ids": sel.scene_ids, "scene_range": sel.label, "full": sel.full,
         "clips": sum(len(p.clips) for p in live),
         "duration_s": j["length"], "join": j["mode"], "fallbacks": fallbacks, "loudness": loud,

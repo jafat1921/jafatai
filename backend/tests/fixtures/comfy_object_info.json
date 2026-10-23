@@ -1001,7 +1001,8 @@
       "trellis_2_int8_convrot.safetensors",
       "pixal3d_multiview_int8_convrot.safetensors",
       "ideogram4_fp8_scaled.safetensors",
-      "ideogram4_unconditional_fp8_scaled.safetensors"
+      "ideogram4_unconditional_fp8_scaled.safetensors",
+      "wan2.2_s2v_14B_fp8_scaled.safetensors"
      ]
     ],
     "weight_dtype": [
@@ -7100,6 +7101,532 @@
   "api_node": false,
   "price_badge": null,
   "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "WanSoundImageToVideo": {
+  "input": {
+   "required": {
+    "positive": [
+     "CONDITIONING",
+     {}
+    ],
+    "negative": [
+     "CONDITIONING",
+     {}
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ],
+    "width": [
+     "INT",
+     {
+      "default": 832,
+      "min": 16,
+      "max": 16384,
+      "step": 16
+     }
+    ],
+    "height": [
+     "INT",
+     {
+      "default": 480,
+      "min": 16,
+      "max": 16384,
+      "step": 16
+     }
+    ],
+    "length": [
+     "INT",
+     {
+      "default": 77,
+      "min": 1,
+      "max": 16384,
+      "step": 4
+     }
+    ],
+    "batch_size": [
+     "INT",
+     {
+      "default": 1,
+      "min": 1,
+      "max": 4096
+     }
+    ]
+   },
+   "optional": {
+    "audio_encoder_output": [
+     "AUDIO_ENCODER_OUTPUT",
+     {}
+    ],
+    "ref_image": [
+     "IMAGE",
+     {}
+    ],
+    "control_video": [
+     "IMAGE",
+     {}
+    ],
+    "ref_motion": [
+     "IMAGE",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "positive",
+    "negative",
+    "vae",
+    "width",
+    "height",
+    "length",
+    "batch_size"
+   ],
+   "optional": [
+    "audio_encoder_output",
+    "ref_image",
+    "control_video",
+    "ref_motion"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ],
+  "output_is_list": [
+   false,
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative",
+   "latent"
+  ],
+  "output_tooltips": [
+   null,
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "WanSoundImageToVideo",
+  "display_name": null,
+  "description": "",
+  "python_module": "comfy_extras.nodes_wan",
+  "category": "model/conditioning/wan/sound",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "WanSoundImageToVideoExtend": {
+  "input": {
+   "required": {
+    "positive": [
+     "CONDITIONING",
+     {}
+    ],
+    "negative": [
+     "CONDITIONING",
+     {}
+    ],
+    "vae": [
+     "VAE",
+     {}
+    ],
+    "length": [
+     "INT",
+     {
+      "default": 77,
+      "min": 1,
+      "max": 16384,
+      "step": 4
+     }
+    ],
+    "video_latent": [
+     "LATENT",
+     {}
+    ]
+   },
+   "optional": {
+    "audio_encoder_output": [
+     "AUDIO_ENCODER_OUTPUT",
+     {}
+    ],
+    "ref_image": [
+     "IMAGE",
+     {}
+    ],
+    "control_video": [
+     "IMAGE",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "positive",
+    "negative",
+    "vae",
+    "length",
+    "video_latent"
+   ],
+   "optional": [
+    "audio_encoder_output",
+    "ref_image",
+    "control_video"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ],
+  "output_is_list": [
+   false,
+   false,
+   false
+  ],
+  "output_name": [
+   "positive",
+   "negative",
+   "latent"
+  ],
+  "output_tooltips": [
+   null,
+   null,
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "WanSoundImageToVideoExtend",
+  "display_name": null,
+  "description": "",
+  "python_module": "comfy_extras.nodes_wan",
+  "category": "model/conditioning/wan/sound",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "AudioEncoderLoader": {
+  "input": {
+   "required": {
+    "audio_encoder_name": [
+     "COMBO",
+     {
+      "multiselect": false,
+      "options": [
+       "sheetsage2_bf16.safetensors",
+       "wav2vec2_large_english_fp16.safetensors"
+      ]
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "audio_encoder_name"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "AUDIO_ENCODER"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "AUDIO_ENCODER"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "AudioEncoderLoader",
+  "display_name": "Load Audio Encoder",
+  "description": "",
+  "python_module": "comfy_extras.nodes_audio_encoder",
+  "category": "model/loaders",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "AudioEncoderEncode": {
+  "input": {
+   "required": {
+    "audio_encoder": [
+     "AUDIO_ENCODER",
+     {}
+    ],
+    "audio": [
+     "AUDIO",
+     {}
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "audio_encoder",
+    "audio"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "AUDIO_ENCODER_OUTPUT"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "AUDIO_ENCODER_OUTPUT"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "AudioEncoderEncode",
+  "display_name": null,
+  "description": "",
+  "python_module": "comfy_extras.nodes_audio_encoder",
+  "category": "model/conditioning",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "LatentConcat": {
+  "input": {
+   "required": {
+    "samples1": [
+     "LATENT",
+     {}
+    ],
+    "samples2": [
+     "LATENT",
+     {}
+    ],
+    "dim": [
+     "COMBO",
+     {
+      "multiselect": false,
+      "options": [
+       "x",
+       "-x",
+       "y",
+       "-y",
+       "t",
+       "-t"
+      ]
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "samples1",
+    "samples2",
+    "dim"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "LATENT"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "LATENT"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "LatentConcat",
+  "display_name": null,
+  "description": "",
+  "python_module": "comfy_extras.nodes_latent",
+  "category": "model/latent/advanced",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "join latents",
+   "stitch latents"
+  ],
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "LatentCut": {
+  "input": {
+   "required": {
+    "samples": [
+     "LATENT",
+     {}
+    ],
+    "dim": [
+     "COMBO",
+     {
+      "multiselect": false,
+      "options": [
+       "x",
+       "y",
+       "t"
+      ]
+     }
+    ],
+    "index": [
+     "INT",
+     {
+      "default": 0,
+      "min": -16384,
+      "max": 16384,
+      "step": 1
+     }
+    ],
+    "amount": [
+     "INT",
+     {
+      "default": 1,
+      "min": 1,
+      "max": 16384,
+      "step": 1
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "samples",
+    "dim",
+    "index",
+    "amount"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "LATENT"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "LATENT"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "LatentCut",
+  "display_name": null,
+  "description": "",
+  "python_module": "comfy_extras.nodes_latent",
+  "category": "model/latent/advanced",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "crop latent",
+   "slice latent",
+   "extract region"
+  ],
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "ImageFromBatch": {
+  "input": {
+   "required": {
+    "image": [
+     "IMAGE",
+     {}
+    ],
+    "batch_index": [
+     "INT",
+     {
+      "default": 0,
+      "min": -16384,
+      "max": 16384
+     }
+    ],
+    "length": [
+     "INT",
+     {
+      "default": 1,
+      "min": 1,
+      "max": 4096
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "image",
+    "batch_index",
+    "length"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "IMAGE"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "IMAGE"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "ImageFromBatch",
+  "display_name": "Get Image from Batch",
+  "description": "",
+  "python_module": "comfy_extras.nodes_images",
+  "category": "image/batch",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": [
+   "select image",
+   "pick from batch",
+   "extract image"
+  ],
   "essentials_category": null,
   "has_intermediate_output": false
  }

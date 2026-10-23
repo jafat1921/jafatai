@@ -38,6 +38,8 @@ os.environ.update(
         "FILM_LLM_MODEL": "off",
         # and Ideogram's caption writer
         "IDEOGRAM_CAPTION_MODEL": "creative",
+        # the lip-sync tests were written against LTX's graph; test_wan_s2v covers Wan
+        "FILM_LIPSYNC_ENGINE": "ltx",
     }
 )
 

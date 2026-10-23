@@ -1,0 +1,42 @@
+{
+  "name": "wan22_s2v",
+  "family": "wan-2.2-s2v",
+  "description": "Wan 2.2 S2V 14B (speech to video) for lip-synced takes, after Comfy's video_wan2_2_14B_s2v template, its 4-step path: the Wan 2.2 lightx2v LoRA, shift 8, uni_pc/simple, cfg 1. One 77-frame pass at 16 fps (4.8 s) and up to two WanSoundImageToVideoExtend passes; one_pass / two_passes drop the extends a short take doesn't need. The template's first-latent doubling (against an over-baked first frame) is kept; Trim drops batch_index frames, which the template sets to the pass count, and keeps `frames`. Weights: Apache-2.0.",
+  "inputs": {
+    "prompt":       {"type": "str", "required": true, "targets": [["Positive", "text"]]},
+    "negative":     {"type": "str", "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+                     "targets": [["Negative", "text"]]},
+    "first_image":  {"type": "image", "required": true, "targets": [["FirstImage", "image"]]},
+    "speech_audio": {"type": "image", "required": true, "targets": [["SpeechAudio", "audio"]]},
+    "audio_start_s": {"type": "float", "default": 0.0, "targets": [["AudioTrim", "start_index"]]},
+    "duration_s":   {"type": "float", "default": 4.8, "targets": [["AudioTrim", "duration"]]},
+    "width":        {"type": "int", "default": 832, "multiple_of": 16, "targets": [["S2V", "width"]]},
+    "height":       {"type": "int", "default": 480, "multiple_of": 16, "targets": [["S2V", "height"]]},
+    "frames":       {"type": "int", "default": 77, "targets": [["Trim", "length"]]},
+    "passes":       {"type": "int", "default": 3, "targets": [["Trim", "batch_index"]]},
+    "seed":         {"type": "int", "default": 0,
+                     "targets": [["Sampler", "seed"], ["Sampler2", "seed"], ["Sampler3", "seed"]]},
+    "one_pass":     {"type": "bool", "default": false,
+                     "if_set": {"drop": ["Extend1", "Sampler2", "Concat2", "Extend2", "Sampler3", "Concat3"],
+                                "bypass": {"Concat2": {"0": "samples1"}, "Concat3": {"0": "samples1"}}}},
+    "two_passes":   {"type": "bool", "default": false,
+                     "if_set": {"drop": ["Extend2", "Sampler3", "Concat3"],
+                                "bypass": {"Concat3": {"0": "samples1"}}}},
+    "filename_prefix": {"type": "str", "default": "mixai/wan_s2v", "targets": [["Save", "filename_prefix"]]}
+  },
+  "outputs": {"video": {"node": "Save", "kind": "video"}},
+  "models": {
+    "diffusion_models": ["wan2.2_s2v_14B_fp8_scaled.safetensors"],
+    "loras": ["wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"],
+    "text_encoders": ["umt5_xxl_fp8_e4m3fn_scaled.safetensors"],
+    "vae": ["wan_2.1_vae.safetensors"],
+    "audio_encoders": ["wav2vec2_large_english_fp16.safetensors"]
+  },
+  "requires": {
+    "pack": "ComfyUI core (WanSoundImageToVideo, AudioEncoderLoader) + VideoHelperSuite",
+    "nodes": ["WanSoundImageToVideo", "WanSoundImageToVideoExtend", "AudioEncoderLoader", "AudioEncoderEncode",
+              "LatentConcat", "LatentCut", "ImageFromBatch", "VHS_VideoCombine"],
+    "verified": "node and input names read from the GPU server's /object_info on 2026-10-23"
+  },
+  "progress_weights": {"Sampler": 8, "Sampler2": 8, "Sampler3": 8, "UNet": 4, "TextEncoder": 2, "Decode": 3, "Save": 1}
+}

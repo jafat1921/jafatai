@@ -139,6 +139,9 @@ class Settings(BaseSettings):
     # 3+ quoted English lines: Ideogram draws blank banners and the app sets the words (app.ideogram_text).
     # auto | off
     ideogram_exact_text: str = "auto"
+    # what lip-syncs a speaking take: wan_s2v (Wan 2.2 S2V, the default) or ltx (LTX-2.3 audio-to-video, whose
+    # mouths often stayed still while the voice ran)
+    film_lipsync_engine: str = "wan_s2v"
     # Voice studio (contract v16): speech engines run in their own venvs, on the claiming worker's GPU
     audio_venvs_dir: str = "/data/venvs"
     # where the engine venvs keep their Hugging Face downloads (empty: their own default)

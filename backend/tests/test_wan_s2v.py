@@ -88,3 +88,31 @@ def test_the_takes_own_engine_beats_the_server_default(tmp_path):
     params = {"speech_audio": str(tmp_path / "slice.wav"), "first_frame_id": "frame", "duration_s": 4.0,
               "lipsync": True, "lipsync_engine": "wan_s2v"}
     assert plan_generation("take", "x", params, 1, Lookup(tmp_path)).template == "wan22_s2v"
+
+
+@pytest.mark.parametrize("scale", [3.0, 0.0])
+def test_ltx_lip_sync_runs_modality_guidance_on_the_first_pass(tmp_path, scale):
+    s = get_settings()
+    old, s.ltx_modality_scale = s.ltx_modality_scale, scale
+    try:
+        params = {"speech_audio": str(tmp_path / "slice.wav"), "first_frame_id": "frame", "duration_s": 5.0,
+                  "lipsync": True, "quality": "hq"}
+        p = plan_generation("take", "x", params, 1, Lookup(tmp_path))
+        g, _ = build(p.template, {**p.inputs, **{k: f"{k}.bin" for k in p.images}}, [("user.safetensors", 0.8)])
+    finally:
+        s.ltx_modality_scale = old
+    first, refine = g[find_node(g, "Guider")]["inputs"]["model"], g[find_node(g, "Guider2")]["inputs"]["model"]
+    if scale:
+        guide = g[first[0]]
+        assert guide["class_type"] == "LTXVModalityGuidance" and guide["inputs"]["modality_scale"] == 3.0
+        # a user LoRA still sits under the guidance, and the refine pass skips it
+        assert g[guide["inputs"]["model"][0]]["_meta"]["title"] == "LoRA 1" == g[refine[0]]["_meta"]["title"]
+    else:
+        assert "ModalityGuide" not in {n["_meta"]["title"] for n in g.values()}
+        assert g[first[0]]["_meta"]["title"] == "LoRA 1"
+
+
+@pytest.mark.parametrize("name", ["ltx23_ia2v", "ltx23_ia2v_extend"])
+def test_the_ltx_lip_sync_templates_check_against_the_servers_nodes(name):
+    info = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    assert check_template(name, info)["ok"]

@@ -1,7 +1,7 @@
 {
   "name": "ltx23_ia2v",
   "family": "ltx-2.3",
-  "description": "LTX-2.3 image + audio to video (lip sync), after Comfy's video_ltx2_3_ia2v template without its prompt enhancer: the given speech is encoded with the audio VAE and frozen (SetLatentNoiseMask with a 0 SolidMask) so only the picture is generated next to it. dev fp8 + distilled LoRA 1.1 (0.5); first pass at latent size with the 8-step sigmas, then the x2 spatial upscaler and a 3-sigma refine at full size. single_stage drops the upscaler and the second pass (the 480p draft). The decoded audio is the first pass's, i.e. the speech as given.",
+  "description": "LTX-2.3 image + audio to video (lip sync), after Comfy's video_ltx2_3_ia2v template without its prompt enhancer: the given speech is encoded with the audio VAE and frozen (SetLatentNoiseMask with a 0 SolidMask) so only the picture is generated next to it. dev fp8 + distilled LoRA 1.1 (0.5); first pass at latent size with the 8-step sigmas, then the x2 spatial upscaler and a 3-sigma refine at full size. single_stage drops the upscaler and the second pass (the 480p draft). The decoded audio is the first pass's, i.e. the speech as given. The first pass runs LTXVModalityGuidance (an extra pass per step with the audio/video cross-attention cut, pushed back toward the coupled prediction), Lightricks' lip-sync guidance at its reference scale 3; no_modality drops it.",
   "inputs": {
     "prompt":        {"type": "str", "required": true, "targets": [["Positive", "text"]]},
     "negative":      {"type": "str", "default": "pc game, console game, video game, cartoon, childish, ugly, blurry, low quality, still frame, frozen, watermark, subtitles",
@@ -20,6 +20,9 @@
     "fps":           {"type": "float", "default": 24.0,
                       "targets": [["Conditioning", "frame_rate"], ["Save", "frame_rate"]]},
     "seed":          {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"], ["Noise2", "noise_seed"]]},
+    "modality_scale": {"type": "float", "default": 3.0, "targets": [["ModalityGuide", "modality_scale"]]},
+    "no_modality":   {"type": "bool", "default": false,
+                      "if_set": {"drop": ["ModalityGuide"], "bypass": {"ModalityGuide": {"0": "model"}}}},
     "single_stage":  {"type": "bool", "default": false,
                       "if_set": {"drop": ["SpatialLoader", "CropGuides", "Noise2", "Sigmas2", "Guider2"],
                                  "bypass": {"Separate2": {"0": "av_latent"}, "Sampler2": {"0": "latent_image"},

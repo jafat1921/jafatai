@@ -1,7 +1,7 @@
 {
   "name": "ltx23_ia2v_extend",
   "family": "ltx-2.3",
-  "description": "LTX-2.3 lip-synced continuation piece for the AI video podcast's continuous camera tracks: ltx23_extend's context frames (the previous piece's tail laid in place over the first latent frames) plus ltx23_ia2v's frozen speech, here the host's track audio for the whole window (context + new frames), encoded with the audio VAE and kept by a 0 SolidMask on SetLatentNoiseMask. The camera's angle keyframe guides the last frame at low strength (LTXVAddGuide) so the face doesn't drift over a long take; LTXVCropGuides takes the guide frame off again. dev fp8 + distilled LoRA as ltx23_ia2v; single_stage drops the upscaler and the second pass (the 480p draft). The context video's own audio isn't used.",
+  "description": "LTX-2.3 lip-synced continuation piece for the AI video podcast's continuous camera tracks: ltx23_extend's context frames (the previous piece's tail laid in place over the first latent frames) plus ltx23_ia2v's frozen speech, here the host's track audio for the whole window (context + new frames), encoded with the audio VAE and kept by a 0 SolidMask on SetLatentNoiseMask. The camera's angle keyframe guides the last frame at low strength (LTXVAddGuide) so the face doesn't drift over a long take; LTXVCropGuides takes the guide frame off again. dev fp8 + distilled LoRA as ltx23_ia2v; single_stage drops the upscaler and the second pass (the 480p draft). The context video's own audio isn't used. The first pass runs LTXVModalityGuidance (an extra pass per step with the audio/video cross-attention cut, pushed back toward the coupled prediction), Lightricks' lip-sync guidance at its reference scale 3; no_modality drops it.",
   "inputs": {
     "prompt":        {"type": "str", "required": true, "targets": [["Positive", "text"]]},
     "negative":      {"type": "str", "default": "pc game, console game, video game, cartoon, childish, ugly, blurry, low quality, still frame, frozen, watermark, subtitles, scene cut, jump cut",
@@ -28,6 +28,9 @@
     "fps":           {"type": "float", "default": 24.0,
                       "targets": [["Conditioning", "frame_rate"], ["Save", "frame_rate"]]},
     "seed":          {"type": "int", "default": 0, "targets": [["Noise", "noise_seed"], ["Noise2", "noise_seed"]]},
+    "modality_scale": {"type": "float", "default": 3.0, "targets": [["ModalityGuide", "modality_scale"]]},
+    "no_modality":   {"type": "bool", "default": false,
+                      "if_set": {"drop": ["ModalityGuide"], "bypass": {"ModalityGuide": {"0": "model"}}}},
     "single_stage":  {"type": "bool", "default": false,
                       "if_set": {"drop": ["SpatialLoader", "ContextScale2", "Noise2", "Sigmas2", "Guider2"],
                                  "bypass": {"Separate2": {"0": "av_latent"}, "Sampler2": {"0": "latent_image"},

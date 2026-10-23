@@ -7629,5 +7629,241 @@
   ],
   "essentials_category": null,
   "has_intermediate_output": false
+ },
+ "LTXVModalityGuidance": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {}
+    ],
+    "modality_scale": [
+     "FLOAT",
+     {
+      "default": 3.0,
+      "min": 1.0,
+      "max": 100.0,
+      "step": 0.1,
+      "round": 0.01
+     }
+    ],
+    "start_percent": [
+     "FLOAT",
+     {
+      "advanced": true,
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.001
+     }
+    ],
+    "end_percent": [
+     "FLOAT",
+     {
+      "advanced": true,
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.001
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "model",
+    "modality_scale",
+    "start_percent",
+    "end_percent"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MODEL"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "MODEL"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "LTXVModalityGuidance",
+  "display_name": "LTXV Modality Guidance (A/V coupling)",
+  "description": "Cross-modal (audio-video) guidance for LTXV-AV. Runs one extra forward pass per step with the a2v/v2a cross-attention severed, then pushes the result toward the coupled prediction - strengthening audio-visual sync (e.g. lip-sync). Reference default modality_scale is 3.0. Stacks with the dual-CFG guider and STG. Set to 1.0 to disable (no extra pass).",
+  "python_module": "comfy_extras.nodes_lt",
+  "category": "advanced/guidance",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "LTXVDualCFGGuider": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {}
+    ],
+    "positive": [
+     "CONDITIONING",
+     {}
+    ],
+    "negative": [
+     "CONDITIONING",
+     {}
+    ],
+    "video_cfg": [
+     "FLOAT",
+     {
+      "default": 3.0,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.1,
+      "round": 0.01
+     }
+    ],
+    "audio_cfg": [
+     "FLOAT",
+     {
+      "default": 7.0,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.1,
+      "round": 0.01
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "model",
+    "positive",
+    "negative",
+    "video_cfg",
+    "audio_cfg"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "GUIDER"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "GUIDER"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "LTXVDualCFGGuider",
+  "display_name": "LTXV Dual CFG Guider",
+  "description": "Separate CFG scales for the video and audio modalities of a packed LTXV-AV latent.",
+  "python_module": "comfy_extras.nodes_lt",
+  "category": "model/sampling/guiders",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
+ },
+ "LTXVSpatioTemporalGuidance": {
+  "input": {
+   "required": {
+    "model": [
+     "MODEL",
+     {}
+    ],
+    "scale": [
+     "FLOAT",
+     {
+      "default": 1.0,
+      "min": 0.0,
+      "max": 100.0,
+      "step": 0.01,
+      "round": 0.01
+     }
+    ],
+    "blocks": [
+     "STRING",
+     {
+      "tooltip": "Comma-separated transformer block indices to perturb.",
+      "default": "29",
+      "multiline": false
+     }
+    ],
+    "start_percent": [
+     "FLOAT",
+     {
+      "advanced": true,
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.001
+     }
+    ],
+    "end_percent": [
+     "FLOAT",
+     {
+      "advanced": true,
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.001
+     }
+    ]
+   }
+  },
+  "input_order": {
+   "required": [
+    "model",
+    "scale",
+    "blocks",
+    "start_percent",
+    "end_percent"
+   ]
+  },
+  "is_input_list": false,
+  "output": [
+   "MODEL"
+  ],
+  "output_is_list": [
+   false
+  ],
+  "output_name": [
+   "MODEL"
+  ],
+  "output_tooltips": [
+   null
+  ],
+  "output_matchtypes": null,
+  "name": "LTXVSpatioTemporalGuidance",
+  "display_name": "LTXV Spatio-Temporal Guidance (STG)",
+  "description": "Runs one extra pass per step with the self-attention of the selected blocks degraded to a value-passthrough, then guides away from it - improving spatial detail and motion coherence.",
+  "python_module": "comfy_extras.nodes_lt",
+  "category": "advanced/guidance",
+  "output_node": false,
+  "deprecated": false,
+  "experimental": false,
+  "dev_only": false,
+  "api_node": false,
+  "price_badge": null,
+  "search_aliases": null,
+  "essentials_category": null,
+  "has_intermediate_output": false
  }
 }

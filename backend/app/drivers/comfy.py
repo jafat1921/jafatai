@@ -432,6 +432,13 @@ def wan_s2v_plan(prompt: str, params: dict, seed: int, lookup) -> Plan:
     return Plan("wan22_s2v", inputs, images, [], "video", sources)
 
 
+def _modality() -> dict:
+    # LTX's audio/video sync guidance on the first pass; at cfg 1 and no modality term the mouth often stayed
+    # still while the voice ran. 0 (or anything up to 1, which does nothing) drops the node
+    scale = float(get_settings().ltx_modality_scale or 0)
+    return {"modality_scale": scale} if scale > 1 else {"no_modality": True}
+
+
 def lipsync_plan(prompt: str, params: dict, seed: int, lookup, negative: str, loras) -> Plan:
     """A lip-synced take (AI video podcast): START frame plus the speaker's dry voice, cut by the graph's
     TrimAudioDuration to [audio_start_s, +duration]. Draft is one pass at the draft size; "hq" is the two-pass
@@ -452,7 +459,7 @@ def lipsync_plan(prompt: str, params: dict, seed: int, lookup, negative: str, lo
         "latent_height": h // 2 if final else h, "num_frames": frames, "fps": fps, "seed": seed,
         # the template feeds duration*fps+1 frames from the same duration, so the audio matches frames-1
         "audio_start_s": round(float(params.get("audio_start_s") or 0.0), 4), "duration_s": round((frames - 1) / fps, 4),
-        "single_stage": not final,
+        "single_stage": not final, **_modality(),
     }
     if negative:
         inputs["negative"] = negative
@@ -475,7 +482,7 @@ def lipsync_extend_plan(prompt: str, params: dict, seed: int, lookup, negative: 
         "prompt": prompt, "width": w, "height": h, "latent_width": w // 2 if final else w,
         "latent_height": h // 2 if final else h, "num_frames": frames, "fps": fps, "seed": seed,
         "audio_start_s": round(float(params.get("audio_start_s") or 0.0), 4), "duration_s": round((frames - 1) / fps, 4),
-        "single_stage": not final,
+        "single_stage": not final, **_modality(),
     }
     if params.get("guide_strength") is not None:
         inputs["guide_strength"] = float(params["guide_strength"])

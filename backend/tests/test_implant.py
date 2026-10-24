@@ -423,3 +423,33 @@ def test_big_phone_photos_are_kept_at_a_consultation_size(surgeon):
         g = db.get(Generation, r.json()["id"])
         with Image.open(get_settings().data_dir / g.file_path) as pic:
             assert pic.size == (1200, 1600)
+
+
+def test_a_demo_patient_from_ai_pictures(surgeon, fast_driver):
+    from app import manage
+
+    me = surgeon.get("/api/auth/me").json()
+    with SessionLocal() as db:
+        g = enqueue_generation(db, workspace_id=me["workspace_id"], project_id=None, target_type="media",
+                               target_id="m" * 36, kind="image", prompt="sample", params={})
+        rel = f"workspaces/{me['workspace_id']}/media/{g.id}.png"
+        (get_settings().data_dir / rel).parent.mkdir(parents=True, exist_ok=True)
+        (get_settings().data_dir / rel).write_bytes(_png())
+        g.file_path, g.status, g.media_type = rel, "ready", "image/png"
+        db.query(Job).filter(Job.id == g.job_id).delete()
+        db.commit()
+        gid = g.id
+    assert manage.main(["implant-demo", "--email", "dr.ayesha@example.com", "--photo", f"{gid}:front:topless",
+                        "--label", "AI sample 3 (topless)", "--bra", "34B", "--bw", "12.5", "--ptosis", "2",
+                        "--options", "lift"]) == 0
+    _run(fast_driver)
+    p = surgeon.get("/api/implant/patients").json()[0]
+    assert p["label"] == "DEMO · AI sample 3 (topless)" and p["consent"]["topless_ok"] is True
+    detail = surgeon.get(f"/api/implant/patients/{p['id']}").json()
+    assert detail["photos"]["front"]["garment"] == "topless"
+    s = detail["sessions"][0]
+    assert [o["procedure"] for o in s["options"]] == ["augmentation_lift"] * 2
+    assert len(s["results"]) == 2 and all(r["status"] == "ready" for r in s["results"])
+    # an implant picture can't be the source of a demo
+    assert manage.main(["implant-demo", "--email", "dr.ayesha@example.com", "--photo",
+                        f"{detail['photos']['front']['id']}:front:topless", "--label", "x"]) == 1

@@ -11,6 +11,10 @@
                            before the photo catalogue (M10); safe to run again
   voice-samples [--engine omnivoice|kokoro|voxcpm] [--force] [--only id,id]
                            render the Voice Gallery's missing samples on this GPU box (contract v19)
+  implant-demo --email E --photo GEN:VIEW:GARMENT [--photo ...] --label L [--bra 32A] [--bw 12]
+               [--ptosis 2] [--options sizes|lift]
+                           a DEMO patient in that account's Implant Preview from AI pictures of fictional
+                           people, rendered by the normal pipeline (M22)
 """
 import getpass
 import os
@@ -136,6 +140,71 @@ def voice_samples(args: list[str], run=None) -> int:
     return 1 if failed else 0
 
 
+DEMO_OPTIONS = {
+    "sizes": [{"label": "Natural", "left_cc": 275, "right_cc": 275, "profile": "moderate"},
+              {"label": "Fuller", "left_cc": 350, "right_cc": 350, "profile": "moderate_plus"},
+              {"label": "Full", "left_cc": 425, "right_cc": 425, "profile": "high"}],
+    "lift": [{"label": "Lift only volume", "left_cc": 250, "right_cc": 250, "profile": "moderate",
+              "procedure": "augmentation_lift"},
+             {"label": "Lift and fuller", "left_cc": 325, "right_cc": 325, "profile": "moderate_plus",
+              "procedure": "augmentation_lift"}],
+}
+
+
+def implant_demo(args: list[str]) -> int:
+    """A demo patient in someone's Implant Preview, from AI-generated pictures of fictional people, so a
+    surgeon can be shown the area before any real patient is in it. Renders through the normal pipeline."""
+    import argparse
+
+    from app.implant import service as im
+    from app.models import Generation, ImplantPatient, Membership, utcnow
+    from app.services import generation_file
+
+    p = argparse.ArgumentParser(prog="implant-demo")
+    p.add_argument("--email", required=True, help="the account whose Implant Preview gets the demo")
+    p.add_argument("--photo", action="append", required=True, metavar="GEN_ID:VIEW:GARMENT",
+                   help="a finished AI picture, e.g. 364d…:front:garment (garment or topless)")
+    p.add_argument("--label", required=True)
+    p.add_argument("--bra", default="")
+    p.add_argument("--bw", type=float, default=None, help="breast base width, cm (both sides)")
+    p.add_argument("--ptosis", type=int, default=None)
+    p.add_argument("--options", choices=sorted(DEMO_OPTIONS), default="sizes")
+    a = p.parse_args(args)
+    with SessionLocal() as db:
+        user = db.scalars(select(User).where(User.email == a.email.strip().lower())).first()
+        if user is None:
+            print(f"no account {a.email}")
+            return 1
+        ws = db.scalars(select(Membership.workspace_id).where(Membership.user_id == user.id)
+                        .order_by(Membership.created_at)).first()
+        photos = []
+        for spec in a.photo:
+            gid, view, garment = (spec.split(":") + ["front", "garment"])[:3]
+            g = db.get(Generation, gid)
+            path = generation_file(g) if g is not None else None
+            if g is None or g.target_type.startswith("implant_") or path is None or not path.is_file():
+                print(f"{gid}: not a finished picture")
+                return 1
+            photos.append((view, garment, path.read_bytes()))
+        topless = any(garment == "topless" for _, garment, _ in photos)
+        m = {k: v for k, v in {"bra_size": a.bra, "bw_left_cm": a.bw, "bw_right_cm": a.bw,
+                               "ptosis_grade": a.ptosis}.items() if v not in (None, "")}
+        patient = ImplantPatient(workspace_id=ws, surgeon_user_id=user.id, label=f"DEMO · {a.label}"[:120],
+                                 adult_confirmed=True, measurements=m, retention_months=12,
+                                 notes="Demo patient: AI-generated fictional person, not a real patient.",
+                                 consent={"at": utcnow().isoformat(), "topless_ok": topless, "demo": True,
+                                          "attested_by": "Demo: AI-generated fictional person, no real patient"})
+        db.add(patient)
+        db.flush()
+        for view, garment, data in photos:
+            im.save_photo(db, patient, view, garment, data)
+        im.generate(db, patient, [{"shape": "round", "placement": "dual_plane", "fill": "silicone", **o}
+                                  for o in DEMO_OPTIONS[a.options]])
+        db.commit()
+        print(f"demo patient {patient.label} ({patient.id}) for {user.email}: rendering now")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) >= 2 and argv[0] == "reset-password":
         return reset_password(argv[1])
@@ -149,6 +218,8 @@ def main(argv: list[str]) -> int:
         return catalogue_backfill()
     if argv[:1] == ["voice-samples"]:
         return voice_samples(argv[1:])
+    if argv[:1] == ["implant-demo"]:
+        return implant_demo(argv[1:])
     print(__doc__)
     return 2
 

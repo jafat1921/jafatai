@@ -291,13 +291,6 @@
 .jafat .polaroids .pic { aspect-ratio: 1; border-radius: 2px; box-shadow: none; }
 .jafat .polaroids:focus-visible { outline: 3px solid var(--rust); outline-offset: 3px; }
 
-/* ---------- works where you work ---------- */
-.jafat .works { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; }
-.jafat .works p { margin: 0; }
-.jafat .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
-.jafat .chips li { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 8px; background: rgba(255, 250, 238, .75); box-shadow: 0 0 0 1px rgba(138, 85, 35, .45); font: 600 14px/1 var(--ui); color: var(--ink); }
-.jafat .chips svg { width: 18px; height: 18px; color: var(--ink); }
-.jafat .chips .muted { background: transparent; box-shadow: 0 0 0 1px rgba(138, 85, 35, .3) inset; color: var(--ink-soft); font-weight: 500; }
 
 /* ---------- pricing ---------- */
 .jafat .pricing { list-style: none; margin: 20px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: center; }

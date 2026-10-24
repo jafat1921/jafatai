@@ -74,13 +74,13 @@ const TILES: Tile[] = [
 export function StudioTiles({ anchors }: { anchors?: boolean }) {
   return (
     <ul className="tiles" role="list">
-      {TILES.map((t) => (
-        <li key={t.id} id={anchors ? t.id : undefined} className="tile">
+      {TILES.map((t, i) => (
+        <li key={t.id} id={anchors ? t.id : undefined} className="tile" style={{ '--i': i } as React.CSSProperties}>
           <img className="tile-quill" src={QUILL} alt="" />
           <h3>{t.title}</h3>
           <p>{t.line}</p>
           <Link className="explore" to={anchors ? `#${t.group}` : `/studio#${t.group}`}>
-            Explore<span className="sr-only">: {t.title}</span> <span aria-hidden>→</span>
+            Explore<span className="sr-only">: {t.title}</span> <span className="nudge" aria-hidden>→</span>
           </Link>
           <ChevronRight className="chev" aria-hidden />
         </li>
@@ -119,7 +119,7 @@ export function PricingCards() {
         const ticks = p.studios.slice(0, SHOWN)
         const extra = p.studios.length - SHOWN
         return (
-          <li key={p.id} className={i === star ? 'price star' : 'price'}>
+          <li key={p.id} className={i === star ? 'price star' : 'price'} style={{ '--i': i } as React.CSSProperties}>
             {i === star && <span className="ribbon">Most chosen</span>}
             <div className="price-head">
               <h3>{p.name}</h3>

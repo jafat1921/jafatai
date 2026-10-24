@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { useMe } from '@/hooks/useAuth'
 import { JafatDefs } from './JafatDefs'
 import { QUILL, useBrandFonts, useCreateHref, useInviteOnly } from './head'
+import { usePageMotion } from './motion'
 import './jafat.css'
+import './motion.css'
 
 const CRAFTS: [string, string][] = [
   ['/studio#pictures', 'Pictures'],
@@ -51,6 +53,8 @@ function useHashScroll() {
 export function MarketingLayout({ children, className }: { children: React.ReactNode; className?: string }) {
   useBrandFonts()
   useHashScroll()
+  const root = useRef<HTMLDivElement>(null)
+  usePageMotion(root)
   const invite = useInviteOnly()
   const me = useMe()
   const [open, setOpen] = useState(false)
@@ -73,7 +77,7 @@ export function MarketingLayout({ children, className }: { children: React.React
   )
 
   return (
-    <div className={className ? `jafat ${className}` : 'jafat'}>
+    <div ref={root} className={className ? `jafat ${className}` : 'jafat'}>
       <JafatDefs />
       <a className="skip" href="#main">
         Skip to content

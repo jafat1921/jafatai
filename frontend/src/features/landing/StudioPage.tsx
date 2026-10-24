@@ -136,7 +136,7 @@ export function StudioPage() {
         </nav>
       </section>
 
-      <section aria-labelledby="tools-title">
+      <section aria-labelledby="tools-title" data-reveal>
         <div className="section-head">
           <p className="eyebrow">The Studio</p>
           <h2 id="tools-title">Everything you need to create, in one place</h2>
@@ -145,7 +145,7 @@ export function StudioPage() {
       </section>
 
       {GROUPS.map((g, i) => (
-        <section key={g.id} id={g.id} className={`group${i % 2 ? ' flip' : ''}`} aria-labelledby={`${g.id}-title`}>
+        <section key={g.id} id={g.id} className={`group${i % 2 ? ' flip' : ''}`} aria-labelledby={`${g.id}-title`} data-reveal>
           <div className="group-head">
             <p className="eyebrow">{g.eyebrow}</p>
             <h2 id={`${g.id}-title`}>{g.title}</h2>
@@ -163,7 +163,7 @@ export function StudioPage() {
         </section>
       ))}
 
-      <section className="sheet map finale" aria-labelledby="studio-finale">
+      <section className="sheet map finale" aria-labelledby="studio-finale" data-reveal>
         <h2 id="studio-finale">Try it on your own idea</h2>
         <p>A free account opens the whole studio. Your work stays yours.</p>
         <div className="actions">

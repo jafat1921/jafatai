@@ -16,7 +16,7 @@ export function AboutPage() {
       </section>
 
       <div className="about">
-        <section className="sheet" aria-labelledby="about-languages">
+        <section className="sheet" aria-labelledby="about-languages" data-reveal>
           <h2 id="about-languages">Two languages, one studio</h2>
           <p>
             Work in English,{' '}
@@ -28,7 +28,7 @@ export function AboutPage() {
           </p>
         </section>
 
-        <section className="sheet" aria-labelledby="about-private">
+        <section className="sheet" aria-labelledby="about-private" data-reveal>
           <h2 id="about-private">Private by default</h2>
           <p>
             Everything is made in Jafat’s own studio. What you write and make is never handed to anyone else to train on, sell or look at, and
@@ -36,7 +36,7 @@ export function AboutPage() {
           </p>
         </section>
 
-        <section className="sheet" aria-labelledby="about-name">
+        <section className="sheet" aria-labelledby="about-name" data-reveal>
           <h2 id="about-name">The name</h2>
           <p>
             We write it{' '}
@@ -49,7 +49,7 @@ export function AboutPage() {
         </section>
       </div>
 
-      <section className="sheet map finale" aria-labelledby="about-finale">
+      <section className="sheet map finale" aria-labelledby="about-finale" data-reveal>
         <h2 id="about-finale">Write your first page</h2>
         <p>Start free and see what your idea becomes.</p>
         <div className="actions">

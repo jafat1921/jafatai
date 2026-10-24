@@ -1,9 +1,10 @@
+import { useRef } from 'react'
 import { Link } from 'react-router'
-import { MessageSquare, Sparkles } from 'lucide-react'
 import { CreateButton, MarketingLayout } from './MarketingLayout'
 import { Pic, PricingCards, StudioTiles, VoiceCard } from './parts'
 import { QUILL, useCreateHref, useInviteOnly, usePageMeta } from './head'
 import { HOME_META } from './meta'
+import { useDrift, useTilt, useTyping } from './motion'
 
 const UR = (text: string) => (
   <span lang="ur" dir="rtl">
@@ -25,20 +26,36 @@ const GALLERY: [string, string, boolean?][] = [
 
 const PIPELINE = ['Title card', 'Scenes', 'Narration', 'Music', 'The End']
 
+const IDEA = 'A little cloud who wants to help…'
+
+// fixed spots for the drifting embers, so nothing reshuffles between renders
+const EMBERS = Array.from({ length: 18 }, (_, i) => ({ left: (i * 37) % 100, delay: (i * 0.73) % 9, size: 2 + (i % 3) }))
+
+const v = (vars: Record<string, string | number>) => vars as React.CSSProperties
+
 export function LandingPage() {
   usePageMeta(HOME_META)
   const invite = useInviteOnly()
   const create = useCreateHref()
+  const art = useRef<HTMLDivElement>(null)
+  const prompt = useRef<HTMLAnchorElement>(null)
+  const strip = useRef<HTMLUListElement>(null)
+  useTilt(art)
+  useDrift(strip)
+  const idea = useTyping(prompt, IDEA)
 
   return (
     <MarketingLayout>
-      <section className="hero" aria-labelledby="hero-title">
+      <section className="hero" aria-labelledby="hero-title" data-live>
         <div className="hero-copy reveal">
           <p className="eyebrow">Your AI studio</p>
-          <h1 id="hero-title">
+          <h1 id="hero-title" className="ink-in">
             Create <span className="gilded">pictures</span> / <span className="gilded">films</span> /{' '}
             <span className="gilded">voices</span> / music, made at Jafat.
           </h1>
+          <svg className="ink-stroke" viewBox="0 0 320 18" aria-hidden focusable="false">
+            <path d="M3 12 C 50 4, 96 16, 150 9 S 248 4, 317 11" />
+          </svg>
           <p className="lede">
             Write the idea once. Jafat draws it, films it, voices it and scores it, in English and {UR('اُردُو')}.
           </p>
@@ -50,8 +67,15 @@ export function LandingPage() {
             {invite && <span className="note">Sign-up is by invitation</span>}
           </div>
         </div>
-        <div className="hero-art reveal" aria-hidden>
-          <img className="quill" src={QUILL} alt="" />
+        <div className="hero-art reveal" aria-hidden ref={art}>
+          <span className="embers">
+            {EMBERS.map((e, i) => (
+              <i key={i} style={v({ left: `${e.left}%`, '--delay': `${e.delay}s`, '--size': `${e.size}px` })} />
+            ))}
+          </span>
+          <span className="quill-float">
+            <img className="quill" src={QUILL} alt="" />
+          </span>
           <Pic name="castle" alt="" className="h1" eager />
           <Pic name="forest" alt="" className="h2" play eager />
           <VoiceCard className="h3" />
@@ -59,11 +83,14 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="sheet formats" aria-labelledby="formats-title">
+      <section className="sheet formats" aria-labelledby="formats-title" data-reveal data-live>
         <h2 id="formats-title">One idea, every format</h2>
-        <Link className="prompt" to={create} aria-label="Try your own idea">
+        <Link className="prompt" to={create} aria-label="Try your own idea" ref={prompt}>
           <img src={QUILL} alt="" />
-          <span className="prompt-text">A little cloud who wants to help…</span>
+          <span className="prompt-text" aria-hidden>
+            {idea.shown}
+            {idea.typing && <span className="caret" />}
+          </span>
           <span className="go" aria-hidden>
             →
           </span>
@@ -92,7 +119,7 @@ export function LandingPage() {
         </ol>
       </section>
 
-      <section className="studio" aria-labelledby="studio-title">
+      <section className="studio" aria-labelledby="studio-title" data-reveal>
         <div className="head-left">
           <h2 id="studio-title">The Studio</h2>
           <p>Everything you need to create, in one place.</p>
@@ -101,7 +128,7 @@ export function LandingPage() {
       </section>
 
       <div className="two-up">
-        <section className="sheet char" aria-labelledby="char-title">
+        <section className="sheet char" aria-labelledby="char-title" data-reveal>
           <Pic name="girl_book" alt="One character, a girl in a red headscarf, kept the same in every scene" />
           <div>
             <h2 id="char-title">Same character, every scene</h2>
@@ -111,10 +138,11 @@ export function LandingPage() {
             </Link>
           </div>
         </section>
-        <section className="sheet script-film" aria-labelledby="film-title">
+        <section className="sheet script-film" aria-labelledby="film-title" data-reveal data-live>
           <h2 id="film-title">From script to film</h2>
           <p>From one idea to a finished film.</p>
           <ol className="pipeline">
+            <li className="playhead" aria-hidden />
             {PIPELINE.map((step) => (
               <li key={step}>
                 {step === 'Title card' && (
@@ -138,7 +166,7 @@ export function LandingPage() {
       </div>
 
       <div className="two-up">
-        <section className="sheet brand-kit" aria-labelledby="brand-title">
+        <section className="sheet brand-kit" aria-labelledby="brand-title" data-reveal>
           <h2 id="brand-title">Your brand, kept</h2>
           <p>Your brand kit, applied to every output.</p>
           <div className="kit" aria-hidden>
@@ -160,7 +188,7 @@ export function LandingPage() {
             </span>
           </div>
         </section>
-        <section className="sheet speaks" aria-labelledby="speaks-title">
+        <section className="sheet speaks" aria-labelledby="speaks-title" data-reveal>
           <h2 id="speaks-title">Speaks your language</h2>
           <p>Same words, two languages: a Poetry Short in Urdu, with its meaning in English.</p>
           <div className="pair">
@@ -187,43 +215,26 @@ export function LandingPage() {
         </section>
       </div>
 
-      <section id="gallery" className="sheet made" aria-labelledby="gallery-title">
+      <section id="gallery" className="sheet made" aria-labelledby="gallery-title" data-reveal data-live>
         <h2 id="gallery-title">Made at Jafat</h2>
         <p>Real examples. Endless possibilities.</p>
-        <ul className="polaroids" role="list" aria-label="Examples made at Jafat" tabIndex={0}>
-          {GALLERY.map(([name, alt, play]) => (
-            <li key={name}>
+        <ul className="polaroids" role="list" aria-label="Examples made at Jafat" tabIndex={0} ref={strip}>
+          {GALLERY.map(([name, alt, play], i) => (
+            <li key={name} style={v({ '--i': i })}>
               <Pic name={name} alt={alt} play={play} />
             </li>
           ))}
         </ul>
       </section>
 
-      <section className="sheet works" aria-labelledby="works-title">
-        <div>
-          <h2 id="works-title">Works where you work</h2>
-          <p>Connect Jafat to your AI assistant in a minute.</p>
-        </div>
-        <ul className="chips" role="list">
-          <li>
-            <Sparkles aria-hidden />
-            Claude
-          </li>
-          <li>
-            <MessageSquare aria-hidden />
-            ChatGPT
-          </li>
-          <li className="muted">More coming soon</li>
-        </ul>
-      </section>
 
-      <section className="sheet price-band" aria-labelledby="price-title">
+      <section className="sheet price-band" aria-labelledby="price-title" data-reveal data-live>
         <h2 id="price-title">Simple, fair pricing</h2>
         <p>More room. More possibilities.</p>
         <PricingCards />
       </section>
 
-      <section className="scroll-cta" aria-labelledby="finale-title">
+      <section className="scroll-cta" aria-labelledby="finale-title" data-reveal data-live>
         <img className="cta-quill" src={QUILL} alt="" />
         <span className="ar gilded" lang="ar" aria-hidden>
           جعفت

@@ -13,13 +13,13 @@ export function PlansPage() {
         <p className="lede">Start free with the whole studio, and move up when you need more room.</p>
       </section>
 
-      <section className="sheet price-band" aria-label="Plans">
+      <section className="sheet price-band" aria-label="Plans" data-reveal data-live>
         <PricingCards />
       </section>
 
       <p className="plans-note">Prices in Pakistani rupees, with local payment methods. Ask us about plans for teams and studios.</p>
 
-      <section className="faq" aria-labelledby="faq-title">
+      <section className="faq" aria-labelledby="faq-title" data-reveal>
         <div className="section-head">
           <p className="eyebrow">Questions</p>
           <h2 id="faq-title">Asked at the door</h2>

@@ -198,7 +198,7 @@ function PackageForm({ initial, onDone }: { initial: Package | null; onDone: () 
       <div className="flex flex-wrap gap-x-6 gap-y-2">
         <label className="flex items-center gap-3 text-body">
           <Switch checked={f.public} onCheckedChange={(v) => set('public', v)} disabled={initial?.kind === 'custom'} />
-          On the pricing page
+          Show on the website
         </label>
         <label className="flex items-center gap-3 text-body">
           <Switch checked={f.private_items} onCheckedChange={(v) => set('private_items', v)} />
@@ -297,7 +297,7 @@ export function PackagesPage() {
                   <td className={cn(td, 'text-right tabular-nums')}>{minutes(p.gpu_min_day)}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{p.max_queued ?? 'No limit'}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{p.subscribers}</td>
-                  <td className={td}>{p.public ? 'Pricing page' : 'Hidden'}</td>
+                  <td className={td}>{p.public ? 'On the website' : 'Clients only'}</td>
                   <td className={cn(td, 'whitespace-nowrap text-right')}>
                     <Button size="sm" variant="ghost" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
                       <Pencil aria-hidden />

@@ -38,7 +38,7 @@ describe('Admin: Packages', () => {
     expect(within(pro).getByText('240 min')).toBeInTheDocument()
     expect(within(pro).getByText('3')).toBeInTheDocument()
     expect(within(demo).getByText('Demo · 7 days')).toBeInTheDocument()
-    expect(within(demo).getByText('Hidden')).toBeInTheDocument()
+    expect(within(demo).getByText('Clients only')).toBeInTheDocument()
   })
 
   it('creates a package from the form', async () => {
@@ -54,7 +54,7 @@ describe('Admin: Packages', () => {
     await user.type(within(dialog).getByLabelText('GPU min a day'), '600')
     await user.clear(within(dialog).getByLabelText('Jobs at once'))
     await user.click(within(dialog).getByLabelText('Ad Studio'))
-    await user.click(within(dialog).getByRole('switch', { name: 'On the pricing page' }))
+    await user.click(within(dialog).getByRole('switch', { name: 'Show on the website' }))
     await user.click(within(dialog).getByRole('button', { name: 'Create package' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/packages')).toBeDefined())
     const body = calls.find((c) => c.method === 'POST' && c.path === '/admin/packages')!.body as Record<string, unknown>

@@ -99,10 +99,14 @@ def photos(db: Session, p: ImplantPatient) -> dict[str, Generation]:
 
 # ---------------------------------------------------------------- the edit
 
-def _volume_words(cc: int, base_width: float | None = None) -> str:
-    # how many cups a volume adds depends on her frame (planning.cc_per_cup), so the words follow it
-    cups = planning.cup_change(cc, base_width)
-    size = "a subtle" if cups <= 0.5 else "a moderate" if cups <= 1 else "a clear" if cups <= 2 else "a large"
+def _volume_words(cc: int, base_width: float | None = None, bra_size: str | None = None) -> str:
+    # how many cups a volume adds depends on her frame (planning.cc_per_cup), so the words follow it; with her
+    # bra size known, the cup she'll wear names the step exactly (unrounded, so 350 and 425 cc differ)
+    cups, exact = planning.cup_change(cc, base_width), cc / planning.cc_per_cup(base_width)
+    size = "a subtle" if exact < 0.75 else "a moderate" if exact < 1.5 else "a clear" if exact < 2 else "a large"
+    target = planning.target_cup(bra_size, exact)
+    if target:
+        return f"{size} increase in breast volume, so that she now fills {target}"
     return f"{size} increase in breast volume, {planning.cup_words(cups)}"
 
 
@@ -130,7 +134,7 @@ def instruction(opt: dict, garment: str, measurements: dict | None = None) -> st
     left, right = int(opt["left_cc"]), int(opt["right_cc"])
     m = measurements or {}
     bw = planning._num(m, "bw_left_cm" if left >= right else "bw_right_cm")
-    size = (f"Give this woman {_volume_words(max(left, right), bw)}"
+    size = (f"Give this woman {_volume_words(max(left, right), bw, m.get('bra_size'))}"
             + (f", with the left breast ({left} cc) {'slightly larger' if left > right else 'slightly smaller'} "
                f"than the right ({right} cc)" if abs(left - right) >= 25 else ", the same on both sides")
             + f", as after breast augmentation with {SHAPE_WORDS[opt['shape']]}, "

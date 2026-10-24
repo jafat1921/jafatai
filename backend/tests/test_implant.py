@@ -380,3 +380,15 @@ def test_the_surgeon_sets_the_chest_area(surgeon, client):
     assert surgeon.patch(f"/api/implant/photos/{photo['id']}", json={"chest_box": [0, 0, 50, 50]}).status_code == 422
     # not someone else's photo
     assert client.patch(f"/api/implant/photos/{photo['id']}", json={"chest_box": [20, 120, 640, 880]}).status_code == 404
+
+
+def test_her_bra_size_names_the_step():
+    assert planning.cup_of("34B") == planning.CUPS.index("B") and planning.cup_of("75 dd") == planning.CUPS.index("DD")
+    assert planning.cup_of("") is None and planning.cup_of("34") is None
+    m = {"bw_left_cm": 12, "bw_right_cm": 12, "bra_size": "32A"}
+    words = [im.instruction({"left_cc": cc, "right_cc": cc, "profile": "moderate", "shape": "round",
+                             "placement": "dual_plane"}, "garment", m) for cc in (275, 350, 425)]
+    # 350 and 425 cc were both "about two cup sizes" and drew alike
+    assert "fills a B cup" in words[0] and "fills a full B cup" in words[1] and "fills a C cup" in words[2]
+    assert "about" in im.instruction({"left_cc": 300, "right_cc": 300, "profile": "moderate", "shape": "round",
+                                      "placement": "dual_plane"}, "garment", {})

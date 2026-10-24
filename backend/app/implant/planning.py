@@ -36,6 +36,26 @@ def cup_words(cups: float) -> str:
     return f"about {n}{' and a half' if half else ''} cup size{'s' if cups > 1 else ''}"
 
 
+CUPS = ("AA", "A", "B", "C", "D", "DD", "E", "F", "G")
+
+
+def cup_of(bra_size: str | None) -> int | None:
+    """The cup in "34B", "75 C", "b", "DD": its index in CUPS, None when there's no cup in it."""
+    letters = "".join(ch for ch in (bra_size or "").upper() if ch.isalpha())
+    return CUPS.index(letters) if letters in CUPS else None
+
+
+def target_cup(bra_size: str | None, cups: float) -> str | None:
+    """The cup she'd wear after, in words the edit model knows ("a full C cup"). Steps of 350 vs 425 cc were
+    both "about two cup sizes" and came out alike; a target cup keeps them apart."""
+    now = cup_of(bra_size)
+    if now is None:
+        return None
+    t = min(len(CUPS) - 1 + 0.49, now + cups)
+    letter = CUPS[int(t)]
+    return f"a full {letter} cup" if t - int(t) >= 0.5 else f"a {letter} cup"
+
+
 def _num(m: dict, key: str) -> float | None:
     v = m.get(key)
     try:

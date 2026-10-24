@@ -27,11 +27,14 @@ function PhotoSlot({ patient, view }: { patient: Patient; view: View }) {
   const upload = useUploadPhoto(patient.id)
   const current = patient.photos[view]
   const name = patient.views?.[view] ?? VIEW_LABEL[view]
-  const toplessOk = patient.consent.topless_ok
+  // her own everyday photo is always in her clothes; the topless choice is for the clinical views only
+  const own = view === 'own'
+  const toplessOk = patient.consent.topless_ok && !own
   const [garment, setGarment] = useState<Garment>(current?.garment === 'topless' && toplessOk ? 'topless' : 'garment')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
-  const [top, setTop] = useState(15)
+  // clinical shots crop the face off by default; her own photo keeps it, so she sees herself
+  const [top, setTop] = useState(own ? 0 : 15)
   const [bottom, setBottom] = useState(100)
   const urlRef = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -77,32 +80,39 @@ function PhotoSlot({ patient, view }: { patient: Patient; view: View }) {
       {current && !preview && current.status !== 'ready' && current.status !== 'approved' && <StatusPill className="self-start" status={generationStatus(current.status)} />}
       {current && isDone(current) && !preview && <ChestArea patientId={patient.id} photo={current} view={view} name={name} draft={draft} setDraft={setDraft} />}
 
-      <fieldset className="flex flex-col gap-1">
-        <legend className="section-label mb-1">Garment</legend>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-body">
-          <label className="flex items-center gap-1.5">
-            <input type="radio" name={`${uid}-garment`} className="accent-studio-accent" checked={sendGarment === 'garment'} onChange={() => setGarment('garment')} />
-            Bra/top
-          </label>
-          <label className="flex items-center gap-1.5 aria-disabled:opacity-60" aria-disabled={!toplessOk || undefined}>
-            <input
-              type="radio"
-              name={`${uid}-garment`}
-              className="accent-studio-accent"
-              checked={sendGarment === 'topless'}
-              aria-disabled={!toplessOk}
-              aria-describedby={toplessOk ? undefined : `${uid}-why`}
-              onChange={() => toplessOk && setGarment('topless')}
-            />
-            Topless
-          </label>
-        </div>
-        {!toplessOk && (
-          <p id={`${uid}-why`} className="text-small text-studio-muted">
-            Topless needs the patient’s separate consent. Turn it on at the top of the page.
-          </p>
-        )}
-      </fieldset>
+      {own ? (
+        <p className="text-small text-studio-muted">
+          A recent photo in fitted everyday clothes, standing or seated, with the chest clearly visible. Ask her to
+          move the dupatta off the chest. Loose clothes show a softer change. Her clothes are never removed or changed.
+        </p>
+      ) : (
+        <fieldset className="flex flex-col gap-1">
+          <legend className="section-label mb-1">Garment</legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-body">
+            <label className="flex items-center gap-1.5">
+              <input type="radio" name={`${uid}-garment`} className="accent-studio-accent" checked={sendGarment === 'garment'} onChange={() => setGarment('garment')} />
+              Bra/top
+            </label>
+            <label className="flex items-center gap-1.5 aria-disabled:opacity-60" aria-disabled={!toplessOk || undefined}>
+              <input
+                type="radio"
+                name={`${uid}-garment`}
+                className="accent-studio-accent"
+                checked={sendGarment === 'topless'}
+                aria-disabled={!toplessOk}
+                aria-describedby={toplessOk ? undefined : `${uid}-why`}
+                onChange={() => toplessOk && setGarment('topless')}
+              />
+              Topless
+            </label>
+          </div>
+          {!toplessOk && (
+            <p id={`${uid}-why`} className="text-small text-studio-muted">
+              Topless needs the patient’s separate consent. Turn it on at the top of the page.
+            </p>
+          )}
+        </fieldset>
+      )}
 
       <div className="flex flex-col gap-1">
         <label htmlFor={`${uid}-file`} className="section-label">

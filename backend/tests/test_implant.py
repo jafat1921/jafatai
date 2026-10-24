@@ -453,3 +453,32 @@ def test_a_demo_patient_from_ai_pictures(surgeon, fast_driver):
     # an implant picture can't be the source of a demo
     assert manage.main(["implant-demo", "--email", "dr.ayesha@example.com", "--photo",
                         f"{detail['photos']['front']['id']}:front:topless", "--label", "x"]) == 1
+
+
+def test_her_own_photo_is_always_clothed_and_keeps_her_clothes(surgeon, fast_driver, eye):
+    p = _patient(surgeon, topless_ok=True)
+    # even with topless consent, her own photo can't be marked topless
+    r = _photo(surgeon, p["id"], view="own", garment="topless")
+    assert r.status_code == 422 and "clothes" in r.json()["detail"]
+    assert _photo(surgeon, p["id"], view="own").status_code == 201
+
+    opt = {"left_cc": 300, "right_cc": 300, "profile": "moderate", "shape": "round", "placement": "dual_plane",
+           "fill": "silicone"}
+    own = im.instruction(opt, "garment", view="own")
+    assert "kameez" in own and "dupatta" in own and "same face" in own
+    assert "Do not remove, open, lift, shorten or change any clothing" in own and "Never show more skin" in own
+    lift = im.instruction({**opt, "procedure": "augmentation_lift"}, "garment", view="own")
+    assert "under the clothes" in lift and "bra cups" not in lift
+    # the clinical views read exactly as before
+    for g in ("garment", "topless"):
+        assert im.instruction(opt, g, view="front") == im.instruction(opt, g)
+        assert "kameez" not in im.instruction(opt, g) and "same face" not in im.instruction(opt, g)
+
+    e = eye([False])
+    surgeon.post(f"/api/implant/patients/{p['id']}/sessions", json={"options": OPTS[:1]})
+    _run(fast_driver)
+    detail = surgeon.get(f"/api/implant/patients/{p['id']}").json()
+    res = detail["sessions"][0]["results"][0]
+    # rendered from her own photo, and the clothing check still ran
+    assert res["view"] == "own" and res["status"] == "ready" and res["garment_check"] is True and e.calls == 1
+    assert list(detail["views"])[0] == "own"

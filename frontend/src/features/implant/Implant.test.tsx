@@ -140,6 +140,20 @@ describe('Implant patient page', () => {
     expect(cropBox(15, 100)).toBe('0,0.15,1,0.85')
   })
 
+  it('her own photo comes first, is always in her clothes, and the clinical views keep their choice', async () => {
+    const p = patient()
+    p.consent.topless_ok = true
+    p.views = { own: 'Her own photo', ...p.views }
+    openPatient(p)
+    const photos = await screen.findByRole('region', { name: 'Photos' })
+    expect(within(photos).getAllByRole('heading', { level: 3 })[0]).toHaveTextContent('Her own photo')
+    const own = within(photos).getByRole('heading', { name: 'Her own photo' }).closest('li')!
+    expect(within(own).queryByRole('radio')).not.toBeInTheDocument()
+    expect(within(own).getByText(/dupatta off the chest/)).toBeInTheDocument()
+    const front = within(photos).getByRole('heading', { name: 'Front' }).closest('li')!
+    expect(within(front).getByRole('radio', { name: 'Topless' })).toHaveAttribute('aria-disabled', 'false')
+  })
+
   it('renders the options with the spec and the estimate', async () => {
     const { calls, user } = openPatient(patient(), (method, path) => (method === 'POST' && path === '/implant/patients/p1/sessions' ? withResults('queued') : undefined))
     await user.click(await screen.findByRole('button', { name: '300 / 350 / 400 cc moderate-plus' }))

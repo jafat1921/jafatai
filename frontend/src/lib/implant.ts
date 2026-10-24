@@ -2,7 +2,7 @@
 import { request, send } from './api'
 import type { GenerationStatus, Job } from './types'
 
-export type View = 'front' | 'left_oblique' | 'right_oblique' | 'left_lateral' | 'right_lateral'
+export type View = 'own' | 'front' | 'left_oblique' | 'right_oblique' | 'left_lateral' | 'right_lateral'
 // [y1, x1, y2, x2] on a 0–1000 scale, y down
 export type ChestBox = [number, number, number, number]
 export type Garment = 'garment' | 'topless'
@@ -119,7 +119,7 @@ export interface PatientCreate {
 export type PatientPatch = Partial<Pick<Patient, 'label' | 'retention_months' | 'measurements' | 'notes'>> & { topless_ok?: boolean }
 
 export const VIEWS: View[] = ['front', 'left_oblique', 'right_oblique', 'left_lateral', 'right_lateral']
-export const VIEW_LABEL: Record<View, string> = { front: 'Front', left_oblique: 'Left 45°', right_oblique: 'Right 45°', left_lateral: 'Left 90°', right_lateral: 'Right 90°' }
+export const VIEW_LABEL: Record<View, string> = { own: 'Her own photo', front: 'Front', left_oblique: 'Left 45°', right_oblique: 'Right 45°', left_lateral: 'Left 90°', right_lateral: 'Right 90°' }
 
 // the server decides which views a patient has; fall back for an older answer without them
 export const patientViews = (p: Patient) => {
@@ -129,6 +129,7 @@ export const patientViews = (p: Patient) => {
 
 // same as backend/app/implant/finish.py DEFAULT_BOX
 export const CHEST_DEFAULT: Record<View, ChestBox> = {
+  own: [80, 100, 650, 900],
   front: [0, 100, 620, 900],
   left_oblique: [0, 80, 620, 920],
   right_oblique: [0, 80, 620, 920],

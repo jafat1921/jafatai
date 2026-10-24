@@ -15,7 +15,9 @@ from app.models import Generation, ImplantPatient, ImplantSession, utcnow
 from app.implant import planning
 from app.services import enqueue_generation, new_seed
 
-VIEWS = {"front": "Front", "left_oblique": "Left 45°", "right_oblique": "Right 45°", "left_lateral": "Left 90°",
+# "own" is her everyday photo in her own clothes, any pose: what patients in Pakistan will share (surgeon's review,
+# 24 Oct). It is always clothed; the five clinical views work as before
+VIEWS = {"own": "Her own photo", "front": "Front", "left_oblique": "Left 45°", "right_oblique": "Right 45°", "left_lateral": "Left 90°",
          "right_lateral": "Right 90°"}
 GARMENTS = ("garment", "topless")
 PROFILES = ("low", "moderate", "moderate_plus", "high", "extra_high")
@@ -59,6 +61,8 @@ def save_photo(db: Session, p: ImplantPatient, view: str, garment: str, data: by
         raise HTTPException(422, f"view must be one of: {', '.join(VIEWS)}")
     if garment not in GARMENTS:
         raise HTTPException(422, "garment must be garment or topless")
+    if view == "own" and garment != "garment":
+        raise HTTPException(422, "Her own photo is always in her clothes")
     if garment == "topless" and not (p.consent or {}).get("topless_ok"):
         raise HTTPException(409, "The patient hasn't consented to topless photos. Tick that consent first, or "
                                  "use a photo in a bra or top.")
@@ -133,7 +137,13 @@ PLACEMENT_WORDS = {
 }
 
 
-def instruction(opt: dict, garment: str, measurements: dict | None = None) -> str:
+OWN_CLOTHES = ("She wears the same clothes as in the photo (for example a kameez, kurta, dress or blouse), with any "
+               "dupatta, scarf or shawl exactly where it is. Keep their colour, print, embroidery, fabric and the folds "
+               "away from the bust exactly; the fabric fits and drapes naturally over the fuller bust. Do not remove, "
+               "open, lift, shorten or change any clothing, and do not make it tighter or more revealing.")
+
+
+def instruction(opt: dict, garment: str, measurements: dict | None = None, view: str | None = None) -> str:
     """Literal wording, as Folietech's wrap renders: the edit models follow plain words far better than
     numbers or flourishes. cc only steers the words; phase 2's warp makes the size exact."""
     left, right = int(opt["left_cc"]), int(opt["right_cc"])
@@ -151,15 +161,16 @@ def instruction(opt: dict, garment: str, measurements: dict | None = None) -> st
         lift = ("Also as after a breast lift (mastopexy): the breasts sit higher on the chest and look firmer and "
                 "rounder, the lowest part of each breast rises to the breast crease, and "
                 + ("the nipples sit higher, centred on the front of each breast. " if garment == "topless" else
+                   "the bust sits higher and fuller under the clothes. " if view == "own" else
                    "the bra cups sit higher and fuller. "))
-    body = ("The nipples and areolas keep their size, colour and shape; they sit slightly higher and point "
+    body = OWN_CLOTHES if view == "own" else ("The nipples and areolas keep their size, colour and shape; they sit slightly higher and point "
             "slightly outward. The breast crease may sit slightly lower. Keep the natural gap between the breasts."
             if garment == "topless" else
             "She wears the same bra or top as in the photo: keep its style, colour and fabric exactly, fitted "
             "naturally over the new shape. Do not remove, open or change any clothing.")
     return " ".join([
         size, lift + body,
-        "Keep everything else identical: same person, same body shape outside the chest, skin tone and texture, "
+        "Keep everything else identical: same person, " + ("same face, " if view == "own" else "") + "same body shape outside the chest, skin tone and texture, "
         "moles, tattoos, arms, hands, pose, camera angle, crop, background and lighting.",
         "Never show more skin than the original photo. Clinical medical photograph, photorealistic and natural, "
         "no glamour, no scars. Do not add text or logos.",
@@ -184,7 +195,7 @@ def generate(db: Session, p: ImplantPatient, options: list[dict]) -> ImplantSess
             garment = pp.get("garment", "garment")
             enqueue_generation(db, workspace_id=p.workspace_id, project_id=None, target_type="implant_result",
                                target_id=s.id, kind="image", seed=seeds[view],
-                               prompt=instruction(opt, garment, p.measurements),
+                               prompt=instruction(opt, garment, p.measurements, view),
                                params={"reference_ids": [photo.id], "model": EDIT_MODEL, "width": w, "height": h,
                                        "implant": {"option": i, "view": view, "photo_id": photo.id,
                                                    "garment": garment}})

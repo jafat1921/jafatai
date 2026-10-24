@@ -16,7 +16,9 @@ log = logging.getLogger("mixai.implant")
 
 # [y1, x1, y2, x2] on 0-1000, when the vision model can't say: neck-to-hip clinical framing
 DEFAULT_BOX = {"front": [0, 100, 620, 900], "left_oblique": [0, 80, 620, 920], "right_oblique": [0, 80, 620, 920],
-               "left_lateral": [0, 150, 620, 950], "right_lateral": [0, 50, 620, 850]}
+               "left_lateral": [0, 150, 620, 950], "right_lateral": [0, 50, 620, 850],
+               # her own photo may be anything from a bust shot to full length
+               "own": [80, 100, 650, 900]}
 
 
 class Box(BaseModel):
@@ -43,7 +45,8 @@ def find_chest(photo: Path, view: str, tick=None) -> tuple[list[int], str]:
     """(box, source): the vision model's box around both breasts and whatever covers them, else the default."""
     msgs = [{"role": "system", "content": "You locate regions in clinical photographs. Answer only with JSON."},
             {"role": "user", "images": [image_b64(photo)],
-             "content": "Give the bounding box that contains both breasts, the whole bra or top over them, and a "
+             "content": "Give the bounding box that contains both breasts, the clothing over them (bra, top, kameez, "
+                        "dress, dupatta), and a "
                         "little margin, as [y1, x1, y2, x2] on a 0-1000 scale (y down). Reply as JSON "
                         '{"box": [y1, x1, y2, x2]}.'}]
     try:
@@ -138,7 +141,7 @@ def garment_check(photo: Path, result: Path, tick=None) -> bool | None:
     msgs = [{"role": "system", "content": "You check medical simulation images. Answer only with JSON."},
             {"role": "user", "images": [image_b64(photo), image_b64(result)],
              "content": "The FIRST picture is the original, the SECOND is an edited simulation of the same person. "
-                        "Is any skin or body part uncovered in the SECOND picture that clothing (bra, top) covers in "
+                        "Is any skin or body part uncovered in the SECOND picture that clothing (bra, top, kameez, dress, dupatta, scarf) covers in "
                         "the FIRST? Ignore a change of shape or size under the same clothing. Reply as JSON "
                         '{"uncovered": true|false, "why": "short reason"}.'}]
     try:

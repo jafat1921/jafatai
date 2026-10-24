@@ -16,14 +16,23 @@ export function usePageMotion(root: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const el = root.current
     if (!el) return
-    // the headline and page fade start from hidden and only show once their animation plays; a view whose
-    // animation clock never moves (frozen embedded panes, some power-saving modes) would keep them hidden,
-    // so a clock that hasn't run after 2.5 s switches every animation off and the page shows as it is
-    const clock0 = Number(document.timeline?.currentTime ?? 0)
+    // a view that never paints a frame (frozen embedded panes, some power-saving modes) would leave every
+    // animation on its first frame, so no frames in 2.5 s switches them all off. Counted with
+    // requestAnimationFrame: document.timeline stands still in Chrome until something animates, which
+    // wrongly froze the whole site on a normal desktop (24 Oct)
+    let frames = 0
+    let raf = requestAnimationFrame(function tick() {
+      frames++
+      if (frames < 5) raf = requestAnimationFrame(tick)
+    })
     const stall = window.setTimeout(() => {
-      if (Number(document.timeline?.currentTime ?? 0) - clock0 < 500) el.classList.add('still')
+      if (frames === 0) el.classList.add('still')
     }, 2500)
-    if (!motionAllowed()) return () => window.clearTimeout(stall)
+    if (!motionAllowed())
+      return () => {
+        window.clearTimeout(stall)
+        cancelAnimationFrame(raf)
+      }
     el.classList.add('motion')
 
     let heard = false
@@ -63,6 +72,7 @@ export function usePageMotion(root: RefObject<HTMLElement | null>) {
 
     return () => {
       window.clearTimeout(stall)
+      cancelAnimationFrame(raf)
       window.clearTimeout(failsafe)
       io.disconnect()
       mo.disconnect()

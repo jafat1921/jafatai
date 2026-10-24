@@ -224,10 +224,14 @@ def regenerate(vp_id: str, body: RegenerateIn, db: Session = Depends(get_db), cu
         first = {"portrait": "Make the portraits", "set": "Build the set"}.get(body.what, "Make the camera angles")
         raise HTTPException(409, f"This hasn't been made yet: press “{first}” first, then regenerate it if you want another")
     prompt, note = base.prompt, None
+    params = {k: v for k, v in (base.params or {}).items() if k not in ("comfy", "approved_by", "auto_check")}
+    if body.what == "angle":
+        # from today's angle prompt, not the old frame's: a fix to the template (single-person close-ups,
+        # 24 Oct) reaches a regenerate too, and the frame is tagged as current so "continue" keeps it
+        prompt, params = vd.fresh_angle_prompt(db, vp, vd.episode_of(db, vp), body.key or "", params)
     if body.note and body.note.strip():
         note = body.note.strip()
-        prompt, _ = rewrite_prompt_from_note(base.prompt, note)
-    params = {k: v for k, v in (base.params or {}).items() if k not in ("comfy", "approved_by", "auto_check")}
+        prompt, _ = rewrite_prompt_from_note(prompt, note)
     g = enqueue_generation(db, workspace_id=vp.workspace_id, project_id=vp.project_id, target_type=base.target_type,
                            target_id=base.target_id, kind=base.kind, prompt=prompt, params=params, seed=new_seed(),
                            parent_id=base.id, note=note)

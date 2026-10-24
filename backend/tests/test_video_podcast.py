@@ -573,8 +573,15 @@ def test_resume_from_a_piece_and_final_rerenders_only_changed_tracks(client, rec
     angle = next(a for a in vp["angles"] if a["key"] == f"{host}:close")
     g = ok(client.post(f"/api/podcast/ai-video/{vp['id']}/regenerate", json={"what": "angle", "key": angle["key"]}),
            202)
+    # from today's single-person template, not the old frame's prompt
+    assert "nobody else" in g["prompt"] and "towards the co-host" not in g["prompt"]
     _run_all(recorder)
+    # the page shows the new one waiting for its Approve, not the approved old one
+    vp = ok(client.get(f"/api/podcast/ai-video/{vp['id']}"))
+    shown = next(a for a in vp["angles"] if a["key"] == angle["key"])["frame"]
+    assert shown["id"] == g["id"] and shown["status"] == "ready"
     ok(client.post(f"/api/generations/{g['id']}/approve"))
+    assert ok(client.post(f"/api/podcast/ai-video/{vp['id']}/continue"), 409)  # the new frame counts as current
     vp = ok(client.get(f"/api/podcast/ai-video/{vp['id']}"))
     need = [t for t in vp["plan"]["tracks"] if t["needs"]["final"]]
     assert need and {t["camera"] for t in need} == {host}

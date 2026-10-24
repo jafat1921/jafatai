@@ -215,10 +215,19 @@ def fresh(gens: list[Generation], key: str, value) -> list[Generation]:
     return [g for g in gens if (g.params or {}).get(key) == value]
 
 
-def current_portrait(db: Session, entry: dict) -> Generation | None:
+def pick(gens: list[Generation], show: bool = False) -> Generation | None:
+    """Newest first in: the approved one, else the newest. `show` (the page) puts a newer one that's still
+    being made or waiting for its Approve ahead of it; with the approved one shown instead, a regenerated
+    angle never appeared and couldn't be approved (24 Oct)."""
+    top = next(iter(gens), None)
+    if show and top is not None and (top.status in LIVE or top.status == "ready"):
+        return top
+    return next((g for g in gens if g.status == "approved"), None) or top
+
+
+def current_portrait(db: Session, entry: dict, show: bool = False) -> Generation | None:
     """The approved portrait of this host choice, else its newest one (any status)."""
-    gens = fresh(portraits(db, entry["character_id"]), "vp_rev", entry.get("rev"))
-    return next((g for g in gens if g.status == "approved"), None) or next(iter(gens), None)
+    return pick(fresh(portraits(db, entry["character_id"]), "vp_rev", entry.get("rev")), show)
 
 
 def usable_portrait(db: Session, entry: dict) -> Generation | None:
@@ -329,7 +338,7 @@ def ensure_location(db: Session, vp: VideoPodcast) -> Location:
     return loc
 
 
-def establishing(db: Session, vp: VideoPodcast, fresh_only: bool = True) -> Generation | None:
+def establishing(db: Session, vp: VideoPodcast, fresh_only: bool = True, show: bool = False) -> Generation | None:
     if not vp.set_location_id:
         return None
     gens = list(db.scalars(select(Generation).where(
@@ -338,7 +347,7 @@ def establishing(db: Session, vp: VideoPodcast, fresh_only: bool = True) -> Gene
     if fresh_only:
         ep_hosts = len(vp.hosts or {})
         gens = fresh(gens, "vp_set", set_key(vp, ep_hosts))
-    return next((g for g in gens if g.status == "approved"), None) or next(iter(gens), None)
+    return pick(gens, show)
 
 
 def angle_keys(vp: VideoPodcast, ep: PodcastEpisode) -> list[tuple[str, str | None, str]]:
@@ -443,18 +452,30 @@ def ensure_angle_shots(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> dic
     return out
 
 
+def fresh_angle_prompt(db: Session, vp: VideoPodcast, ep: PodcastEpisode, key: str, params: dict) -> tuple[str, dict]:
+    """An angle's prompt and refs as the keyframes stage would make them now."""
+    shots = ensure_angle_shots(db, vp, ep)
+    host_id, angle = next((h, a) for k, h, a in angle_keys(vp, ep) if k == key)
+    ids, labels = angle_refs(db, vp, ep, host_id, angle)
+    shot = shots[key]
+    params = {**params, "aspect_ratio": settings_of(vp)["aspect"], "vp_refs": angle_tag(ids, shot.start_prompt)}
+    if ids:
+        params.update(reference_ids=ids, reference_labels=labels)
+    return sb.prepare_shot_generation(db, shot, "keyframe_start", "", params)
+
+
 def angle_tag(ids: list[str], prompt: str) -> str:
     return hashlib.sha1(json.dumps([ids, prompt]).encode()).hexdigest()[:16]
 
 
-def frame_of(db: Session, shot_id: str | None) -> Generation | None:
+def frame_of(db: Session, shot_id: str | None, show: bool = False) -> Generation | None:
     """An angle's frame: approved, else the newest one."""
     if not shot_id:
         return None
     gens = list(db.scalars(select(Generation).where(
         Generation.target_type == "shot", Generation.target_id == shot_id, Generation.kind == "keyframe_start",
     ).order_by(Generation.created_at.desc())).all())
-    return next((g for g in gens if g.status == "approved"), None) or next(iter(gens), None)
+    return pick(gens, show)
 
 
 def angle_frames(db: Session, vp: VideoPodcast) -> dict[str, Generation]:
@@ -959,7 +980,7 @@ def hosts_out(db: Session, vp: VideoPodcast, ep: PodcastEpisode) -> list[dict]:
                     "photo_as_is": bool(entry.get("as_is")),
                     "photo_url": sv.item_url(db, photo.id) if photo else None,
                     "from_character_id": entry.get("from_character_id"), "consent": entry.get("consent"),
-                    "portrait": _gen(current_portrait(db, entry)), "sheet_views": sheets})
+                    "portrait": _gen(current_portrait(db, entry, show=True)), "sheet_views": sheets})
     return out
 
 
@@ -1011,7 +1032,7 @@ def vp_out(db: Session, vp: VideoPodcast) -> dict:
         label = ANGLE_LABELS[angle]
         angles.append({"key": key, "label": f"{names.get(host_id, '')} · {label}" if host_id else label,
                        "host_id": host_id, "angle": angle, "shot_id": shots.get(key),
-                       "frame": _gen(frame_of(db, shots.get(key)))})
+                       "frame": _gen(frame_of(db, shots.get(key), show=True))})
     job = db.get(Job, vp.job_id) if vp.job_id else None
     return {
         "id": vp.id, "episode_id": vp.episode_id, "project_id": vp.project_id, "title": ep.title,
@@ -1022,7 +1043,7 @@ def vp_out(db: Session, vp: VideoPodcast) -> dict:
         "settings": st, "hosts": hosts_out(db, vp, ep),
         "set": {"location_id": vp.set_location_id, "preset": st["set_preset"], "prompt": st["set_prompt"],
                 "description": loc.description if loc else set_description(vp),
-                "establishing": _gen(establishing(db, vp, fresh_only=False))},
+                "establishing": _gen(establishing(db, vp, fresh_only=False, show=True))},
         "angles": angles, "plan": plan_out(db, vp, ep), "plan_stats": vplan.stats(plan_of(vp) or {}),
         "duration_s": mix["duration_s"] if mix else None,
         "mix_stale": bool(mix and plan_of(vp) and stage(vp, "plan").get("basis") not in (None, mix["generation_id"])),

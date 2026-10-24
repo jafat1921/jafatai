@@ -260,6 +260,15 @@ def _validate(model_cls: type[T], text: str) -> T:
     return model_cls.model_validate_json(extract_json(text))
 
 
+def with_house_rules(messages: list[dict]) -> list[dict]:
+    # every writer follows them, so a film, ad or poem never asks the picture models for what they'd refuse
+    from app.content_policy import HOUSE_RULES
+
+    if messages and messages[0].get("role") == "system":
+        return [{**messages[0], "content": messages[0]["content"] + "\n\n" + HOUSE_RULES}, *messages[1:]]
+    return [{"role": "system", "content": HOUSE_RULES}, *messages]
+
+
 async def chat(
     role: Role,
     messages: list[dict],
@@ -272,11 +281,14 @@ async def chat(
     retry_empty: bool = True,
     model: str | None = None,
     keep_alive: str | None = None,
+    house_rules: bool = True,
 ) -> ChatResult:
     """One chat call for a role. With `schema`, `result.data` is a validated instance or LLMError is raised.
     `model` overrides the role's model for this one call (Ad Studio picks its own copywriter). `keep_alive`
     is Ollama's (native API only): how long the model stays loaded afterwards."""
     s = get_settings()
+    if house_rules and role != "vision":
+        messages = with_house_rules(messages)
     chosen = model is not None
     model = model or model_for(role)
     if think is None:

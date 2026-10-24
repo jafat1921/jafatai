@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.models import ACTING_USER, VIA_API, ApiToken, Job, Membership, User, utcnow
 from app.quota import QUOTA_CHANNEL, QUOTA_USER
+from app import content_policy  # noqa: F401  (registers the check on new pictures and videos)
 
 COOKIE_NAME = "mixai_session"
 SESSION_MAX_AGE = 14 * 24 * 3600

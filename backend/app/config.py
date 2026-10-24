@@ -123,6 +123,9 @@ class Settings(BaseSettings):
     audio_allow_noncommercial: bool = True
     # aerab for Arabic-script languages (contract v23): the master switch keeps its old name so existing
     # .env files carry on; aerab_languages says which languages it covers
+    # the vision model looks at every finished picture (and a frame of each video) for anything nude or sexual;
+    # off only while the vision model is away (app.content_policy)
+    content_check_pictures: bool = True
     urdu_aerab: bool = True
     aerab_languages: str = "ur,ar,fa,ps,sd,pnb"
     # whether ACE-Step sees the aerab on Urdu lyrics; the lyrics keep them either way. Off is the A/B for

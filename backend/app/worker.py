@@ -364,6 +364,13 @@ def handle_generate(ctx: JobContext) -> dict:
     if get_settings().urdu_aerab and (gen.kind in VIDEO_KINDS or gen.kind in ("song", "speech")):
         _add_aerab(ctx, gen)
 
+    # the prompt is final here; what Jafat won't picture is refused before a GPU is touched (app.content_policy)
+    from app import content_policy
+
+    # starts from the person's own negative, so the safety words add to it rather than replace it
+    safety = {k: v for k, v in (gen.params or {}).items() if k in ("negative", "negative_prompt") and v}
+    content_policy.check_before(ctx, gen, safety)
+
     driver = ctx.driver_factory()
     job.gpu = job.gpu or getattr(driver, "name", None)
     gen.status = "generating"
@@ -384,6 +391,7 @@ def handle_generate(ctx: JobContext) -> dict:
         "target_type": gen.target_type,
         "target_id": gen.target_id,
         "project_id": gen.project_id,
+        **safety,
     }
     result = getattr(driver, method)(gen.prompt, params, gen.seed, abs_path, ctx.progress)
     if (gen.params or {}).get("ideogram_caption"):
@@ -417,6 +425,7 @@ def handle_generate(ctx: JobContext) -> dict:
         finish_result(db, gen, abs_path,
                       lambda seed: getattr(driver, method)(gen.prompt, params, seed, abs_path, ctx.progress),
                       tick=lambda: ctx.progress(0.97, "Checking the result"))
+    content_policy.check_after(ctx, gen, abs_path, result.media_type)
     gen.file_path = rel_path
     gen.media_type = result.media_type
     gen.status = "ready"

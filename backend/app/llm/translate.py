@@ -100,7 +100,8 @@ def keep_alive(model: str) -> str | None:
 def _ask(model: str, text: str, source: str, target: str, tick) -> str:
     res = chat_sync("creative", [{"role": "user", "content": prompt(text, source, target)}], model=model,
                     think=False, temperature=0.0, max_tokens=min(4000, 200 + 4 * len(text)), timeout=240.0,
-                    tick=tick, keep_alive=keep_alive(model))
+                    # TranslateGemma wants its own prompt and nothing else; a translation is never pictured
+                    tick=tick, keep_alive=keep_alive(model), house_rules=False)
     return res.content.strip()
 
 

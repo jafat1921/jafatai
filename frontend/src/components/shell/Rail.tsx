@@ -65,7 +65,7 @@ export function Rail() {
     >
       <Link
         to="/"
-        aria-label="Mix AI Cinema Studio, home"
+        aria-label="Jafat AI Studio, home"
         className="mb-2 flex size-9 items-center justify-center rounded-[6px] bg-studio-gold text-studio-darkroom shadow-card"
       >
         <Clapperboard aria-hidden className="size-4" />

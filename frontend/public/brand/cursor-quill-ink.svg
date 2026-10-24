@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 64 64">
+  <!-- Links and buttons: the quill dipped in ember ink, hotspot at the nib (4 28 at 32 px). A dark outline keeps it visible on any part of the page. -->
+  <g transform="translate(4 60) rotate(45) scale(.18) translate(-56 -396)" stroke="#1a120c" stroke-width="16" stroke-linejoin="round">
+    <path fill="#ff8a00" d="M62 6C40 40 18 110 22 170l12 2-10 14c4 54 20 94 34 114 8-30 28-70 38-110l-14-2 16-16C104 110 88 40 62 6z"/>
+    <path fill="#9a5a18" d="M53 298h10l-1 70H54z"/>
+    <path fill="#1a120c" d="M51.5 366h9l-4.2 30z"/>
+  </g>
+  <circle cx="5" cy="59" r="3.6" fill="#ff6a00" stroke="#1a120c" stroke-width="1.5"/>
+</svg>

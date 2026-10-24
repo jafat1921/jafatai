@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 400">
+  <defs>
+    <linearGradient id="vane" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe15a"/>
+      <stop offset=".45" stop-color="#f2b31c"/>
+      <stop offset="1" stop-color="#c96a08"/>
+    </linearGradient>
+    <linearGradient id="quill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3cf7a"/>
+      <stop offset="1" stop-color="#9a5a18"/>
+    </linearGradient>
+  </defs>
+  <!-- the vane, with a few notches where the barbs have parted -->
+  <path fill="url(#vane)" d="M62 6C40 40 18 110 22 170l12 2-10 14c4 54 20 94 34 114 8-30 28-70 38-110l-14-2 16-16C104 110 88 40 62 6z"/>
+  <!-- fine barbs -->
+  <g fill="none" stroke="#9a5410" stroke-width=".8" stroke-opacity=".45" stroke-linecap="round">
+    <path d="M62 60 40 80M62 90 32 114M61 130 28 150M60 200 34 226M59 240 44 262"/>
+    <path d="M62 60 82 76M62 100 90 118M61 140 94 152M60 210 84 222M59 250 72 262"/>
+  </g>
+  <!-- the shaft catches the light, then runs on into the hollow quill and the nib -->
+  <path fill="none" stroke="#fff2c8" stroke-width="2.6" stroke-linecap="round" d="M62 16C64 120 61 220 58 300"/>
+  <path fill="none" stroke="url(#quill)" stroke-width="5" stroke-linecap="round" d="M58 298 56 370"/>
+  <path fill="#1a120c" d="M51.5 366h9l-4.2 30z"/>
+</svg>

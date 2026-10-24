@@ -324,4 +324,4 @@ const TITLES: [RegExp, string][] = [
   [/^\/admin$/, 'Admin'],
 ]
 
-export const pageTitle = (pathname: string) => TITLES.find(([re]) => re.test(pathname.replace(/(.)\/+$/, '$1')))?.[1] ?? 'Mix AI Cinema Studio'
+export const pageTitle = (pathname: string) => TITLES.find(([re]) => re.test(pathname.replace(/(.)\/+$/, '$1')))?.[1] ?? 'Jafat AI Studio'

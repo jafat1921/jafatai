@@ -86,7 +86,7 @@ export function TopBar() {
           <Link
             to="/"
             className="flex size-8 shrink-0 items-center justify-center rounded-[6px] bg-studio-gold text-studio-darkroom"
-            aria-label="Mix AI Cinema Studio, home"
+            aria-label="Jafat AI Studio, home"
           >
             <Clapperboard aria-hidden className="size-4" />
           </Link>

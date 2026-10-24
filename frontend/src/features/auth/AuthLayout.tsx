@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, CheckCircle2, Clapperboard } from 'lucide-react'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Ornament } from '@/components/studio/ornament'
 import { cn } from '@/lib/utils'
 
@@ -12,11 +12,16 @@ export function AuthLayout({ subtitle, children, footer }: { subtitle: string; c
     <main className="flex min-h-full items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm animate-fade-in">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <div className="flex size-11 items-center justify-center rounded-[8px] bg-studio-gold text-studio-darkroom shadow-card">
-            <Clapperboard aria-hidden className="size-5" />
-          </div>
+          {/* the logo's cream ground melts into the parchment under multiply */}
+          <img
+            src="/brand/jafat-logo-horizontal-light.png"
+            alt=""
+            width={2000}
+            height={600}
+            className="h-auto w-56 mix-blend-multiply"
+          />
           <div>
-            <h1 className="font-display text-[30px] font-bold leading-9">Mix AI Cinema Studio</h1>
+            <h1 className="font-display text-[30px] font-bold leading-9">Jafat AI Studio</h1>
             <Ornament className="my-2 justify-center" />
             <p className="text-body text-studio-muted">{subtitle}</p>
           </div>

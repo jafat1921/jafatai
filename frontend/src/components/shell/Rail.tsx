@@ -57,7 +57,7 @@ export function Rail() {
       aria-label="Main"
       data-f6-region
       tabIndex={-1}
-      className="relative z-40 flex w-[72px] shrink-0 flex-col items-center gap-1 band border-r border-studio-border py-2 focus-visible:outline-none"
+      className="relative z-40 flex w-[72px] shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden band border-r border-studio-border py-2 [scrollbar-color:rgb(255_184_0/0.35)_transparent] [scrollbar-width:thin] focus-visible:outline-none"
       onKeyDown={(e) => {
         if (e.key === 'Escape' && menu.open) closeMenu(true)
       }}

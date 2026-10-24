@@ -39,7 +39,7 @@ export function AppShell() {
   // The Tabs root spans the top bar (tab list) and the workspace (tab panels) so
   // aria-controls/labelledby wire up; the URL is the source of truth.
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full overflow-hidden">
       {!mobile && <Rail />}
       <Tabs
         value={isStage(stage) ? stage : ''}

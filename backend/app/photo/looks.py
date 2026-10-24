@@ -205,7 +205,7 @@ def bake(look: Look, size: int = 33) -> np.ndarray:
 
 
 def cube_text(table: np.ndarray, title: str, params: dict) -> str:
-    notes = ["Made by Mix AI Cinema Studio (develop pipeline baked on an identity lattice)",
+    notes = ["Made by Jafat AI Studio (develop pipeline baked on an identity lattice)",
              "Input and output: sRGB / Rec.709, full range 0..1"]
     skipped = dv.spatial_used(params)
     if skipped:

@@ -106,11 +106,11 @@ def openapi_json(request: Request, _=Depends(require_docs_access)):
 
 @docs_router.get("/api/docs")
 def swagger(_=Depends(require_docs_access)):
-    return get_swagger_ui_html(openapi_url="/api/openapi.json", title="Mix AI Cinema Studio API",
+    return get_swagger_ui_html(openapi_url="/api/openapi.json", title="Jafat AI Studio API",
                                swagger_ui_parameters={"persistAuthorization": True, "docExpansion": "none",
                                                       "tryItOutEnabled": False, "displayRequestDuration": True})
 
 
 @docs_router.get("/api/redoc")
 def redoc(_=Depends(require_docs_access)):
-    return get_redoc_html(openapi_url="/api/openapi.json", title="Mix AI Cinema Studio API")
+    return get_redoc_html(openapi_url="/api/openapi.json", title="Jafat AI Studio API")

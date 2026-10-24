@@ -114,7 +114,7 @@ def write_pdf(pages: list[Page], title: str = "") -> bytes:
     pdf.put(catalog, f"<< /Type /Catalog /Pages {pages_n} 0 R >>".encode())
     # the title as UTF-16, so a Swedish or Urdu name survives
     name = title.encode("utf-16-be").hex().upper()
-    info = pdf.add(f"<< /Title <FEFF{name}> /Producer (Mix AI Print Studio) >>".encode())
+    info = pdf.add(f"<< /Title <FEFF{name}> /Producer (Jafat AI Studio) >>".encode())
     return pdf.bytes(catalog, info)
 
 

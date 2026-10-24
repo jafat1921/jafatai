@@ -12,7 +12,7 @@ from app.config import get_settings
 
 log = logging.getLogger("mixai.mail")
 
-STUDIO = "Mix AI Cinema Studio"
+STUDIO = "Jafat AI Studio"
 # Antique Atelier paper (frontend/src/index.css); email clients ignore most CSS, so it's all inline
 PAPER, CARD, BORDER, INK, MUTED, ACCENT, ON_ACCENT = ("#e4d2ab", "#f4ead5", "#b8862f", "#2a1c0f", "#5b4630",
                                                       "#7a4e1a", "#f4ead5")

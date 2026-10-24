@@ -53,14 +53,14 @@ WAIT_MAX_S = 60
 INLINE_MAX_BYTES = 750_000  # bigger pictures go inline as their 512 px preview
 STATE_KEY = "mixai.mcp"  # the ASGI scope slot the endpoint leaves the token's (scopes, role) in
 
-INSTRUCTIONS = """Mix AI Cinema Studio: make pictures, video, music, speech and characters on the studio's own GPUs.
+INSTRUCTIONS = """Jafat AI Studio: make pictures, video, music, speech and characters.
 
 Anything slow returns job ids straight away. Call wait_for_job (up to 60 s a call, repeat as needed) or get_job,
 and when a job is done it carries a download_url. get_media gives the same for any Library item. Download links
 last ten minutes; ask again for a fresh one. Ids from one tool (media_id, generation_id, character_id) can be
 passed to the others."""
 
-server = MCPServer("mixai", title="Mix AI Cinema Studio", instructions=INSTRUCTIONS, version="1.0",
+server = MCPServer("mixai", title="Jafat AI Studio", instructions=INSTRUCTIONS, version="1.0",
                    log_level="WARNING")
 
 # tool name -> the token scope it needs; tools/list leaves out what the caller's token can't use

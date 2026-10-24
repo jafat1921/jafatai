@@ -18,6 +18,29 @@ import { router } from './router'
 
 applyQuill(readQuillPref())
 
+// a tab opened before a deploy asks for build files that are gone; fetch the new build once instead of
+// showing "error loading dynamically imported module". The flag stops a reload loop if it's really broken
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    if (sessionStorage.getItem('jafat-reloaded')) return
+    sessionStorage.setItem('jafat-reloaded', '1')
+  } catch {
+    return
+  }
+  event.preventDefault()
+  window.location.reload()
+})
+window.addEventListener('load', () => {
+  // the new build came up; a later deploy may reload again
+  setTimeout(() => {
+    try {
+      sessionStorage.removeItem('jafat-reloaded')
+    } catch {
+      /* storage blocked: nothing to clear */
+    }
+  }, 10_000)
+})
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

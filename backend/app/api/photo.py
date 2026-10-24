@@ -156,7 +156,7 @@ def cube(body: CubeIn, db: Session = Depends(get_db), cur: CurrentUser = Depends
     lut = svc.resolve_lut(db, cur.workspace_id, p)
     p["lut"] = None
     table = lt.bake(p, body.size, lut=lut)
-    title = body.title.strip() or "Mix AI look"
+    title = body.title.strip() or "Jafat look"
     return Response(lk.cube_text(table, title, p), media_type="text/plain; charset=utf-8", headers={
         "Content-Disposition": f'attachment; filename="{_file_name(title)}.cube"', "Cache-Control": "no-store"})
 

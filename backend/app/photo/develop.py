@@ -1314,7 +1314,7 @@ def _exif_bytes(raw: bytes | None) -> bytes | None:
         ex = Image.Exif()
         ex.load(raw)
         ex[0x0112] = 1  # pixels are already upright
-        ex[0x0131] = "Mix AI Cinema Studio"
+        ex[0x0131] = "Jafat AI Studio"
         return ex.tobytes()
     except Exception:
         return None

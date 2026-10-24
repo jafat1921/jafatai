@@ -49,7 +49,7 @@ async def lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     s = get_settings()
     # the docs live under /api (the proxy only passes /api through) and are gated, so FastAPI's own are off
-    app = FastAPI(title="Mix AI Cinema Studio", version="0.1.0", lifespan=lifespan,
+    app = FastAPI(title="Jafat AI Studio", version="0.1.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.openapi = lambda: build_schema(app)
     # added before CORS so CORS wraps it: a refused write still carries the CORS headers
@@ -82,9 +82,13 @@ def create_app() -> FastAPI:
                 raise HTTPException(404, "Not found")
             candidate = (dist_root / full_path).resolve()
             if full_path and candidate.is_relative_to(dist_root) and candidate.is_file():
-                return FileResponse(candidate)
-            # client-side routes all land on index.html
-            return FileResponse(index)
+                # hashed build files never change under the same name; everything else is checked each time
+                hashed = full_path.startswith("assets/")
+                return FileResponse(candidate, headers={
+                    "Cache-Control": "public, max-age=31536000, immutable" if hashed else "no-cache"})
+            # client-side routes all land on index.html. Never served stale: an old copy points at build files
+            # the next deploy removed ("error loading dynamically imported module")
+            return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
 

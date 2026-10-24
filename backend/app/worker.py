@@ -547,6 +547,11 @@ HANDLERS[model3d_logo.JOB] = model3d_logo.handle
 CPU_JOB_LEDGER[model3d_logo.JOB] = "model3d"
 
 
+def _db_busy(e: BaseException) -> bool:
+    # the lock also surfaces second-hand, as "transaction has been rolled back due to a previous exception"
+    return "database is locked" in str(e)
+
+
 def _close_generation(db: Session, job: Job, status: str = "failed") -> None:
     if job.generation_id:
         gen = db.get(Generation, job.generation_id)
@@ -611,6 +616,16 @@ def _run(db: Session, job: Job, ctx: JobContext) -> None:
     except Exception as e:
         db.rollback()
         db.refresh(job)
+        if _db_busy(e) and job.attempts < MAX_ATTEMPTS:
+            # SQLite was locked past busy_timeout by another writer; the work itself didn't fail. A video podcast
+            # four hours into its render was marked failed this way with all its takes made (24 Oct); resumable
+            # jobs pick up where they stopped, the rest just run again
+            job.status = "queued"
+            job.message = "Re-queued: the database was busy"
+            _close_generation(db, job, status="queued")
+            log.warning("job %s re-queued after a database lock: %s", job.id, e)
+            db.commit()
+            return
         job.status = "failed"
         job.error = str(e) or type(e).__name__
         job.message = "Failed"

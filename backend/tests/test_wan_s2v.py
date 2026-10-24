@@ -116,3 +116,10 @@ def test_ltx_lip_sync_runs_modality_guidance_on_the_first_pass(tmp_path, scale):
 def test_the_ltx_lip_sync_templates_check_against_the_servers_nodes(name):
     info = json.loads(FIXTURE.read_text(encoding="utf-8"))
     assert check_template(name, info)["ok"]
+
+
+def test_a_long_takes_first_piece_stays_on_ltx_under_a_wan_default(wan, tmp_path):
+    # the pieces are 24 fps and continue on LTX's extend graph; a Wan first piece slid the rest off the voice
+    first = {"kind": "take_chunk", "chunk_idx": 0, "first_frame_id": "kf1", "speech_audio": str(tmp_path / "t.wav"),
+             "audio_start_s": 0.0, "num_frames": 225, "fps": 24, "aspect_ratio": "16:9"}
+    assert plan_generation("take_chunk", "x", first, 1, Lookup(tmp_path)).template == "ltx23_ia2v"

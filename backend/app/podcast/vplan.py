@@ -29,6 +29,23 @@ WIDE = "wide"
 COVER = "cover"
 
 
+def words_between(lines: list[dict], a: float, b: float) -> str:
+    """The words of these timed lines ({text, start, end}) spoken between a and b. A line running over an
+    edge gives the share of its words that falls inside, split by time (the TTS pace is even enough for a
+    prompt)."""
+    out = []
+    for x in lines:
+        s, e = float(x.get("start", 0.0)), float(x.get("end", 0.0))
+        if e <= a + 1e-6 or s >= b - 1e-6 or e <= s:
+            continue
+        words = (x.get("text") or "").split()
+        lo = round(len(words) * max(0.0, (a - s) / (e - s)))
+        hi = round(len(words) * min(1.0, (b - s) / (e - s)))
+        if hi > lo:
+            out.append(" ".join(words[lo:hi]))
+    return " ".join(out).strip()
+
+
 def snap(t: float) -> float:
     return round(round(float(t) * FPS) / FPS, 4)
 

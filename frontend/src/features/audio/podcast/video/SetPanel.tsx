@@ -96,7 +96,7 @@ export function SetPanel({ vp }: { vp: VideoPodcast }) {
           disabled={locked}
           regenerating={regen.isPending}
           approving={approve.isPending}
-          onRegenerate={() => regen.mutate({ what: 'set' }, { onSuccess: () => announce('Making the set again.') })}
+          onRegenerate={(note) => regen.mutate({ what: 'set', ...(note ? { note } : {}) }, { onSuccess: () => announce('Making the set again.') })}
           onApprove={(id) => approve.mutate(id, { onSuccess: () => announce('Set approved.') })}
         />
       </section>

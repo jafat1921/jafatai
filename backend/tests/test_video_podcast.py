@@ -1,6 +1,7 @@
 """AI video podcast (contract v24, continuous cameras): segments, host track audio and the cut-list rules,
 the ltx23_ia2v / ltx23_ia2v_extend graphs, consent, the hidden project, and the whole pipeline on the mock
 driver (both review stops, the long-take tracks piece by piece, resume, the cut over the episode mix)."""
+import re
 import json
 import shutil
 from pathlib import Path
@@ -500,6 +501,9 @@ def test_pipeline_renders_continuous_cameras_and_cuts_them_over_the_mix(client, 
                     hit = next(c for c in pieces if c["generation_id"] == f"{g.id}_c{cur['idx']}")
                     assert hit["audio_start_s"] == pytest.approx(cur["start_frame"] / 24, abs=1e-3)
                     assert cur["start_frame"] == prev["start_frame"] + prev["frames"] - 9
+                # each piece carries the words its host says in it, or listens with the mouth closed
+                said = [re.search(r'says: "([^"]*)"', c["prompt"]) for c in chunks]
+                assert any(said) and all(m or "mouth closed" in c["prompt"] for m, c in zip(said, chunks))
         out = vp["outputs"]["draft"]
         mix_path = get_settings().data_dir / db.get(Generation, ep["outputs"]["mix"]["generation_id"]).file_path
         video = get_settings().data_dir / db.get(Generation, out["generation_id"]).file_path

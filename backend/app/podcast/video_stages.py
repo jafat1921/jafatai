@@ -430,6 +430,13 @@ class Run:
             db.flush()
             tries.append(g.id)
             waits.append(g.job_id)
+            # commit per track: the next track's audio mix (ffmpeg) would otherwise run inside this write and
+            # hold SQLite's lock past every other writer's busy_timeout. The run record goes in first so a
+            # crash can't enqueue the track twice
+            rec["run"] = run
+            self.put(rec)
+            self.save()
+            db.commit()
         rec["run"] = run
         self.put(rec)
         if waits:

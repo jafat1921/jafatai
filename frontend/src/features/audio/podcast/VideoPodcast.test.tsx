@@ -306,6 +306,16 @@ describe('AI video podcast', { timeout: 20_000 }, () => {
     await waitFor(() => expect(sent(calls, 'PATCH', '/podcast/ai-video/v1')).toEqual([{ hosts: { h2: { source: 'existing', character_id: 'x1' } } }]))
     await user.click(screen.getByRole('button', { name: 'Regenerate portrait of Ali' }))
     await waitFor(() => expect(sent(calls, 'POST', '/podcast/ai-video/v1/regenerate')).toEqual([{ what: 'portrait', key: 'h1' }]))
+    // or with a note on what to change
+    await user.click(screen.getByRole('button', { name: 'Regenerate portrait of Ali with changes' }))
+    const fix = screen.getByRole('button', { name: 'Regenerate with this change' })
+    expect(fix).toBeDisabled()
+    await user.type(screen.getByLabelText(/What should change/), 'only one person, nobody behind him')
+    await user.click(fix)
+    await waitFor(() =>
+      expect(sent(calls, 'POST', '/podcast/ai-video/v1/regenerate')).toContainEqual({ what: 'portrait', key: 'h1', note: 'only one person, nobody behind him' }),
+    )
+    expect(screen.queryByLabelText(/What should change/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Approve portrait of Ali' }))
     await waitFor(() => expect(sent(calls, 'POST', '/generations/gp1/approve')).toHaveLength(1))
     // Sara has no portrait yet: nothing to approve or regenerate, just a pointer to the stage button

@@ -381,9 +381,12 @@ def angle_prompt(db: Session, vp: VideoPodcast, ep: PodcastEpisode, host_id: str
         lead = f"{who} ({look})" if look else who
         frame = {"close": "Close-up, head and shoulders, of", "three_quarter": "Three-quarter close-up of",
                  "listen": "Close-up of"}[angle]
-        act = ("listening to the co-host, attentive, slight nod, mouth closed" if angle == "listen" else
-               "speaking into a podcast microphone, mid-sentence, natural expression, looking towards the co-host")
-        return f"{frame} {lead} seated in {place}, {act}. Shallow depth of field, the set softly blurred behind."
+        act = ("listening, attentive, slight nod, mouth closed, eyes just off camera" if angle == "listen" else
+               "speaking into a podcast microphone, mid-sentence, natural expression, eyes just off camera")
+        # "looking towards the co-host" drew a stranger's head and shoulder into the foreground, and the
+        # lip-sync model then moved his mouth instead of the host's (24 Oct)
+        return (f"{frame} {lead} seated alone in {place}, {act}. A single person in the frame: nobody else, no "
+                "other heads or shoulders in the foreground. Shallow depth of field, the set softly blurred behind.")
     who = " and ".join(names.values()) or "the hosts"
     if angle == "wide":
         return (f"Wide shot of {place} with {who} seated at their microphones in conversation, everyone in frame, "
@@ -780,6 +783,24 @@ def take_prompt(db: Session, vp: VideoPodcast, ep: PodcastEpisode, track: dict) 
     return f"{together} in conversation at their microphones, natural gestures. Slow, steady camera. {still}"
 
 
+def piece_prompt(db: Session, vp: VideoPodcast, ep: PodcastEpisode, track: dict, timeline: list[dict],
+                 chunk: dict) -> str:
+    """A host track's piece, with the words that host says in it. One prompt for the whole track ("natural
+    gestures… when silent, mouth closed", no words) often left the mouth shut while the voice ran (24 Oct)."""
+    names = host_names(db, vp, ep)
+    who = names.get(track["host_id"] or "", "The host")
+    place = SET_PRESETS.get(settings_of(vp)["set_preset"], SET_PRESETS["modern_studio"])[0].lower()
+    still = "Static camera, realistic podcast studio, natural light."
+    a, b = track["start"] + float(chunk.get("t_start") or 0.0), track["start"] + float(chunk.get("t_end") or 0.0)
+    said = vplan.words_between(track_lines(track, timeline), a, b).replace('"', "'")
+    if not said:
+        return (f"{who} listens to the other host at the {place}, attentive, small nods and reactions, mouth "
+                f"closed. {still}")
+    return (f'{who} talks with the other host at the {place} and says: "{said}" The mouth moves with every '
+            f"word, natural small head movements, calm hand gestures; between sentences {who} listens with the "
+            f"mouth closed. {still}")
+
+
 def first_unfinished(g: Generation) -> int | None:
     """The piece a failed or cancelled track picks up from, when some of its pieces are already on disk."""
     chunks = (g.params or {}).get("chunks") or []
@@ -807,7 +828,8 @@ def enqueue_track(db: Session, vp: VideoPodcast, ep: PodcastEpisode, track: dict
         audio = track_audio(db, vp, track, inp.timeline, inp.takes)
         chunks = pieces_for(track)
         for c in chunks:
-            c["prompt"] = prompt  # given, so the long-take runner doesn't ask the LLM for beats
+            # given, so the long-take runner doesn't ask the LLM for beats
+            c["prompt"] = piece_prompt(db, vp, ep, track, inp.timeline, c)
         params = {**common, "num_frames": frames_for(dur, 24.0), "longtake": True, "continuity": "extend",
                   "context_frames": longtake.context_frames("extend"), "chunks": chunks,
                   "assembly": {"status": "pending"}, "lipsync": True, "speech_audio": str(audio),

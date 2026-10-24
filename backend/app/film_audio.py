@@ -206,21 +206,8 @@ def lipsync_engine(project) -> str:
 
 
 def words_in(bts: list[dict], who: str, a: float, b: float) -> str:
-    """What `who` says between a and b. A line running over the edges gives the share of its words that falls
-    inside, split by time (the TTS pace is even enough for a prompt)."""
-    out = []
-    for x in bts:
-        if x["kind"] != "line" or x["character_id"] != who:
-            continue
-        s, e = x.get("start", 0.0), x.get("end", 0.0)
-        if e <= a + 1e-6 or s >= b - 1e-6 or e <= s:
-            continue
-        words = x["text"].split()
-        lo = round(len(words) * max(0.0, (a - s) / (e - s)))
-        hi = round(len(words) * min(1.0, (b - s) / (e - s)))
-        if hi > lo:
-            out.append(" ".join(words[lo:hi]))
-    return " ".join(out).strip()
+    """What `who` says between a and b."""
+    return vplan.words_between([x for x in bts if x["kind"] == "line" and x["character_id"] == who], a, b)
 
 
 def beat_at(bts: list[dict], t: float) -> dict | None:

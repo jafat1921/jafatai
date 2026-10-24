@@ -734,7 +734,8 @@ class Run:
         for i, con in enumerate(cons):
             self.tick(i / max(1, len(cons)), f"Laying out concept {con['n']}")
             con = svc.concept(c, con["id"])
-            made += svc.render_concept(self.db, c, con, self.kit)
+            made += svc.render_concept(self.db, c, con, self.kit,
+                                       after_each=lambda: self.tick(i / max(1, len(cons))))
             for a in svc.ads_of(c, con["id"]):
                 if a.get("status") == "ready" and a.get("qa_gen") != a.get("generation_id"):
                     self.tick(i / max(1, len(cons)), f"Checking the ads of concept {con['n']}")

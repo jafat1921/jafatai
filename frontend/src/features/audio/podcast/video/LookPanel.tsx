@@ -49,7 +49,7 @@ function AngleCard({ vp, angle, hostName }: { vp: VideoPodcast; angle: VPAngle; 
         disabled={jobRunning(vp)}
         regenerating={regen.isPending}
         approving={approve.isPending}
-        onRegenerate={() => regen.mutate({ what: 'angle', key: angle.key }, { onSuccess: () => announce(`Making ${name} again.`) })}
+        onRegenerate={(note) => regen.mutate({ what: 'angle', key: angle.key, ...(note ? { note } : {}) }, { onSuccess: () => announce(`Making ${name} again.`) })}
         onApprove={(id) => approve.mutate(id, { onSuccess: () => announce(`${name} approved.`) })}
       />
       {(regen.error || approve.error) && (

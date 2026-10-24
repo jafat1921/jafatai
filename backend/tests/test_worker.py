@@ -135,3 +135,27 @@ def test_comfy_driver_builds_without_network():
 
     # constructing must not touch the GPU box (worker calls this at startup)
     assert get_driver("comfy").name == "comfy"
+
+
+def test_a_database_lock_requeues_the_job_instead_of_failing_it(client, character, db, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from app import worker
+
+    def locked(_ctx):
+        raise OperationalError("UPDATE job SET result=?", {}, Exception("database is locked"))
+
+    monkeypatch.setitem(worker.HANDLERS, "locky", locked)
+    job = Job(workspace_id=db.get(Job, _queue(client, character)[0]).workspace_id, type="locky")
+    db.add(job)
+    db.commit()
+    db.query(Job).filter(Job.type != "locky").delete()
+    db.commit()
+    for _ in range(MAX_ATTEMPTS - 1):
+        assert process_one()
+        db.refresh(job)
+        assert job.status == "queued" and "busy" in job.message
+    # still locked on its last attempt: then it fails as before
+    assert process_one()
+    db.refresh(job)
+    assert job.status == "failed" and "database is locked" in job.error

@@ -364,9 +364,11 @@ def _plan(kind: str, prompt: str, params: dict, seed: int, lookup) -> Plan:
 
     if kind == "take_chunk" and params.get("speech_audio"):
         # a piece of a continuous camera track: the first starts from the angle keyframe, the rest continue
-        if params.get("context_video") and not (_lipsync_engine(params) == "wan_s2v" and params.get("first_frame_id")):
+        if params.get("context_video"):
             return lipsync_extend_plan(prompt, params, seed, lookup, negative, loras)
-        return lipsync_plan(prompt, params, seed, lookup, negative, loras)
+        # always LTX: the pieces are planned in 24 fps frames and continue from each other on LTX's extend
+        # graph. A Wan first piece (16 fps, 150 of 225 frames) slid every later piece off its voice (24 Oct)
+        return lipsync_plan(prompt, {**params, "lipsync_engine": "ltx"}, seed, lookup, negative, loras)
 
     if kind == "take_chunk":
         return chunk_plan(prompt, params, seed, lookup, negative, loras)

@@ -483,8 +483,10 @@ def new_ad(con: dict, fmt: str) -> dict:
             "overrides": {}, "status": "pending", "error": None, "dirty": True, "photo_id": None, "report": {}}
 
 
-def render_concept(db: Session, c: AdCampaign, con: dict, kit: BrandKit | None, *, only_dirty: bool = True) -> int:
-    """Every format of one concept that needs it, on the CPU. Returns how many were made."""
+def render_concept(db: Session, c: AdCampaign, con: dict, kit: BrandKit | None, *, only_dirty: bool = True,
+                   after_each=None) -> int:
+    """Every format of one concept that needs it, on the CPU. Returns how many were made. A job passes
+    after_each to commit between formats, so the next layout doesn't render inside this one's write."""
     made = 0
     have = {a["format"]: a for a in ads_of(c, con["id"])}
     for fmt in brief_of(c)["formats"]:
@@ -498,6 +500,8 @@ def render_concept(db: Session, c: AdCampaign, con: dict, kit: BrandKit | None, 
             continue
         write_ad(db, c, con, rec, kit)
         made += 1
+        if after_each:
+            after_each()
     return made
 
 

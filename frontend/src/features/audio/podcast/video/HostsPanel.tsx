@@ -89,7 +89,7 @@ function HostCard({ vp, host }: { vp: VideoPodcast; host: VPHost }) {
             disabled={locked}
             regenerating={regen.isPending}
             approving={approve.isPending}
-            onRegenerate={() => regen.mutate({ what: 'portrait', key: host.host_id }, { onSuccess: () => announce(`Making a new portrait of ${host.name}.`) })}
+            onRegenerate={(note) => regen.mutate({ what: 'portrait', key: host.host_id, ...(note ? { note } : {}) }, { onSuccess: () => announce(`Making a new portrait of ${host.name}.`) })}
             onApprove={(id) => approve.mutate(id, { onSuccess: () => announce(`Portrait of ${host.name} approved.`) })}
           />
           {views.some(([, , g]) => picture(g)) && (

@@ -13,7 +13,8 @@
 .jafat.paused *, .jafat.paused *::before, .jafat.paused *::after { animation-play-state: paused !important; }
 
 /* ---------- a page settles in like a fresh sheet ---------- */
-@keyframes jm-page { from { opacity: 0; transform: translateY(6px); } }
+/* every start frame stays readable: a browser that never runs the animation still shows the page */
+@keyframes jm-page { from { opacity: .88; transform: translateY(6px); } }
 .jafat .site-main { animation: jm-page .45s ease-out backwards; }
 
 /* ---------- header: shadow on scroll, ink underline under the links ---------- */
@@ -39,7 +40,7 @@
 .jafat .btn-primary:hover::after, .jafat .btn-primary:focus-visible::after { transform: translateX(120%); }
 
 /* ---------- hero: ink, gold leaf, a floating quill and embers ---------- */
-@keyframes jm-ink { from { clip-path: inset(-12% 100% -24% 0); filter: blur(5px); opacity: .3; } to { clip-path: inset(-12% -4% -24% 0); filter: blur(0); opacity: 1; } }
+@keyframes jm-ink { from { filter: blur(2.5px); opacity: .62; transform: translateY(4px); } to { filter: blur(0); opacity: 1; transform: none; } }
 .jafat .ink-in { animation: jm-ink 1.5s cubic-bezier(.3, .6, .2, 1) .15s backwards; }
 
 @keyframes jm-leaf { from { background-position: 120% 0; } to { background-position: -120% 0; } }
@@ -88,8 +89,8 @@
 
 /* ---------- sections unfurl as they scroll in ---------- */
 .jafat.motion [data-reveal] { transform-origin: top center; transition: opacity .8s ease, transform .9s cubic-bezier(.2, .7, .2, 1); }
-.jafat.motion [data-reveal]:not(.is-in) { opacity: 0; transform: translateY(18px) scaleY(.96); }
-@keyframes jm-rise { from { opacity: 0; transform: translateY(16px); } }
+.jafat.motion [data-reveal]:not(.is-in) { opacity: .35; transform: translateY(18px) scaleY(.96); }
+@keyframes jm-rise { from { opacity: .55; transform: translateY(16px); } }
 .jafat.motion .is-in :is(.tiles > li, .pricing > li, .flow > li, .group-cards > *) { animation: jm-rise .6s cubic-bezier(.2, .7, .2, 1) backwards; animation-delay: calc(var(--i, 0) * 60ms + .12s); }
 .jafat.motion .is-in .flow > li:nth-child(2), .jafat.motion .is-in .group-cards > :nth-child(2) { --i: 1; }
 .jafat.motion .is-in .flow > li:nth-child(3), .jafat.motion .is-in .group-cards > :nth-child(3) { --i: 2; }

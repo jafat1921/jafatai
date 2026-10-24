@@ -46,7 +46,7 @@ function patient(extra: Partial<Patient> = {}): Patient {
   }
 }
 
-const OPTIONS = [300, 350].map((cc) => ({ label: '', left_cc: cc, right_cc: cc, profile: 'moderate_plus' as const, shape: 'round' as const, placement: 'dual_plane' as const, fill: 'silicone' as const }))
+const OPTIONS = [300, 350].map((cc) => ({ label: '', left_cc: cc, right_cc: cc, profile: 'moderate_plus' as const, shape: 'round' as const, placement: 'dual_plane' as const, fill: 'silicone' as const, procedure: 'augmentation' as const }))
 
 const withResults = (status: ImplantPicture['status'] = 'ready') =>
   patient({
@@ -143,13 +143,24 @@ describe('Implant patient page', () => {
   it('renders the options with the spec and the estimate', async () => {
     const { calls, user } = openPatient(patient(), (method, path) => (method === 'POST' && path === '/implant/patients/p1/sessions' ? withResults('queued') : undefined))
     await user.click(await screen.findByRole('button', { name: '300 / 350 / 400 cc moderate-plus' }))
+    const b = screen.getByRole('group', { name: 'Option B' })
+    await user.selectOptions(within(b).getByLabelText('Procedure'), 'Augmentation with lift (mastopexy)')
     const go = screen.getByRole('button', { name: /Render the options/ })
     expect(go).toHaveTextContent('3 options × 2 photos = 6 pictures')
     await user.click(go)
     await waitFor(() => expect(calls.find((c) => c.path === '/implant/patients/p1/sessions')).toBeDefined())
     const body = calls.find((c) => c.path === '/implant/patients/p1/sessions')!.body as { options: unknown[] }
     expect(body.options).toEqual(
-      [300, 350, 400].map((cc) => ({ label: '', left_cc: cc, right_cc: cc, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone' })),
+      [300, 350, 400].map((cc) => ({
+        label: '',
+        left_cc: cc,
+        right_cc: cc,
+        profile: 'moderate_plus',
+        shape: 'round',
+        placement: 'dual_plane',
+        fill: 'silicone',
+        procedure: cc === 350 ? 'augmentation_lift' : 'augmentation',
+      })),
     )
     expect(await screen.findAllByText('Waiting in queue')).toHaveLength(2)
   })
@@ -222,8 +233,18 @@ describe('Implant patient page', () => {
     expect(screen.getByText('Ptosis grade 2: a lift is likely needed.').closest('li')).toHaveClass('text-studio-warning')
     expect(screen.getByText('Her base widths differ by 1.5 cm.')).toHaveClass('text-studio-muted')
     expect(screen.getByText('Approximate; confirm with the manufacturer’s chart.')).toBeInTheDocument()
+    expect(screen.getByText('Add her bra size in Measurements to see the expected cup.')).toHaveClass('text-studio-muted')
     const sent = calls.filter((c) => c.path === '/implant/patients/p1/check')
     expect(sent).toHaveLength(1)
-    expect(sent[0].body).toEqual({ options: [{ label: '', left_cc: 300, right_cc: 300, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone' }] })
+    expect(sent[0].body).toEqual({ options: [{ label: '', left_cc: 300, right_cc: 300, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone', procedure: 'augmentation' }] })
+  })
+
+  it('names the cup she goes to, per side when they differ', async () => {
+    const side = { width_cm: 11.8, projection_cm: 3.9, cup_change: 1.5 }
+    const check = { sides: { left: { ...side, target_cup: 'a full B cup' }, right: { ...side, target_cup: 'a C cup' } }, checks: [] }
+    openPatient(patient({ measurements: { bra_size: '32A' } }), (method, path) => (method === 'POST' && path === '/implant/patients/p1/check' ? [check] : undefined))
+    expect(await screen.findByText('L From her current 32A to a full B cup')).toBeInTheDocument()
+    expect(screen.getByText('R From her current 32A to a C cup')).toBeInTheDocument()
+    expect(screen.queryByText(/Add her bra size/)).toBeNull()
   })
 })

@@ -25,6 +25,7 @@ Profile = Literal["low", "moderate", "moderate_plus", "high", "extra_high"]
 Shape = Literal["round", "teardrop"]
 Placement = Literal["subglandular", "submuscular", "dual_plane"]
 Fill = Literal["silicone", "saline"]
+Procedure = Literal["augmentation", "augmentation_lift"]
 FILE_HEADERS = {"Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer"}
 
 
@@ -78,6 +79,7 @@ class OptionIn(BaseModel):
     shape: Shape = "round"
     placement: Placement = "dual_plane"
     fill: Fill = "silicone"
+    procedure: Procedure = "augmentation"
 
 
 class SessionIn(BaseModel):

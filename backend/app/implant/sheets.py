@@ -27,7 +27,8 @@ PROFILE_LABEL = {"low": "Low", "moderate": "Moderate", "moderate_plus": "Moderat
 def option_line(opt: dict) -> str:
     cc = f"{opt['left_cc']} cc" if opt["left_cc"] == opt["right_cc"] else f"L {opt['left_cc']} / R {opt['right_cc']} cc"
     return (f"{cc} · {PROFILE_LABEL.get(opt['profile'], opt['profile'])} profile · {opt['shape'].title()} · "
-            f"{opt['placement'].replace('_', ' ')} · {opt.get('fill', 'silicone')}")
+            f"{opt['placement'].replace('_', ' ')} · {opt.get('fill', 'silicone')}"
+            + (" · with lift" if opt.get("procedure") == "augmentation_lift" else ""))
 
 
 def _page():
@@ -166,7 +167,8 @@ def chart(p: ImplantPatient, surgeon: str, photos: dict[str, Generation], opt: d
 
 def _dims(a: dict) -> str:
     def side(s: dict) -> str:
-        return f"≈{s['width_cm']} cm wide, {s['projection_cm']} cm projection, +{s['cup_change']:g} cup"
+        cup = f" (to {s['target_cup']})" if s.get("target_cup") else ""
+        return f"≈{s['width_cm']} cm wide, {s['projection_cm']} cm projection, +{s['cup_change']:g} cup{cup}"
 
     left, right = a["sides"]["left"], a["sides"]["right"]
     text = side(left) if left == right else f"L {side(left)} · R {side(right)}"

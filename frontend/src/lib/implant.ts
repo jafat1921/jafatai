@@ -10,6 +10,7 @@ export type Profile = 'low' | 'moderate' | 'moderate_plus' | 'high' | 'extra_hig
 export type ImplantShape = 'round' | 'teardrop'
 export type Placement = 'subglandular' | 'submuscular' | 'dual_plane'
 export type Fill = 'silicone' | 'saline'
+export type Procedure = 'augmentation' | 'augmentation_lift'
 
 export interface Consent {
   at: string | null
@@ -65,6 +66,7 @@ export interface ImplantOption {
   shape: ImplantShape
   placement: Placement
   fill: Fill
+  procedure: Procedure
 }
 
 export interface ImplantSession {
@@ -78,6 +80,8 @@ export interface SideCheck {
   width_cm: number
   projection_cm: number
   cup_change: number
+  // only when her bra size is entered, e.g. "a full B cup"
+  target_cup?: string | null
 }
 
 export interface OptionCheck {
@@ -154,10 +158,11 @@ export const PROFILE_LABEL: Record<Profile, string> = { low: 'Low', moderate: 'M
 export const SHAPE_LABEL: Record<ImplantShape, string> = { round: 'Round', teardrop: 'Teardrop' }
 export const PLACEMENT_LABEL: Record<Placement, string> = { subglandular: 'Subglandular', submuscular: 'Submuscular', dual_plane: 'Dual plane' }
 export const FILL_LABEL: Record<Fill, string> = { silicone: 'Silicone', saline: 'Saline' }
+export const PROCEDURE_LABEL: Record<Procedure, string> = { augmentation: 'Augmentation', augmentation_lift: 'Augmentation with lift (mastopexy)' }
 
 export const ccOk = (n: number) => Number.isInteger(n) && n >= 100 && n <= 900
 
-export const newOption = (cc = 300): ImplantOption => ({ label: '', left_cc: cc, right_cc: cc, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone' })
+export const newOption = (cc = 300): ImplantOption => ({ label: '', left_cc: cc, right_cc: cc, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone', procedure: 'augmentation' })
 
 export const optionLine = (o: ImplantOption) =>
   `${o.left_cc === o.right_cc ? `${o.left_cc} cc` : `L ${o.left_cc} / R ${o.right_cc} cc`} · ${PROFILE_LABEL[o.profile] ?? o.profile}`

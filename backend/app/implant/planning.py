@@ -72,7 +72,8 @@ def assess(opt: dict, m: dict) -> dict:
         cc = float(opt[f"{side}_cc"])
         width, proj = dimensions(cc, opt["profile"])
         bw = _num(m, f"bw_{side}_cm")
-        out["sides"][side] = {"width_cm": width, "projection_cm": proj, "cup_change": cup_change(cc, bw)}
+        out["sides"][side] = {"width_cm": width, "projection_cm": proj, "cup_change": cup_change(cc, bw),
+                              "target_cup": target_cup(m.get("bra_size"), cc / cc_per_cup(bw))}
         if bw:
             if width > bw + 0.5:
                 warn({"level": "warn", "text": f"{side.title()}: the implant (≈{width} cm) is wider than her breast "
@@ -90,9 +91,13 @@ def assess(opt: dict, m: dict) -> dict:
         warn({"level": "warn", "text": f"Upper-pole pinch {pinch:g} cm is thin for placement over the muscle: the "
                                        "edge may show or ripple. Dual plane is usually advised."})
     ptosis = _num(m, "ptosis_grade")
-    if ptosis is not None and ptosis >= 2:
-        warn({"level": "warn", "text": f"Ptosis grade {ptosis:g}: a lift is likely needed, and this simulation "
-                                       "doesn't show one."})
+    lift = opt.get("procedure") == "augmentation_lift"
+    if ptosis is not None and ptosis >= 2 and not lift:
+        warn({"level": "warn", "text": f"Ptosis grade {ptosis:g}: a lift is likely needed. Choose "
+                                       "\"Augmentation with lift\" to show it."})
+    if lift:
+        warn({"level": "info", "text": "A lift adds scars around the areola (and often below it); the simulation "
+                                       "doesn't show them."})
     bl, br = _num(m, "bw_left_cm"), _num(m, "bw_right_cm")
     if bl and br and abs(bl - br) > 1 and opt["left_cc"] == opt["right_cc"]:
         warn({"level": "info", "text": f"Her base widths differ by {abs(bl - br):.1f} cm; different volumes per "

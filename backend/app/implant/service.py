@@ -24,6 +24,9 @@ PLACEMENTS = ("subglandular", "submuscular", "dual_plane")
 FILLS = ("silicone", "saline")
 EDIT_MODEL = "qwen_image_edit_2511"
 MAX_PHOTO_BYTES = 25 * 1024 * 1024
+# a 12 MP phone photo against the edit's ~1 MP: the new chest would be stretched 3.5x and look soft next to the
+# rest. 1600 px on the long side is plenty for a consultation and keeps the two close
+PHOTO_LONG_SIDE = 1600
 DISCLAIMER = "Computer simulation for discussion only. Actual surgical results vary."
 FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 
@@ -73,6 +76,8 @@ def save_photo(db: Session, p: ImplantPatient, view: str, garment: str, data: by
         if box[2] - box[0] < 64 or box[3] - box[1] < 64:
             raise HTTPException(422, "The crop is too small")
         im = im.crop(box)
+    if max(im.size) > PHOTO_LONG_SIDE:
+        im.thumbnail((PHOTO_LONG_SIDE, PHOTO_LONG_SIDE), Image.LANCZOS)
     g = Generation(workspace_id=p.workspace_id, project_id=None, target_type="implant_photo", target_id=p.id,
                    kind="upload", status="ready", prompt="", media_type="image/png",
                    params={"view": view, "garment": garment, "width": im.width, "height": im.height})
@@ -141,13 +146,19 @@ def instruction(opt: dict, garment: str, measurements: dict | None = None) -> st
             f"{PROFILE_WORDS[opt['profile']]}, {PLACEMENT_WORDS[opt['placement']]}"
             + (", saline-filled so slightly firmer and rounder." if opt.get("fill") == "saline"
                else ", silicone gel so soft and natural."))
+    lift = ""
+    if opt.get("procedure") == "augmentation_lift":
+        lift = ("Also as after a breast lift (mastopexy): the breasts sit higher on the chest and look firmer and "
+                "rounder, the lowest part of each breast rises to the breast crease, and "
+                + ("the nipples sit higher, centred on the front of each breast. " if garment == "topless" else
+                   "the bra cups sit higher and fuller. "))
     body = ("The nipples and areolas keep their size, colour and shape; they sit slightly higher and point "
             "slightly outward. The breast crease may sit slightly lower. Keep the natural gap between the breasts."
             if garment == "topless" else
             "She wears the same bra or top as in the photo: keep its style, colour and fabric exactly, fitted "
             "naturally over the new shape. Do not remove, open or change any clothing.")
     return " ".join([
-        size, body,
+        size, lift + body,
         "Keep everything else identical: same person, same body shape outside the chest, skin tone and texture, "
         "moles, tattoos, arms, hands, pose, camera angle, crop, background and lighting.",
         "Never show more skin than the original photo. Clinical medical photograph, photorealistic and natural, "

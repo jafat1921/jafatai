@@ -10,6 +10,7 @@ import {
   LETTERS,
   newOption,
   PLACEMENT_LABEL,
+  PROCEDURE_LABEL,
   PROFILE_LABEL,
   patientViews,
   SHAPE_LABEL,
@@ -138,8 +139,9 @@ export function Options({ patient }: { patient: Patient }) {
               <Pick id={`${uid}-${i}-shape`} label="Shape" value={o.shape} labels={SHAPE_LABEL} onChange={(shape) => edit(i, { shape })} />
               <Pick id={`${uid}-${i}-placement`} label="Placement" value={o.placement} labels={PLACEMENT_LABEL} onChange={(placement) => edit(i, { placement })} />
               <Pick id={`${uid}-${i}-fill`} label="Fill" value={o.fill} labels={FILL_LABEL} onChange={(fill) => edit(i, { fill })} />
+              <Pick id={`${uid}-${i}-procedure`} label="Procedure" value={o.procedure} labels={PROCEDURE_LABEL} onChange={(procedure) => edit(i, { procedure })} />
             </fieldset>
-            <Fit check={checks.data?.[i]} />
+            <Fit check={checks.data?.[i]} braSize={patient.measurements.bra_size?.trim()} />
           </li>
         ))}
       </ul>
@@ -184,7 +186,10 @@ export function Options({ patient }: { patient: Patient }) {
 const cups = (n: number) => `about +${n} cup${n === 1 ? '' : 's'}`
 const dims = (s: SideCheck) => `≈ ${s.width_cm} cm wide · ${s.projection_cm} cm projection · ${cups(s.cup_change)}`
 
-function Fit({ check }: { check: OptionCheck | undefined }) {
+function Fit({ check, braSize }: { check: OptionCheck | undefined; braSize?: string }) {
+  const cupLine = (cup: string | null | undefined) => (cup ? `From her current ${braSize} to ${cup}` : null)
+  const l = cupLine(check?.sides.left.target_cup)
+  const r = cupLine(check?.sides.right.target_cup)
   // the live region stays mounted so the first answer is read out too
   return (
     <div role="status" aria-live="polite" className="mt-2 flex flex-col gap-1 text-small">
@@ -196,6 +201,16 @@ function Fit({ check }: { check: OptionCheck | undefined }) {
             <>
               <p>L {dims(check.sides.left)}</p>
               <p>R {dims(check.sides.right)}</p>
+            </>
+          )}
+          {!braSize ? (
+            <p className="text-studio-muted">Add her bra size in Measurements to see the expected cup.</p>
+          ) : l === r ? (
+            l && <p>{l}</p>
+          ) : (
+            <>
+              {l && <p>L {l}</p>}
+              {r && <p>R {r}</p>}
             </>
           )}
           {check.checks.length > 0 && (

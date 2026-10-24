@@ -392,3 +392,34 @@ def test_her_bra_size_names_the_step():
     assert "fills a B cup" in words[0] and "fills a full B cup" in words[1] and "fills a C cup" in words[2]
     assert "about" in im.instruction({"left_cc": 300, "right_cc": 300, "profile": "moderate", "shape": "round",
                                       "placement": "dual_plane"}, "garment", {})
+
+
+def test_a_lift_is_drawn_and_planned(surgeon):
+    opt = {"left_cc": 300, "right_cc": 300, "profile": "moderate", "shape": "round", "placement": "dual_plane"}
+    words = im.instruction({**opt, "procedure": "augmentation_lift"}, "garment")
+    assert "breast lift (mastopexy)" in words and "bra cups sit higher" in words
+    assert "mastopexy" not in im.instruction(opt, "garment")
+    sag = {"ptosis_grade": 2, "bra_size": "34A", "bw_left_cm": 12.5, "bw_right_cm": 12.5}
+    plain = planning.assess(opt, sag)
+    assert any("Augmentation with lift" in c["text"] for c in plain["checks"])
+    lifted = planning.assess({**opt, "procedure": "augmentation_lift"}, sag)
+    assert not any(c["level"] == "warn" for c in lifted["checks"]) and any("scars" in c["text"] for c in lifted["checks"])
+    assert plain["sides"]["left"]["target_cup"] == "a full B cup"  # A + 1.5 cups at 200 cc a cup
+    p = _patient(surgeon)
+    _photo(surgeon, p["id"])
+    r = surgeon.post(f"/api/implant/patients/{p['id']}/sessions",
+                     json={"options": [{**OPTS[0], "procedure": "augmentation_lift"}]})
+    assert r.status_code == 202 and r.json()["sessions"][0]["options"][0]["procedure"] == "augmentation_lift"
+
+
+def test_big_phone_photos_are_kept_at_a_consultation_size(surgeon):
+    p = _patient(surgeon)
+    buf = io.BytesIO()
+    Image.new("RGB", (3000, 4000), (200, 160, 140)).save(buf, "JPEG")
+    r = surgeon.post(f"/api/implant/patients/{p['id']}/photos", files={"file": ("p.jpg", buf.getvalue(), "image/jpeg")},
+                     data={"view": "front", "garment": "garment"})
+    assert r.status_code == 201
+    with SessionLocal() as db:
+        g = db.get(Generation, r.json()["id"])
+        with Image.open(get_settings().data_dir / g.file_path) as pic:
+            assert pic.size == (1200, 1600)

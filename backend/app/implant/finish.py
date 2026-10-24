@@ -123,7 +123,11 @@ def composite(photo: Path, result: Path, box: list[int]) -> None:
     """Writes the finished picture over `result`."""
     with Image.open(photo) as p, Image.open(result) as r:
         before, after = p.convert("RGB"), r.convert("RGB")
+    grow = before.width / after.width
     after = align(before, after, box)
+    if grow > 1.15:
+        after = after.filter(ImageFilter.UnsharpMask(radius=1.2 * grow, percent=round(40 + 20 * min(grow, 3)),
+                                                     threshold=2))
     mask = mask_for(before, after, box)
     after = match_colour(before, after, mask)
     Image.composite(after, before, mask).save(result)

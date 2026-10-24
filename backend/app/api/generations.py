@@ -31,7 +31,8 @@ def list_generations(
     db: Session = Depends(get_db),
     cur: CurrentUser = Depends(get_current_user),
 ):
-    q = select(Generation).where(Generation.workspace_id == cur.workspace_id)
+    q = select(Generation).where(Generation.workspace_id == cur.workspace_id,
+                                 Generation.target_type.not_in(("implant_photo", "implant_result")))
     if target_type:
         q = q.where(Generation.target_type == target_type)
     if target_id:

@@ -76,6 +76,8 @@ class User(Base):
     limit_gpu_min_day: Mapped[float | None] = mapped_column(Float, nullable=True)
     limit_gpu_min_month: Mapped[float | None] = mapped_column(Float, nullable=True)
     limit_max_queued: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # M22: Implant Preview is opt-in per account; only an admin switches it on (admins always have it)
+    implant_access: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -988,6 +990,38 @@ class AdminAudit(Base):
     target_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class ImplantPatient(Base):
+    """M22: one surgeon's patient. Photos and results are Generation rows (implant_photo / implant_result) whose
+    files live under data/clinic/, outside every workspace folder, so nothing else in the app can list or serve
+    them."""
+    __tablename__ = "implant_patient"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = _ws()
+    surgeon_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(120))
+    adult_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # {at, attested_by, form_path, topless_ok}; nothing is generated until it's recorded
+    consent: Mapped[dict] = mapped_column(JSON, default=dict)
+    measurements: Mapped[dict] = mapped_column(JSON, default=dict)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    retention_months: Mapped[int] = mapped_column(Integer, default=24)
+    # the approved option and its chart: {session_id, option, chart_path, approved_at, versions: [...]}
+    chart: Mapped[dict] = mapped_column(JSON, default=dict)
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class ImplantSession(Base):
+    """One round of options (up to three) rendered on the patient's photos."""
+    __tablename__ = "implant_session"
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(String(36), ForeignKey("implant_patient.id", ondelete="CASCADE"),
+                                            index=True)
+    options: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 VIA_API_MODELS = (Project, Character, Generation, Job, MediaItem, Folder, Album, BrandKit, Look, VoiceProfile,

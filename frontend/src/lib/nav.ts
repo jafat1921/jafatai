@@ -36,6 +36,7 @@ import {
   Sparkles,
   SquareSplitHorizontal,
   Stamp,
+  Stethoscope,
   SwatchBook,
   UserRound,
   Users,
@@ -81,7 +82,7 @@ export interface MenuSection {
   modelsNote?: string
 }
 
-export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | '3d' | 'audio' | 'upscale' | 'queue' | 'settings' | 'admin' | 'print'
+export type RailId = 'home' | 'assets' | 'brand' | 'photos' | 'image' | 'video' | 'characters' | '3d' | 'audio' | 'upscale' | 'queue' | 'settings' | 'admin' | 'print' | 'implant'
 
 export interface RailItem {
   id: RailId
@@ -202,6 +203,8 @@ export const SETTINGS_ITEM: RailItem = { id: 'settings', label: 'Settings', icon
 export const ADMIN_ITEM: RailItem = { id: 'admin', label: 'Admin', icon: ShieldUser, to: '/admin' }
 // contract v41: Print Studio, admins only too
 export const PRINT_ITEM: RailItem = { id: 'print', label: 'Print Studio', icon: Printer, to: '/admin/print' }
+// M22: admins, plus surgeons an admin has granted it to
+export const IMPLANT_ITEM: RailItem = { id: 'implant', label: 'Implant Preview', icon: Stethoscope, to: '/clinic/implant' }
 
 const TOOL_ROUTE: Partial<Record<ModelType, string>> = { image: '/image/generate', edit: '/image/edit', video: '/video/create', audio: '/audio/music' }
 
@@ -260,6 +263,7 @@ export function activeRail(pathname: string): RailId | null {
   if (p.startsWith('/queue')) return 'queue'
   if (p.startsWith('/settings')) return 'settings'
   if (p.startsWith('/admin/print')) return 'print'
+  if (p.startsWith('/clinic/implant')) return 'implant'
   if (p.startsWith('/admin')) return 'admin'
   return null
 }
@@ -316,6 +320,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/admin\/usage/, 'GPU usage'],
   [/^\/admin\/audit/, 'Audit log'],
   [/^\/admin\/print/, 'Print Studio'],
+  [/^\/clinic\/implant/, 'Implant Preview'],
   [/^\/admin$/, 'Admin'],
 ]
 

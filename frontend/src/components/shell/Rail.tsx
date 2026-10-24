@@ -4,7 +4,7 @@ import { Clapperboard } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useConnections } from '@/hooks/useConnections'
 import { useMe } from '@/hooks/useAuth'
-import { activeRail, ADMIN_ITEM, PRINT_ITEM, RAIL_ITEMS, SETTINGS_ITEM, type MenuId, type RailId, type RailItem } from '@/lib/nav'
+import { activeRail, ADMIN_ITEM, IMPLANT_ITEM, PRINT_ITEM, RAIL_ITEMS, SETTINGS_ITEM, type MenuId, type RailId, type RailItem } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 import { StatusDot } from './ConnectionStatus'
 import { JobsTray } from './JobsTray'
@@ -154,6 +154,18 @@ export function Rail() {
       </ul>
 
       <div className="mt-auto flex flex-col items-center gap-1">
+        {(me?.admin || me?.implant) && (
+          <Link
+            to={IMPLANT_ITEM.to}
+            aria-current={active === 'implant' ? 'page' : undefined}
+            aria-label={IMPLANT_ITEM.label}
+            className={cn(ITEM, active === 'implant' && ACTIVE)}
+            onPointerEnter={() => menu.open && menu.hoverLeave()}
+          >
+            <Indicator on={active === 'implant'} />
+            <Face item={IMPLANT_ITEM} />
+          </Link>
+        )}
         {me?.admin && (
           <Link
             to={PRINT_ITEM.to}

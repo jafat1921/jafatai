@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app import accounts, mailer
 from app.config import get_settings
 from app.db import get_db
+from app.implant.guard import has_access as has_implant_access
 from app.models import User, utcnow
 from app.ratelimit import SlidingWindow
 from app.schemas import EmailIn, LoginIn, PasswordChangeIn, ProfilePatch, ResetIn, SignupIn, UserOut
@@ -58,7 +59,7 @@ def _user_out(cur: CurrentUser) -> UserOut:
     u = cur.user
     return UserOut(id=u.id, email=u.email, display_name=u.display_name, workspace_id=cur.workspace_id, role=cur.role,
                    api_access=can_use_api(cur), api_docs=can_read_docs(cur), admin=is_admin(cur),
-                   verified=is_verified(u))
+                   verified=is_verified(u), implant=has_implant_access(cur))
 
 
 def _set_cookie(response: Response, user: User) -> None:

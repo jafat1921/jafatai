@@ -35,8 +35,9 @@ def job_out(j: Job) -> JobOut:
 
 def get_owned(db: Session, model, obj_id: str, workspace_id: str, label: str):
     obj = db.get(model, obj_id)
-    # same 404 for "missing" and "someone else's" so ids can't be probed
-    if obj is None or obj.workspace_id != workspace_id:
+    # same 404 for "missing" and "someone else's" so ids can't be probed. Implant Preview's photos and results
+    # are reached only through /api/implant, never as an ordinary generation
+    if obj is None or obj.workspace_id != workspace_id or getattr(obj, "target_type", "").startswith("implant_"):
         raise HTTPException(404, f"{label} not found")
     return obj
 

@@ -68,6 +68,8 @@ class UserOut(Out):
     admin: bool = False
     # contract v38: false until the email link is opened; such a user can look around but not queue work
     verified: bool = True
+    # M22: Implant Preview in the rail (admins, and accounts an admin switched it on for)
+    implant: bool = False
 
 
 # accounts (contract v38)
@@ -114,6 +116,7 @@ class AdminUserOut(BaseModel):
     package_name: str = ""
     subscription_ends_at: Utc | None = None
     gpu_min_day_limit: float | None = None
+    implant_access: bool = False
 
 
 class AdminUserPatch(BaseModel):
@@ -121,6 +124,7 @@ class AdminUserPatch(BaseModel):
     is_active: bool | None = None
     is_admin: bool | None = None
     verified: bool | None = None
+    implant_access: bool | None = None
     # contract v39: per-user limits over the package's; sending null clears one
     limit_gpu_min_day: float | None = Field(default=None, ge=0, le=100_000)
     limit_gpu_min_month: float | None = Field(default=None, ge=0, le=10_000_000)

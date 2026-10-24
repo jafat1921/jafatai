@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input, fieldClass } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
 import { GpuMeter } from '@/components/studio/gpu-meter'
 import { qk } from '@/hooks/keys'
 import { api } from '@/lib/api'
@@ -481,6 +482,10 @@ export function UserDrawer({ user, self, onClose, onPatch }: { user: AdminUser |
                 Email a password reset link
               </Button>
             </div>
+            <label className="flex items-center gap-3 text-body">
+              <Switch checked={!!user.implant_access} onCheckedChange={(v) => onPatch({ implant_access: v })} />
+              Implant Preview access
+            </label>
             {self && <p className="text-small text-studio-muted">This is you, so it can’t be switched off or lose admin here.</p>}
             {detail.isError ? (
               <Notice>{detail.error.message}</Notice>

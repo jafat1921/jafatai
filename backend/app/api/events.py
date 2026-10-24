@@ -7,11 +7,12 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.db import SessionLocal
 from app import storyboard as sb
 from app import visibility as vis
+from app.implant.guard import private_ids
 from app.library import items_out
 from app.models import Generation, Job, MediaItem, Project, Shot, utcnow
 from app.reel import reel_events
@@ -39,13 +40,14 @@ def collect_changes(workspace_id: str, since: datetime, want: bool | None = None
     db = SessionLocal()
     try:
         jobs = db.scalars(
-            select(Job).where(Job.workspace_id == workspace_id, Job.updated_at > since, *vis.where(Job, want))
+            select(Job).where(Job.workspace_id == workspace_id, Job.updated_at > since, *vis.where(Job, want),
+                              or_(Job.generation_id.is_(None), Job.generation_id.not_in(private_ids())))
             .order_by(Job.updated_at)
         ).all()
         gens = db.scalars(
             select(Generation)
             .where(Generation.workspace_id == workspace_id, Generation.updated_at > since,
-                   *vis.where(Generation, want))
+                   *vis.where(Generation, want), Generation.id.not_in(private_ids()))
             .order_by(Generation.updated_at)
         ).all()
         out = [("job", j.id, j.updated_at, job_out(j).model_dump(mode="json")) for j in jobs]

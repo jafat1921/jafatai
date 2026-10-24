@@ -104,7 +104,8 @@ def _users_out(db: Session, users: list[User]) -> list[AdminUserOut]:
             gpu_min_month=round(mon.get(u.id, 0.0), 1), jobs=int(jobs.get(u.id, 0)), tokens=int(tokens.get(u.id, 0)),
             package_id=p.id if p and not u.is_admin else None,
             package_name="Unlimited" if u.is_admin else (p.name if p else "Free"),
-            subscription_ends_at=sub.ends_at if sub else None, gpu_min_day_limit=day_limit(u, p)))
+            subscription_ends_at=sub.ends_at if sub else None, gpu_min_day_limit=day_limit(u, p),
+            implant_access=bool(u.implant_access)))
     return out
 
 
@@ -174,6 +175,8 @@ def patch_user(user_id: str, body: AdminUserPatch, db: Session = Depends(get_db)
         user.is_admin = body.is_admin
     if body.verified is not None:
         user.email_verified_at = (user.email_verified_at or utcnow()) if body.verified else None
+    if body.implant_access is not None:
+        user.implant_access = body.implant_access
     if body.is_active is False and user.is_active:
         accounts.deactivate(db, user)
     elif body.is_active is True:

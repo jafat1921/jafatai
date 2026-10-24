@@ -288,7 +288,7 @@ export async function postBlob(path: string, body: unknown): Promise<Blob> {
 }
 
 // raw fetch for the binary and multipart photo routes; same error shape as request()
-async function send(path: string, init: RequestInit): Promise<Response> {
+export async function send(path: string, init: RequestInit): Promise<Response> {
   let res: Response
   try {
     res = await fetch(API_BASE + path, { credentials: 'include', ...init })

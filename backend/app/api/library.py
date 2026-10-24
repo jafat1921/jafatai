@@ -300,7 +300,7 @@ def _edit_source(db: Session, workspace_id: str, sid: str) -> tuple[str | None, 
         media_id = item.id
     else:
         g = db.get(Generation, sid)
-        if g is not None and g.workspace_id != workspace_id:
+        if g is not None and (g.workspace_id != workspace_id or g.target_type.startswith("implant_")):
             g = None
         media_id = None
     if g is None:

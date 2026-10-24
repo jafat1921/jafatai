@@ -17,6 +17,8 @@ export interface User {
   admin?: boolean
   // contract v38: false until the emailed link is opened; such a user can look around but not start work
   verified?: boolean
+  // M22: Implant Preview (admins, or granted by one)
+  implant?: boolean
 }
 
 // contract v38
@@ -47,6 +49,7 @@ export interface AdminUser {
   package_name?: string
   subscription_ends_at?: string | null
   gpu_min_day_limit?: number | null
+  implant_access?: boolean
 }
 
 export interface AdminUserPatch {
@@ -54,6 +57,7 @@ export interface AdminUserPatch {
   is_active?: boolean
   is_admin?: boolean
   verified?: boolean
+  implant_access?: boolean
   // contract v39: null clears the override
   limit_gpu_min_day?: number | null
   limit_gpu_min_month?: number | null

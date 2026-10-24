@@ -19,7 +19,7 @@ def test_login_me_logout(anon):
     assert body["email"] == ADMIN["email"]
     assert body["role"] == "owner"
     assert set(body) == {"id", "email", "display_name", "workspace_id", "role", "api_access", "api_docs", "admin",
-                         "verified"}
+                         "verified", "implant"}
 
     cookie = r.headers["set-cookie"].lower()
     assert "mixai_session=" in cookie and "httponly" in cookie and "samesite=lax" in cookie

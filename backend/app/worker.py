@@ -250,6 +250,10 @@ class JobContext:
 
 
 def _out_path(gen: Generation, media_ext: str) -> tuple[Path, str]:
+    if gen.target_type.startswith("implant_"):
+        # outside every workspace folder: /api/media can't serve it, only /api/implant/files can
+        rel = Path("clinic") / gen.workspace_id / "results" / f"{gen.id}{media_ext}"
+        return get_settings().data_dir / rel, rel.as_posix()
     if gen.target_type == "media":
         rel = Path("workspaces") / gen.workspace_id / "media" / f"{gen.id}{media_ext}"
         return get_settings().data_dir / rel, rel.as_posix()
@@ -309,6 +313,10 @@ def handle_generate(ctx: JobContext) -> dict:
     gen = db.get(Generation, job.generation_id) if job.generation_id else None
     if gen is None:
         raise RuntimeError("Generation for this job no longer exists")
+    from app.implant import guard as implant_guard
+
+    if implant_guard.refuses(db, gen):
+        raise RuntimeError("This uses a private Implant Preview picture, which can't be used anywhere else")
 
     if gen.kind in IMAGE_KINDS:
         method, media_type = "generate_image", "image/png"
@@ -402,6 +410,10 @@ def handle_generate(ctx: JobContext) -> dict:
         # Photo Studio: back to the source's full size, blended / composited (app.photo.restore)
         ctx.progress(0.995, "Finishing at full size")
         meta.update(restore.finish(gen, abs_path))
+    if gen.target_type == "implant_result":
+        from app.implant.service import stamp
+
+        stamp(abs_path)
     gen.file_path = rel_path
     gen.media_type = result.media_type
     gen.status = "ready"
@@ -688,6 +700,17 @@ def sweep_subscriptions() -> None:
             log.info("%d subscription(s) ended", n)
     except Exception:
         log.exception("subscription sweep failed")
+    # Implant Preview patients past their retention period go, files and all
+    from app.implant.service import purge_expired
+
+    try:
+        with SessionLocal() as db:
+            n = purge_expired(db)
+            db.commit()
+        if n:
+            log.info("%d implant patient file(s) past retention deleted", n)
+    except Exception:
+        log.exception("implant retention sweep failed")
 
 
 def main(argv: list[str] | None = None) -> None:

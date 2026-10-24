@@ -295,6 +295,18 @@ export const shellRoutes: RouteObject[] = [
       }),
     ],
   },
+  // M22: Implant Preview, for admins and granted surgeons only
+  {
+    path: 'clinic/implant',
+    lazy: async () => ({ Component: (await import('@/features/implant/ImplantLayout')).ImplantLayout }),
+    children: [
+      { index: true, lazy: async () => ({ Component: (await import('@/features/implant/ImplantPatientsPage')).ImplantPatientsPage }) },
+      page(':id', async () => {
+        const { ImplantPatientPage } = await import('@/features/implant/ImplantPatientPage')
+        return <ImplantPatientPage />
+      }),
+    ],
+  },
   // contract v27: admin only while PUBLIC_API is off (the page sends anyone else back to Settings)
   page('settings/api', async () => {
     const { ApiTokensPage } = await import('@/features/settings/ApiTokensPage')

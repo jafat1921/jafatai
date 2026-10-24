@@ -1,0 +1,203 @@
+import { useId, useState } from 'react'
+import { Link2, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useRenderOptions } from '@/hooks/useImplant'
+import {
+  FILL_LABEL,
+  isDone,
+  LETTERS,
+  newOption,
+  PLACEMENT_LABEL,
+  PROFILE_LABEL,
+  SHAPE_LABEL,
+  VIEWS,
+  type ImplantOption,
+  type Patient,
+} from '@/lib/implant'
+import { plural } from '@/lib/utils'
+import { announce } from '@/stores/ui'
+
+const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
+const PRESET = [300, 350, 400]
+
+const ccOk = (n: number) => Number.isInteger(n) && n >= 100 && n <= 900
+
+export function Options({ patient }: { patient: Patient }) {
+  const uid = useId()
+  const render = useRenderOptions(patient.id)
+  const [options, setOptions] = useState<ImplantOption[]>([newOption()])
+  // "same both sides" keeps the right side following the left until it's switched off
+  const [same, setSame] = useState<boolean[]>([true])
+
+  const photos = VIEWS.filter((v) => isDone(patient.photos[v])).length
+  const valid = options.every((o) => ccOk(o.left_cc) && ccOk(o.right_cc))
+  const why = !photos ? 'Upload at least one photo first.' : !valid ? 'Each side takes 100 to 900 cc.' : null
+
+  const edit = (i: number, patch: Partial<ImplantOption>) =>
+    setOptions((all) => all.map((o, j) => (j !== i ? o : { ...o, ...patch, ...(same[i] && patch.left_cc !== undefined ? { right_cc: patch.left_cc } : {}) })))
+
+  return (
+    <section id="implant-options" aria-labelledby={`${uid}-h`} className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 id={`${uid}-h`} className="mr-auto font-display text-title font-semibold">
+          Options
+        </h2>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            setOptions(PRESET.map((cc) => newOption(cc)))
+            setSame(PRESET.map(() => true))
+          }}
+        >
+          300 / 350 / 400 cc moderate-plus
+        </Button>
+        {options.length < 3 && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setOptions((all) => [...all, newOption(all[all.length - 1]?.left_cc ?? 300)])
+              setSame((s) => [...s, true])
+            }}
+          >
+            <Plus aria-hidden />
+            Add an option
+          </Button>
+        )}
+      </div>
+
+      <ul className="grid min-w-0 gap-3 md:grid-cols-3">
+        {options.map((o, i) => (
+          <li key={i} className="min-w-0">
+            <fieldset className="flex flex-col gap-2 rounded-[6px] border border-studio-border-strong bg-studio-panel p-3">
+              <legend className="sr-only">Option {LETTERS[i]}</legend>
+              <div className="flex items-center gap-2">
+                <span aria-hidden className="font-display text-title font-semibold">
+                  {LETTERS[i]}
+                </span>
+                {options.length > 1 && (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="ml-auto"
+                    aria-label={`Remove option ${LETTERS[i]}`}
+                    onClick={() => {
+                      setOptions((all) => all.filter((_, j) => j !== i))
+                      setSame((s) => s.filter((_, j) => j !== i))
+                    }}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                )}
+              </div>
+              <Field id={`${uid}-${i}-label`} label="Label">
+                <Input id={`${uid}-${i}-label`} maxLength={60} placeholder="For example: Natural" value={o.label} onChange={(e) => edit(i, { label: e.target.value })} />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field id={`${uid}-${i}-l`} label="Left (cc)">
+                  <Input id={`${uid}-${i}-l`} type="number" inputMode="numeric" min={100} max={900} step={5} aria-invalid={!ccOk(o.left_cc)} value={o.left_cc || ''} onChange={(e) => edit(i, { left_cc: Number(e.target.value) })} />
+                </Field>
+                <Field id={`${uid}-${i}-r`} label="Right (cc)">
+                  <Input
+                    id={`${uid}-${i}-r`}
+                    type="number"
+                    inputMode="numeric"
+                    min={100}
+                    max={900}
+                    step={5}
+                    aria-invalid={!ccOk(o.right_cc)}
+                    value={o.right_cc || ''}
+                    onChange={(e) => {
+                      setSame((s) => s.map((v, j) => (j === i ? false : v)))
+                      edit(i, { right_cc: Number(e.target.value) })
+                    }}
+                  />
+                </Field>
+              </div>
+              <button
+                type="button"
+                aria-pressed={same[i]}
+                className="flex items-center gap-1 self-start rounded-[4px] text-small text-studio-accent underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-studio-accent"
+                onClick={() => {
+                  const on = !same[i]
+                  setSame((s) => s.map((v, j) => (j === i ? on : v)))
+                  if (on) setOptions((all) => all.map((x, j) => (j === i ? { ...x, right_cc: x.left_cc } : x)))
+                }}
+              >
+                <Link2 aria-hidden className="size-3.5" />
+                Same both sides
+              </button>
+              <Pick id={`${uid}-${i}-profile`} label="Profile" value={o.profile} labels={PROFILE_LABEL} onChange={(profile) => edit(i, { profile })} />
+              <Pick id={`${uid}-${i}-shape`} label="Shape" value={o.shape} labels={SHAPE_LABEL} onChange={(shape) => edit(i, { shape })} />
+              <Pick id={`${uid}-${i}-placement`} label="Placement" value={o.placement} labels={PLACEMENT_LABEL} onChange={(placement) => edit(i, { placement })} />
+              <Pick id={`${uid}-${i}-fill`} label="Fill" value={o.fill} labels={FILL_LABEL} onChange={(fill) => edit(i, { fill })} />
+            </fieldset>
+          </li>
+        ))}
+      </ul>
+
+      {render.isError && (
+        <p role="alert" className="text-small text-studio-danger">
+          {render.error.message}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="lg"
+          variant="primary"
+          disabled={!!why}
+          aria-describedby={why ? `${uid}-why` : undefined}
+          loading={render.isPending}
+          onClick={() =>
+            render.mutate(
+              options.map((o) => ({ ...o, label: o.label.trim() })),
+              { onSuccess: () => announce('Rendering the options. The pictures appear below as they finish.') },
+            )
+          }
+        >
+          <Sparkles aria-hidden />
+          Render the options
+          <span className="font-normal opacity-85">
+            · {plural(options.length, 'option')} × {plural(photos, 'photo')} = {plural(options.length * photos, 'picture')}
+          </span>
+        </Button>
+        {why && (
+          <p id={`${uid}-why`} className="text-small text-studio-muted">
+            {why}
+          </p>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <label htmlFor={id} className="text-small">
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function Pick<T extends string>({ id, label, value, labels, onChange }: { id: string; label: string; value: T; labels: Record<T, string>; onChange: (v: T) => void }) {
+  return (
+    <Field id={id} label={label}>
+      <select id={id} className={SELECT} value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {(Object.keys(labels) as T[]).map((k) => (
+          <option key={k} value={k}>
+            {labels[k]}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}

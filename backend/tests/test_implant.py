@@ -1,8 +1,11 @@
 """Implant Preview (M22): opt-in access, consent first, one surgeon's patients only, and nothing from it reaching
 the rest of the app."""
 import io
+import json
 from datetime import timedelta
 
+import httpx
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -11,11 +14,14 @@ from sqlalchemy import select
 from app import accounts
 from app.config import get_settings
 from app.db import SessionLocal
+from app.implant import finish, planning
 from app.implant import service as im
+from app.llm import set_transport
 from app.main import app
 from app.models import AdminAudit, Generation, ImplantPatient, Job, utcnow
 from app.services import enqueue_generation
 from app.worker import process_one
+from tests.test_ai import oa
 
 PW = "a-long-password-1"
 OPTS = [{"label": "Natural", "left_cc": 300, "right_cc": 300, "profile": "moderate"},
@@ -227,3 +233,150 @@ def test_delete_and_retention_remove_everything(surgeon, fast_driver):
         assert im.purge_expired(db) == 1
         db.commit()
         assert db.get(ImplantPatient, q["id"]) is None and db.get(ImplantPatient, keep["id"]) is not None
+
+
+# ---------------------------------------------------------------- phase 1.5: the surgeon's gaps
+
+def test_implant_size_and_the_planners_warnings():
+    width, proj = planning.dimensions(300, "moderate_plus")
+    assert 11.5 <= width <= 12.2 and proj == pytest.approx(width * 0.38, abs=0.1)  # Mentor: 11.6 cm
+    assert planning.dimensions(300, "high")[0] < width < planning.dimensions(300, "moderate")[0]
+    assert planning.cup_change(300, 12.5) == 1.5 and planning.cup_change(300, 14) == 1.0
+    opt = {"left_cc": 400, "right_cc": 400, "profile": "moderate", "shape": "round", "placement": "subglandular"}
+    m = {"bw_left_cm": 11, "bw_right_cm": 12.5, "pinch_cm": 1.5, "ptosis_grade": 2, "nimf_left_cm": 7}
+    texts = " | ".join(c["text"] for c in planning.assess(opt, m)["checks"])
+    for bit in ("wider than her breast base", "pinch 1.5 cm is thin", "Ptosis grade 2", "differ by 1.5 cm",
+                "fold may need lowering"):
+        assert bit in texts, texts
+    calm = {"bw_left_cm": 12.5, "bw_right_cm": 12.5, "pinch_cm": 3, "ptosis_grade": 0, "nimf_left_cm": 9}
+    assert planning.assess({**opt, "left_cc": 300, "right_cc": 300, "placement": "dual_plane",
+                            "profile": "moderate_plus"}, calm)["checks"] == []
+
+
+def _scene(path, chest_colour=(200, 160, 140), legs=(90, 120, 160), scale=1.0):
+    from PIL import ImageDraw
+
+    im = Image.new("RGB", (400, 500), (180, 180, 185))
+    d = ImageDraw.Draw(im)
+    d.rectangle((0, 330, 400, 500), fill=legs)
+    d.ellipse((120, 60, 280, 200), fill=chest_colour)
+    for x in range(0, 400, 25):  # texture, so the alignment has something to lock on
+        d.line((x, 0, x, 500), fill=(150, 150, 160))
+    if scale != 1.0:
+        w, h = round(400 * scale), round(500 * scale)
+        small = im.resize((w, h))
+        im = Image.new("RGB", (400, 500), (0, 0, 0))
+        im.paste(small, ((400 - w) // 2, (500 - h) // 2))
+    im.save(path)
+
+
+def test_only_the_chest_comes_from_the_result(tmp_path):
+    photo, result = tmp_path / "photo.png", tmp_path / "result.png"
+    _scene(photo)
+    # the edit drew a bigger chest, but also nudged the legs' colour and re-framed by 1%: only the chest may stay
+    _scene(result, chest_colour=(230, 120, 110), legs=(60, 160, 90), scale=1.01)
+    box = [80, 200, 460, 800]
+    finish.composite(photo, result, box)
+    with Image.open(photo) as a, Image.open(result) as b:
+        before, after = np.asarray(a.convert("RGB")), np.asarray(b.convert("RGB"))
+    assert (before[420:, :] == after[420:, :]).all()  # the legs: the photo's, pixel for pixel
+    assert (before[:, :40] == after[:, :40]).all()
+    centre = after[120:140, 190:210].reshape(-1, 3).mean(0)
+    assert centre[1] < 145  # the result's chest (greener-free red), not the photo's
+
+
+def test_the_chest_box_falls_back_without_the_vision_model(tmp_path):
+    photo = tmp_path / "p.png"
+    _scene(photo)
+    box, source = finish.find_chest(photo, "left_oblique")
+    assert source == "default" and box == finish.DEFAULT_BOX["left_oblique"]
+    assert finish.clean_box([10, 10, 50, 900]) is None and finish.clean_box([0, 100, 620, 900]) == [0, 100, 620, 900]
+
+
+class _Eye:
+    """The vision model: a chest box, then the garment verdicts in order."""
+
+    def __init__(self, verdicts):
+        self.verdicts = list(verdicts)
+        self.calls = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": [{"id": m} for m in ("fake-eye", "fake-writer", "fake-reasoner")]})
+        body = json.loads(request.content)
+        text = json.dumps(body.get("messages", []))
+        if "bounding box" in text:
+            return httpx.Response(200, json=oa(json.dumps({"box": [50, 150, 600, 850]})))
+        self.calls += 1
+        uncovered = self.verdicts.pop(0) if self.verdicts else False
+        return httpx.Response(200, json=oa(json.dumps({"uncovered": uncovered, "why": "test"})))
+
+
+@pytest.fixture
+def eye():
+    def install(verdicts):
+        e = _Eye(verdicts)
+        set_transport(httpx.MockTransport(e))
+        return e
+
+    yield install
+    set_transport(None)
+
+
+def _one_render(surgeon, fast_driver, garment="garment"):
+    p = _patient(surgeon, topless_ok=garment == "topless")
+    _photo(surgeon, p["id"], garment=garment)
+    surgeon.post(f"/api/implant/patients/{p['id']}/sessions", json={"options": OPTS[:1]})
+    _run(fast_driver)
+    return surgeon.get(f"/api/implant/patients/{p['id']}").json()
+
+
+def test_a_result_that_uncovers_skin_is_redrawn_once_then_refused(surgeon, fast_driver, eye):
+    e = eye([True, False])
+    detail = _one_render(surgeon, fast_driver)
+    res = detail["sessions"][0]["results"][0]
+    assert res["status"] == "ready" and res["garment_check"] is True and e.calls == 2
+    assert res["chest_box"] == [50, 150, 600, 850]  # the vision model's box, kept on the photo too
+    assert detail["photos"]["front"]["chest_box"] == [50, 150, 600, 850]
+
+    e = eye([True, True])
+    detail = _one_render(surgeon, fast_driver)
+    res = detail["sessions"][0]["results"][0]
+    assert res["status"] == "failed" and e.calls == 2
+    with SessionLocal() as db:
+        assert "changed the clothing" in db.get(Job, res["job_id"]).error
+
+
+def test_topless_photos_skip_the_garment_check(surgeon, fast_driver, eye):
+    e = eye([True])
+    res = _one_render(surgeon, fast_driver, garment="topless")["sessions"][0]["results"][0]
+    assert res["status"] == "ready" and e.calls == 0
+
+
+def test_options_share_a_seed_per_view_and_the_planner_answers(surgeon):
+    p = _patient(surgeon)
+    _photo(surgeon, p["id"])
+    _photo(surgeon, p["id"], view="right_lateral")
+    surgeon.post(f"/api/implant/patients/{p['id']}/sessions", json={"options": OPTS})
+    with SessionLocal() as db:
+        gens = db.scalars(select(Generation).where(Generation.target_type == "implant_result")).all()
+        seeds = {}
+        for g in gens:
+            seeds.setdefault(g.params["implant"]["view"], set()).add(g.seed)
+    assert set(seeds) == {"front", "right_lateral"} and all(len(s) == 1 for s in seeds.values())
+    assert seeds["front"] != seeds["right_lateral"]
+
+    r = surgeon.post(f"/api/implant/patients/{p['id']}/check", json={"options": OPTS})
+    assert r.status_code == 200
+    a, b = r.json()
+    assert a["sides"]["left"]["width_cm"] > 0 and b["sides"]["left"]["cup_change"] > a["sides"]["left"]["cup_change"]
+
+
+def test_the_surgeon_sets_the_chest_area(surgeon, client):
+    p = _patient(surgeon)
+    photo = _photo(surgeon, p["id"]).json()
+    r = surgeon.patch(f"/api/implant/photos/{photo['id']}", json={"chest_box": [20, 120, 640, 880]})
+    assert r.status_code == 200 and r.json()["chest_box"] == [20, 120, 640, 880]
+    assert surgeon.patch(f"/api/implant/photos/{photo['id']}", json={"chest_box": [0, 0, 50, 50]}).status_code == 422
+    # not someone else's photo
+    assert client.patch(f"/api/implant/photos/{photo['id']}", json={"chest_box": [20, 120, 640, 880]}).status_code == 404

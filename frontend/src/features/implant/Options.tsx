@@ -2,18 +2,21 @@ import { useId, useState } from 'react'
 import { Link2, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useRenderOptions } from '@/hooks/useImplant'
+import { useOptionChecks, useRenderOptions } from '@/hooks/useImplant'
 import {
+  ccOk,
   FILL_LABEL,
   isDone,
   LETTERS,
   newOption,
   PLACEMENT_LABEL,
   PROFILE_LABEL,
+  patientViews,
   SHAPE_LABEL,
-  VIEWS,
   type ImplantOption,
+  type OptionCheck,
   type Patient,
+  type SideCheck,
 } from '@/lib/implant'
 import { plural } from '@/lib/utils'
 import { announce } from '@/stores/ui'
@@ -21,16 +24,15 @@ import { announce } from '@/stores/ui'
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
 const PRESET = [300, 350, 400]
 
-const ccOk = (n: number) => Number.isInteger(n) && n >= 100 && n <= 900
-
 export function Options({ patient }: { patient: Patient }) {
   const uid = useId()
   const render = useRenderOptions(patient.id)
   const [options, setOptions] = useState<ImplantOption[]>([newOption()])
   // "same both sides" keeps the right side following the left until it's switched off
   const [same, setSame] = useState<boolean[]>([true])
+  const checks = useOptionChecks(patient.id, options, patient.measurements)
 
-  const photos = VIEWS.filter((v) => isDone(patient.photos[v])).length
+  const photos = patientViews(patient).filter((v) => isDone(patient.photos[v])).length
   const valid = options.every((o) => ccOk(o.left_cc) && ccOk(o.right_cc))
   const why = !photos ? 'Upload at least one photo first.' : !valid ? 'Each side takes 100 to 900 cc.' : null
 
@@ -137,10 +139,12 @@ export function Options({ patient }: { patient: Patient }) {
               <Pick id={`${uid}-${i}-placement`} label="Placement" value={o.placement} labels={PLACEMENT_LABEL} onChange={(placement) => edit(i, { placement })} />
               <Pick id={`${uid}-${i}-fill`} label="Fill" value={o.fill} labels={FILL_LABEL} onChange={(fill) => edit(i, { fill })} />
             </fieldset>
+            <Fit check={checks.data?.[i]} />
           </li>
         ))}
       </ul>
 
+      {checks.data && <p className="text-small text-studio-muted">Approximate; confirm with the manufacturer’s chart.</p>}
       {render.isError && (
         <p role="alert" className="text-small text-studio-danger">
           {render.error.message}
@@ -174,6 +178,39 @@ export function Options({ patient }: { patient: Patient }) {
         )}
       </div>
     </section>
+  )
+}
+
+const cups = (n: number) => `about +${n} cup${n === 1 ? '' : 's'}`
+const dims = (s: SideCheck) => `≈ ${s.width_cm} cm wide · ${s.projection_cm} cm projection · ${cups(s.cup_change)}`
+
+function Fit({ check }: { check: OptionCheck | undefined }) {
+  // the live region stays mounted so the first answer is read out too
+  return (
+    <div role="status" aria-live="polite" className="mt-2 flex flex-col gap-1 text-small">
+      {check && (
+        <>
+          {dims(check.sides.left) === dims(check.sides.right) ? (
+            <p>{dims(check.sides.left)}</p>
+          ) : (
+            <>
+              <p>L {dims(check.sides.left)}</p>
+              <p>R {dims(check.sides.right)}</p>
+            </>
+          )}
+          {check.checks.length > 0 && (
+            <ul className="flex flex-col gap-1">
+              {check.checks.map((c, j) => (
+                <li key={j} className={c.level === 'warn' ? 'rounded-[4px] border border-studio-warning px-2 py-1 text-studio-warning' : 'text-studio-muted'}>
+                  {c.level === 'warn' && <span className="sr-only">Warning: </span>}
+                  {c.text}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

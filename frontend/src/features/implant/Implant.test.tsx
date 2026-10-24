@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Rail } from '@/components/shell/Rail'
@@ -38,7 +38,7 @@ function patient(extra: Partial<Patient> = {}): Patient {
     approved: false,
     measurements: {},
     notes: '',
-    views: { front: 'Front', left_oblique: 'Left 45°', right_oblique: 'Right 45°' },
+    views: { front: 'Front', left_oblique: 'Left 45°', right_oblique: 'Right 45°', left_lateral: 'Left 90°', right_lateral: 'Right 90°' },
     photos: { front: photo('front'), left_oblique: photo('left_oblique'), right_oblique: null },
     sessions: [],
     chart: { session_id: null, option: null, approved_at: null, versions: 0, url: null },
@@ -179,5 +179,51 @@ describe('Implant patient page', () => {
       .getAllByRole('img')
       .map((i) => i.getAttribute('src'))
     expect(srcs).toEqual(expect.arrayContaining(['/api/implant/files/ph-front', '/api/implant/files/r0']))
+  })
+
+  it('gives every view from the server its own slot and results row', async () => {
+    const p = withResults()
+    p.photos.left_lateral = photo('left_lateral')
+    p.sessions[0].results.push({ id: 'r9', status: 'ready', url: '/api/implant/files/r9', job_id: null, option: 0, view: 'left_lateral' })
+    openPatient(p)
+    const photos = await screen.findByRole('region', { name: 'Photos' })
+    expect(within(photos).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Front', 'Left 45°', 'Right 45°', 'Left 90°', 'Right 90°'])
+    expect(screen.getByRole('button', { name: 'Option A, Left 90°: compare with the photo' })).toBeInTheDocument()
+  })
+
+  it('outlines the chest area and saves the surgeon’s own', async () => {
+    const p = patient({ photos: { front: photo('front', { chest_box: [100, 200, 600, 800] }), left_oblique: photo('left_oblique'), right_oblique: null } })
+    const { calls, user } = openPatient(p, (method, path, body) => (method === 'PATCH' && path === '/implant/photos/ph-front' ? photo('front', body as Partial<ImplantPicture>) : undefined))
+    const front = (await screen.findByRole('heading', { name: 'Front' })).closest('li')!
+    const left = screen.getByRole('heading', { name: 'Left 45°' }).closest('li')!
+    expect(within(front).getByTestId('chest-box')).toHaveStyle({ top: '10%', left: '20%', height: '50%', width: '60%' })
+    expect(within(left).queryByTestId('chest-box')).toBeNull()
+    expect(within(left).getByText(/found automatically on the first render/)).toBeInTheDocument()
+
+    await user.click(within(front).getByRole('button', { name: 'Adjust chest area, Front' }))
+    expect(within(front).getByText('Everything outside this area stays exactly as in the photo.')).toBeInTheDocument()
+    fireEvent.change(within(front).getByLabelText(/^Top: /), { target: { value: '20' } })
+    fireEvent.change(within(front).getByLabelText(/^Right: /), { target: { value: '90' } })
+    expect(within(front).getByTestId('chest-box')).toHaveStyle({ top: '20%', width: '70%' })
+    await user.click(within(front).getByRole('button', { name: 'Save chest area, Front' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({ path: '/implant/photos/ph-front', body: { chest_box: [200, 200, 600, 900] } }))
+  })
+
+  it('shows the implant size and the planner’s warnings under each option', async () => {
+    const check = {
+      sides: { left: { width_cm: 11.8, projection_cm: 3.9, cup_change: 1.5 }, right: { width_cm: 11.8, projection_cm: 3.9, cup_change: 1.5 } },
+      checks: [
+        { level: 'warn', text: 'Ptosis grade 2: a lift is likely needed.' },
+        { level: 'info', text: 'Her base widths differ by 1.5 cm.' },
+      ],
+    }
+    const { calls } = openPatient(patient({ measurements: { ptosis_grade: 2 } }), (method, path) => (method === 'POST' && path === '/implant/patients/p1/check' ? [check] : undefined))
+    expect(await screen.findByText('≈ 11.8 cm wide · 3.9 cm projection · about +1.5 cups')).toBeInTheDocument()
+    expect(screen.getByText('Ptosis grade 2: a lift is likely needed.').closest('li')).toHaveClass('text-studio-warning')
+    expect(screen.getByText('Her base widths differ by 1.5 cm.')).toHaveClass('text-studio-muted')
+    expect(screen.getByText('Approximate; confirm with the manufacturer’s chart.')).toBeInTheDocument()
+    const sent = calls.filter((c) => c.path === '/implant/patients/p1/check')
+    expect(sent).toHaveLength(1)
+    expect(sent[0].body).toEqual({ options: [{ label: '', left_cc: 300, right_cc: 300, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone' }] })
   })
 })

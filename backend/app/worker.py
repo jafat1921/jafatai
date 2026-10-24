@@ -411,9 +411,12 @@ def handle_generate(ctx: JobContext) -> dict:
         ctx.progress(0.995, "Finishing at full size")
         meta.update(restore.finish(gen, abs_path))
     if gen.target_type == "implant_result":
-        from app.implant.service import stamp
+        from app.implant.service import finish_result
 
-        stamp(abs_path)
+        ctx.progress(0.95, "Keeping everything but the chest as it was")
+        finish_result(db, gen, abs_path,
+                      lambda seed: getattr(driver, method)(gen.prompt, params, seed, abs_path, ctx.progress),
+                      tick=lambda: ctx.progress(0.97, "Checking the result"))
     gen.file_path = rel_path
     gen.media_type = result.media_type
     gen.status = "ready"

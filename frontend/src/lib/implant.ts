@@ -2,7 +2,9 @@
 import { request, send } from './api'
 import type { GenerationStatus, Job } from './types'
 
-export type View = 'front' | 'left_oblique' | 'right_oblique'
+export type View = 'front' | 'left_oblique' | 'right_oblique' | 'left_lateral' | 'right_lateral'
+// [y1, x1, y2, x2] on a 0–1000 scale, y down
+export type ChestBox = [number, number, number, number]
 export type Garment = 'garment' | 'topless'
 export type Profile = 'low' | 'moderate' | 'moderate_plus' | 'high' | 'extra_high'
 export type ImplantShape = 'round' | 'teardrop'
@@ -51,6 +53,8 @@ export interface ImplantPicture {
   view?: View
   garment?: Garment
   option?: number
+  chest_box?: ChestBox
+  garment_check?: boolean | null
 }
 
 export interface ImplantOption {
@@ -70,6 +74,17 @@ export interface ImplantSession {
   results: ImplantPicture[]
 }
 
+export interface SideCheck {
+  width_cm: number
+  projection_cm: number
+  cup_change: number
+}
+
+export interface OptionCheck {
+  sides: { left: SideCheck; right: SideCheck }
+  checks: { level: 'info' | 'warn'; text: string }[]
+}
+
 export interface Chart {
   session_id: string | null
   option: number | null
@@ -81,7 +96,7 @@ export interface Chart {
 export interface Patient extends PatientSummary {
   measurements: Measurements
   notes: string
-  views: Record<View, string>
+  views: Partial<Record<View, string>>
   photos: Partial<Record<View, ImplantPicture | null>>
   sessions: ImplantSession[]
   chart: Chart
@@ -99,8 +114,23 @@ export interface PatientCreate {
 
 export type PatientPatch = Partial<Pick<Patient, 'label' | 'retention_months' | 'measurements' | 'notes'>> & { topless_ok?: boolean }
 
-export const VIEWS: View[] = ['front', 'left_oblique', 'right_oblique']
-export const VIEW_LABEL: Record<View, string> = { front: 'Front', left_oblique: 'Left 45°', right_oblique: 'Right 45°' }
+export const VIEWS: View[] = ['front', 'left_oblique', 'right_oblique', 'left_lateral', 'right_lateral']
+export const VIEW_LABEL: Record<View, string> = { front: 'Front', left_oblique: 'Left 45°', right_oblique: 'Right 45°', left_lateral: 'Left 90°', right_lateral: 'Right 90°' }
+
+// the server decides which views a patient has; fall back for an older answer without them
+export const patientViews = (p: Patient) => {
+  const vs = Object.keys(p.views ?? {}) as View[]
+  return vs.length ? vs : VIEWS
+}
+
+// same as backend/app/implant/finish.py DEFAULT_BOX
+export const CHEST_DEFAULT: Record<View, ChestBox> = {
+  front: [0, 100, 620, 900],
+  left_oblique: [0, 80, 620, 920],
+  right_oblique: [0, 80, 620, 920],
+  left_lateral: [0, 150, 620, 950],
+  right_lateral: [0, 50, 620, 850],
+}
 export const LETTERS = ['A', 'B', 'C']
 
 // same labels as the PDFs (backend/app/implant/sheets.py MEASURES)
@@ -124,6 +154,8 @@ export const PROFILE_LABEL: Record<Profile, string> = { low: 'Low', moderate: 'M
 export const SHAPE_LABEL: Record<ImplantShape, string> = { round: 'Round', teardrop: 'Teardrop' }
 export const PLACEMENT_LABEL: Record<Placement, string> = { subglandular: 'Subglandular', submuscular: 'Submuscular', dual_plane: 'Dual plane' }
 export const FILL_LABEL: Record<Fill, string> = { silicone: 'Silicone', saline: 'Saline' }
+
+export const ccOk = (n: number) => Number.isInteger(n) && n >= 100 && n <= 900
 
 export const newOption = (cc = 300): ImplantOption => ({ label: '', left_cc: cc, right_cc: cc, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone' })
 
@@ -157,6 +189,8 @@ export const implantApi = {
   consentForm: (id: string, file: File) => multipart<Patient>(`${base(id)}/consent-form`, { file }),
   photo: (id: string, body: { file: File; view: View; garment: Garment; crop?: string }) =>
     multipart<ImplantPicture>(`${base(id)}/photos`, { file: body.file, view: body.view, garment: body.garment, ...(body.crop ? { crop: body.crop } : {}) }),
+  chestBox: (genId: string, box: ChestBox) => request<ImplantPicture>('PATCH', `/implant/photos/${genId}`, { chest_box: box }),
+  check: (id: string, options: ImplantOption[]) => request<OptionCheck[]>('POST', `${base(id)}/check`, { options }),
   render: (id: string, options: ImplantOption[]) => request<Patient>('POST', `${base(id)}/sessions`, { options }),
   approve: (id: string, sessionId: string, body: { option: number; notes: string }) => request<Patient>('POST', `${base(id)}/sessions/${sessionId}/approve`, body),
   retry: (jobId: string) => request<Job>('POST', `/jobs/${jobId}/retry`, {}),

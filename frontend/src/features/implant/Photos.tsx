@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { ImageIcon, Upload } from 'lucide-react'
 import { StatusPill } from '@/components/studio/status-pill'
 import { Button } from '@/components/ui/button'
-import { useUploadPhoto } from '@/hooks/useImplant'
-import { cropBox, VIEW_LABEL, VIEWS, type Garment, type Patient, type View } from '@/lib/implant'
+import { useChestBox, useUploadPhoto } from '@/hooks/useImplant'
+import { CHEST_DEFAULT, cropBox, isDone, patientViews, VIEW_LABEL, type ChestBox, type Garment, type ImplantPicture, type Patient, type View } from '@/lib/implant'
 import { generationStatus } from '@/lib/status'
 import { announce } from '@/stores/ui'
 
@@ -14,7 +14,7 @@ export function Photos({ patient }: { patient: Patient }) {
         Photos
       </h2>
       <ul className="grid min-w-0 gap-3 md:grid-cols-3">
-        {VIEWS.map((v) => (
+        {patientViews(patient).map((v) => (
           <PhotoSlot key={v} patient={patient} view={v} />
         ))}
       </ul>
@@ -51,13 +51,15 @@ function PhotoSlot({ patient, view }: { patient: Patient; view: View }) {
   // consent can be withdrawn after the choice was made
   const sendGarment: Garment = toplessOk ? garment : 'garment'
   const shown = preview ?? current?.url ?? null
+  const [draft, setDraft] = useState<ChestBox | null>(null)
+  const box = preview ? null : (draft ?? current?.chest_box ?? null)
 
   return (
     <li className="flex min-w-0 flex-col gap-2 rounded-[6px] border border-studio-border-strong bg-studio-panel p-3">
       <h3 className="text-body font-medium">{name}</h3>
       <div className="relative aspect-[3/4] overflow-hidden rounded-[4px] bg-studio-raised">
         {shown ? (
-          <img src={shown} alt={preview ? `${name}: new photo, as it will be cropped` : `${name} photo`} className="size-full object-contain" />
+          <Fit src={shown} alt={preview ? `${name}: new photo, as it will be cropped` : `${name} photo`} box={box} />
         ) : (
           <span className="flex size-full items-center justify-center text-studio-muted">
             <ImageIcon aria-hidden className="size-6" />
@@ -73,6 +75,7 @@ function PhotoSlot({ patient, view }: { patient: Patient; view: View }) {
         )}
       </div>
       {current && !preview && current.status !== 'ready' && current.status !== 'approved' && <StatusPill className="self-start" status={generationStatus(current.status)} />}
+      {current && isDone(current) && !preview && <ChestArea patientId={patient.id} photo={current} view={view} name={name} draft={draft} setDraft={setDraft} />}
 
       <fieldset className="flex flex-col gap-1">
         <legend className="section-label mb-1">Garment</legend>
@@ -159,5 +162,113 @@ function PhotoSlot({ patient, view }: { patient: Patient; view: View }) {
         Upload
       </Button>
     </li>
+  )
+}
+
+// sized to the photo's own shape, so the 0–1000 box lands on the picture and not on the letterbox
+function Fit({ src, alt, box }: { src: string; alt: string; box: ChestBox | null }) {
+  const [ratio, setRatio] = useState(3 / 4)
+  return (
+    <span className="flex size-full items-center justify-center">
+      <span className={`relative ${ratio <= 3 / 4 ? 'h-full' : 'w-full'}`} style={{ aspectRatio: ratio }}>
+        <img src={src} alt={alt} className="size-full" onLoad={(e) => e.currentTarget.naturalHeight && setRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)} />
+        {box && (
+          <span
+            aria-hidden
+            data-testid="chest-box"
+            className="absolute rounded-[2px] border-2 border-dashed border-studio-accent"
+            style={{ top: `${box[0] / 10}%`, left: `${box[1] / 10}%`, height: `${(box[2] - box[0]) / 10}%`, width: `${(box[3] - box[1]) / 10}%` }}
+          />
+        )}
+      </span>
+    </span>
+  )
+}
+
+// the server's limits (finish.clean_box): at least 12% tall and 20% wide
+const MIN_H = 12
+const MIN_W = 20
+
+function ChestArea({ patientId, photo, view, name, draft, setDraft }: { patientId: string; photo: ImplantPicture; view: View; name: string; draft: ChestBox | null; setDraft: (b: ChestBox | null) => void }) {
+  const uid = useId()
+  const save = useChestBox(patientId)
+  const open = draft !== null
+  // sliders work in whole percent; the box is per mille
+  const [t, l, b, r] = (draft ?? photo.chest_box ?? CHEST_DEFAULT[view]).map((v) => Math.round(v / 10))
+  const set = (next: [number, number, number, number]) => setDraft(next.map((v) => v * 10) as ChestBox)
+  const sliders: { key: string; label: string; value: number; change: (v: number) => void }[] = [
+    { key: 'top', label: 'Top', value: t, change: (v) => set([Math.min(v, b - MIN_H), l, b, r]) },
+    { key: 'bottom', label: 'Bottom', value: b, change: (v) => set([t, l, Math.max(v, t + MIN_H), r]) },
+    { key: 'left', label: 'Left', value: l, change: (v) => set([t, Math.min(v, r - MIN_W), b, r]) },
+    { key: 'right', label: 'Right', value: r, change: (v) => set([t, l, b, Math.max(v, l + MIN_W)]) },
+  ]
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {!photo.chest_box && !open && <p className="text-small text-studio-muted">The chest area is found automatically on the first render; you can adjust it.</p>}
+      <button
+        type="button"
+        aria-label={`Adjust chest area, ${name}`}
+        aria-expanded={open}
+        aria-controls={`${uid}-panel`}
+        className="self-start rounded-[4px] text-small text-studio-accent underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-studio-accent"
+        onClick={() => {
+          save.reset()
+          setDraft(open ? null : (photo.chest_box ?? CHEST_DEFAULT[view]))
+        }}
+      >
+        Adjust chest area
+      </button>
+      {open && (
+        <div id={`${uid}-panel`} className="flex flex-col gap-1.5">
+          <p className="text-small text-studio-muted">Everything outside this area stays exactly as in the photo.</p>
+          {sliders.map((s) => (
+            <div key={s.key} className="flex flex-col gap-0.5">
+              <label htmlFor={`${uid}-${s.key}`} className="text-small">
+                {s.label}: {s.value}%
+              </label>
+              <input
+                id={`${uid}-${s.key}`}
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={s.value}
+                aria-valuetext={`${s.value}%`}
+                className="accent-studio-accent"
+                onChange={(e) => s.change(Number(e.target.value))}
+              />
+            </div>
+          ))}
+          {save.isError && (
+            <p role="alert" className="text-small text-studio-danger">
+              {save.error.message}
+            </p>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="self-start"
+            aria-label={`Save chest area, ${name}`}
+            loading={save.isPending}
+            onClick={() =>
+              draft &&
+              save.mutate(
+                { genId: photo.id, box: draft },
+                {
+                  onSuccess: () => {
+                    announce(`${name} chest area saved`)
+                    setDraft(null)
+                  },
+                },
+              )
+            }
+          >
+            Save chest area
+          </Button>
+        </div>
+      )}
+    </div>
   )
 }

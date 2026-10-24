@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { useApproveOption, useRetryPicture } from '@/hooks/useImplant'
-import { implantApi, isDone, isPending, LETTERS, optionLine, shortDay, VIEW_LABEL, VIEWS, type ImplantSession, type Patient, type View } from '@/lib/implant'
+import { implantApi, isDone, isPending, LETTERS, optionLine, patientViews, shortDay, VIEW_LABEL, type ImplantSession, type Patient, type View } from '@/lib/implant'
 import { generationStatus } from '@/lib/status'
 import { announce } from '@/stores/ui'
 
@@ -58,7 +58,7 @@ export function Results({ patient }: { patient: Patient }) {
 function Consultation({ patient, session, onCompare }: { patient: Patient; session: ImplantSession; onCompare: (c: Compare) => void }) {
   const uid = useId()
   const retry = useRetryPicture(patient.id)
-  const views = VIEWS.filter((v) => session.results.some((r) => r.view === v))
+  const views = patientViews(patient).filter((v) => session.results.some((r) => r.view === v))
   const at = (v: View, i: number) => session.results.find((r) => r.view === v && r.option === i)
   const cols = { gridTemplateColumns: `repeat(${session.options.length + 1}, minmax(120px, 1fr))` }
   const chosen = patient.chart.session_id === session.id ? patient.chart.option : null

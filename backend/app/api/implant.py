@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 from app import audit
 from app.config import get_settings
 from app.db import get_db, release
+from app.implant import planning
 from app.implant import service as im
 from app.implant import sheets
+from app.implant.finish import clean_box
 from app.implant.guard import require_implant
 from app.models import Generation, ImplantPatient, ImplantSession, utcnow
 from app.security import CurrentUser, session_only
@@ -82,6 +84,10 @@ class SessionIn(BaseModel):
     options: list[OptionIn] = Field(min_length=1, max_length=3)
 
 
+class ChestBoxIn(BaseModel):
+    chest_box: list[int] = Field(min_length=4, max_length=4, description="[y1, x1, y2, x2] on 0-1000")
+
+
 class ApproveIn(BaseModel):
     option: int = Field(ge=0, le=2)
     notes: str = Field("", max_length=1500)
@@ -91,7 +97,8 @@ def _gen_out(g: Generation | None) -> dict | None:
     if g is None:
         return None
     return {"id": g.id, "status": g.status, "url": f"/api/implant/files/{g.id}" if g.file_path else None,
-            "job_id": g.job_id, **{k: v for k, v in (g.params or {}).items() if k in ("view", "garment")},
+            "job_id": g.job_id,
+            **{k: v for k, v in (g.params or {}).items() if k in ("view", "garment", "chest_box", "garment_check")},
             **({"option": g.params["implant"]["option"], "view": g.params["implant"]["view"]}
                if (g.params or {}).get("implant") else {})}
 
@@ -242,6 +249,34 @@ def create_session(patient_id: str, body: SessionIn, db: Session = Depends(get_d
     audit.record(db, cur.user, "implant_generate", "implant_patient", p.id, session=s.id, options=len(body.options))
     db.commit()
     return _patient_out(db, p, full=True)
+
+
+@router.post("/patients/{patient_id}/check")
+@session_only
+def check_options(patient_id: str, body: SessionIn, db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(require_implant)):
+    """Implant size, expected cup change and the planner's warnings for each option, before anything renders."""
+    p = _patient(db, cur, patient_id)
+    return [planning.assess(o.model_dump(), p.measurements or {}) for o in body.options]
+
+
+@router.patch("/photos/{gen_id}")
+@session_only
+def set_chest_box(gen_id: str, body: ChestBoxIn, db: Session = Depends(get_db),
+                  cur: CurrentUser = Depends(require_implant)):
+    """The surgeon's own chest area for a photo; renders after this keep everything outside it unchanged."""
+    g = db.get(Generation, gen_id)
+    if g is None or g.target_type != "implant_photo":
+        raise HTTPException(404, "Photo not found")
+    p = _patient(db, cur, g.target_id)
+    box = clean_box(body.chest_box)
+    if box is None:
+        raise HTTPException(422, "The chest area is too small")
+    g.params = {**(g.params or {}), "chest_box": box, "chest_box_from": "surgeon"}
+    im.touch(p)
+    audit.record(db, cur.user, "implant_chest_box", "implant_patient", p.id, view=g.params.get("view"))
+    db.commit()
+    return _gen_out(g)
 
 
 @router.post("/patients/{patient_id}/sessions/{session_id}/approve")

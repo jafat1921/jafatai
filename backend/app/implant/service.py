@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 from app import library as lib
 from app.config import get_settings
 from app.models import Generation, ImplantPatient, ImplantSession, utcnow
-from app.services import enqueue_generation
+from app.implant import planning
+from app.services import enqueue_generation, new_seed
 
-VIEWS = {"front": "Front", "left_oblique": "Left 45°", "right_oblique": "Right 45°"}
+VIEWS = {"front": "Front", "left_oblique": "Left 45°", "right_oblique": "Right 45°", "left_lateral": "Left 90°",
+         "right_lateral": "Right 90°"}
 GARMENTS = ("garment", "topless")
 PROFILES = ("low", "moderate", "moderate_plus", "high", "extra_high")
 SHAPES = ("round", "teardrop")
@@ -97,14 +99,11 @@ def photos(db: Session, p: ImplantPatient) -> dict[str, Generation]:
 
 # ---------------------------------------------------------------- the edit
 
-def _volume_words(cc: int) -> str:
-    if cc <= 250:
-        return "a subtle increase in breast volume, about half to one cup size"
-    if cc <= 350:
-        return "a moderate increase in breast volume, about one cup size"
-    if cc <= 450:
-        return "a clear increase in breast volume, about one and a half to two cup sizes"
-    return "a large increase in breast volume, about two or more cup sizes"
+def _volume_words(cc: int, base_width: float | None = None) -> str:
+    # how many cups a volume adds depends on her frame (planning.cc_per_cup), so the words follow it
+    cups = planning.cup_change(cc, base_width)
+    size = "a subtle" if cups <= 0.5 else "a moderate" if cups <= 1 else "a clear" if cups <= 2 else "a large"
+    return f"{size} increase in breast volume, {planning.cup_words(cups)}"
 
 
 PROFILE_WORDS = {
@@ -125,11 +124,13 @@ PLACEMENT_WORDS = {
 }
 
 
-def instruction(opt: dict, garment: str) -> str:
+def instruction(opt: dict, garment: str, measurements: dict | None = None) -> str:
     """Literal wording, as Folietech's wrap renders: the edit models follow plain words far better than
     numbers or flourishes. cc only steers the words; phase 2's warp makes the size exact."""
     left, right = int(opt["left_cc"]), int(opt["right_cc"])
-    size = (f"Give this woman {_volume_words(max(left, right))}"
+    m = measurements or {}
+    bw = planning._num(m, "bw_left_cm" if left >= right else "bw_right_cm")
+    size = (f"Give this woman {_volume_words(max(left, right), bw)}"
             + (f", with the left breast ({left} cc) {'slightly larger' if left > right else 'slightly smaller'} "
                f"than the right ({right} cc)" if abs(left - right) >= 25 else ", the same on both sides")
             + f", as after breast augmentation with {SHAPE_WORDS[opt['shape']]}, "
@@ -159,13 +160,16 @@ def generate(db: Session, p: ImplantPatient, options: list[dict]) -> ImplantSess
     s = ImplantSession(patient_id=p.id, options=options)
     db.add(s)
     db.flush()
+    # one seed per view for every option: the options then differ by their spec, not by the noise
+    seeds = {view: new_seed() for view in pics}
     for i, opt in enumerate(options):
         for view, photo in pics.items():
             pp = photo.params or {}
             w, h = lib.size_for_ratio(pp.get("width") or 3, pp.get("height") or 4)
             garment = pp.get("garment", "garment")
             enqueue_generation(db, workspace_id=p.workspace_id, project_id=None, target_type="implant_result",
-                               target_id=s.id, kind="image", prompt=instruction(opt, garment),
+                               target_id=s.id, kind="image", seed=seeds[view],
+                               prompt=instruction(opt, garment, p.measurements),
                                params={"reference_ids": [photo.id], "model": EDIT_MODEL, "width": w, "height": h,
                                        "implant": {"option": i, "view": view, "photo_id": photo.id,
                                                    "garment": garment}})
@@ -177,6 +181,33 @@ def results(db: Session, s: ImplantSession) -> list[Generation]:
     return list(db.scalars(select(Generation).where(Generation.target_type == "implant_result",
                                                     Generation.target_id == s.id)
                            .order_by(Generation.created_at)))
+
+
+def finish_result(db: Session, gen: Generation, path: Path, redraw, tick=None) -> None:
+    """In the worker, once the edit is on disk: chest only (finish.composite), the clothing check with one
+    redraw, then the stamp. `redraw(seed)` renders the edit again into `path`."""
+    from app.implant import finish
+
+    imp = (gen.params or {}).get("implant") or {}
+    photo = db.get(Generation, imp.get("photo_id") or "")
+    src = get_settings().data_dir / photo.file_path if photo is not None and photo.file_path else None
+    if src is None or not src.is_file():
+        raise RuntimeError("The patient's photo is gone; add it again")
+    box = (photo.params or {}).get("chest_box")
+    origin = "surgeon"
+    if not box:
+        box, origin = finish.find_chest(src, imp.get("view", "front"), tick)
+        photo.params = {**(photo.params or {}), "chest_box": box, "chest_box_from": origin}
+    finish.composite(src, path, box)
+    verdict = None if imp.get("garment") == "topless" else finish.garment_check(src, path, tick)
+    if verdict is False:
+        redraw(new_seed())
+        finish.composite(src, path, box)
+        verdict = finish.garment_check(src, path, tick)
+        if verdict is False:
+            raise RuntimeError("The result changed the clothing; try again")
+    gen.params = {**(gen.params or {}), "chest_box": box, "garment_check": verdict}
+    stamp(path)
 
 
 def stamp(path: Path) -> None:

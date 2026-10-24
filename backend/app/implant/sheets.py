@@ -5,6 +5,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from app.config import get_settings
+from app.implant import planning
 from app.implant.service import (DISCLAIMER, PLACEMENT_WORDS, VIEWS, _font, patient_rel)
 from app.models import Generation, ImplantPatient, utcnow
 
@@ -88,8 +89,15 @@ def consultation(p: ImplantPatient, surgeon: str, photos: dict[str, Generation],
     y = _head(d, "Breast augmentation consultation", p, surgeon)
     for i, opt in enumerate(options):
         d.text((M, y), f"Option {chr(65 + i)}: {option_line(opt)}", font=_font("inter", 22), fill=INK)
-        y += 34
-    y += 16
+        y += 32
+        a = planning.assess(opt, p.measurements or {})
+        d.text((M + 30, y), _dims(a), font=_font("inter", 18), fill=MUTED)
+        y += 28
+        for c in a["checks"][:2]:
+            d.text((M + 30, y), ("! " if c["level"] == "warn" else "· ") + c["text"][:110], font=_font("inter", 17),
+                   fill=MUTED)
+            y += 26
+    y += 12
     by: dict[str, dict[int, Generation]] = {}
     for g in results:
         imp = (g.params or {}).get("implant") or {}
@@ -132,7 +140,14 @@ def chart(p: ImplantPatient, surgeon: str, photos: dict[str, Generation], opt: d
         y += 32
     d.text((M, y), f"Placement: {PLACEMENT_WORDS[opt['placement']].split(',')[0].replace('placed ', '')}",
            font=f, fill=INK)
-    y += 48
+    y += 32
+    a = planning.assess(opt, p.measurements or {})
+    d.text((M, y), _dims(a), font=_font("inter", 19), fill=MUTED)
+    y += 30
+    for c in a["checks"][:3]:
+        d.text((M, y), ("! " if c["level"] == "warn" else "· ") + c["text"][:115], font=_font("inter", 18), fill=INK)
+        y += 28
+    y += 14
     rows = [(v, photos.get(v), [("After · approved", picked.get(v))]) for v in VIEWS if v in photos]
     y = _pairs(im, d, y, rows, H - M - 330)
     d.text((M, y), "Surgeon's notes", font=fb, fill=INK)
@@ -147,6 +162,15 @@ def chart(p: ImplantPatient, surgeon: str, photos: dict[str, Generation], opt: d
         d.text((x, y + 8), label, font=_font("inter", 18), fill=MUTED)
     _foot(d)
     return _pdf(im)
+
+
+def _dims(a: dict) -> str:
+    def side(s: dict) -> str:
+        return f"≈{s['width_cm']} cm wide, {s['projection_cm']} cm projection, +{s['cup_change']:g} cup"
+
+    left, right = a["sides"]["left"], a["sides"]["right"]
+    text = side(left) if left == right else f"L {side(left)} · R {side(right)}"
+    return text + " (approximate; confirm with the manufacturer's chart)"
 
 
 def save_chart(p: ImplantPatient, data: bytes, version: int) -> str:

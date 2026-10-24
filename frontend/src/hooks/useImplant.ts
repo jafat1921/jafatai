@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useMe } from '@/hooks/useAuth'
-import { implantApi, implantBusy, type Garment, type ImplantOption, type Patient, type PatientCreate, type PatientPatch, type View } from '@/lib/implant'
+import { ccOk, implantApi, implantBusy, type ChestBox, type Garment, type ImplantOption, type Measurements, type Patient, type PatientCreate, type PatientPatch, type View } from '@/lib/implant'
 
 const POLL_MS = 3000
 const LIST = ['implant', 'list'] as const
@@ -77,4 +78,36 @@ export function useApproveOption(id: string) {
 export function useRetryPicture(id: string) {
   const qc = useQueryClient()
   return useMutation({ mutationFn: (jobId: string) => implantApi.retry(jobId), onSuccess: () => qc.invalidateQueries({ queryKey: patientKey(id) }) })
+}
+
+export function useChestBox(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ genId, box }: { genId: string; box: ChestBox }) => implantApi.chestBox(genId, box),
+    onSuccess: () => qc.invalidateQueries({ queryKey: patientKey(id) }),
+  })
+}
+
+function useDebounced<T>(value: T, ms: number) {
+  const [v, setV] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return v
+}
+
+/** Sizes and warnings for the options as typed; one call for all of them, after the typing stops. */
+export function useOptionChecks(id: string, options: ImplantOption[], measurements: Measurements) {
+  const key = useDebounced(JSON.stringify({ options, measurements }), 400)
+  const sent = (JSON.parse(key) as { options: ImplantOption[] }).options
+  return useQuery({
+    // outside patientKey, so refreshing the patient doesn't ask again
+    queryKey: ['implant-check', id, key],
+    queryFn: () => implantApi.check(id, sent),
+    enabled: sent.every((o) => ccOk(o.left_cc) && ccOk(o.right_cc)),
+    staleTime: Infinity,
+    placeholderData: (prev) => prev,
+    retry: false,
+  })
 }

@@ -13,7 +13,7 @@ export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 text-body font-medium text-studio-muted transition-colors duration-150 hover:bg-studio-panel-hover hover:text-studio-text aria-selected:bg-studio-accent aria-selected:text-studio-accent-fg aria-selected:shadow-[inset_0_-2px_0_var(--accent-gold)] [&_svg]:size-3.5',
+        'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 text-body font-medium text-studio-muted transition-colors duration-150 hover:bg-studio-panel-hover hover:text-studio-text aria-selected:bg-studio-accent aria-selected:bg-gold-leaf aria-selected:font-semibold aria-selected:text-studio-on-gold aria-selected:shadow-[inset_0_0_0_1px_rgb(20_13_8/0.3)] [&_svg]:size-3.5',
         className,
       )}
       {...props}

@@ -1,5 +1,5 @@
 import { Link, useLocation, useParams } from 'react-router'
-import { Clapperboard, ListOrdered, PanelRight } from 'lucide-react'
+import { ListOrdered, PanelRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip } from '@/components/ui/tooltip'
@@ -80,15 +80,11 @@ export function TopBar() {
       <header
         data-f6-region
         tabIndex={-1}
-        className="glass relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-studio-border px-4 focus-visible:outline-none md:px-6"
+        className="band relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-studio-border px-4 focus-visible:outline-none md:px-6"
       >
         {mobile && (
-          <Link
-            to="/"
-            className="flex size-8 shrink-0 items-center justify-center rounded-[6px] bg-studio-gold text-studio-darkroom"
-            aria-label="Jafat AI Studio, home"
-          >
-            <Clapperboard aria-hidden className="size-4" />
+          <Link to="/" className="shrink-0 rounded-[6px]" aria-label="Jafat AI Studio, home">
+            <img src="/brand/jafat-icon-192.png" alt="" className="size-8 rounded-[6px]" />
           </Link>
         )}
         <span className="min-w-0 truncate font-display text-panel font-semibold" data-testid="page-title">
@@ -103,7 +99,7 @@ export function TopBar() {
     <header
       data-f6-region
       tabIndex={-1}
-      className="glass relative z-30 shrink-0 border-b border-studio-border focus-visible:outline-none"
+      className="band relative z-30 shrink-0 border-b border-studio-border focus-visible:outline-none"
     >
       <div className="flex h-14 items-center gap-2 px-3 md:gap-3">
         <div className="flex min-w-0 items-center gap-2 max-md:flex-1">

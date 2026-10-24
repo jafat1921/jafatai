@@ -7,7 +7,7 @@ export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
 
-export const overlayClass = 'fixed inset-0 z-50 bg-[rgb(42_28_15/0.45)] data-[state=open]:animate-fade-in'
+export const overlayClass = 'fixed inset-0 z-50 bg-studio-darkroom/50 data-[state=open]:animate-fade-in'
 
 export function DialogContent({
   className,

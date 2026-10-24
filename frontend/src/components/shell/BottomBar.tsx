@@ -124,7 +124,7 @@ export function BottomBar() {
 
   return (
     <>
-      <nav aria-label="Main" className="glass flex shrink-0 border-t border-studio-border pb-[env(safe-area-inset-bottom)]">
+      <nav aria-label="Main" className="band flex shrink-0 border-t border-studio-border pb-[env(safe-area-inset-bottom)]">
         {link('home', '/', 'Home', Home)}
         {button('image', 'Image', ImageIcon)}
         {button('video', 'Video', Clapperboard)}
@@ -133,7 +133,7 @@ export function BottomBar() {
       </nav>
       <DialogPrimitive.Root open={sheet !== null} onOpenChange={(o) => !o && close()}>
         <DialogPrimitive.Portal>
-          <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-[rgb(42_28_15/0.3)] motion-safe:animate-fade-in" />
+          <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-studio-darkroom/35 motion-safe:animate-fade-in" />
           <DialogPrimitive.Content
             aria-describedby={undefined}
             className="fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto rounded-t-[12px] border-t border-studio-gold/70 bg-studio-raised p-3 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-modal paper-fine"

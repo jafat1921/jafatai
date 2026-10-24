@@ -15,7 +15,7 @@ export function SheetContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { overlay?: boolean }) {
   return (
     <DialogPrimitive.Portal>
-      {overlay && <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-[rgb(42_28_15/0.2)] data-[state=open]:animate-fade-in" />}
+      {overlay && <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-studio-darkroom/25 data-[state=open]:animate-fade-in" />}
       <DialogPrimitive.Content
         className={cn(
           'glass fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full flex-col border-l border-studio-border-strong shadow-modal data-[state=open]:animate-slide-in-right data-[state=closed]:animate-slide-out-right focus-visible:outline-none',

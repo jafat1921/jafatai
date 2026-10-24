@@ -98,7 +98,7 @@ export function DropPasteOverlay({ targets }: { targets: DropTarget[] }) {
   return (
     <>
       {dragging && targets.length > 0 && (
-        <div aria-hidden className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-[rgb(42_28_15/0.35)] p-6">
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-studio-darkroom/40 p-6">
           <div className="flex flex-col items-center gap-2 rounded-[12px] border-2 border-dashed border-studio-gold bg-studio-raised/95 px-8 py-6 text-center shadow-modal">
             <ImagePlus className="size-7 text-studio-accent" />
             <p className="font-display text-title font-semibold">Drop the picture anywhere</p>

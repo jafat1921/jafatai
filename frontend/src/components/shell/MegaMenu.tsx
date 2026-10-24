@@ -152,7 +152,7 @@ export function MegaMenu({ id, section, anchorId, keyboard, onPick, onClose, onP
       onPointerLeave={onPointerLeave}
       style={{ top }}
       className={cn(
-        'fixed left-[80px] z-50 max-h-[calc(100vh-16px)] overflow-y-auto rounded-[8px] border border-studio-gold/70 bg-studio-raised p-4 shadow-modal paper-fine motion-safe:animate-fade-in',
+        'paper fixed left-[80px] z-50 max-h-[calc(100vh-16px)] overflow-y-auto rounded-[8px] border border-studio-gold/70 bg-studio-raised p-4 shadow-modal paper-fine motion-safe:animate-fade-in',
         cols === 2 ? 'w-[min(680px,calc(100vw-96px))]' : 'w-[min(380px,calc(100vw-96px))]',
       )}
     >

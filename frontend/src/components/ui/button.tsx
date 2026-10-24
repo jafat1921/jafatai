@@ -9,7 +9,9 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-studio-accent text-studio-accent-fg hover:bg-studio-accent-hover active:bg-studio-accent-pressed',
+        // gold leaf with char text, the site's own gold button
+        primary:
+          'bg-studio-accent bg-gold-leaf text-studio-on-gold font-semibold shadow-[inset_0_0_0_1px_rgb(20_13_8/0.35)] hover:shadow-[inset_0_0_0_1px_rgb(20_13_8/0.35),0_0_16px_rgb(255_106_0/0.45)] active:brightness-95',
         secondary:
           'bg-studio-raised text-studio-text border border-studio-border-strong hover:bg-studio-panel-hover hover:border-studio-border-hover',
         ghost: 'text-studio-muted hover:text-studio-text hover:bg-studio-panel-hover',

@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { Clapperboard } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useConnections } from '@/hooks/useConnections'
 import { useMe } from '@/hooks/useAuth'
@@ -15,11 +14,11 @@ import { useMenus } from './useMenus'
 
 const ITEM =
   'relative flex w-14 flex-col items-center gap-1 rounded-[6px] py-1.5 text-studio-muted transition-colors duration-150 hover:bg-studio-panel-hover hover:text-studio-text'
-const ACTIVE = 'bg-studio-accent-soft text-studio-text font-semibold'
+const ACTIVE = 'bg-studio-accent-soft text-studio-gold font-semibold'
 
 function Indicator({ on }: { on: boolean }) {
   // gold bar on the rail's left edge; shape, not colour alone, marks the current section
-  return on ? <span aria-hidden className="absolute -left-2 top-2 bottom-2 w-[3px] rounded-r bg-studio-gold" /> : null
+  return on ? <span aria-hidden className="absolute -left-2 top-2 bottom-2 w-[3px] rounded-r bg-studio-gold bg-gold-leaf shadow-[0_0_10px_rgb(255_106_0/0.6)]" /> : null
 }
 
 function Face({ item }: { item: RailItem }) {
@@ -58,17 +57,13 @@ export function Rail() {
       aria-label="Main"
       data-f6-region
       tabIndex={-1}
-      className="relative z-40 flex w-[72px] shrink-0 flex-col items-center gap-1 border-r border-studio-border bg-studio-panel py-2 focus-visible:outline-none"
+      className="relative z-40 flex w-[72px] shrink-0 flex-col items-center gap-1 band border-r border-studio-border py-2 focus-visible:outline-none"
       onKeyDown={(e) => {
         if (e.key === 'Escape' && menu.open) closeMenu(true)
       }}
     >
-      <Link
-        to="/"
-        aria-label="Jafat AI Studio, home"
-        className="mb-2 flex size-9 items-center justify-center rounded-[6px] bg-studio-gold text-studio-darkroom shadow-card"
-      >
-        <Clapperboard aria-hidden className="size-4" />
+      <Link to="/" aria-label="Jafat AI Studio, home" className="mb-2 rounded-[8px] shadow-[0_0_14px_rgb(255_106_0/0.25)]">
+        <img src="/brand/jafat-icon-192.png" alt="" className="size-10 rounded-[8px]" />
       </Link>
 
       <ul className="flex flex-col items-center gap-1">

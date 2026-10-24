@@ -18,6 +18,7 @@ def test_plans_show_only_website_packages_without_limits(anon):
     creator = next(p for p in r.json() if p["name"] == "Creator")
     assert creator["price_pkr"] == 2500 and creator["description"] == "For regular creators."
     assert "3D Studio" not in creator["studios"] and "Image studio" in creator["studios"]
+    assert "Stories" not in creator["studios"]  # the studio behind another product
     text = r.text.lower()
     assert "gpu" not in text and "max_queued" not in text and "api and mcp" not in text
 

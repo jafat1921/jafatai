@@ -12,14 +12,14 @@ const UR = (text: string) => (
 )
 
 const GALLERY: [string, string, boolean?][] = [
-  ['girl_book', 'Storybook illustration of a girl reading, the same character on every page'],
+  ['girl_book', 'Illustration of a girl in a red headscarf reading, a character kept the same in every scene'],
   ['castle', 'AI image of a fairy-tale castle above a green valley'],
   ['kingfisher', 'Short AI video of a kingfisher on a branch', true],
   ['elder', 'Portrait of a wise elder with a white beard and a turban'],
   ['neon_city', 'A neon city at night, made with the AI image generator'],
   ['music_notes', 'Glowing music notes for an original AI soundtrack'],
   ['dream_big', 'Poster with the words Dream Big set in exact lettering'],
-  ['family_story', 'A family story told in warm illustrated pictures'],
+  ['family_story', 'A grandmother and two children by the fire, in warm illustrated pictures'],
   ['mountain_village', 'A mountain village at dawn, painted from one line of text'],
 ]
 
@@ -36,8 +36,8 @@ export function LandingPage() {
         <div className="hero-copy reveal">
           <p className="eyebrow">Your AI studio</p>
           <h1 id="hero-title">
-            Create stories / <span className="gilded">pictures</span> / <span className="gilded">films</span> /{' '}
-            <span className="gilded">voices</span>, made at Jafat.
+            Create <span className="gilded">pictures</span> / <span className="gilded">films</span> /{' '}
+            <span className="gilded">voices</span> / music, made at Jafat.
           </h1>
           <p className="lede">
             Write the idea once. Jafat draws it, films it, voices it and scores it, in English and {UR('اُردُو')}.
@@ -102,10 +102,10 @@ export function LandingPage() {
 
       <div className="two-up">
         <section className="sheet char" aria-labelledby="char-title">
-          <Pic name="girl_book" alt="The same storybook character, a girl with a book, kept across every page" />
+          <Pic name="girl_book" alt="One character, a girl in a red headscarf, kept the same in every scene" />
           <div>
-            <h2 id="char-title">Same character, every page</h2>
-            <p>The face and look are kept across a whole book.</p>
+            <h2 id="char-title">Same character, every scene</h2>
+            <p>One face and voice, kept across your pictures, films and ads.</p>
             <Link className="explore-inline" to="/studio#characters">
               Explore{' '}<span className="sr-only">characters</span> <span aria-hidden>→</span>
             </Link>
@@ -113,7 +113,7 @@ export function LandingPage() {
         </section>
         <section className="sheet script-film" aria-labelledby="film-title">
           <h2 id="film-title">From script to film</h2>
-          <p>Your story, from idea to screen.</p>
+          <p>From one idea to a finished film.</p>
           <ol className="pipeline">
             {PIPELINE.map((step) => (
               <li key={step}>
@@ -162,22 +162,22 @@ export function LandingPage() {
         </section>
         <section className="sheet speaks" aria-labelledby="speaks-title">
           <h2 id="speaks-title">Speaks your language</h2>
-          <p>Same story, two languages.</p>
+          <p>Same words, two languages: a Poetry Short in Urdu, with its meaning in English.</p>
           <div className="pair">
             <figure>
               <div className="page" lang="en">
-                <Pic name="cloud" alt="The little cloud, from an English storybook page" />
+                <Pic name="courtyard" alt="A lantern glowing in a moonlit courtyard, the backdrop of an Urdu poetry video" />
                 <span className="pg-lang">English</span>
-                <strong>The Little Cloud</strong>
-                <span>The cloud wanted to help the village.</span>
+                <strong>Ghalib</strong>
+                <span>Thousands of desires, each one worth dying for.</span>
               </div>
               <figcaption>English</figcaption>
             </figure>
             <figure>
               <div className="page ur-page" lang="ur" dir="rtl">
-                <Pic name="cloud" alt="The little cloud on an Urdu storybook page" />
-                <strong>چھوٹا سا بادَل</strong>
-                <span>بادَل نے گاؤں کی مَدَد کرنے کا اِرادہ کیا۔</span>
+                <Pic name="courtyard" alt="The same moonlit courtyard, with the verse in Urdu" />
+                <strong>غالِب</strong>
+                <span>ہَزاروں خواہِشیں اَیسی کہ ہَر خواہِش پہ دَم نِکلے</span>
               </div>
               <figcaption lang="ur" dir="rtl">
                 اُردُو

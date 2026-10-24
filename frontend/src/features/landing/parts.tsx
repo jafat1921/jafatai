@@ -58,7 +58,7 @@ interface Tile {
 const TILES: Tile[] = [
   { id: 'pictures', title: 'Pictures', line: 'Create, edit with words, restyle, upscale, remove backgrounds.', group: 'photos' },
   { id: 'video', title: 'Video', line: 'Bring any picture to life, image to video.', group: 'films' },
-  { id: 'story-films', title: 'Story films', line: 'Narrated storybook videos with captions, chapters and a quiz ending.', group: 'films' },
+  { id: 'films-one-idea', title: 'Films from one idea', line: 'A whole film from a single line: script, scenes, voices, music and titles.', group: 'films' },
   { id: 'poetry', title: 'Poetry Shorts', line: 'An Urdu poem turned into a short video, with a voice, music and calligraphy.', group: 'films' },
   { id: 'voices', title: 'Voices', line: 'Natural narration, design a voice, English and Urdu with correct aerab.', group: 'podcasts' },
   { id: 'podcast-shows', title: 'Podcasts', line: 'Audio and video podcasts: write, voice and publish, with two hosts on screen.', group: 'podcasts' },

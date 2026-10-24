@@ -10,8 +10,9 @@ from app.models import Package
 
 router = APIRouter(prefix="/site", tags=["site"])
 
-# studios a visitor would recognise; "api" stays off a marketing page
-SHOWN = {k: v for k, v in pk.FEATURES.items() if k != "api"}
+# studios a visitor would recognise; "api" stays off a marketing page, and "stories" is the studio behind
+# another product, not something Jafat sells
+SHOWN = {k: v for k, v in pk.FEATURES.items() if k not in ("api", "stories")}
 
 
 @router.get("/plans")

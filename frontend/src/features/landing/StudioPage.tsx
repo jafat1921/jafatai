@@ -47,7 +47,7 @@ const GROUPS: Group[] = [
   {
     id: 'films',
     eyebrow: 'AI video maker in Urdu',
-    title: 'Stories, films and presenters',
+    title: 'Films, poetry and presenters',
     intro: 'From a single line to a finished film, with titles, music and a cast that stays true from scene to scene.',
     items: [
       ['A whole film from one idea', 'A line becomes a script, a storyboard, shots, a score and a cut.'],

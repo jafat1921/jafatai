@@ -88,7 +88,7 @@ describe('public site', () => {
   it('greets a signed-out visitor at / with the landing page', async () => {
     server()
     visit('/')
-    expect(await screen.findByRole('heading', { level: 1, name: /Create stories \/ pictures \/ films \/ voices, made at Jafat/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: /Create pictures \/ films \/ voices \/ music, made at Jafat/ })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const starts = await screen.findAllByRole('link', { name: /Start creating/ })
     starts.forEach((a) => expect(a).toHaveAttribute('href', '/signup'))
@@ -99,11 +99,11 @@ describe('public site', () => {
     expect(screen.getByRole('link', { name: 'See what people make' })).toHaveAttribute('href', '#gallery')
     expect(screen.getByRole('heading', { name: 'One idea, every format' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Made at Jafat' }).closest('section')).toHaveAttribute('id', 'gallery')
-    for (const name of ['Pictures', 'Video', 'Story films', 'Voices', 'Music & sound', 'Characters', 'Ad campaigns', 'Podcasts', 'Poetry Shorts', 'Dubbing & subtitles', 'Photo restore', '3D models'])
+    for (const name of ['Pictures', 'Video', 'Films from one idea', 'Voices', 'Music & sound', 'Characters', 'Ad campaigns', 'Podcasts', 'Poetry Shorts', 'Dubbing & subtitles', 'Photo restore', '3D models'])
       expect(screen.getByRole('heading', { level: 3, name })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Explore: Characters' })).toHaveAttribute('href', '/studio#films')
     // the Urdu page of the two-language story is real text, not baked into a picture
-    expect(screen.getByText('بادَل نے گاؤں کی مَدَد کرنے کا اِرادہ کیا۔').closest('[lang]')).toHaveAttribute('lang', 'ur')
+    expect(screen.getByText('ہَزاروں خواہِشیں اَیسی کہ ہَر خواہِش پہ دَم نِکلے').closest('[lang]')).toHaveAttribute('lang', 'ur')
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
     expect(screen.queryByText(/implant/i)).toBeNull()
   })

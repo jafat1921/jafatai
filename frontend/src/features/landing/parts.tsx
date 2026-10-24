@@ -59,11 +59,15 @@ const TILES: Tile[] = [
   { id: 'pictures', title: 'Pictures', line: 'Create, edit with words, restyle, upscale, remove backgrounds.', group: 'photos' },
   { id: 'video', title: 'Video', line: 'Bring any picture to life, image to video.', group: 'films' },
   { id: 'story-films', title: 'Story films', line: 'Narrated storybook videos with captions, chapters and a quiz ending.', group: 'films' },
+  { id: 'poetry', title: 'Poetry Shorts', line: 'An Urdu poem turned into a short video, with a voice, music and calligraphy.', group: 'films' },
   { id: 'voices', title: 'Voices', line: 'Natural narration, design a voice, English and Urdu with correct aerab.', group: 'podcasts' },
+  { id: 'podcast-shows', title: 'Podcasts', line: 'Audio and video podcasts: write, voice and publish, with two hosts on screen.', group: 'podcasts' },
   { id: 'music', title: 'Music & sound', line: 'Songs, background scores, sound effects.', group: 'sound' },
   { id: 'characters', title: 'Characters', line: 'One face and voice, consistent in every scene.', group: 'films' },
   { id: 'ads', title: 'Ad campaigns', line: 'Posts and short videos for WhatsApp, Facebook, Instagram and TikTok in every size.', group: 'social' },
-  { id: 'print', title: 'Print & products', line: 'Posters, book covers, merchandise designs.', group: 'photos' },
+  { id: 'dubbing-subtitles', title: 'Dubbing & subtitles', line: 'Re-voice a video in Urdu or English, with timed subtitles.', group: 'dubbing' },
+  { id: 'restore', title: 'Photo restore', line: 'Mend, colour and sharpen old family photos.', group: 'photos' },
+  { id: 'models-3d', title: '3D models', line: 'A 3D model from a picture or a line.', group: 'more' },
 ]
 
 /** The eight studio cards. On /studio they carry the ids the header links to. */

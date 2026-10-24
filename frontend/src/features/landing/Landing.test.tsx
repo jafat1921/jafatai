@@ -99,7 +99,7 @@ describe('public site', () => {
     expect(screen.getByRole('link', { name: 'See what people make' })).toHaveAttribute('href', '#gallery')
     expect(screen.getByRole('heading', { name: 'One idea, every format' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Made at Jafat' }).closest('section')).toHaveAttribute('id', 'gallery')
-    for (const name of ['Pictures', 'Video', 'Story films', 'Voices', 'Music & sound', 'Characters', 'Ad campaigns', 'Print & products'])
+    for (const name of ['Pictures', 'Video', 'Story films', 'Voices', 'Music & sound', 'Characters', 'Ad campaigns', 'Podcasts', 'Poetry Shorts', 'Dubbing & subtitles', 'Photo restore', '3D models'])
       expect(screen.getByRole('heading', { level: 3, name })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Explore: Characters' })).toHaveAttribute('href', '/studio#films')
     // the Urdu page of the two-language story is real text, not baked into a picture

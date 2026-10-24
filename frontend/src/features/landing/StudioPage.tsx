@@ -93,15 +93,14 @@ const GROUPS: Group[] = [
   },
   {
     id: 'photos',
-    eyebrow: 'Pictures, photos and print',
+    eyebrow: 'Pictures and photos',
     title: 'An AI image generator, and a darkroom for old photos',
     intro: 'Make new pictures from words, and give old ones a second life.',
     items: [
       ['Pictures from a line', 'Illustrations, covers and posters in your own style.'],
       ['Edit with words', 'Say what to change in a picture, and it changes.'],
       ['Restore old photos', 'Mend creases and scratches, add colour back and sharpen faces.'],
-      ['Print size and looks', 'Enlarge to print size, and finish with a look of your choosing.'],
-      ['Print designs', 'Shop signs, flyers and stickers, ready for the printer.'],
+      ['Bigger, sharper and finished', 'Enlarge your pictures without losing detail, and finish them with a look of your choosing.'],
     ],
   },
   {

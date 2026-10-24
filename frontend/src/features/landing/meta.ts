@@ -3,7 +3,7 @@ import type { PageMeta } from './head'
 // kept apart from the pages so the tests can check every title and description in one place
 
 export const HOME_FAQ: [string, string][] = [
-  ['What can I make with Jafat?', 'Pictures, social media ads, films, presenter videos, Urdu poetry videos, dubbing, podcasts, voices, music, restored photos, print designs and 3D models.'],
+  ['What can I make with Jafat?', 'Pictures, social media ads, films, presenter videos, Urdu poetry videos, dubbing, podcasts, voices, music, restored photos and 3D models.'],
   ['Which languages can I work in?', 'English and Urdu. Urdu is set in Nastaliq with full aerab, right to left, and its voices read as a native speaker would.'],
   ['Who owns what I make?', 'You do. It stays in your private library until you decide to share it.'],
   ['What do I need?', 'Only a web browser, on a computer or a phone. There is nothing to install.'],

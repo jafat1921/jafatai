@@ -28,12 +28,14 @@ function VideoCreate() {
   const generate = useVideoGenerate()
   const record = useRecordRun<VideoRun>(PAGE)
 
-  const run = (r: VideoRun) =>
+  // a run from the dock empties the prompt once it's accepted; a tile's Retry leaves the dock alone
+  const run = (r: VideoRun, fromDock = false) =>
     generate.mutate(r.body, {
       onSuccess: (res) => {
         const { items, jobs } = videoResult(res)
         record({ prompt: r.body.prompt, summary: r.summary, settings: r, items, jobs, label: 'Your clip' })
         announce('Making your clip. It appears below when it finishes.')
+        if (fromDock) setForm((f) => ({ ...f, prompt: '' }))
       },
     })
   const refill = (patch: Partial<VideoForm>, quiet = false) => {
@@ -50,7 +52,7 @@ function VideoCreate() {
         form={form}
         setForm={setForm}
         modelPicked={!!model && form.model === model}
-        onRun={run}
+        onRun={(r) => run(r, true)}
         pending={generate.isPending}
         error={generate.error}
       />

@@ -30,11 +30,13 @@ export function ImageGeneratePage() {
   const generate = useImageGenerate()
   const record = useRecordRun<ImageRun>(PAGE)
 
-  const run = (r: ImageRun) =>
+  // a run from the dock empties the prompt once it's accepted (settings stay); a tile's Retry leaves the dock alone
+  const run = (r: ImageRun, fromDock = false) =>
     generate.mutate(r.body, {
       onSuccess: ({ items, jobs }) => {
         record({ prompt: r.body.prompt, summary: r.summary, settings: r, items: items ?? [], jobs, label: plural(items?.length ?? r.form.count, 'image') })
         announce(`Creating ${plural(items?.length ?? r.form.count, 'image')}. They appear below as they finish.`)
+        if (fromDock) setPrefill((p) => ({ n: p.n + 1, form: { ...r.form, prompt: '' } }))
       },
     })
 
@@ -57,7 +59,7 @@ export function ImageGeneratePage() {
         initial={prefill.form}
         templateTitle={prefill.n ? undefined : tpl?.templateTitle}
         modelPicked={!!model && !prefill.n}
-        onRun={run}
+        onRun={(r) => run(r, true)}
         pending={generate.isPending}
         error={generate.error}
       />

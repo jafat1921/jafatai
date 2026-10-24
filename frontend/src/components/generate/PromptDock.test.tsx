@@ -134,8 +134,12 @@ describe('magic prompt', () => {
     expect(posted(calls)).not.toHaveProperty('prompt_enhanced')
 
     calls.length = 0
+    const next = screen.getByRole('textbox', { name: 'Describe the image' })
+    expect(next).toHaveValue('')
     await user.click(screen.getByRole('radio', { name: /^Off:/ }))
     expect(screen.queryByRole('button', { name: 'Preview enhancement' })).not.toBeInTheDocument()
+    await user.click(next)
+    await user.paste('a fox at dawn')
     await user.click(screen.getByRole('button', { name: /^Generate/ }))
     expect(posted(calls)).toMatchObject({ prompt: 'a fox at dawn', magic_prompt: 'off' })
   })

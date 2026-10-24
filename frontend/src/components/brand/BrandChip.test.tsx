@@ -81,6 +81,9 @@ describe('brand chip', () => {
     expect(within(chip).getByText('Off')).toBeInTheDocument()
     await closeChip(user)
     expect(screen.getByRole('button', { name: 'Brand: Stone (off)' })).toBeInTheDocument()
+    // the dock emptied after the first render
+    await user.click(screen.getByRole('textbox', { name: 'Describe the clip' }))
+    await user.paste('Steam rising from a cup')
     await user.click(screen.getByRole('button', { name: /^Render/ }))
     expect(posted(calls)).not.toHaveProperty('brand_kit_id')
   })

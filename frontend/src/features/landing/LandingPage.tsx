@@ -1,323 +1,236 @@
-import { useEffect } from 'react'
 import { Link } from 'react-router'
-import { useAuthConfig } from '@/hooks/useAuth'
-import { JafatDefs } from './JafatDefs'
-import './jafat.css'
+import { MessageSquare, Sparkles } from 'lucide-react'
+import { CreateButton, MarketingLayout } from './MarketingLayout'
+import { Pic, PricingCards, StudioTiles, VoiceCard } from './parts'
+import { QUILL, useCreateHref, useInviteOnly, usePageMeta } from './head'
+import { HOME_META } from './meta'
 
-const FONTS =
-  'https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=Cormorant+Garamond:wght@400;500;600&family=Gulzar&family=IM+Fell+English+SC&family=Sora:wght@500;600;800&display=swap'
+const UR = (text: string) => (
+  <span lang="ur" dir="rtl">
+    {text}
+  </span>
+)
 
-// only the public site needs these faces, so they come and go with it
-function useBrandFonts() {
-  useEffect(() => {
-    const pre = Object.assign(document.createElement('link'), { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: '' })
-    const css = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: FONTS })
-    document.head.append(pre, css)
-    return () => {
-      pre.remove()
-      css.remove()
-    }
-  }, [])
-}
-
-const QUILL = '/brand/feather.svg'
-
-const CRAFTS = [
-  ['Pictures', 'Illustrations, covers and posters in your own style, from a single line.'],
-  ['Video', 'Still pictures brought to life, then cut into a film with titles and music.'],
-  ['Voices', 'Narration in English, Urdu and Swedish, with aerab where the words need it.'],
-  ['Music', 'Scores and soundscapes for every story, made to fit its length.'],
+const GALLERY: [string, string, boolean?][] = [
+  ['girl_book', 'Storybook illustration of a girl reading, the same character on every page'],
+  ['castle', 'AI image of a fairy-tale castle above a green valley'],
+  ['kingfisher', 'Short AI video of a kingfisher on a branch', true],
+  ['elder', 'Portrait of a wise elder with a white beard and a turban'],
+  ['neon_city', 'A neon city at night, made with the AI image generator'],
+  ['music_notes', 'Glowing music notes for an original AI soundtrack'],
+  ['dream_big', 'Poster with the words Dream Big set in exact lettering'],
+  ['family_story', 'A family story told in warm illustrated pictures'],
+  ['mountain_village', 'A mountain village at dawn, painted from one line of text'],
 ]
 
-const MORE = [
-  ['Characters that keep their face and voice', 'Cast someone once; they look and sound the same in every scene.'],
-  ['A whole film from one idea', 'A line becomes a script, a storyboard, shots, a score and a cut.'],
-  ['Video podcasts with two hosts', 'Two voices talk your topic through, on screen, from your notes.'],
-  ['Ads and print designs in your brand', 'Campaigns, posters and flyers in your colours, in every size.'],
-  ['3D models from a picture or a line', 'Turn a sketch, a photo or a sentence into a model you can spin.'],
-]
-
-function Brand() {
-  return (
-    <Link className="brand" to="/" aria-label="Jafat AI Studio, home">
-      <span className="ar gilded" lang="ar" aria-hidden>
-        جعفت
-      </span>
-      <span aria-hidden>
-        <b>JAFAT</b>
-        <small className="gilded">AI STUDIO</small>
-      </span>
-    </Link>
-  )
-}
+const PIPELINE = ['Title card', 'Scenes', 'Narration', 'Music', 'The End']
 
 export function LandingPage() {
-  useBrandFonts()
-  const config = useAuthConfig()
-  // until the server answers, assume the door is open; an old server reads as closed (see useAuthConfig)
-  const invite = config.data ? config.data.signup !== 'open' : false
-
-  useEffect(() => {
-    const was = document.title
-    document.title = 'Jafat AI Studio: pictures, film, voices and music'
-    return () => {
-      document.title = was
-    }
-  }, [])
-
-  const create = (label: string) =>
-    invite ? (
-      <Link className="btn btn-primary" to="/login">
-        <img src={QUILL} alt="" />
-        Sign in
-      </Link>
-    ) : (
-      <Link className="btn btn-primary" to="/signup">
-        <img src={QUILL} alt="" />
-        {label}
-      </Link>
-    )
+  usePageMeta(HOME_META)
+  const invite = useInviteOnly()
+  const create = useCreateHref()
 
   return (
-    <div className="jafat">
-      <JafatDefs />
-      <a className="skip" href="#main">
-        Skip to content
-      </a>
+    <MarketingLayout>
+      <section className="hero" aria-labelledby="hero-title">
+        <div className="hero-copy reveal">
+          <p className="eyebrow">Your AI studio</p>
+          <h1 id="hero-title">
+            Create stories / <span className="gilded">pictures</span> / <span className="gilded">films</span> /{' '}
+            <span className="gilded">voices</span>, made at Jafat.
+          </h1>
+          <p className="lede">
+            Write the idea once. Jafat draws it, films it, voices it and scores it, in English and {UR('اُردُو')}.
+          </p>
+          <div className="actions">
+            <CreateButton label="Start creating free" arrow />
+            <a className="btn btn-ghost pill" href="#gallery">
+              See what people make
+            </a>
+            {invite && <span className="note">Sign-up is by invitation</span>}
+          </div>
+        </div>
+        <div className="hero-art reveal" aria-hidden>
+          <img className="quill" src={QUILL} alt="" />
+          <Pic name="castle" alt="" className="h1" eager />
+          <Pic name="forest" alt="" className="h2" play eager />
+          <VoiceCard className="h3" />
+          <VoiceCard className="h4" />
+        </div>
+      </section>
 
-      <header className="band site-header">
-        <Brand />
-        <nav aria-label="Main">
-          <a href="#studio">Studio</a>
-          <a href="#how">How it works</a>
-          <a href="#languages">Languages</a>
-          <a href="#faq">FAQ</a>
-        </nav>
-        <Link className="btn btn-ghost" to="/login">
-          Sign in
+      <section className="sheet formats" aria-labelledby="formats-title">
+        <h2 id="formats-title">One idea, every format</h2>
+        <Link className="prompt" to={create} aria-label="Try your own idea">
+          <img src={QUILL} alt="" />
+          <span className="prompt-text">A little cloud who wants to help…</span>
+          <span className="go" aria-hidden>
+            →
+          </span>
         </Link>
-      </header>
+        <ol className="flow">
+          <li>
+            <Pic name="cloud" alt="AI image generator: a smiling little cloud, from a single idea" />
+            <h3>Picture</h3>
+            <p>From your idea to beautiful images.</p>
+          </li>
+          <li>
+            <Pic name="forest" alt="AI video of a sunlit forest, made from the picture" play />
+            <h3>Film</h3>
+            <p>Turn images into short films.</p>
+          </li>
+          <li>
+            <VoiceCard mic />
+            <h3>Narration</h3>
+            <p>Natural voices in English and {UR('اُردُو')}.</p>
+          </li>
+          <li>
+            <Pic name="music_notes" alt="Glowing music notes for original AI music" />
+            <h3>Music</h3>
+            <p>Original music and soundscapes.</p>
+          </li>
+        </ol>
+      </section>
 
-      <main id="main" tabIndex={-1}>
-        <section className="hero" aria-labelledby="hero-title">
-          <div className="reveal">
-            <p className="eyebrow">Your own AI studio</p>
-            <h1 id="hero-title">
-              Every story, <span className="gilded">written in light</span>
-            </h1>
-            <p className="lede">
-              Pictures, film, voices and music, made on Jafat’s own GPUs: in English,{' '}
-              <span lang="ur" dir="rtl">
-                اُردُو
-              </span>{' '}
-              and{' '}
-              <span lang="ar" dir="rtl">
-                العَرَبِيَّة
-              </span>
-              .
-            </p>
-            <div className="actions">
-              {create('Start creating')}
-              {invite ? (
-                <span className="note">Sign-up is by invitation</span>
-              ) : (
-                <Link className="btn btn-ghost" to="/login">
-                  Sign in
-                </Link>
-              )}
-            </div>
-          </div>
-          <div className="hero-art reveal" aria-hidden>
-            <span className="watermark ar">جعفت</span>
-            <img className="quill" src={QUILL} alt="" />
+      <section className="studio" aria-labelledby="studio-title">
+        <div className="head-left">
+          <h2 id="studio-title">The Studio</h2>
+          <p>Everything you need to create, in one place.</p>
+        </div>
+        <StudioTiles />
+      </section>
+
+      <div className="two-up">
+        <section className="sheet char" aria-labelledby="char-title">
+          <Pic name="girl_book" alt="The same storybook character, a girl with a book, kept across every page" />
+          <div>
+            <h2 id="char-title">Same character, every page</h2>
+            <p>The face and look are kept across a whole book.</p>
+            <Link className="explore-inline" to="/studio#characters">
+              Explore{' '}<span className="sr-only">characters</span> <span aria-hidden>→</span>
+            </Link>
           </div>
         </section>
-
-        <section id="studio" aria-labelledby="studio-title">
-          <div className="section-head">
-            <p className="eyebrow">The studio</p>
-            <h2 id="studio-title">Four crafts, one quill</h2>
-            <p>Each tool is a page in the same old book: write the idea once, and the studio draws, films, voices and scores it.</p>
-          </div>
-          <div className="cards">
-            {CRAFTS.map(([title, text]) => (
-              <article key={title} className="card sheet reveal">
-                <img className="icon" src={QUILL} alt="" />
-                <h3>{title}</h3>
-                <p>{text}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="sheet map more" aria-labelledby="more-title">
-          <div className="section-head">
-            <p className="eyebrow">Turn the page</p>
-            <h2 id="more-title">More in the studio</h2>
-          </div>
-          <ul>
-            {MORE.map(([title, text]) => (
-              <li key={title}>
-                <img src={QUILL} alt="" />
-                <div>
-                  <strong>{title}</strong>
-                  <span>{text}</span>
-                </div>
+        <section className="sheet script-film" aria-labelledby="film-title">
+          <h2 id="film-title">From script to film</h2>
+          <p>Your story, from idea to screen.</p>
+          <ol className="pipeline">
+            {PIPELINE.map((step) => (
+              <li key={step}>
+                {step === 'Title card' && (
+                  <span className="pic dark gold-text" aria-hidden>
+                    Title
+                  </span>
+                )}
+                {step === 'Scenes' && <Pic name="castle" alt="" />}
+                {step === 'Narration' && <VoiceCard />}
+                {step === 'Music' && <Pic name="music_notes" alt="" />}
+                {step === 'The End' && (
+                  <span className="pic dark gold-text" aria-hidden>
+                    The End
+                  </span>
+                )}
+                <span className="step">{step}</span>
               </li>
             ))}
-          </ul>
-        </section>
-
-        <section id="how" aria-labelledby="how-title">
-          <div className="section-head">
-            <p className="eyebrow">How it works</p>
-            <h2 id="how-title">Three strokes of the pen</h2>
-          </div>
-          <ol className="steps">
-            <li>
-              <span className="num ar gilded" aria-hidden>
-                ١
-              </span>
-              <h3>Write your idea</h3>
-              <p>A line, a verse or a page. Say who it’s for and how it should feel.</p>
-            </li>
-            <li>
-              <span className="num ar gilded" aria-hidden>
-                ٢
-              </span>
-              <h3>The studio drafts it</h3>
-              <p>Pictures, shots, voices and music arrive as drafts you can look over.</p>
-            </li>
-            <li>
-              <span className="num ar gilded" aria-hidden>
-                ٣
-              </span>
-              <h3>Refine and export</h3>
-              <p>Keep what you love, redo the rest, then take it away at full quality.</p>
-            </li>
           </ol>
         </section>
+      </div>
 
-        <section id="languages" aria-labelledby="languages-title">
-          <div className="section-head">
-            <p className="eyebrow">Languages</p>
-            <h2 id="languages-title">Written as it is spoken</h2>
-            <p>Each script set the right way round, and each voice reading it as a native speaker would.</p>
-          </div>
-          <div className="tongues">
-            <div className="tongue sheet">
-              <span className="name">English</span>
-              <span className="sample" lang="en">
-                Every story, written in light
+      <div className="two-up">
+        <section className="sheet brand-kit" aria-labelledby="brand-title">
+          <h2 id="brand-title">Your brand, kept</h2>
+          <p>Your brand kit, applied to every output.</p>
+          <div className="kit" aria-hidden>
+            <span className="kit-logo">
+              <img src={QUILL} alt="" />
+              YOUR BRAND
+            </span>
+            <span className="kit-side">
+              <span className="dots">
+                <i style={{ background: '#d4a017' }} />
+                <i style={{ background: '#e8a33d' }} />
+                <i style={{ background: '#3a8f8a' }} />
+                <i style={{ background: '#3b3530' }} />
               </span>
-              <p>Scripts, subtitles and voices.</p>
-            </div>
-            <div className="tongue sheet">
-              <span className="name">
-                Urdu ·{' '}
-                <span lang="ur" dir="rtl">
-                  اُردُو
-                </span>
+              <span className="aa">
+                Aa <span>Aa</span>
               </span>
-              <span className="sample ur" lang="ur" dir="rtl">
-                ہَر کَہانی، نُور سے لِکھی ہُوئی
-              </span>
-              <p>With full aerab, so every word is read as it should sound.</p>
-            </div>
-            <div className="tongue sheet">
-              <span className="name">
-                Arabic ·{' '}
-                <span lang="ar" dir="rtl">
-                  العَرَبِيَّة
-                </span>
-              </span>
-              <span className="sample" lang="ar" dir="rtl">
-                كُلُّ حِكَايَةٍ مَكْتُوبَةٌ بِالنُّورِ
-              </span>
-              <p>Right to left, from the title card to the subtitles.</p>
-            </div>
-            <div className="tongue sheet">
-              <span className="name">Swedish voices</span>
-              <span className="sample" lang="sv">
-                Varje berättelse, skriven i ljus
-              </span>
-              <p>Narration in warm Swedish voices.</p>
-            </div>
+              <span className="kit-cap">Colours · Fonts · Voice</span>
+            </span>
           </div>
         </section>
-
-        <section className="sheet yours" aria-labelledby="yours-title">
-          <div>
-            <p className="eyebrow">Private by default</p>
-            <h2 id="yours-title">Your work stays yours</h2>
-            <p>Nothing you write or make is handed to anyone else to train on, sell or look at.</p>
+        <section className="sheet speaks" aria-labelledby="speaks-title">
+          <h2 id="speaks-title">Speaks your language</h2>
+          <p>Same story, two languages.</p>
+          <div className="pair">
+            <figure>
+              <div className="page" lang="en">
+                <Pic name="cloud" alt="The little cloud, from an English storybook page" />
+                <span className="pg-lang">English</span>
+                <strong>The Little Cloud</strong>
+                <span>The cloud wanted to help the village.</span>
+              </div>
+              <figcaption>English</figcaption>
+            </figure>
+            <figure>
+              <div className="page ur-page" lang="ur" dir="rtl">
+                <Pic name="cloud" alt="The little cloud on an Urdu storybook page" />
+                <strong>چھوٹا سا بادَل</strong>
+                <span>بادَل نے گاؤں کی مَدَد کرنے کا اِرادہ کیا۔</span>
+              </div>
+              <figcaption lang="ur" dir="rtl">
+                اُردُو
+              </figcaption>
+            </figure>
           </div>
-          <ul>
-            <li>
-              <strong>Made on Jafat’s own GPUs</strong>
-              <span>Every picture, frame and note is drawn on our own machines.</span>
+        </section>
+      </div>
+
+      <section id="gallery" className="sheet made" aria-labelledby="gallery-title">
+        <h2 id="gallery-title">Made at Jafat</h2>
+        <p>Real examples. Endless possibilities.</p>
+        <ul className="polaroids" role="list" aria-label="Examples made at Jafat" tabIndex={0}>
+          {GALLERY.map(([name, alt, play]) => (
+            <li key={name}>
+              <Pic name={name} alt={alt} play={play} />
             </li>
-            <li>
-              <strong>No third-party AI services</strong>
-              <span>Your ideas never leave for someone else’s cloud.</span>
-            </li>
-            <li>
-              <strong>Private until you share</strong>
-              <span>Your library is yours alone unless you choose to show it.</span>
-            </li>
-          </ul>
-        </section>
+          ))}
+        </ul>
+      </section>
 
-        <section id="faq" className="faq" aria-labelledby="faq-title">
-          <div className="section-head">
-            <p className="eyebrow">Questions</p>
-            <h2 id="faq-title">Asked at the door</h2>
-          </div>
-          <details>
-            <summary>Does an account cost anything?</summary>
-            <p>
-              {invite
-                ? 'No. Accounts are free, and for now they are by invitation.'
-                : 'No. A free account lets you try the whole studio; more room comes with Pro.'}
-            </p>
-          </details>
-          <details>
-            <summary>Which languages can I work in?</summary>
-            <p>English, Urdu and Arabic, each in its own script, with full aerab on Urdu. Narration also comes in Swedish.</p>
-          </details>
-          <details>
-            <summary>Who owns what I make?</summary>
-            <p>You do. It stays in your private library until you decide to share it.</p>
-          </details>
-          <details>
-            <summary>What do I need?</summary>
-            <p>Only a web browser. The heavy work runs on Jafat’s own GPUs, so there is nothing to install.</p>
-          </details>
-          <details>
-            <summary>How do I start?</summary>
-            <p>
-              {invite
-                ? 'Sign in with the account you were invited to, then write your first idea.'
-                : 'Create an account, confirm your email and write your first idea. The studio takes it from there.'}
-            </p>
-          </details>
-        </section>
+      <section className="sheet works" aria-labelledby="works-title">
+        <div>
+          <h2 id="works-title">Works where you work</h2>
+          <p>Connect Jafat to your AI assistant in a minute.</p>
+        </div>
+        <ul className="chips" role="list">
+          <li>
+            <Sparkles aria-hidden />
+            Claude
+          </li>
+          <li>
+            <MessageSquare aria-hidden />
+            ChatGPT
+          </li>
+          <li className="muted">More coming soon</li>
+        </ul>
+      </section>
 
-        <section className="sheet map finale" aria-labelledby="finale-title">
-          <span className="ar gilded" lang="ar" aria-hidden>
-            جعفت
-          </span>
-          <h2 id="finale-title">Begin your first page</h2>
-          <p>{invite ? 'Sign-up is by invitation. Already have an account? Your studio is waiting.' : 'A free account lets you try the whole studio. Your work stays yours.'}</p>
-          <div className="actions">{create('Create an account')}</div>
-        </section>
-      </main>
+      <section className="sheet price-band" aria-labelledby="price-title">
+        <h2 id="price-title">Simple, fair pricing</h2>
+        <p>More room. More possibilities.</p>
+        <PricingCards />
+      </section>
 
-      <footer className="band site-footer">
-        <span>© 2026 Jafat AI Studio · jafat.ai</span>
-        <Link to="/login">Sign in</Link>
-        {!invite && <Link to="/signup">Create an account</Link>}
-      </footer>
-    </div>
+      <section className="scroll-cta" aria-labelledby="finale-title">
+        <img className="cta-quill" src={QUILL} alt="" />
+        <span className="ar gilded" lang="ar" aria-hidden>
+          جعفت
+        </span>
+        <h2 id="finale-title">Begin your first page</h2>
+        <CreateButton label="Create a free account" arrow />
+      </section>
+    </MarketingLayout>
   )
 }

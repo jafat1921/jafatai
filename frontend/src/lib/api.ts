@@ -358,7 +358,22 @@ export interface PhotoExif {
   tags: Record<string, string>
 }
 
+// the public site's price list: only packages the admin marked "Show on the website", already sorted
+export interface SitePlan {
+  id: string
+  name: string
+  description: string
+  price_pkr: number
+  period: 'day' | 'week' | 'month' | 'year' | 'none'
+  days: number | null
+  private_items: boolean
+  studios: string[]
+}
+
 export const api = {
+  site: {
+    plans: () => get<SitePlan[]>('/site/plans'),
+  },
   auth: {
     login: (email: string, password: string) => post<User>('/auth/login', { email, password }),
     logout: () => post<void>('/auth/logout'),

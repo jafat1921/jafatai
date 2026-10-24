@@ -270,6 +270,9 @@ export function activeRail(pathname: string): RailId | null {
 
 const TITLES: [RegExp, string][] = [
   [/^\/$/, 'Home'],
+  [/^\/studio$/, 'What you can make'],
+  [/^\/plans$/, 'Plans'],
+  [/^\/about$/, 'About'],
   [/^\/(video\/quick|create)$/, 'Quick video'],
   [/^\/quick\//, 'Quick video'],
   [/^\/(video\/)?projects$/, 'Studio projects'],

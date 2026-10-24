@@ -210,7 +210,7 @@ def implant_demo(args: list[str]) -> int:
 SAMPLE_PACKAGES = (
     dict(slug="creator", name="Creator", sort=3, public=True, price_pkr=2500, period="month",
          description="For creators and small shops posting every week: pictures, videos, voices and music, "
-                     "in English, Urdu and Arabic.",
+                     "in English and Urdu.",
          gpu_min_day=120.0, gpu_min_month=2400.0, max_queued=4),
     dict(slug="studio", name="Studio", sort=4, public=True, price_pkr=7500, period="month", private_items=True,
          description="For busy creators and brands: films, podcasts, dubbing and ads every day, with private "

@@ -1,35 +1,29 @@
 import * as React from 'react'
+import { Link } from 'react-router'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
-import { Ornament } from '@/components/studio/ornament'
+import { MarketingLayout } from '@/features/landing/MarketingLayout'
 import { cn } from '@/lib/utils'
 
-// the double-ruled parchment card every signed-out page sits on
-export const CARD =
-  'flex flex-col gap-4 rounded-[8px] border-[3px] border-double border-studio-gold/80 bg-studio-raised p-5 shadow-pop'
+// the burnt-edge sheet in AuthLayout is the card now; this only lays the form out
+export const CARD = 'flex flex-col gap-4'
 
 export function AuthLayout({ subtitle, children, footer }: { subtitle: string; children: React.ReactNode; footer?: React.ReactNode }) {
   return (
-    <main className="flex min-h-full items-center justify-center px-4 py-10">
-      <div className="w-full max-w-sm animate-fade-in">
-        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+    <MarketingLayout className="auth">
+      <div className="auth-main animate-fade-in">
+        <Link className="back" to="/">
+          <span aria-hidden>←</span> Back to jafat.ai
+        </Link>
+        <div className="auth-head">
           {/* the logo's cream ground melts into the parchment under multiply */}
-          <img
-            src="/brand/jafat-logo-horizontal-light.png"
-            alt=""
-            width={2000}
-            height={600}
-            className="h-auto w-56 mix-blend-multiply"
-          />
-          <div>
-            <h1 className="font-display text-[30px] font-bold leading-9">Jafat AI Studio</h1>
-            <Ornament className="my-2 justify-center" />
-            <p className="text-body text-studio-muted">{subtitle}</p>
-          </div>
+          <img src="/brand/jafat-logo-horizontal-light.png" alt="Jafat logo" width={2000} height={600} />
+          <h1>Jafat AI Studio</h1>
+          <p>{subtitle}</p>
         </div>
-        {children}
-        {footer && <div className="mt-4 flex flex-col items-center gap-1.5 text-center text-body">{footer}</div>}
+        <div className="sheet auth-sheet">{children}</div>
+        {footer && <div className="auth-foot">{footer}</div>}
       </div>
-    </main>
+    </MarketingLayout>
   )
 }
 

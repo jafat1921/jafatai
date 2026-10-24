@@ -4,6 +4,7 @@ export const qk = {
   me: ['me'] as const,
   tokens: ['api-tokens'] as const,
   authConfig: ['auth-config'] as const,
+  sitePlans: ['site-plans'] as const,
   adminUsers: (q: string, status: string, packageId = '') => ['admin-users', q, status, packageId] as const,
   // contract v39
   usage: ['account-usage'] as const,

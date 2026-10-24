@@ -336,6 +336,10 @@ const routes: RouteObject[] = [
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/verify-email', element: <VerifyEmailPage /> },
+  // the public site; '/' itself is the landing for visitors, see RequireAuth
+  { path: '/studio', lazy: async () => ({ Component: (await import('@/features/landing/StudioPage')).StudioPage }) },
+  { path: '/plans', lazy: async () => ({ Component: (await import('@/features/landing/PlansPage')).PlansPage }) },
+  { path: '/about', lazy: async () => ({ Component: (await import('@/features/landing/AboutPage')).AboutPage }) },
   {
     element: <RequireAuth />,
     children: [{ element: <AppShell />, children: shellRoutes }],

@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input'
 import { useOptionChecks, useRenderOptions } from '@/hooks/useImplant'
 import {
   ccOk,
+  ENGINE_LABEL,
+  ENGINES,
   FILL_LABEL,
   isDone,
   LETTERS,
@@ -14,6 +16,7 @@ import {
   PROFILE_LABEL,
   patientViews,
   SHAPE_LABEL,
+  type Engine,
   type ImplantOption,
   type OptionCheck,
   type Patient,
@@ -24,6 +27,10 @@ import { announce } from '@/stores/ui'
 
 const SELECT = 'h-8 w-full rounded-[6px] border border-studio-border-strong bg-studio-raised px-2 text-body focus-visible:outline-2 focus-visible:outline-studio-accent'
 const PRESET = [300, 350, 400]
+const ENGINE_HELP: Record<Engine, string> = {
+  ai: 'Photorealistic: the chest is redrawn, the rest of her photo kept.',
+  warp: 'Her own photo, reshaped by the implant volume. Nothing is redrawn.',
+}
 
 export function Options({ patient }: { patient: Patient }) {
   const uid = useId()
@@ -32,10 +39,11 @@ export function Options({ patient }: { patient: Patient }) {
   // "same both sides" keeps the right side following the left until it's switched off
   const [same, setSame] = useState<boolean[]>([true])
   const checks = useOptionChecks(patient.id, options, patient.measurements)
+  const [engines, setEngines] = useState<Engine[]>(ENGINES)
 
   const photos = patientViews(patient).filter((v) => isDone(patient.photos[v])).length
   const valid = options.every((o) => ccOk(o.left_cc) && ccOk(o.right_cc))
-  const why = !photos ? 'Upload at least one photo first.' : !valid ? 'Each side takes 100 to 900 cc.' : null
+  const why = !photos ? 'Upload at least one photo first.' : !valid ? 'Each side takes 100 to 900 cc.' : !engines.length ? 'Choose at least one way to show it.' : null
 
   const edit = (i: number, patch: Partial<ImplantOption>) =>
     setOptions((all) => all.map((o, j) => (j !== i ? o : { ...o, ...patch, ...(same[i] && patch.left_cc !== undefined ? { right_cc: patch.left_cc } : {}) })))
@@ -147,6 +155,25 @@ export function Options({ patient }: { patient: Patient }) {
       </ul>
 
       {checks.data && <p className="text-small text-studio-muted">Approximate; confirm with the manufacturer’s chart.</p>}
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="section-label mb-1">Show it as</legend>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {ENGINES.map((e) => (
+            <label key={e} className="flex max-w-sm items-start gap-2 text-body">
+              <input
+                type="checkbox"
+                className="mt-1 accent-studio-accent"
+                checked={engines.includes(e)}
+                onChange={(ev) => setEngines((all) => (ev.target.checked ? ENGINES.filter((x) => x === e || all.includes(x)) : all.filter((x) => x !== e)))}
+              />
+              <span>
+                {ENGINE_LABEL[e]}
+                <span className="block text-small text-studio-muted">{ENGINE_HELP[e]}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       {render.isError && (
         <p role="alert" className="text-small text-studio-danger">
           {render.error.message}
@@ -162,7 +189,7 @@ export function Options({ patient }: { patient: Patient }) {
           loading={render.isPending}
           onClick={() =>
             render.mutate(
-              options.map((o) => ({ ...o, label: o.label.trim() })),
+              { options: options.map((o) => ({ ...o, label: o.label.trim() })), engines },
               { onSuccess: () => announce('Rendering the options. The pictures appear below as they finish.') },
             )
           }
@@ -170,7 +197,8 @@ export function Options({ patient }: { patient: Patient }) {
           <Sparkles aria-hidden />
           Render the options
           <span className="font-normal opacity-85">
-            · {plural(options.length, 'option')} × {plural(photos, 'photo')} = {plural(options.length * photos, 'picture')}
+            · {plural(options.length, 'option')} × {plural(photos, 'photo')}
+            {engines.length > 1 && ' × 2 ways'} = {plural(options.length * photos * engines.length, 'picture')}
           </span>
         </Button>
         {why && (

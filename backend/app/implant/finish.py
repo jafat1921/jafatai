@@ -60,6 +60,39 @@ def find_chest(photo: Path, view: str, tick=None) -> tuple[list[int], str]:
     return list(DEFAULT_BOX.get(view, DEFAULT_BOX["front"])), "default"
 
 
+class _Point(BaseModel):
+    side: str
+    y: int
+    x: int
+
+
+class _Points(BaseModel):
+    points: list[_Point] = Field(max_length=2)
+
+
+def find_bust(photo: Path, view: str, box: list[int], tick=None) -> tuple[list[dict], str]:
+    """(points, source): the centre of each breast, under whatever she wears, for the shape warp. Points outside the
+    chest box are dropped; none left means the usual places in the box (warp.default_points)."""
+    from app.implant.warp import default_points
+
+    msgs = [{"role": "system", "content": "You locate regions in clinical photographs. Answer only with JSON."},
+            {"role": "user", "images": [image_b64(photo)],
+             "content": "Give the centre point of each breast you can see (under any clothing), as y and x on a "
+                        "0-1000 scale (y down), with side \"left\" or \"right\" meaning the person's own left or "
+                        'right. Reply as JSON {"points": [{"side": "left", "y": 0, "x": 0}]}.'}]
+    y1, x1, y2, x2 = box
+    try:
+        res = chat_sync("vision", msgs, schema=_Points, temperature=0.0, max_tokens=120,
+                        timeout=get_settings().vision_timeout_s, tick=tick)
+        pts = [{"side": q.side if q.side in ("left", "right") else "left", "y": q.y, "x": q.x}
+               for q in res.data.points if y1 <= q.y <= y2 and x1 <= q.x <= x2]
+        if pts:
+            return pts, "vision"
+    except LLMError as e:
+        log.info("bust points from the vision model failed, using the usual places: %s", e)
+    return default_points(view, box), "default"
+
+
 def _grey(im: Image.Image, size: tuple[int, int]) -> np.ndarray:
     return np.asarray(im.convert("L").resize(size), dtype=np.float32)
 

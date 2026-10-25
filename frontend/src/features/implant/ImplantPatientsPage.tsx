@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCreatePatient, usePatients } from '@/hooks/useImplant'
-import { shortDay } from '@/lib/implant'
+import { SESSION_ONLY, sessionOnly, shortDay } from '@/lib/implant'
 import { announce } from '@/stores/ui'
 
 export function ImplantPatientsPage() {
@@ -45,6 +45,7 @@ export function ImplantPatientsPage() {
               >
                 <span className="min-w-0 flex-1 truncate text-body font-medium">{p.label}</span>
                 <span className="text-small text-studio-muted">last seen {shortDay(p.last_activity_at)}</span>
+                {sessionOnly(p) && <Badge tone="warning">Session only</Badge>}
                 {p.approved && <Badge tone="success">Chart ready</Badge>}
               </Link>
             </li>
@@ -65,13 +66,15 @@ function NewPatientDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [consent, setConsent] = useState(false)
   const [topless, setTopless] = useState(false)
   const [months, setMonths] = useState('24')
+  const [once, setOnce] = useState(false)
 
   const missing = [!label.trim() && 'a patient code or name', !adult && 'the age tick', !consent && 'the consent tick'].filter(Boolean) as string[]
   const monthsOk = Number.isInteger(Number(months)) && Number(months) >= 1 && Number(months) <= 120
-  const ready = missing.length === 0 && monthsOk
+  const ready = missing.length === 0 && (once || monthsOk)
 
   const reset = () => {
     setLabel('')
+    setOnce(false)
     setAdult(false)
     setConsent(false)
     setTopless(false)
@@ -98,7 +101,7 @@ function NewPatientDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             e.preventDefault()
             if (!ready) return
             create.mutate(
-              { label: label.trim(), adult_confirmed: adult, consent_attested: consent, topless_ok: topless, retention_months: Number(months) },
+              { label: label.trim(), adult_confirmed: adult, consent_attested: consent, topless_ok: topless, retention_months: once ? SESSION_ONLY : Number(months) },
               {
                 onSuccess: (p) => {
                   announce(`${p.label} added`)
@@ -136,10 +139,21 @@ function NewPatientDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               Only with the patient’s separate consent. Without it, use photos in a bra or fitted top.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-body">
-            <label htmlFor={`${uid}-months`}>Keep the file for</label>
-            <Input id={`${uid}-months`} type="number" inputMode="numeric" min={1} max={120} className="w-20" aria-invalid={!monthsOk} value={months} onChange={(e) => setMonths(e.target.value)} />
-            <span>months</span>
+          <div className="flex flex-col gap-1.5">
+            <label className="flex items-center gap-2 text-body">
+              <input type="checkbox" className="accent-studio-accent" checked={once} onChange={(e) => setOnce(e.target.checked)} aria-describedby={`${uid}-once-help`} />
+              Session only
+            </label>
+            <p id={`${uid}-once-help`} className="pl-6 text-small text-studio-muted">
+              Photos and results are deleted when you end the consultation, or 12 hours after the last change.
+            </p>
+            {!once && (
+              <div className="flex flex-wrap items-center gap-2 text-body">
+                <label htmlFor={`${uid}-months`}>Keep the file for</label>
+                <Input id={`${uid}-months`} type="number" inputMode="numeric" min={1} max={120} className="w-20" aria-invalid={!monthsOk} value={months} onChange={(e) => setMonths(e.target.value)} />
+                <span>months</span>
+              </div>
+            )}
           </div>
           {create.isError && (
             <p role="alert" className="text-small text-studio-danger">

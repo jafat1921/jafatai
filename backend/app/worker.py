@@ -318,6 +318,16 @@ def handle_generate(ctx: JobContext) -> dict:
     if implant_guard.refuses(db, gen):
         raise RuntimeError("This uses a private Implant Preview picture, which can't be used anywhere else")
 
+    if gen.target_type == "implant_result" and ((gen.params or {}).get("implant") or {}).get("engine") == "warp":
+        # Implant Preview's shape warp: her own photo reshaped by measurement, no model and no GPU
+        from app.implant.service import render_warp
+
+        abs_path, rel_path = _out_path(gen, EXT["image/png"])
+        ctx.progress(0.2, "Reshaping her photo")
+        render_warp(db, gen, abs_path, tick=lambda: ctx.progress(0.4, "Finding the bust"))
+        gen.file_path, gen.media_type, gen.status = rel_path, "image/png", "ready"
+        return {"file_path": rel_path, "media_type": "image/png"}
+
     if gen.kind in IMAGE_KINDS:
         method, media_type = "generate_image", "image/png"
     elif gen.kind in VIDEO_KINDS:

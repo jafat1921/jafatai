@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useMe } from '@/hooks/useAuth'
-import { ccOk, implantApi, implantBusy, type ChestBox, type Garment, type ImplantOption, type Measurements, type Patient, type PatientCreate, type PatientPatch, type View } from '@/lib/implant'
+import { ccOk, implantApi, implantBusy, type ChestBox, type Engine, type Garment, type ImplantOption, type Measurements, type Patient, type PatientCreate, type PatientPatch, type View } from '@/lib/implant'
 
 const POLL_MS = 3000
 const LIST = ['implant', 'list'] as const
@@ -48,6 +48,18 @@ export function useDeletePatient(id: string) {
   })
 }
 
+/** Session only: ends the consultation, which deletes the patient with every photo and picture. */
+export function useEndConsultation(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => implantApi.end(id),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: patientKey(id) })
+      void qc.invalidateQueries({ queryKey: LIST })
+    },
+  })
+}
+
 export function useConsentForm(id: string) {
   const qc = useQueryClient()
   return useMutation({ mutationFn: (file: File) => implantApi.consentForm(id, file), onSuccess: (p) => put(qc, p) })
@@ -64,13 +76,16 @@ export function useUploadPhoto(id: string) {
 
 export function useRenderOptions(id: string) {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (options: ImplantOption[]) => implantApi.render(id, options), onSuccess: (p) => put(qc, p) })
+  return useMutation({
+    mutationFn: ({ options, engines }: { options: ImplantOption[]; engines: Engine[] }) => implantApi.render(id, options, engines),
+    onSuccess: (p) => put(qc, p),
+  })
 }
 
 export function useApproveOption(id: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ sessionId, ...body }: { sessionId: string; option: number; notes: string }) => implantApi.approve(id, sessionId, body),
+    mutationFn: ({ sessionId, ...body }: { sessionId: string; option: number; engine: Engine; notes: string }) => implantApi.approve(id, sessionId, body),
     onSuccess: (p) => put(qc, p),
   })
 }

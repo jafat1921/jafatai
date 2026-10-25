@@ -482,3 +482,105 @@ def test_her_own_photo_is_always_clothed_and_keeps_her_clothes(surgeon, fast_dri
     # rendered from her own photo, and the clothing check still ran
     assert res["view"] == "own" and res["status"] == "ready" and res["garment_check"] is True and e.calls == 1
     assert list(detail["views"])[0] == "own"
+
+
+# ---------------------------------------------------------------- the shape warp and session-only mode
+
+def _textured(path, size=(600, 800)):
+    rng = np.random.default_rng(7)
+    Image.fromarray(rng.integers(0, 255, (size[1], size[0], 3), dtype=np.uint8)).save(path)
+
+
+def test_the_shape_warp_reshapes_only_the_bust(tmp_path):
+    from app.implant import warp
+
+    src = tmp_path / "p.png"
+    _textured(src)
+    box = [100, 150, 600, 850]
+    opt = {"left_cc": 300, "right_cc": 300, "profile": "moderate_plus", "procedure": "augmentation"}
+
+    def run(name, o, m=None):
+        out = tmp_path / name
+        warp.render(src, out, o, m or {"bra_size": "34B"}, "front", box)
+        return np.asarray(Image.open(out), dtype=np.int16)
+
+    before = np.asarray(Image.open(src), dtype=np.int16)
+    mid = run("mid.png", opt)
+    changed = np.abs(mid - before).sum(axis=2) > 0
+    ys, xs = np.nonzero(changed)
+    # only inside the chest box: the face, the arms and the background are her photo, pixel for pixel
+    assert changed.any() and ys.min() >= 0.1 * 800 - 1 and ys.max() <= 0.6 * 800 + 1
+    assert xs.min() >= 0.15 * 600 - 1 and xs.max() <= 0.85 * 600 + 1
+
+    def amount(img, half=None):
+        d = np.abs(img - before).sum(axis=2)
+        if half == "image_left":
+            d = d[:, :300]
+        elif half == "image_right":
+            d = d[:, 300:]
+        return float(d.mean())
+
+    big = run("big.png", {**opt, "left_cc": 450, "right_cc": 450})
+    small = run("small.png", {**opt, "left_cc": 150, "right_cc": 150})
+    assert amount(small) < amount(mid) < amount(big)
+    # the same 300 cc shows more on a small cup than on a large one
+    assert warp.scale_for(300, "32A") > warp.scale_for(300, "36D")
+    # her left breast is on the right of a front photo
+    uneven = run("uneven.png", {**opt, "left_cc": 450, "right_cc": 150})
+    assert amount(uneven, "image_right") > amount(uneven, "image_left")
+    # the same option always gives the same picture
+    assert np.array_equal(run("again.png", opt), mid)
+    assert not np.array_equal(run("lift.png", {**opt, "procedure": "augmentation_lift"}), mid)
+
+
+def test_both_engines_render_and_the_chart_takes_the_approved_one(surgeon, fast_driver):
+    p = _patient(surgeon)
+    _photo(surgeon, p["id"], view="own")
+    r = surgeon.post(f"/api/implant/patients/{p['id']}/sessions", json={"options": OPTS[:1], "engines": ["ai", "warp"]})
+    assert r.status_code == 202, r.text
+    _run(fast_driver)
+    detail = surgeon.get(f"/api/implant/patients/{p['id']}").json()
+    res = detail["sessions"][0]["results"]
+    assert sorted(x["engine"] for x in res) == ["ai", "warp"] and all(x["status"] == "ready" for x in res)
+    with SessionLocal() as db:
+        w = next(db.get(Generation, x["id"]) for x in res if x["engine"] == "warp")
+        # no model, no GPU: the photo's own pixels; the vision model is away here, so the usual places were used
+        assert "model" not in w.params and w.params["warp"]["sides"]
+        photo = db.get(Generation, w.params["implant"]["photo_id"])
+        assert photo.params["bust_points_from"] == "default"
+
+    sid = detail["sessions"][0]["id"]
+    r = surgeon.post(f"/api/implant/patients/{p['id']}/sessions/{sid}/approve", json={"option": 0, "engine": "warp"})
+    assert r.status_code == 200 and r.json()["chart"]["engine"] == "warp"
+    assert surgeon.get(f"/api/implant/patients/{p['id']}/sessions/{sid}/consultation.pdf").status_code == 200
+    # an older client sends no engines: the AI edit only, as before
+    surgeon.post(f"/api/implant/patients/{p['id']}/sessions", json={"options": OPTS[:1]})
+    newest = surgeon.get(f"/api/implant/patients/{p['id']}").json()["sessions"][0]["results"]
+    assert [x["engine"] for x in newest] == ["ai"]
+
+
+def test_a_session_only_patient_goes_when_the_consultation_ends(surgeon, fast_driver):
+    p = _patient(surgeon, retention_months=0)
+    _photo(surgeon, p["id"])
+    surgeon.post(f"/api/implant/patients/{p['id']}/sessions", json={"options": OPTS[:1], "engines": ["warp"]})
+    _run(fast_driver)
+    data = get_settings().data_dir
+    with SessionLocal() as db:
+        files = [data / g.file_path for g in db.scalars(select(Generation).where(
+            Generation.target_type.in_(("implant_photo", "implant_result"))))]
+    assert files and all(f.is_file() for f in files)
+    assert surgeon.post(f"/api/implant/patients/{p['id']}/end").status_code == 204
+    assert not any(f.exists() for f in files)
+    assert surgeon.get(f"/api/implant/patients/{p['id']}").status_code == 404
+
+    kept = _patient(surgeon, label="kept")
+    assert surgeon.post(f"/api/implant/patients/{kept['id']}/end").status_code == 409
+    # left open, a session-only patient is gone after half a day; one kept for months is not
+    quiet = _patient(surgeon, label="quiet", retention_months=0)
+    with SessionLocal() as db:
+        for pid in (quiet["id"], kept["id"]):
+            db.get(ImplantPatient, pid).last_activity_at = utcnow() - timedelta(hours=13)
+        db.commit()
+        assert im.purge_expired(db) == 1
+        db.commit()
+        assert db.get(ImplantPatient, quiet["id"]) is None and db.get(ImplantPatient, kept["id"]) is not None

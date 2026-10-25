@@ -84,6 +84,9 @@ def _pdf(im: Image.Image) -> bytes:
     return buf.getvalue()
 
 
+ENGINE_LABEL = {"ai": "AI", "warp": "Shape warp"}
+
+
 def consultation(p: ImplantPatient, surgeon: str, photos: dict[str, Generation], options: list[dict],
                  results: list[Generation]) -> bytes:
     im, d = _page()
@@ -99,20 +102,23 @@ def consultation(p: ImplantPatient, surgeon: str, photos: dict[str, Generation],
                    fill=MUTED)
             y += 26
     y += 12
-    by: dict[str, dict[int, Generation]] = {}
+    by: dict[tuple[str, str], dict[int, Generation]] = {}
     for g in results:
         imp = (g.params or {}).get("implant") or {}
         if g.status in ("ready", "approved"):
-            by.setdefault(imp.get("view"), {})[imp.get("option")] = g
-    rows = [(v, photos.get(v), [(f"Option {chr(65 + i)}", by.get(v, {}).get(i)) for i in range(len(options))])
-            for v in VIEWS if v in photos]
+            by.setdefault((imp.get("view"), imp.get("engine") or "ai"), {})[imp.get("option")] = g
+    engines = [e for e in ENGINE_LABEL if any(k[1] == e for k in by)] or ["ai"]
+    tag = len(engines) > 1
+    rows = [(v, photos.get(v), [(f"Option {chr(65 + i)}{' · ' + ENGINE_LABEL[e] if tag else ''}",
+                                 by.get((v, e), {}).get(i)) for i in range(len(options))])
+            for v in VIEWS if v in photos for e in engines]
     _pairs(im, d, y, rows, H - M - 70)
     _foot(d)
     return _pdf(im)
 
 
 def chart(p: ImplantPatient, surgeon: str, photos: dict[str, Generation], opt: dict, picked: dict[str, Generation],
-          notes: str) -> bytes:
+          notes: str, engine: str = "ai") -> bytes:
     """The approved plan, for the patient file: measurements, implants per side, before/after, signatures."""
     im, d = _page()
     y = _head(d, "Surgical planning chart · breast augmentation", p, surgeon)
@@ -149,7 +155,8 @@ def chart(p: ImplantPatient, surgeon: str, photos: dict[str, Generation], opt: d
         d.text((M, y), ("! " if c["level"] == "warn" else "· ") + c["text"][:115], font=_font("inter", 18), fill=INK)
         y += 28
     y += 14
-    rows = [(v, photos.get(v), [("After · approved", picked.get(v))]) for v in VIEWS if v in photos]
+    rows = [(v, photos.get(v), [(f"After · approved · {ENGINE_LABEL.get(engine, engine)}", picked.get(v))])
+            for v in VIEWS if v in photos]
     y = _pairs(im, d, y, rows, H - M - 330)
     d.text((M, y), "Surgeon's notes", font=fb, fill=INK)
     y += 36

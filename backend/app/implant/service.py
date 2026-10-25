@@ -177,7 +177,10 @@ def instruction(opt: dict, garment: str, measurements: dict | None = None, view:
     ])
 
 
-def generate(db: Session, p: ImplantPatient, options: list[dict]) -> ImplantSession:
+ENGINES = ("ai", "warp")
+
+
+def generate(db: Session, p: ImplantPatient, options: list[dict], engines: tuple[str, ...] = ("ai",)) -> ImplantSession:
     if not (p.consent or {}).get("at") or not p.adult_confirmed:
         raise HTTPException(409, "Record the patient's consent and age confirmation first")
     pics = photos(db, p)
@@ -188,17 +191,24 @@ def generate(db: Session, p: ImplantPatient, options: list[dict]) -> ImplantSess
     db.flush()
     # one seed per view for every option: the options then differ by their spec, not by the noise
     seeds = {view: new_seed() for view in pics}
-    for i, opt in enumerate(options):
-        for view, photo in pics.items():
-            pp = photo.params or {}
-            w, h = lib.size_for_ratio(pp.get("width") or 3, pp.get("height") or 4)
-            garment = pp.get("garment", "garment")
-            enqueue_generation(db, workspace_id=p.workspace_id, project_id=None, target_type="implant_result",
-                               target_id=s.id, kind="image", seed=seeds[view],
-                               prompt=instruction(opt, garment, p.measurements, view),
-                               params={"reference_ids": [photo.id], "model": EDIT_MODEL, "width": w, "height": h,
-                                       "implant": {"option": i, "view": view, "photo_id": photo.id,
-                                                   "garment": garment}})
+    for engine in [e for e in ENGINES if e in engines]:
+        for i, opt in enumerate(options):
+            for view, photo in pics.items():
+                pp = photo.params or {}
+                garment = pp.get("garment", "garment")
+                imp = {"option": i, "view": view, "photo_id": photo.id, "garment": garment, "engine": engine}
+                if engine == "warp":
+                    # no model: the worker reshapes her photo itself (render_warp)
+                    enqueue_generation(db, workspace_id=p.workspace_id, project_id=None,
+                                       target_type="implant_result", target_id=s.id, kind="image",
+                                       prompt="shape warp", params={"implant": imp})
+                    continue
+                w, h = lib.size_for_ratio(pp.get("width") or 3, pp.get("height") or 4)
+                enqueue_generation(db, workspace_id=p.workspace_id, project_id=None, target_type="implant_result",
+                                   target_id=s.id, kind="image", seed=seeds[view],
+                                   prompt=instruction(opt, garment, p.measurements, view),
+                                   params={"reference_ids": [photo.id], "model": EDIT_MODEL, "width": w, "height": h,
+                                           "implant": imp})
     touch(p)
     return s
 
@@ -207,6 +217,41 @@ def results(db: Session, s: ImplantSession) -> list[Generation]:
     return list(db.scalars(select(Generation).where(Generation.target_type == "implant_result",
                                                     Generation.target_id == s.id)
                            .order_by(Generation.created_at)))
+
+
+def engine_of(g: Generation) -> str:
+    # results from before the shape warp have no engine: they are the AI edit
+    return ((g.params or {}).get("implant") or {}).get("engine") or "ai"
+
+
+def render_warp(db: Session, gen: Generation, path: Path, tick=None) -> None:
+    """In the worker: the shape warp for one option and view, straight from her photo (app.implant.warp)."""
+    from app.implant import finish, warp
+
+    imp = (gen.params or {}).get("implant") or {}
+    photo = db.get(Generation, imp.get("photo_id") or "")
+    src = get_settings().data_dir / photo.file_path if photo is not None and photo.file_path else None
+    if src is None or not src.is_file():
+        raise RuntimeError("The patient's photo is gone; add it again")
+    s = db.get(ImplantSession, gen.target_id)
+    p = db.get(ImplantPatient, s.patient_id) if s else None
+    if s is None or p is None:
+        raise RuntimeError("This consultation no longer exists")
+    view = imp.get("view", "front")
+    pp = dict(photo.params or {})
+    box = pp.get("chest_box")
+    if not box:
+        box, pp["chest_box_from"] = finish.find_chest(src, view, tick)
+        pp["chest_box"] = box
+    # points found for another box (the surgeon moved it since) are found again
+    if not pp.get("bust_points") or pp.get("bust_points_box") != box:
+        pp["bust_points"], pp["bust_points_from"] = finish.find_bust(src, view, box, tick)
+        pp["bust_points_box"] = box
+    photo.params = pp
+    path.parent.mkdir(parents=True, exist_ok=True)
+    used = warp.render(src, path, s.options[imp["option"]], p.measurements, view, box, pp["bust_points"])
+    stamp(path)
+    gen.params = {**(gen.params or {}), "chest_box": box, "warp": used}
 
 
 def finish_result(db: Session, gen: Generation, path: Path, redraw, tick=None) -> None:
@@ -273,10 +318,19 @@ def purge(db: Session, p: ImplantPatient) -> None:
     db.delete(p)
 
 
+SESSION_ONLY_HOURS = 12
+
+
+def keep_for(p: ImplantPatient) -> timedelta:
+    # retention 0 is "session only": gone when the consultation ends, or after a quiet half day at the latest
+    if not p.retention_months:
+        return timedelta(hours=SESSION_ONLY_HOURS)
+    return timedelta(days=30 * p.retention_months)
+
+
 def purge_expired(db: Session) -> int:
     now = utcnow()
-    gone = [p for p in db.scalars(select(ImplantPatient))
-            if p.last_activity_at + timedelta(days=30 * max(1, p.retention_months)) < now]
+    gone = [p for p in db.scalars(select(ImplantPatient)) if p.last_activity_at + keep_for(p) < now]
     for p in gone:
         purge(db, p)
     return len(gone)

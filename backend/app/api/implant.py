@@ -50,7 +50,8 @@ class PatientIn(BaseModel):
     adult_confirmed: bool
     consent_attested: bool = Field(description="The patient signed the consent form")
     topless_ok: bool = False
-    retention_months: int = Field(24, ge=1, le=120)
+    # 0 is session only: gone when the consultation ends (app.implant.service.keep_for)
+    retention_months: int = Field(24, ge=0, le=120)
     measurements: Measurements = Measurements()
     notes: str = Field("", max_length=4000)
 
@@ -66,7 +67,7 @@ class PatientIn(BaseModel):
 class PatientPatch(BaseModel):
     label: str | None = Field(None, min_length=1, max_length=120)
     topless_ok: bool | None = None
-    retention_months: int | None = Field(None, ge=1, le=120)
+    retention_months: int | None = Field(None, ge=0, le=120)
     measurements: Measurements | None = None
     notes: str | None = Field(None, max_length=4000)
 
@@ -84,6 +85,8 @@ class OptionIn(BaseModel):
 
 class SessionIn(BaseModel):
     options: list[OptionIn] = Field(min_length=1, max_length=3)
+    # the AI edit, the shape warp, or both side by side
+    engines: list[Literal["ai", "warp"]] = Field(["ai"], min_length=1, max_length=2)
 
 
 class ChestBoxIn(BaseModel):
@@ -92,6 +95,7 @@ class ChestBoxIn(BaseModel):
 
 class ApproveIn(BaseModel):
     option: int = Field(ge=0, le=2)
+    engine: Literal["ai", "warp"] = "ai"
     notes: str = Field("", max_length=1500)
 
 
@@ -101,8 +105,8 @@ def _gen_out(g: Generation | None) -> dict | None:
     return {"id": g.id, "status": g.status, "url": f"/api/implant/files/{g.id}" if g.file_path else None,
             "job_id": g.job_id,
             **{k: v for k, v in (g.params or {}).items() if k in ("view", "garment", "chest_box", "garment_check")},
-            **({"option": g.params["implant"]["option"], "view": g.params["implant"]["view"]}
-               if (g.params or {}).get("implant") else {})}
+            **({"option": g.params["implant"]["option"], "view": g.params["implant"]["view"],
+                "engine": im.engine_of(g)} if (g.params or {}).get("implant") else {})}
 
 
 def _patient_out(db: Session, p: ImplantPatient, full: bool = False) -> dict:
@@ -122,6 +126,7 @@ def _patient_out(db: Session, p: ImplantPatient, full: bool = False) -> dict:
             "sessions": [{"id": s.id, "created_at": s.created_at, "options": s.options,
                           "results": [_gen_out(g) for g in im.results(db, s)]} for s in sessions],
             "chart": {"session_id": chart.get("session_id"), "option": chart.get("option"),
+                      "engine": chart.get("engine", "ai"),
                       "approved_at": chart.get("approved_at"), "versions": len(chart.get("versions") or []),
                       "url": f"/api/implant/patients/{p.id}/chart.pdf" if chart.get("chart_path") else None}}
 
@@ -201,6 +206,19 @@ def delete_patient(patient_id: str, db: Session = Depends(get_db), cur: CurrentU
     return Response(status_code=204)
 
 
+@router.post("/patients/{patient_id}/end", status_code=204)
+@session_only
+def end_consultation(patient_id: str, db: Session = Depends(get_db), cur: CurrentUser = Depends(require_implant)):
+    """Session only: the consultation is over, so the patient and every photo and picture go now."""
+    p = _patient(db, cur, patient_id)
+    if p.retention_months:
+        raise HTTPException(409, f"This patient is kept for {p.retention_months} months; delete them instead")
+    audit.record(db, cur.user, "implant_session_end", "implant_patient", p.id)
+    im.purge(db, p)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.post("/patients/{patient_id}/consent-form")
 @session_only
 async def upload_consent_form(patient_id: str, file: UploadFile = File(...), db: Session = Depends(get_db),
@@ -247,8 +265,9 @@ async def upload_photo(patient_id: str, file: UploadFile = File(...), view: str 
 def create_session(patient_id: str, body: SessionIn, db: Session = Depends(get_db),
                    cur: CurrentUser = Depends(require_implant)):
     p = _patient(db, cur, patient_id)
-    s = im.generate(db, p, [o.model_dump() for o in body.options])
-    audit.record(db, cur.user, "implant_generate", "implant_patient", p.id, session=s.id, options=len(body.options))
+    s = im.generate(db, p, [o.model_dump() for o in body.options], tuple(body.engines))
+    audit.record(db, cur.user, "implant_generate", "implant_patient", p.id, session=s.id, options=len(body.options),
+                 engines=body.engines)
     db.commit()
     return _patient_out(db, p, full=True)
 
@@ -291,20 +310,23 @@ def approve_option(patient_id: str, session_id: str, body: ApproveIn, db: Sessio
     if body.option >= len(s.options):
         raise HTTPException(422, "No such option")
     picked = {g.params["implant"]["view"]: g for g in im.results(db, s)
-              if g.params["implant"]["option"] == body.option and g.status in ("ready", "approved")}
+              if g.params["implant"]["option"] == body.option and im.engine_of(g) == body.engine
+              and g.status in ("ready", "approved")}
     if not picked:
         raise HTTPException(409, "That option has no finished pictures yet")
     chart = dict(p.chart or {})
     versions = list(chart.get("versions") or [])
     data = sheets.chart(p, cur.user.display_name or cur.user.email, im.photos(db, p), s.options[body.option],
-                        picked, body.notes)
+                        picked, body.notes, body.engine)
     path = sheets.save_chart(p, data, len(versions) + 1)
-    entry = {"session_id": s.id, "option": body.option, "chart_path": path, "approved_at": utcnow().isoformat()}
+    entry = {"session_id": s.id, "option": body.option, "engine": body.engine, "chart_path": path,
+             "approved_at": utcnow().isoformat()}
     p.chart = {**entry, "versions": versions + [entry]}
     if body.notes:
         p.notes = body.notes
     im.touch(p)
-    audit.record(db, cur.user, "implant_approve", "implant_patient", p.id, session=s.id, option=body.option)
+    audit.record(db, cur.user, "implant_approve", "implant_patient", p.id, session=s.id, option=body.option,
+                 engine=body.engine)
     db.commit()
     return _patient_out(db, p, full=True)
 

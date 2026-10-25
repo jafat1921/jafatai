@@ -1,15 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, FileDown, Trash2 } from 'lucide-react'
+import { ArrowLeft, Clock, FileDown, Trash2 } from 'lucide-react'
 import { ErrorState } from '@/components/studio/states'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { useConsentForm, useDeletePatient, usePatchPatient, usePatient } from '@/hooks/useImplant'
-import { implantBusy, LETTERS, shortDay, type Patient } from '@/lib/implant'
+import { useConsentForm, useDeletePatient, useEndConsultation, usePatchPatient, usePatient } from '@/hooks/useImplant'
+import { ENGINE_LABEL, implantBusy, LETTERS, sessionOnly, shortDay, type Patient } from '@/lib/implant'
 import { announce } from '@/stores/ui'
+import { BodyModel } from './BodyModel'
 import { Measurements } from './Measurements'
 import { Options } from './Options'
 import { Photos } from './Photos'
@@ -38,6 +39,7 @@ function PatientView({ patient }: { patient: Patient }) {
       <Measurements key={patient.id} patient={patient} />
       <Options patient={patient} />
       <Results patient={patient} />
+      <BodyModel patient={patient} />
       <ChartSection patient={patient} />
     </div>
   )
@@ -49,8 +51,10 @@ function Header({ patient }: { patient: Patient }) {
   const patch = usePatchPatient(patient.id)
   const form = useConsentForm(patient.id)
   const del = useDeletePatient(patient.id)
+  const end = useEndConsultation(patient.id)
   const [confirm, setConfirm] = useState(false)
-  const failed = patch.error ?? form.error ?? del.error
+  const [ending, setEnding] = useState(false)
+  const failed = patch.error ?? form.error ?? del.error ?? end.error
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -101,11 +105,38 @@ function Header({ patient }: { patient: Patient }) {
           </span>
         </div>
       </div>
+      {sessionOnly(patient) && (
+        <div role="note" className="flex min-w-0 flex-wrap items-center gap-3 rounded-[6px] border border-studio-warning/50 bg-studio-raised p-3">
+          <Clock aria-hidden className="size-4 shrink-0 text-studio-warning" />
+          <p className="min-w-0 flex-1 text-body">
+            Session only: the photos and results are deleted when you end the consultation, or 12 hours after the last change. Download the chart first if you need it.
+          </p>
+          <Button type="button" size="sm" variant="danger" onClick={() => setEnding(true)}>
+            End consultation and delete
+          </Button>
+        </div>
+      )}
       {failed && (
         <p role="alert" className="text-small text-studio-danger">
           {failed.message}
         </p>
       )}
+      <ConfirmDialog
+        open={ending}
+        onOpenChange={setEnding}
+        title="End the consultation?"
+        description={`End ${patient.label}’s consultation and delete every photo, result and chart now? This can’t be undone.`}
+        confirmLabel="End and delete"
+        tone="danger"
+        onConfirm={() =>
+          end.mutate(undefined, {
+            onSuccess: () => {
+              announce(`${patient.label}’s consultation ended; everything was deleted`)
+              nav('/clinic/implant')
+            },
+          })
+        }
+      />
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
@@ -136,7 +167,8 @@ function ChartSection({ patient }: { patient: Patient }) {
       {chart.url ? (
         <div className="flex flex-wrap items-center gap-3 rounded-[6px] border border-studio-border-strong bg-studio-panel p-3">
           <p className="text-body">
-            Chart approved {shortDay(chart.approved_at)} · option {chart.option != null ? LETTERS[chart.option] : '—'} · version {chart.versions}
+            Chart approved {shortDay(chart.approved_at)} · option {chart.option != null ? LETTERS[chart.option] : '—'}
+            {chart.engine === 'warp' && ` (${ENGINE_LABEL.warp})`} · version {chart.versions}
           </p>
           <Button asChild size="sm" variant="primary">
             <a href={chart.url} download>

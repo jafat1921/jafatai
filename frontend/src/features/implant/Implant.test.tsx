@@ -3,15 +3,20 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Rail } from '@/components/shell/Rail'
 import { qk } from '@/hooks/keys'
-import { cropBox, type ImplantPicture, type Patient } from '@/lib/implant'
+import { cropBox, type ImplantPicture, type OptionCheck, type Patient } from '@/lib/implant'
 import { activeRail, pageTitle } from '@/lib/nav'
 import type { User } from '@/lib/types'
 import { mockApi, renderAt, systemOk } from '@/test/media-fixtures'
 import { ImplantLayout } from './ImplantLayout'
 import { ImplantPatientPage } from './ImplantPatientPage'
 import { ImplantPatientsPage } from './ImplantPatientsPage'
+import { torsoShapes } from './torsoShape'
 
 afterEach(() => vi.unstubAllGlobals())
+
+// jsdom has no WebGL; the body model's three.js half is checked by its shapes (torsoShape) instead
+const torso = { set: vi.fn(), rotate: vi.fn(), reset: vi.fn(), dispose: vi.fn() }
+vi.mock('./torso3d', () => ({ createTorso: vi.fn(() => torso) }))
 
 const member: User = { id: 'u2', email: 'dr@clinic.test', display_name: 'Dr Rana', workspace_id: 'w1', role: 'owner', admin: false, verified: true }
 const surgeon: User = { ...member, implant: true }
@@ -160,10 +165,14 @@ describe('Implant patient page', () => {
     const b = screen.getByRole('group', { name: 'Option B' })
     await user.selectOptions(within(b).getByLabelText('Procedure'), 'Augmentation with lift (mastopexy)')
     const go = screen.getByRole('button', { name: /Render the options/ })
+    // the AI edit and the shape warp, both ticked to begin with
+    expect(go).toHaveTextContent('3 options × 2 photos × 2 ways = 12 pictures')
+    await user.click(screen.getByRole('checkbox', { name: /^Shape warp/ }))
     expect(go).toHaveTextContent('3 options × 2 photos = 6 pictures')
     await user.click(go)
     await waitFor(() => expect(calls.find((c) => c.path === '/implant/patients/p1/sessions')).toBeDefined())
-    const body = calls.find((c) => c.path === '/implant/patients/p1/sessions')!.body as { options: unknown[] }
+    const body = calls.find((c) => c.path === '/implant/patients/p1/sessions')!.body as { options: unknown[]; engines: string[] }
+    expect(body.engines).toEqual(['ai'])
     expect(body.options).toEqual(
       [300, 350, 400].map((cc) => ({
         label: '',
@@ -190,7 +199,7 @@ describe('Implant patient page', () => {
     await user.click(within(approve).getByRole('button', { name: /^Approve this option….*option B/ }))
     await user.type(within(approve).getByLabelText('Surgeon’s notes for option B'), 'Dual plane, IMF incision')
     await user.click(within(approve).getByRole('button', { name: 'Approve and make the chart' }))
-    await waitFor(() => expect(calls.find((c) => c.path === '/implant/patients/p1/sessions/s1/approve')?.body).toEqual({ option: 1, notes: 'Dual plane, IMF incision' }))
+    await waitFor(() => expect(calls.find((c) => c.path === '/implant/patients/p1/sessions/s1/approve')?.body).toEqual({ option: 1, engine: 'ai', notes: 'Dual plane, IMF incision' }))
     expect(await screen.findByText('Chart approved 24 Oct · option B · version 1')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Download chart' })).toHaveAttribute('href', '/api/implant/patients/p1/chart.pdf')
   })
@@ -260,5 +269,38 @@ describe('Implant patient page', () => {
     expect(await screen.findByText('L From her current 32A to a full B cup')).toBeInTheDocument()
     expect(screen.getByText('R From her current 32A to a C cup')).toBeInTheDocument()
     expect(screen.queryByText(/Add her bra size/)).toBeNull()
+  })
+
+  it('shows the AI edit and the shape warp in their own rows, and approves either', async () => {
+    const p = withResults()
+    p.sessions[0].results.push(...[0, 1].map((option) => ({ id: `w${option}`, status: 'ready' as const, url: `/api/implant/files/w${option}`, job_id: null, option, view: 'front' as const, engine: 'warp' as const })))
+    const { calls, user } = openPatient(p, (method, path) => (method === 'POST' && path.endsWith('/approve') ? p : undefined))
+    expect(await screen.findByRole('button', { name: 'Option A, Front · Shape warp: compare with the photo' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Option A, Front · AI: compare with the photo' })).toBeInTheDocument()
+    const approve = screen.getByRole('list', { name: 'Approve an option' })
+    await user.click(within(approve).getByRole('button', { name: /option A \(Shape warp\)/ }))
+    await user.click(within(approve).getByRole('button', { name: 'Approve and make the chart' }))
+    await waitFor(() => expect(calls.find((c) => c.path.endsWith('/approve'))?.body).toEqual({ option: 0, engine: 'warp', notes: '' }))
+  })
+
+  it('ends a session-only consultation after asking, and deletes everything', async () => {
+    const { calls, user } = openPatient(patient({ retention_months: 0 }), (method, path) => (method === 'POST' && path === '/implant/patients/p1/end' ? null : undefined))
+    expect(await screen.findByText(/Session only: the photos and results are deleted/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'End consultation and delete' }))
+    expect(calls.some((c) => c.path === '/implant/patients/p1/end')).toBe(false)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'End and delete' }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/implant/patients/p1/end')).toBeDefined())
+  })
+
+  it('draws the body model from her measurements and the implant size', async () => {
+    openPatient(withResults())
+    expect(await screen.findByRole('heading', { name: '3D body model' })).toBeInTheDocument()
+    await waitFor(() => expect(torso.set).toHaveBeenCalled())
+    const check: OptionCheck = { sides: { left: { width_cm: 11.9, projection_cm: 4.5, cup_change: 1.5 }, right: { width_cm: 11.9, projection_cm: 4.5, cup_change: 1.5 } }, checks: [] }
+    const { before, after } = torsoShapes({ bra_size: '34B', bw_left_cm: 12, chest_width_cm: 30 }, OPTIONS[0], check)
+    expect(before.chestWidth).toBe(30)
+    expect(after!.left.projection).toBeGreaterThan(before.left.projection)
+    expect(after!.left.radius).toBeGreaterThanOrEqual(before.left.radius)
+    expect(torsoShapes({}, undefined, undefined).after).toBeNull()
   })
 })

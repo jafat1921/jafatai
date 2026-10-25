@@ -6,6 +6,8 @@ export type View = 'own' | 'front' | 'left_oblique' | 'right_oblique' | 'left_la
 // [y1, x1, y2, x2] on a 0–1000 scale, y down
 export type ChestBox = [number, number, number, number]
 export type Garment = 'garment' | 'topless'
+// the AI edit redraws the chest; the shape warp reshapes her own photo by measurement
+export type Engine = 'ai' | 'warp'
 export type Profile = 'low' | 'moderate' | 'moderate_plus' | 'high' | 'extra_high'
 export type ImplantShape = 'round' | 'teardrop'
 export type Placement = 'subglandular' | 'submuscular' | 'dual_plane'
@@ -56,6 +58,7 @@ export interface ImplantPicture {
   option?: number
   chest_box?: ChestBox
   garment_check?: boolean | null
+  engine?: Engine
 }
 
 export interface ImplantOption {
@@ -95,6 +98,7 @@ export interface Chart {
   approved_at: string | null
   versions: number
   url: string | null
+  engine?: Engine
 }
 
 export interface Patient extends PatientSummary {
@@ -161,6 +165,13 @@ export const PLACEMENT_LABEL: Record<Placement, string> = { subglandular: 'Subgl
 export const FILL_LABEL: Record<Fill, string> = { silicone: 'Silicone', saline: 'Saline' }
 export const PROCEDURE_LABEL: Record<Procedure, string> = { augmentation: 'Augmentation', augmentation_lift: 'Augmentation with lift (mastopexy)' }
 
+export const ENGINES: Engine[] = ['ai', 'warp']
+export const ENGINE_LABEL: Record<Engine, string> = { ai: 'AI', warp: 'Shape warp' }
+export const engineOf = (p: ImplantPicture) => p.engine ?? 'ai'
+// retention 0: deleted when the consultation ends, or 12 hours after the last change
+export const SESSION_ONLY = 0
+export const sessionOnly = (p: PatientSummary) => p.retention_months === SESSION_ONLY
+
 export const ccOk = (n: number) => Number.isInteger(n) && n >= 100 && n <= 900
 
 export const newOption = (cc = 300): ImplantOption => ({ label: '', left_cc: cc, right_cc: cc, profile: 'moderate_plus', shape: 'round', placement: 'dual_plane', fill: 'silicone', procedure: 'augmentation' })
@@ -192,13 +203,14 @@ export const implantApi = {
   create: (body: PatientCreate) => request<Patient>('POST', '/implant/patients', body),
   patch: (id: string, body: PatientPatch) => request<Patient>('PATCH', base(id), body),
   remove: (id: string) => request<void>('DELETE', base(id)),
+  end: (id: string) => request<void>('POST', `${base(id)}/end`),
   consentForm: (id: string, file: File) => multipart<Patient>(`${base(id)}/consent-form`, { file }),
   photo: (id: string, body: { file: File; view: View; garment: Garment; crop?: string }) =>
     multipart<ImplantPicture>(`${base(id)}/photos`, { file: body.file, view: body.view, garment: body.garment, ...(body.crop ? { crop: body.crop } : {}) }),
   chestBox: (genId: string, box: ChestBox) => request<ImplantPicture>('PATCH', `/implant/photos/${genId}`, { chest_box: box }),
   check: (id: string, options: ImplantOption[]) => request<OptionCheck[]>('POST', `${base(id)}/check`, { options }),
-  render: (id: string, options: ImplantOption[]) => request<Patient>('POST', `${base(id)}/sessions`, { options }),
-  approve: (id: string, sessionId: string, body: { option: number; notes: string }) => request<Patient>('POST', `${base(id)}/sessions/${sessionId}/approve`, body),
+  render: (id: string, options: ImplantOption[], engines: Engine[]) => request<Patient>('POST', `${base(id)}/sessions`, { options, engines }),
+  approve: (id: string, sessionId: string, body: { option: number; engine: Engine; notes: string }) => request<Patient>('POST', `${base(id)}/sessions/${sessionId}/approve`, body),
   retry: (jobId: string) => request<Job>('POST', `/jobs/${jobId}/retry`, {}),
   chartUrl: (id: string) => `/api${base(id)}/chart.pdf`,
   consultationUrl: (id: string, sessionId: string) => `/api${base(id)}/sessions/${sessionId}/consultation.pdf`,
